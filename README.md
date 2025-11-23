@@ -2,18 +2,18 @@
 
 [![NuGet Version](https://img.shields.io/nuget/v/AgentyCore)](https://www.nuget.org/packages/Agenty.Core) [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/your-org/Agenty/actions) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Agenty is a minimal, extensible .NET framework for building single-agent LLM apps. Inspired by the need for simplicity in .NET ecosystems, it focuses on clean tool orchestration without the bloat of full kernels. Perfect for internal tools, prototypes, or production micro-agents where you want full control without ceremony.
+AgentCore is a minimal, extensible .NET framework for building single-agent LLM apps. Inspired by the need for simplicity in .NET ecosystems, it focuses on clean tool orchestration without the bloat of full kernels. Perfect for internal tools, prototypes, or production micro-agents where you want full control without ceremony.
 
-Runs on .NET Standard 2.0 (Core/Framework compat), it integrates with OpenAI-compatible LLMs but supports easy one method provider swaps. No Graph work flow, DSL, multi-agent complexity—just pure, reliable single-agent flows.
+Runs on .NET Standard 2.0 (Core/Framework compat), it integrates with OpenAI-compatible LLMs but supports easy one-method provider swaps. No graph workflows, DSLs, or multi-agent complexity—just pure, reliable single-agent flows.
 
 ## 🚀 Features
-- **Tool-Centric Design**: Register tools via attributes `[Tool]`; auto-generate JSON schemas for LLM calls.
-- **Streaming & Retries**: Native token streaming, exponential backoff retries, and context trimming to stay under limits.
-- **Structured Outputs**: Typed responses with schema and Tool calls are validation—parse JSON safely or fallback gracefully.
-- **Memory via Chat History**: Episodic memory out-of-the-box; persist to files (no DB deps). Extend to custom memory solutions (e.g., Rag based mempry retrieval).
-- **LLM Agnostic**: Abstracted providers (Supports OpenAI; implement one method to extend to other providers).
-- **Enterprise-Ready Plumbing**: Token tracking, Context trimming, error handling, and DI-friendly (ActivatorUtilities).
-
+- **Attribute-Driven Tools**: Slap `[Tool]` on methods for auto-registration; generates JSON schemas from params/attrs, parses/validates args on-the-fly, and runs sequential (one per iteration) to dodge LLM crapshoots.
+- **Pluggable Executors**: ReAct-style default (`ToolCallingLoop`) with optional sampling presets; extend via `IAgentExecutor` to wire custom agent flow.
+- **Token-Smart Streaming**: `ITokenManager` logs in/out deltas per call; stream text/tool chunks via callbacks, with `SlidingWindowTrimmer` pruning history to fit limits (SharpToken backend).
+- **Retry Resilience**: `IRetryPolicy` with backoff/jitter and prompt-injected fixes (e.g., "Redo: {error}"); sniffs duplicates/repeats in loops for steady runs.
+- **Typed Structured Calls**: `GetStructuredAsync<T>` auto-schemas from .NET types (handles enums/attrs/nullable), validates JSON, retries on busts—POCO outputs without hassle.
+- **Scoped DI Core**: `AgentBuilder` bootstraps `IServiceCollection` for per-invoke scopes; inject trimmers/memories/LLMs like it's 2019 ASP.NET—zero globals.
+- **File Mem + Hooks**: JSON sessions via `FileMemory` (cached, async); swap impls for `IAgentMemory` (RAG? VectorDB? Yours)—or tool-ify retrieval.
 
 ## 📦 Installation
 Via NuGet:
@@ -85,7 +85,7 @@ public class CalcTools
 ```
 
 ### 4. Custom Executor
-Just implement the `IAgentExecutor` for building your own agent flow.
+Just implement the `IAgentExecutor` for your own agent flow.
 ```csharp
 public class MyExecutor : IAgentExecutor {
     public async Task ExecuteAsync(IAgentContext ctx) {
@@ -117,7 +117,8 @@ IAgentExecutor (loops: reason → tool → repeat)
 - **LLMRequest/Response**: Unified for text/tools/structured.
 
 ## 🤝 Contributing
-Any interest in this is appreciated and contributions are always welcome!
+Any interest is appreciated, contributions always welcome!
 
 ## 📄 License
 MIT. See [LICENSE](LICENSE).
+
