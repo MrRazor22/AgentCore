@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,19 +14,16 @@ namespace AgentCore.Tools
     public interface IToolRuntime
     {
         Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
-        Task<IReadOnlyList<ToolCallResult>> HandleToolCallsAsync(IEnumerable<ToolCall> toolCalls, CancellationToken ct = default);
-        Task<IReadOnlyList<ToolCallResult>> HandleToolCallsParallelAsync(IEnumerable<ToolCall> toolCalls, CancellationToken ct = default);
+        Task<ToolCallResult> HandleToolCallsAsync(ToolCall call, CancellationToken ct = default);
     }
 
     public sealed class ToolRuntime : IToolRuntime
     {
         private readonly IToolCatalog _tools;
-        private readonly ILogger<ToolRuntime>? _logger;
 
-        public ToolRuntime(IToolCatalog registry, ILogger<ToolRuntime>? logger = null)
+        public ToolRuntime(IToolCatalog registry)
         {
             _tools = registry ?? throw new ArgumentNullException(nameof(registry));
-            _logger = logger;
         }
         public async Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
         {
@@ -76,7 +74,7 @@ namespace AgentCore.Tools
             }
         }
 
-        private static object?[] InjectCancellationToken(ToolCall toolCall, System.Reflection.MethodInfo method, CancellationToken ct)
+        private static object?[] InjectCancellationToken(ToolCall toolCall, MethodInfo method, CancellationToken ct)
         {
             var finalArgs = new object?[method.GetParameters().Length];
 
@@ -97,77 +95,30 @@ namespace AgentCore.Tools
 
             return finalArgs;
         }
-        public async Task<IReadOnlyList<ToolCallResult>> HandleToolCallsAsync(
-            IEnumerable<ToolCall> toolCalls,
-            CancellationToken ct = default)
+        public async Task<ToolCallResult> HandleToolCallsAsync(ToolCall call, CancellationToken ct = default)
         {
-            var results = new List<ToolCallResult>();
+            ct.ThrowIfCancellationRequested();
 
-            foreach (var call in toolCalls)
+            // text-only assistant message, not a real tool call
+            if (string.IsNullOrWhiteSpace(call.Name) &&
+                !string.IsNullOrWhiteSpace(call.Message))
             {
-                ct.ThrowIfCancellationRequested();
-
-                if (string.IsNullOrWhiteSpace(call.Name) && !string.IsNullOrWhiteSpace(call.Message))
-                {
-                    results.Add(new ToolCallResult(call, null));
-                    continue;
-                }
-
-                try
-                {
-                    var result = await InvokeAsync(call, ct).ConfigureAwait(false);
-                    results.Add(new ToolCallResult(call, result));
-                }
-                catch (ToolValidationAggregateException vex)
-                {
-                    results.Add(new ToolCallResult(call, vex));
-                }
-                catch (ToolExecutionException tex)
-                {
-                    results.Add(new ToolCallResult(call, tex));
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
+                return new ToolCallResult(call, null);
             }
 
-            return results;
-        }
-        public async Task<IReadOnlyList<ToolCallResult>> HandleToolCallsParallelAsync(
-            IEnumerable<ToolCall> toolCalls,
-            CancellationToken ct = default)
-        {
-            var calls = toolCalls.ToList();
-            var results = new ToolCallResult[calls.Count];
-
-            var tasks = calls.Select(async (call, index) =>
+            try
             {
-                ct.ThrowIfCancellationRequested();
-
-                if (string.IsNullOrWhiteSpace(call.Name) && !string.IsNullOrWhiteSpace(call.Message))
-                {
-                    results[index] = new ToolCallResult(call, null);
-                    return;
-                }
-
-                try
-                {
-                    var result = await InvokeAsync(call, ct).ConfigureAwait(false);
-                    results[index] = new ToolCallResult(call, result);
-                }
-                catch (ToolValidationAggregateException vex)
-                {
-                    results[index] = new ToolCallResult(call, vex);
-                }
-                catch (ToolExecutionException tex)
-                {
-                    results[index] = new ToolCallResult(call, tex);
-                }
-            });
-
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-            return results;
+                var result = await InvokeAsync(call, ct).ConfigureAwait(false);
+                return new ToolCallResult(call, result);
+            }
+            catch (ToolValidationAggregateException vex)
+            {
+                return new ToolCallResult(call, vex);
+            }
+            catch (ToolExecutionException tex)
+            {
+                return new ToolCallResult(call, tex);
+            }
         }
     }
 

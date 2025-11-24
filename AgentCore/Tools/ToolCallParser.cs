@@ -8,21 +8,21 @@ using System.Text.RegularExpressions;
 
 namespace AgentCore.Tools
 {
-    public sealed class InlineTools
+    public sealed class InlineToolCall
     {
-        public List<ToolCall> Calls { get; }
+        public ToolCall? Call { get; }
         public string AssistantMessage { get; }
 
-        public InlineTools(List<ToolCall> calls, string assistantMessage)
+        public InlineToolCall(ToolCall? call, string assistantMessage)
         {
-            Calls = calls;
+            Call = call;
             AssistantMessage = assistantMessage;
         }
     }
 
     public interface IToolCallParser
     {
-        InlineTools ExtractInlineToolCall(IToolCatalog tools, string content, bool strict = false);
+        InlineToolCall ExtractInlineToolCall(IToolCatalog tools, string content, bool strict = false);
         object[] ParseToolParams(IToolCatalog tools, string toolName, JObject arguments);
         List<ToolValidationError> ValidateAgainstSchema(JToken? node, JObject schema, string path = "");
     }
@@ -85,7 +85,7 @@ namespace AgentCore.Tools
         );
         #endregion
 
-        public InlineTools ExtractInlineToolCall(IToolCatalog tools, string content, bool strict = false)
+        public InlineToolCall ExtractInlineToolCall(IToolCatalog tools, string content, bool strict = false)
         {
             var matches = ToolTagPattern.Matches(content).Cast<Match>()
                 .Concat(LooseToolJsonPattern.Matches(content).Cast<Match>())
@@ -93,12 +93,13 @@ namespace AgentCore.Tools
                 .OrderBy(m => m.Index)
                 .ToList();
 
-            string fallback = matches.Any()
+            // Assistant message before the first inline JSON
+            string? fallback = matches.Any()
                 ? content.Substring(0, matches[0].Index).Trim()
                 : content.Trim();
 
-            var toolCalls = new List<ToolCall>();
-            string assistantMessage = null;
+            ToolCall? firstCall = null;
+            string? assistantMessage = null;
 
             foreach (var match in matches)
             {
@@ -108,58 +109,79 @@ namespace AgentCore.Tools
                 catch
                 {
                     if (strict)
-                        return new InlineTools(new List<ToolCall>(), $"Invalid JSON: `{jsonStr}`");
+                        return new InlineToolCall(null, $"Invalid JSON inline tool call: `{jsonStr}`");
+
                     continue;
                 }
-                if (node == null) continue;
 
-                var hasName = node.ContainsKey(ToolJsonNameTag);
-                var hasArgs = node.ContainsKey(ToolJsonArgumentsTag);
-                var hasMessage = node.ContainsKey(ToolJsonAssistantMessageTag);
+                if (node == null)
+                    continue;
 
+                bool hasName = node.ContainsKey(ToolJsonNameTag);
+                bool hasArgs = node.ContainsKey(ToolJsonArgumentsTag);
+                bool hasMsg = node.ContainsKey(ToolJsonAssistantMessageTag);
+
+                // --------------------------------------------
+                // 1. Message-only JSON: { "message": "..." }
+                // --------------------------------------------
+                if (!hasName && !hasArgs && hasMsg)
+                {
+                    assistantMessage = node[ToolJsonAssistantMessageTag]?.ToString();
+                    return new InlineToolCall(null, assistantMessage ?? fallback);
+                }
+
+                // ------------------------------------------------------
+                // 2. TOOL CALL JSON: { "name": "...", "arguments": {} }
+                // ------------------------------------------------------
                 if (hasName && hasArgs)
                 {
-                    var name = node[ToolJsonNameTag]?.ToString();
-                    var args = node[ToolJsonArgumentsTag] as JObject ?? new JObject();
-                    var message = node[ToolJsonAssistantMessageTag]?.ToString();
+                    if (firstCall != null)
+                        continue; // ignore further calls
 
-                    if (string.IsNullOrEmpty(name))
-                        return new InlineTools(new List<ToolCall>(), "Tool call missing 'name'.");
+                    string name = node[ToolJsonNameTag]?.ToString();
+                    if (string.IsNullOrWhiteSpace(name))
+                        return new InlineToolCall(null, "Tool call missing 'name'.");
 
                     if (!tools.Contains(name))
-                        return new InlineTools(new List<ToolCall>(),
+                        return new InlineToolCall(null,
                             $"Tool `{name}` not registered. Available: {string.Join(", ", tools.RegisteredTools.Select(t => t.Name))}");
+
+                    var args = node[ToolJsonArgumentsTag] as JObject ?? new JObject();
 
                     var id = node.ContainsKey("id")
                         ? node["id"]?.ToString() ?? Guid.NewGuid().ToString()
                         : Guid.NewGuid().ToString();
 
-                    toolCalls.Add(new ToolCall(id, name, args, ParseToolParams(tools, name, args), message));
+                    firstCall = new ToolCall(
+                        id,
+                        name,
+                        args,
+                        ParseToolParams(tools, name, args),
+                        node.ContainsKey(ToolJsonAssistantMessageTag)
+                            ? node[ToolJsonAssistantMessageTag]?.ToString()
+                            : null
+                    );
+
                     continue;
                 }
 
-                if (!hasName && !hasArgs && hasMessage)
-                {
-                    toolCalls.Add(new ToolCall(node[ToolJsonAssistantMessageTag]?.ToString() ?? fallback));
-                    return new InlineTools(toolCalls, assistantMessage);
-                }
-
+                // ------------------------------------------------------
+                // 3. STRICT ERRORS
+                // ------------------------------------------------------
                 if (strict)
                 {
                     if (!hasName && hasArgs)
-                        toolCalls.Add(new ToolCall("Tool call has arguments but no 'name'."));
+                        return new InlineToolCall(null, "Tool call has 'arguments' but no 'name'.");
                     if (hasName && !hasArgs)
-                        toolCalls.Add(new ToolCall($"Tool `{node[ToolJsonNameTag]}` missing 'arguments'."));
+                        return new InlineToolCall(null, $"Tool `{node[ToolJsonNameTag]}` missing 'arguments'.");
                 }
             }
 
-            if (toolCalls.Count == 0 && strict)
-                toolCalls.Add(new ToolCall("No valid tool call structure found."));
-
-            if (!string.IsNullOrWhiteSpace(fallback))
+            // Return fallback text only (no tool)
+            if (firstCall == null && !string.IsNullOrWhiteSpace(fallback))
                 assistantMessage = fallback;
 
-            return new InlineTools(toolCalls, assistantMessage);
+            return new InlineToolCall(firstCall, assistantMessage);
         }
 
         public object[] ParseToolParams(IToolCatalog tools, string toolName, JObject arguments)
@@ -288,6 +310,7 @@ namespace AgentCore.Tools
 
             return errors;
         }
+
     }
 }
 

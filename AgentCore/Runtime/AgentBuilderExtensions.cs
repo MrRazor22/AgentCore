@@ -19,8 +19,7 @@ namespace AgentCore.Runtime
             builder.Services.AddSingleton<IToolRuntime>(sp =>
             {
                 var registry = sp.GetRequiredService<IToolCatalog>();
-                var logger = sp.GetService<ILogger<ToolRuntime>>();
-                return new ToolRuntime(registry, logger);
+                return new ToolRuntime(registry);
             });
 
             builder.Services.AddSingleton<ILLMClient>(sp =>

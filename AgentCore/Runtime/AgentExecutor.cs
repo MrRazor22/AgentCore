@@ -21,7 +21,7 @@ namespace AgentCore.Runtime
 
         public ToolCallingLoop(
             string? model = null,
-            ToolCallMode toolMode = ToolCallMode.OneTool,
+            ToolCallMode toolMode = ToolCallMode.Auto,
             int maxIterations = 50,
             LLMGenerationOptions? opts = null)
         {
@@ -55,7 +55,7 @@ namespace AgentCore.Runtime
                 ctx.ScratchPad.AddAssistant(result.AssistantMessage);
 
                 // toolcall?
-                var toolCall = result.ToolCalls.FirstOrDefault(); // result.Payload is List<ToolCall>
+                var toolCall = result.ToolCall; // result.Payload is List<ToolCall>
                 if (toolCall == null)
                 {
                     ctx.Response.Set(result.AssistantMessage);
@@ -63,11 +63,9 @@ namespace AgentCore.Runtime
                 }
 
                 // RUN TOOL
-                var outputs = await runtime.HandleToolCallsAsync(
-                    new List<ToolCall> { toolCall },
-                    ctx.CancellationToken);
+                var outputs = await runtime.HandleToolCallsAsync(toolCall, ctx.CancellationToken);
 
-                ctx.ScratchPad.AppendToolCallAndResults(outputs);
+                ctx.ScratchPad.AppendToolCallResult(outputs);
 
                 iteration++;
             }

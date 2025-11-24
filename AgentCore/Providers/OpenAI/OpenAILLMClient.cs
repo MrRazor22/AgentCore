@@ -95,7 +95,7 @@ namespace AgentCore.Providers.OpenAI
                     if (sreq.AllowedTools != null)
                     {
                         options.ToolChoice = sreq.ToolCallMode.ToChatToolChoice();
-                        options.AllowParallelToolCalls = false;
+                        options.AllowParallelToolCalls = false; // intentionally does this to avoud multi tool calls as llm suck at it now
 
                         foreach (var t in sreq.AllowedTools.ToChatTools())
                             options.Tools.Add(t);

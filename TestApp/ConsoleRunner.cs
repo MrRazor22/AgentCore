@@ -27,7 +27,7 @@ namespace TestApp
                 {
                     opts.BaseUrl = "http://127.0.0.1:1234/v1";
                     opts.ApiKey = "lmstudio";
-                    opts.Model = "qwen@q5_k_m";
+                    opts.Model = "model";
                 });
                 builder.AddRetryPolicy(o =>
                 {

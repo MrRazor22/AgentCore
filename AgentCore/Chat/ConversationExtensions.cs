@@ -157,13 +157,10 @@ namespace AgentCore.Chat
             return result.Result;
         }
 
-        public static Conversation AppendToolCallAndResults(this Conversation chat, IEnumerable<ToolCallResult> results)
+        public static Conversation AppendToolCallResult(this Conversation chat, ToolCallResult result)
         {
-            foreach (var r in results)
-            {
-                chat.AddAssistantToolCall(r.Call);
-                chat.AddToolResult(r);
-            }
+            chat.AddAssistantToolCall(result.Call);
+            chat.AddToolResult(result);
             return chat;
         }
         public static IEnumerable<Chat> Filter(this Conversation convo, ChatFilter filter)

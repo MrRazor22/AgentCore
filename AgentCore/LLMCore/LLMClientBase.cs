@@ -219,7 +219,7 @@ namespace AgentCore.LLMCore
                     : _tools.RegisteredTools.ToArray();
 
             var sb = new StringBuilder();
-            var toolCalls = new List<ToolCall>();
+            ToolCall? firstToolCall = null;
 
             // -----------------------------
             // MAIN STREAM (with retries)
@@ -238,7 +238,7 @@ namespace AgentCore.LLMCore
                         break;
 
                     case StreamKind.ToolCall:
-                        toolCalls.Add(chunk.AsToolCall());
+                        firstToolCall = chunk.AsToolCall();
                         _logger.LogInformation("Tool call received: {Name}", chunk.AsToolCall()?.Name);
                         break;
                 }
@@ -249,7 +249,7 @@ namespace AgentCore.LLMCore
             _logger.LogDebug("LLM request completed");
             return new LLMResponse(
                 finalText,
-                toolCalls,
+                firstToolCall!,
                 _currFinishReason,
                 _currInTokensSoFar,
                 _currOutTokensSoFar
@@ -257,8 +257,7 @@ namespace AgentCore.LLMCore
         }
         private async IAsyncEnumerable<LLMStreamChunk> ValidateToolCallsAndStream(LLMRequest request, [EnumeratorCancellation] CancellationToken ct)
         {
-            var currentStreamCalls = new List<ToolCall>();
-            bool limitOneTool = request.ToolCallMode == ToolCallMode.OneTool;
+            ToolCall? firstTool = null;
             await foreach (var rawChunk in PrepareStreamAsync(request, ct))
             {
                 // TEXT ----------------------------------------------------
@@ -273,23 +272,16 @@ namespace AgentCore.LLMCore
                     yield return rawChunk; // emit as-is
 
                     // inline extraction from assistant message
-                    var extraction = _parser.ExtractInlineToolCall(_tools, text);
+                    var inline = _parser.ExtractInlineToolCall(_tools, text);
 
-                    foreach (var call in extraction.Calls)
+                    if (inline.Call != null)
                     {
-                        var validated = TryParseToolCalls(request.Prompt, call);
-                        if (validated == null) continue;
-
-                        CheckRepeatToolCall(request.Prompt, validated, currentStreamCalls);
-
-                        currentStreamCalls.Add(validated);
-
-                        yield return new LLMStreamChunk(
-                            StreamKind.ToolCall,
-                            payload: validated
-                        );
-
-                        if (limitOneTool) yield break;
+                        var validated = TryParseToolCalls(request.Prompt, inline.Call);
+                        if (validated != null && firstTool == null)
+                        {
+                            firstTool = validated;
+                            yield return new LLMStreamChunk(StreamKind.ToolCall, validated);
+                        }
                     }
 
                     continue;
@@ -304,18 +296,13 @@ namespace AgentCore.LLMCore
                     var validated = TryParseToolCalls(request.Prompt, raw);
                     if (validated == null) continue;
 
-                    CheckRepeatToolCall(request.Prompt, validated, currentStreamCalls);
+                    if (validated != null && firstTool == null)
+                    {
+                        firstTool = validated;
+                        yield return new LLMStreamChunk(StreamKind.ToolCall, validated);
+                    }
 
-                    currentStreamCalls.Add(validated);
-
-                    yield return new LLMStreamChunk(
-                        StreamKind.ToolCall,
-                        payload: validated
-                    );
-
-                    if (limitOneTool) yield break;
-
-                    continue;
+                    yield break;
                 }
 
                 // USAGE / FINISH ------------------------------------------
@@ -331,20 +318,6 @@ namespace AgentCore.LLMCore
 
                 throw new RetryException(
                     "You repeated the same assistant response. Don't repeat — refine or add new info."
-                );
-            }
-        }
-
-        private void CheckRepeatToolCall(Conversation requestPrompt, ToolCall validated, List<ToolCall> currentStreamTools)
-        {
-            if (validated.ExistsIn(requestPrompt, currentStreamTools))
-            {
-                _logger.LogWarning("Duplicate tool call ignored: {Tool}", validated.Name);
-
-                var lastResult = requestPrompt.GetLastToolCallResult(validated);
-                throw new RetryException(
-                    $"Tool `{validated.Name}` was already called with same arguments. " +
-                    $"Last result: {lastResult?.AsPrettyJson() ?? "null"}"
                 );
             }
         }

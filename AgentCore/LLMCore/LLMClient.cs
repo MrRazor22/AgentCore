@@ -117,8 +117,7 @@ namespace AgentCore.LLMCore
     {
         None,     // expose tools but forbid calls
         Auto,     // allow text or tool calls
-        Required,  // force tool call
-        OneTool,   // force exactly one tool call
+        Required,  // force tool call 
         Disabled,  // Don't send tools to LLM at all
     }
 
@@ -155,18 +154,18 @@ namespace AgentCore.LLMCore
     public sealed class LLMResponse : LLMResponseBase
     {
         public string? AssistantMessage { get; }
-        public List<ToolCall> ToolCalls { get; }
+        public ToolCall ToolCall { get; }
 
         public LLMResponse(
             string? assistantMessage,
-            List<ToolCall> toolCalls,
+            ToolCall toolCall,
             string finishReason,
             int input,
             int output)
             : base(finishReason, input, output)
         {
             AssistantMessage = assistantMessage;
-            ToolCalls = toolCalls ?? throw new ArgumentNullException(nameof(toolCalls));
+            ToolCall = toolCall;
         }
     }
 
@@ -236,7 +235,6 @@ namespace AgentCore.LLMCore
     }
     public class ToolCallDelta
     {
-        public int Index { get; set; }
         public string? Name { get; set; }
         public string? Delta { get; set; }
     }
