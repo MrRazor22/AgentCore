@@ -69,7 +69,7 @@ namespace TestApp
                 .WithTools<MathTools>()
                 .WithTools<SearchTools>()
 
-                .UseExecutor(() => new ToolCallingLoop(mode: ReasoningMode.Creative));
+                .UseExecutor(() => new ToolCallingLoop());
 
                 while (true)
                 {

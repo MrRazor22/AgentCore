@@ -18,8 +18,7 @@ namespace AgentCore.LLMCore
             IEnumerable<Tool>? allowedTools = null,
             ToolCallMode toolMode = ToolCallMode.Disabled,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null,
+            LLMGenerationOptions options = null,
             Action<string>? onStream = null,
             CancellationToken ct = default)
         {
@@ -29,8 +28,7 @@ namespace AgentCore.LLMCore
                 allowedTools,
                 toolMode,
                 model,
-                reasoning,
-                sampling,
+                options,
                 onStream,
                 ct
             );
@@ -41,20 +39,16 @@ namespace AgentCore.LLMCore
             IEnumerable<Tool>? allowedTools = null,
             ToolCallMode toolMode = ToolCallMode.Disabled,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null,
+            LLMGenerationOptions options = null,
             Action<string>? onStream = null,
             CancellationToken ct = default)
         {
-            var req = new LLMStructuredRequest(
-                prompt: prompt,
-                resultType: typeof(T),
-                allowedTools: allowedTools,
-                toolCallMode: toolMode,
-                model: model,
-                reasoning: reasoning,
-                sampling: sampling
-            );
+            var req = new LLMStructuredRequest(prompt: prompt,
+                                               resultType: typeof(T),
+                                               allowedTools: allowedTools,
+                                               toolCallMode: toolMode,
+                                               model: model,
+                                               options: options);
 
             var resp = await client.ExecuteAsync<T>(req, ct, onStream: chunk =>
             {
@@ -69,20 +63,16 @@ namespace AgentCore.LLMCore
             this ILLMClient client,
             Conversation prompt,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null,
+            LLMGenerationOptions options = null,
             CancellationToken ct = default,
             Action<string> onStream = null)
         {
             // Plain text = NO tools.
-            var req = new LLMRequest(
-                prompt: prompt,
-                allowedTools: null,
-                toolCallMode: ToolCallMode.Disabled,
-                model: model,
-                reasoning: reasoning,
-                sampling: sampling
-            );
+            var req = new LLMRequest(prompt: prompt,
+                                     allowedTools: null,
+                                     toolCallMode: ToolCallMode.Disabled,
+                                     model: model,
+                                     options: options);
 
             return await client.ExecuteAsync(req, ct, onStream: chunk =>
             {
@@ -97,13 +87,12 @@ namespace AgentCore.LLMCore
             Conversation convo,
             ToolCallMode toolMode = ToolCallMode.Auto,
             string? model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions? sampling = null,
+            LLMGenerationOptions? options = null,
             CancellationToken ct = default,
             Action<string>? onStream = null,
             params Tool[] tools)   // optional
         {
-            var req = new LLMRequest(convo, toolMode, tools, model, reasoning, sampling);
+            var req = new LLMRequest(convo, toolMode, tools, model, options);
 
             return await client.ExecuteAsync(req, ct, onStream: chunk =>
             {

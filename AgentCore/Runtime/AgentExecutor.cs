@@ -15,20 +15,17 @@ namespace AgentCore.Runtime
     public class ToolCallingLoop : IAgentExecutor
     {
         private readonly string? _model;
-        private readonly ReasoningMode _mode;
         private readonly ToolCallMode _toolMode;
         private readonly int _maxIterations;
-        private readonly LLMSamplingOptions? _opts;
+        private readonly LLMGenerationOptions? _opts;
 
         public ToolCallingLoop(
             string? model = null,
-            ReasoningMode mode = ReasoningMode.Balanced,
             ToolCallMode toolMode = ToolCallMode.OneTool,
             int maxIterations = 50,
-            LLMSamplingOptions? opts = null)
+            LLMGenerationOptions? opts = null)
         {
             _model = model;
-            _mode = mode;
             _toolMode = toolMode;
             _maxIterations = maxIterations;
             _opts = opts;
@@ -50,7 +47,6 @@ namespace AgentCore.Runtime
                     ctx.ScratchPad,
                     _toolMode,
                     _model,
-                    _mode,
                     _opts,
                     ctx.CancellationToken,
                     s => ctx.Stream?.Invoke(s));

@@ -12,19 +12,16 @@ namespace AgentCore.LLMCore
     {
         public Conversation Prompt { get; internal set; }
         public string Model { get; }
-        public ReasoningMode Reasoning { get; }
-        public LLMSamplingOptions Sampling { get; }
+        public LLMGenerationOptions Options { get; }
 
         protected LLMRequestBase(
             Conversation prompt,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null)
+            LLMGenerationOptions options = null)
         {
             Prompt = prompt;
             Model = model;
-            Reasoning = reasoning;
-            Sampling = sampling;
+            Options = options;
         }
 
         public abstract LLMRequestBase DeepClone();
@@ -39,9 +36,8 @@ namespace AgentCore.LLMCore
             ToolCallMode toolCallMode = ToolCallMode.Auto,
             IEnumerable<Tool> allowedTools = null,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null)
-            : base(prompt, model, reasoning, sampling)
+            LLMGenerationOptions options = null)
+            : base(prompt, model, options)
         {
             AllowedTools = allowedTools;
             ToolCallMode = toolCallMode;
@@ -54,8 +50,7 @@ namespace AgentCore.LLMCore
                 toolCallMode: ToolCallMode,
                 allowedTools: AllowedTools, // allowed to share — immutable list
                 model: Model,
-                reasoning: Reasoning,
-                sampling: Sampling
+                options: Options
             );
         }
     }
@@ -73,14 +68,13 @@ namespace AgentCore.LLMCore
             IEnumerable<Tool> allowedTools = null,
             ToolCallMode toolCallMode = ToolCallMode.Disabled,
             string model = null,
-            ReasoningMode reasoning = ReasoningMode.Balanced,
-            LLMSamplingOptions sampling = null)
-            : base(prompt, model, reasoning, sampling)
+            LLMGenerationOptions options = null)
+            : base(prompt, model, options)
         {
             ResultType = resultType;
-            Schema = Schema;
             AllowedTools = allowedTools;
             ToolCallMode = toolCallMode;
+            Schema = null;
         }
 
         public override LLMRequestBase DeepClone()
@@ -91,8 +85,7 @@ namespace AgentCore.LLMCore
                 allowedTools: AllowedTools,    // immutable list shared
                 toolCallMode: ToolCallMode,
                 model: Model,
-                reasoning: Reasoning,
-                sampling: Sampling
+                options: Options
             )
             {
                 Schema = Schema                 // Schema is immutable — share
@@ -101,9 +94,9 @@ namespace AgentCore.LLMCore
     }
     public sealed class LLMInitOptions
     {
-        public string BaseUrl { get; set; } = "";
-        public string ApiKey { get; set; } = "";
-        public string Model { get; set; } = "";
+        public string? BaseUrl { get; set; } = null;
+        public string? ApiKey { get; set; } = null;
+        public string? Model { get; set; } = null;
     }
 
     public interface ILLMClient
@@ -129,20 +122,17 @@ namespace AgentCore.LLMCore
         Disabled,  // Don't send tools to LLM at all
     }
 
-    public enum ReasoningMode
-    {
-        Deterministic,  // gates, routing, grading
-        Planning,       // structured step-by-step planning
-        Balanced,       // normal reasoning
-        Creative        // brainstorming / open ended
-    }
-    public sealed class LLMSamplingOptions
+    public sealed class LLMGenerationOptions
     {
         public float? Temperature { get; set; }
         public float? TopP { get; set; }
         public int? MaxOutputTokens { get; set; }
         public int? Seed { get; set; }
         public IReadOnlyList<string>? StopSequences { get; set; }
+        public IDictionary<int, int>? LogitBias { get; set; }
+        public float? FrequencyPenalty { get; set; }
+        public float? PresencePenalty { get; set; }
+        public float? TopK { get; set; }
     }
 
     public abstract class LLMResponseBase
@@ -246,8 +236,8 @@ namespace AgentCore.LLMCore
     }
     public class ToolCallDelta
     {
+        public int Index { get; set; }
         public string? Name { get; set; }
         public string? Delta { get; set; }
     }
-
 }

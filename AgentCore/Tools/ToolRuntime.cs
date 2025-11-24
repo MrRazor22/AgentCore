@@ -2,7 +2,9 @@
 using AgentCore.JsonSchema;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +14,7 @@ namespace AgentCore.Tools
     {
         Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
         Task<IReadOnlyList<ToolCallResult>> HandleToolCallsAsync(IEnumerable<ToolCall> toolCalls, CancellationToken ct = default);
+        Task<IReadOnlyList<ToolCallResult>> HandleToolCallsParallelAsync(IEnumerable<ToolCall> toolCalls, CancellationToken ct = default);
     }
 
     public sealed class ToolRuntime : IToolRuntime
@@ -24,13 +27,6 @@ namespace AgentCore.Tools
             _tools = registry ?? throw new ArgumentNullException(nameof(registry));
             _logger = logger;
         }
-
-        private static string MakeKey(ToolCall call)
-        {
-            var argsKey = call.Arguments?.NormalizeArgs() ?? "";
-            return $"{call.Name}:{argsKey}";
-        }
-
         public async Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
         {
             if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
@@ -101,11 +97,11 @@ namespace AgentCore.Tools
 
             return finalArgs;
         }
-
-        public async Task<IReadOnlyList<ToolCallResult>> HandleToolCallsAsync(IEnumerable<ToolCall> toolCalls, CancellationToken ct = default)
+        public async Task<IReadOnlyList<ToolCallResult>> HandleToolCallsAsync(
+            IEnumerable<ToolCall> toolCalls,
+            CancellationToken ct = default)
         {
             var results = new List<ToolCallResult>();
-            var batchCache = new Dictionary<string, object?>();
 
             foreach (var call in toolCalls)
             {
@@ -117,17 +113,9 @@ namespace AgentCore.Tools
                     continue;
                 }
 
-                var key = MakeKey(call);
-                if (batchCache.ContainsKey(key))
-                {
-                    _logger?.LogWarning("Duplicate call detected for {Tool}; ignored.", call.Name);
-                    continue;
-                }
-
                 try
                 {
                     var result = await InvokeAsync(call, ct).ConfigureAwait(false);
-                    batchCache[key] = result;
                     results.Add(new ToolCallResult(call, result));
                 }
                 catch (ToolValidationAggregateException vex)
@@ -144,6 +132,41 @@ namespace AgentCore.Tools
                 }
             }
 
+            return results;
+        }
+        public async Task<IReadOnlyList<ToolCallResult>> HandleToolCallsParallelAsync(
+            IEnumerable<ToolCall> toolCalls,
+            CancellationToken ct = default)
+        {
+            var calls = toolCalls.ToList();
+            var results = new ToolCallResult[calls.Count];
+
+            var tasks = calls.Select(async (call, index) =>
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (string.IsNullOrWhiteSpace(call.Name) && !string.IsNullOrWhiteSpace(call.Message))
+                {
+                    results[index] = new ToolCallResult(call, null);
+                    return;
+                }
+
+                try
+                {
+                    var result = await InvokeAsync(call, ct).ConfigureAwait(false);
+                    results[index] = new ToolCallResult(call, result);
+                }
+                catch (ToolValidationAggregateException vex)
+                {
+                    results[index] = new ToolCallResult(call, vex);
+                }
+                catch (ToolExecutionException tex)
+                {
+                    results[index] = new ToolCallResult(call, tex);
+                }
+            });
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
             return results;
         }
     }
