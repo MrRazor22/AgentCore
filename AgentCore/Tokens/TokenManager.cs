@@ -26,7 +26,7 @@ namespace AgentCore.Tokens
         /// <summary>
         /// Record token usage. If source is null, uses current step from StepContext.
         /// </summary>
-        void Record(int inputTokens, int outputTokens, string? source = null);
+        void Record(int cumulativeInputTokens, int cumulativeOutputTokens, string? source = null);
 
         /// <summary>
         /// Get total tokens used across all calls.

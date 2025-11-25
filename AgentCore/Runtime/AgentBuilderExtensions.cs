@@ -29,7 +29,7 @@ namespace AgentCore.Runtime
                 var tokenizer = sp.GetRequiredService<ITokenizer>();
                 var trimmer = sp.GetRequiredService<IContextTrimmer>();
                 var tokenManager = sp.GetRequiredService<ITokenManager>();
-                var parser = new ToolCallParser();
+                var parser = sp.GetRequiredService<IToolCallParser>();
                 var retry = sp.GetRequiredService<IRetryPolicy>();
 
                 return new OpenAILLMClient(

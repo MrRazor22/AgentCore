@@ -70,6 +70,7 @@ namespace AgentCore.Runtime
             Services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolCatalog>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolRuntime, ToolRuntime>();
+            Services.AddSingleton<IToolCallParser, ToolCallParser>();
             Services.AddSingleton<IContextTrimmer>(sp =>
             {
                 var tokenizer = sp.GetRequiredService<ITokenizer>();

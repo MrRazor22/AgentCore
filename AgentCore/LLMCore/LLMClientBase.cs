@@ -272,7 +272,7 @@ namespace AgentCore.LLMCore
                     yield return rawChunk; // emit as-is
 
                     // inline extraction from assistant message
-                    var inline = _parser.ExtractInlineToolCall(_tools, text);
+                    var inline = _parser.ExtractInlineToolCall(text);
 
                     if (inline.Call != null)
                     {
@@ -334,7 +334,7 @@ namespace AgentCore.LLMCore
 
             try
             {
-                var parsed = _parser.ParseToolParams(_tools, raw.Name, raw.Arguments);
+                var parsed = _parser.ParseToolParams(raw.Name, raw.Arguments);
 
                 return new ToolCall(
                     raw.Id ?? Guid.NewGuid().ToString(),
