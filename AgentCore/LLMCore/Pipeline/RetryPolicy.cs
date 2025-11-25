@@ -1,4 +1,5 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLMCore.Client;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
@@ -6,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Pipeline
 {
     public sealed class RetryPolicyOptions
     {

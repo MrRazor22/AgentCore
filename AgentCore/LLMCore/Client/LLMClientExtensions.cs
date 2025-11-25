@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Client
 {
     public static class LLMClientExtensions
     {

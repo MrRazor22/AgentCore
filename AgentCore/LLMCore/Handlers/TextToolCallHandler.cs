@@ -1,11 +1,13 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLMCore.Client;
+using AgentCore.LLMCore.Pipeline;
 using AgentCore.Tools;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Handlers
 {
     internal sealed class TextToolCallHandler : IChunkHandler
     {

@@ -1,5 +1,7 @@
 ﻿using AgentCore.Chat;
 using AgentCore.JsonSchema;
+using AgentCore.LLMCore.Client;
+using AgentCore.LLMCore.Pipeline;
 using AgentCore.Tools;
 using Newtonsoft.Json.Linq;
 using System;
@@ -7,7 +9,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Handlers
 {
     internal sealed class StructuredHandler<T> : IChunkHandler
     {

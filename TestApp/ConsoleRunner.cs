@@ -97,7 +97,7 @@ namespace TestApp
                         }
                     });
 
-                    Console.WriteLine("\nthinking...");
+                    Console.WriteLine("\n\n───────── thinking... ─────────\n");
 
                     try
                     {
@@ -110,7 +110,7 @@ namespace TestApp
                             continue;
                         }
 
-                        Console.WriteLine("\n\n───────── RESULT ─────────\n");
+                        Console.WriteLine("\n\n\n───────── AGENT RESPONSE ─────────\n");
                         Console.WriteLine(msg);
                         Console.WriteLine("\n──────────────────────────\n");
                     }

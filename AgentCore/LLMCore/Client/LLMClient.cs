@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Client
 {
     public interface IChunkHandler
     {

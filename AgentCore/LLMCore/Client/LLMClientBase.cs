@@ -1,4 +1,6 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLMCore.Handlers;
+using AgentCore.LLMCore.Pipeline;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
@@ -9,7 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore
+namespace AgentCore.LLMCore.Client
 {
     public abstract class LLMClientBase : ILLMClient
     {

@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLMCore;
+using AgentCore.LLMCore.Client;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
