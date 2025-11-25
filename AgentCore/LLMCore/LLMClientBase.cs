@@ -1,20 +1,13 @@
 ﻿using AgentCore.Chat;
-using AgentCore.JsonSchema;
 using AgentCore.Tokens;
 using AgentCore.Tools;
-using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace AgentCore.LLMCore
 {
@@ -81,7 +74,10 @@ namespace AgentCore.LLMCore
             }
 
             // ---- SINGLE STREAM LOOP ----
-            await foreach (var chunk in StreamAsync(request, ct))
+            await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
+                request,
+                r => StreamAsync(r, ct),
+                ct))
             {
                 switch (chunk.Kind)
                 {

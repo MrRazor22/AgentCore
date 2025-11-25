@@ -43,22 +43,22 @@ namespace AgentCore.LLMCore
 
         public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
             LLMRequestBase originalRequest,
-            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> factory,
+            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             var workingRequest = originalRequest.DeepClone();
 
             for (int attempt = 0; attempt <= _options.MaxRetries; attempt++)
             {
-                bool succeeded = true;
-                string? errorMessage = null;
-
                 using var timeoutCts = new CancellationTokenSource(_options.Timeout);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
-                var clonedRequest = workingRequest.DeepClone();
-                var stream = factory(clonedRequest);
+                var cloned = workingRequest.DeepClone();
+                var stream = streamFactory(cloned);
                 var enumerator = stream.GetAsyncEnumerator(linked.Token);
+
+                bool retry = false;
+                string? reason = null;
 
                 try
                 {
@@ -67,18 +67,15 @@ namespace AgentCore.LLMCore
                         bool moved;
 
                         try { moved = await enumerator.MoveNextAsync(); }
-                        catch (RetryException retryEx)
+                        catch (RetryException rex)
                         {
-                            succeeded = false;
-                            errorMessage = retryEx.Message;
+                            retry = true;
+                            reason = rex.Message;
                             break;
                         }
-                        catch (Exception ex)
-                        {
-                            throw; // real errors
-                        }
 
-                        if (!moved) break;
+                        if (!moved)
+                            break;
 
                         yield return enumerator.Current;
                     }
@@ -88,22 +85,28 @@ namespace AgentCore.LLMCore
                     await enumerator.DisposeAsync();
                 }
 
-                if (succeeded)
+                if (!retry)
                     yield break;
 
                 if (attempt == _options.MaxRetries)
                     yield break;
 
-                // Use the exception message to guide the model
-                var retryMessage = $"Retry {attempt + 1} because: {errorMessage ?? "an error occurred"}";
-                workingRequest.Prompt.AddAssistant(retryMessage);
+                // teach the model what to fix
+                workingRequest.Prompt.AddAssistant(reason);
 
-                yield return new LLMStreamChunk(StreamKind.Text, $"[retry {attempt + 1}]: {retryMessage}");
+                // artificial retry chunk for visibility
+                yield return new LLMStreamChunk(
+                    StreamKind.Text,
+                    $"[retry {attempt + 1}] {reason}"
+                );
 
                 await Task.Delay(
-                    TimeSpan.FromMilliseconds(_options.InitialDelay.TotalMilliseconds *
-                                              Math.Pow(_options.BackoffFactor, attempt)),
-                    ct);
+                    TimeSpan.FromMilliseconds(
+                        _options.InitialDelay.TotalMilliseconds *
+                        Math.Pow(_options.BackoffFactor, attempt)
+                    ),
+                    ct
+                );
             }
         }
     }
