@@ -1,6 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.JsonSchema;
-using AgentCore.LLMCore;
+using AgentCore.LLMCore.Client;
 using AgentCore.Tools;
 using OpenAI;
 using OpenAI.Chat;
@@ -87,40 +87,56 @@ namespace AgentCore.Providers.OpenAI
         }
 
         public static void ApplySamplingOptions(
-    this ChatCompletionOptions opts,
-    LLMRequestBase? options)
+            this ChatCompletionOptions opts,
+            LLMRequestBase? request)
         {
-            // No sampling → still apply reasoning mode
-            if (options?.Options != null)
-            {
+            var s = request?.Options;
+            if (s == null)
+                return;
 
-                var s = options.Options;
+            // --- Temperature ---
+            if (s.Temperature.HasValue)
+                opts.Temperature = s.Temperature.Value;
 
-                // --- Temperature ---
-                if (s.Temperature != null)
-                    opts.Temperature = s.Temperature;
+            // --- TopP ---
+            if (s.TopP.HasValue)
+                opts.TopP = s.TopP.Value;
 
-                // --- TopP ---
-                if (s.TopP != null)
-                    opts.TopP = s.TopP;
+            // --- TopK ---
+            //if (s.TopK.HasValue)
+            // OpenAI doesn't support TopK sampling.
+            // Do nothing.
 
-                // --- Max tokens ---
-                if (s.MaxOutputTokens != null)
-                    opts.MaxOutputTokenCount = s.MaxOutputTokens;
+            // --- Max tokens ---
+            if (s.MaxOutputTokens.HasValue)
+                opts.MaxOutputTokenCount = s.MaxOutputTokens.Value;
 
-                // --- Seed (deterministic output) ---
-                // Suppress diagnostic OPENAI001: 'OpenAI.Chat.ChatCompletionOptions.Seed' is for evaluation purposes only and is subject to change or removal in future updates.
+            // --- Seed ---
 #pragma warning disable OPENAI001
-                if (s.Seed != null)
-                    opts.Seed = s.Seed;
+            if (s.Seed.HasValue)
+                opts.Seed = s.Seed.Value;
 #pragma warning restore OPENAI001
 
-                // --- Stop sequences ---
-                if (s.StopSequences != null && s.StopSequences.Count > 0)
-                {
-                    foreach (var stop in s.StopSequences)
-                        opts.StopSequences.Add(stop);
-                }
+            // --- Frequency penalty ---
+            if (s.FrequencyPenalty.HasValue)
+                opts.FrequencyPenalty = s.FrequencyPenalty.Value;
+
+            // --- Presence penalty ---
+            if (s.PresencePenalty.HasValue)
+                opts.PresencePenalty = s.PresencePenalty.Value;
+
+            // --- Stop sequences ---
+            if (s.StopSequences != null && s.StopSequences.Count > 0)
+            {
+                foreach (var stop in s.StopSequences)
+                    opts.StopSequences.Add(stop);
+            }
+
+            // --- Logit bias ---
+            if (s.LogitBias != null && s.LogitBias.Count > 0)
+            {
+                foreach (var kvp in s.LogitBias)
+                    opts.LogitBiases[kvp.Key] = kvp.Value;
             }
         }
     }
