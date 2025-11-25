@@ -20,10 +20,6 @@ namespace AgentCore.LLMCore
 {
     public abstract class LLMClientBase : ILLMClient
     {
-        string? loggedToolName = null;
-        private int _currInTokensSoFar;
-        private int _currOutTokensSoFar;
-        private string _currFinishReason;
         private readonly IToolCatalog _tools;
         private readonly IToolCallParser _parser;
         private readonly ITokenizer _tokenizer;
@@ -32,8 +28,6 @@ namespace AgentCore.LLMCore
         private readonly IRetryPolicy _retryPolicy;
         private readonly ILogger<ILLMClient> _logger;
         protected LLMInitOptions _initOptions;
-
-        private static readonly ConcurrentDictionary<string, JObject> _schemaCache = new ConcurrentDictionary<string, JObject>();
 
         public LLMClientBase(
             LLMInitOptions opts,
@@ -61,17 +55,23 @@ namespace AgentCore.LLMCore
             CancellationToken ct);
         #endregion
 
-        private async IAsyncEnumerable<LLMStreamChunk> PrepareStreamAsync(
+        private async Task<object> RunPipelineAsync(
             LLMRequestBase request,
-            [EnumeratorCancellation] CancellationToken ct)
+            IChunkHandler handler,
+            Action<LLMStreamChunk>? onStream,
+            CancellationToken ct)
         {
-            request.Prompt = _trimmer.Trim(request.Prompt, null, request.Model ?? _initOptions.Model);
+            // ---- TRIM CONTEXT FIRST ----
+            request.Prompt = _trimmer.Trim(
+                request.Prompt,
+                request.Options?.MaxOutputTokens,
+                request.Model
+            );
 
-            _currInTokensSoFar = 0;
-            _currOutTokensSoFar = 0;
-            _currFinishReason = "stop";
+            int inTok = 0;
+            int outTok = 0;
+            string finish = "stop";
 
-            var sb = new StringBuilder();
             var liveLog = new StringBuilder();
 
             if (_logger.IsEnabled(LogLevel.Trace))
@@ -80,55 +80,71 @@ namespace AgentCore.LLMCore
                     JsonConvert.SerializeObject(request.Prompt.ToLogList(), Formatting.Indented));
             }
 
+            // ---- SINGLE STREAM LOOP ----
             await foreach (var chunk in StreamAsync(request, ct))
             {
-                if (chunk.Kind == StreamKind.Text)
+                switch (chunk.Kind)
                 {
-                    var txt = chunk.AsText();
-                    sb.Append(txt);
-                    liveLog.Append(txt);
+                    case StreamKind.Text:
+                        var txt = chunk.AsText() ?? "";
+                        liveLog.Append(txt);
 
-                    if (_logger.IsEnabled(LogLevel.Trace))
-                        _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
-                }
-                // Log
-                else if (chunk.Kind == StreamKind.ToolCallDelta)
-                {
-                    var td = chunk.AsToolCallDelta();
-                    liveLog.Append(td.Delta);
+                        if (_logger.IsEnabled(LogLevel.Trace))
+                            _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
+                        break;
 
-                    if (_logger.IsEnabled(LogLevel.Trace))
-                        _logger.LogTrace("◄ [{Name}] Args: {Args}", td.Name, liveLog.ToString());
-                }
-                if (chunk.Kind == StreamKind.Usage)
-                {
-                    if (chunk.InputTokens.HasValue)
-                        _currInTokensSoFar = chunk.InputTokens.Value;
+                    case StreamKind.ToolCallDelta:
+                        var td = chunk.AsToolCallDelta();
+                        liveLog.Append(td.Delta);
 
-                    if (chunk.OutputTokens.HasValue)
-                        _currOutTokensSoFar = chunk.OutputTokens.Value;
+                        if (_logger.IsEnabled(LogLevel.Trace))
+                            _logger.LogTrace("◄ [{Name}] Args: {Args}",
+                                td.Name, liveLog.ToString());
+                        break;
                 }
 
-                if (chunk.Kind == StreamKind.Finish)
-                {
-                    if (chunk.FinishReason != null)
-                        _currFinishReason = chunk.FinishReason ?? _currFinishReason;
-                }
+                if (chunk.InputTokens.HasValue)
+                    inTok = chunk.InputTokens.Value;
 
-                yield return chunk;
+                if (chunk.OutputTokens.HasValue)
+                    outTok = chunk.OutputTokens.Value;
+
+                if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
+                    finish = chunk.FinishReason;
+
+                onStream?.Invoke(chunk);
+                handler.OnChunk(chunk);
             }
 
-            // fallback
-            int input = _currInTokensSoFar;
-            if (input <= 0)
-                input = _tokenizer.Count(request.Prompt.ToJson(ChatFilter.All), request.Model ?? _initOptions.Model);
+            // ---- FALLBACK TOKEN COUNTING ----
+            if (inTok <= 0)
+            {
+                inTok = _tokenizer.Count(
+                    request.Prompt.ToJson(ChatFilter.All),
+                    request.Model ?? _initOptions.Model
+                );
+            }
 
-            int output = _currOutTokensSoFar;
-            if (output <= 0)
-                output = _tokenizer.Count(sb.ToString(), request.Model ?? _initOptions.Model);
+            var response = handler.BuildResponse(finish, inTok, outTok);
 
-            _tokenManager.Record(input, output);
-            _logger.LogTrace("LLM Call Tokens: in={In}, out={Out}", input, output);
+            if (outTok <= 0)
+            {
+                outTok = response switch
+                {
+                    LLMResponse r =>
+                        _tokenizer.Count(r.AssistantMessage ?? "",
+                            request.Model ?? _initOptions.Model),
+
+                    LLMStructuredResponse<object> s =>
+                        _tokenizer.Count(s.RawJson.ToString(),
+                            request.Model ?? _initOptions.Model),
+
+                    _ => outTok
+                };
+            }
+
+            _tokenManager.Record(inTok, outTok);
+            return response;
         }
 
         public async Task<LLMStructuredResponse<T>> ExecuteAsync<T>(
@@ -136,222 +152,38 @@ namespace AgentCore.LLMCore
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            _logger.LogDebug("Structured request start: {Type}", typeof(T).Name);
+            var handler = new StructuredHandler<T>(request, _parser, _tools);
 
-            request.ResultType = typeof(T);
+            handler.PrepareRequest(request);
 
-            string typeKey = request.ResultType.FullName;
-
-            request.Schema = _schemaCache.GetOrAdd(
-                typeKey,
-                _ => request.ResultType.GetSchemaForType());
-
-            request.AllowedTools =
-                request.ToolCallMode == ToolCallMode.Disabled
-                    ? new Tool[0]
-                    : request.AllowedTools != null && request.AllowedTools.Any()
-                        ? request.AllowedTools.ToArray()
-                        : _tools.RegisteredTools.ToArray();
-
-            StringBuilder jsonBuffer = new StringBuilder();
-
-            // ------------ STREAM WITH RETRIES ------------
-            await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
+            var result = await RunPipelineAsync(
                 request,
-                clonedRequest => PrepareStreamAsync(clonedRequest, ct),
-                ct))
-            {
-                onStream?.Invoke(chunk);
+                handler,
+                onStream,
+                ct);
 
-                if (chunk.Kind == StreamKind.Text)
-                    jsonBuffer.Append(chunk.AsText());
-            }
-
-            string rawText = jsonBuffer.ToString();
-            JToken json = null;
-
-            try
-            {
-                json = JToken.Parse(rawText);
-            }
-            catch
-            {
-                // INVALID JSON → retry driver will see assistant correction
-                _logger.LogWarning("Invalid JSON for structured response {Type}", typeKey);
-                throw new RetryException("Return valid JSON matching the schema.");
-            }
-
-            // ---------- SCHEMA VALIDATION ----------
-            var errors = _parser.ValidateAgainstSchema(json, request.Schema, request.ResultType.Name);
-
-            if (errors.Count > 0)
-            {
-                var msg = string.Join("; ", errors.Select(e => e.Path + ": " + e.Message));
-                _logger.LogWarning("Validation failed for {Type}: {Msg}", typeKey, msg);
-
-                throw new RetryException("Validation failed: " + msg + ". Fix JSON.");
-            }
-
-            T typed = json.ToObject<T>();
-
-            _logger.LogDebug("Structured request completed: {Type}", typeof(T).Name);
-            return new LLMStructuredResponse<T>(
-                json,
-                typed,
-                _currFinishReason,
-                _currInTokensSoFar,
-                _currOutTokensSoFar
-            );
+            return (LLMStructuredResponse<T>)result;
         }
+
 
 
         public async Task<LLMResponse> ExecuteAsync(
-            LLMRequest? request,
+            LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            _logger.LogDebug("LLM request start");
+            var handler = new TextToolCallHandler(_parser, _tools, request.Prompt);
 
-            request.AllowedTools = request.ToolCallMode == ToolCallMode.Disabled
-                ? Array.Empty<Tool>()
-                : request.AllowedTools?.Any() == true
-                    ? request.AllowedTools.ToArray()
-                    : _tools.RegisteredTools.ToArray();
+            handler.PrepareRequest(request);
 
-            var sb = new StringBuilder();
-            ToolCall? firstToolCall = null;
-
-            // -----------------------------
-            // MAIN STREAM (with retries)
-            // -----------------------------
-            await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
+            var result = await RunPipelineAsync(
                 request,
-                clonedrequest => ValidateToolCallsAndStream((LLMRequest)clonedrequest, ct),
-                ct))
-            {
-                onStream?.Invoke(chunk);
+                handler,
+                onStream,
+                ct);
 
-                switch (chunk.Kind)
-                {
-                    case StreamKind.Text:
-                        sb.Append(chunk.AsText());
-                        break;
-
-                    case StreamKind.ToolCall:
-                        firstToolCall = chunk.AsToolCall();
-                        _logger.LogInformation("Tool call received: {Name}", chunk.AsToolCall()?.Name);
-                        break;
-                }
-            }
-
-            var finalText = sb.ToString().Trim();
-
-            _logger.LogDebug("LLM request completed");
-            return new LLMResponse(
-                finalText,
-                firstToolCall!,
-                _currFinishReason,
-                _currInTokensSoFar,
-                _currOutTokensSoFar
-            );
-        }
-        private async IAsyncEnumerable<LLMStreamChunk> ValidateToolCallsAndStream(LLMRequest request, [EnumeratorCancellation] CancellationToken ct)
-        {
-            ToolCall? firstTool = null;
-            await foreach (var rawChunk in PrepareStreamAsync(request, ct))
-            {
-                // TEXT ----------------------------------------------------
-                if (rawChunk.Kind == StreamKind.Text)
-                {
-                    var text = rawChunk.AsText();
-                    if (string.IsNullOrEmpty(text)) continue;
-
-                    // repeated assistant message check (only once per stream) 
-                    CheckRepeatAssistantMessage(request.Prompt, text);
-
-                    yield return rawChunk; // emit as-is
-
-                    // inline extraction from assistant message
-                    var inline = _parser.ExtractInlineToolCall(text);
-
-                    if (inline.Call != null)
-                    {
-                        var validated = TryParseToolCalls(request.Prompt, inline.Call);
-                        if (validated != null && firstTool == null)
-                        {
-                            firstTool = validated;
-                            yield return new LLMStreamChunk(StreamKind.ToolCall, validated);
-                        }
-                    }
-
-                    continue;
-                }
-
-                // TOOLCALL ------------------------------------------------
-                if (rawChunk.Kind == StreamKind.ToolCall)
-                {
-                    var raw = rawChunk.AsToolCall();
-                    if (raw == null) continue;
-
-                    var validated = TryParseToolCalls(request.Prompt, raw);
-                    if (validated == null) continue;
-
-                    if (validated != null && firstTool == null)
-                    {
-                        firstTool = validated;
-                        yield return new LLMStreamChunk(StreamKind.ToolCall, validated);
-                    }
-
-                    yield break;
-                }
-
-                // USAGE / FINISH ------------------------------------------
-                yield return rawChunk;
-            }
+            return (LLMResponse)result;
         }
 
-        private void CheckRepeatAssistantMessage(Conversation requestPrompt, string? text)
-        {
-            if (requestPrompt.IsLastAssistantMessageSame(text))
-            {
-                _logger.LogWarning("Assistant repeated same message");
-
-                throw new RetryException(
-                    "You repeated the same assistant response. Don't repeat — refine or add new info."
-                );
-            }
-        }
-
-        private ToolCall? TryParseToolCalls(Conversation reqPrompt, ToolCall raw)
-        {
-            if (!_tools.Contains(raw.Name))
-            {
-                _logger.LogWarning("Invalid tool: {Name}", raw.Name);
-                throw new RetryException(
-                    $"Tool `{raw.Name}` is invalid. Use one of: {string.Join(", ", _tools.RegisteredTools.Select(t => t.Name))}."
-                );
-            }
-
-            try
-            {
-                var parsed = _parser.ParseToolParams(raw.Name, raw.Arguments);
-
-                return new ToolCall(
-                    raw.Id ?? Guid.NewGuid().ToString(),
-                    raw.Name,
-                    raw.Arguments,
-                    parsed
-                );
-            }
-            catch (ToolValidationAggregateException vex)
-            {
-                var msg = vex.Errors.Select(e => e.Message).ToJoinedString("; ");
-                throw new RetryException($"Invalid arguments for tool `{raw.Name}`. {msg}");
-            }
-            catch (ToolValidationException vex)
-            {
-                throw new RetryException(vex.Message);
-            }
-        }
     }
 }

@@ -8,12 +8,17 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLMCore
 {
+    public interface IChunkHandler
+    {
+        void PrepareRequest(LLMRequestBase request);
+        void OnChunk(LLMStreamChunk chunk);
+        object BuildResponse(string finishReason, int inputTokens, int outputTokens);
+    }
     public abstract class LLMRequestBase
     {
         public Conversation Prompt { get; internal set; }
         public string Model { get; }
         public LLMGenerationOptions Options { get; }
-
         protected LLMRequestBase(
             Conversation prompt,
             string model = null,
