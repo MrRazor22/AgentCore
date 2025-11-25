@@ -109,6 +109,12 @@ namespace AgentCore.LLMCore
                 throw new RetryException(ex.Message);
             }
         }
+        public string GetOutputTextForTokenCount(object response)
+        {
+            var r = (LLMResponse)response;
+            return r.AssistantMessage ?? "";
+        }
+
     }
 
 }

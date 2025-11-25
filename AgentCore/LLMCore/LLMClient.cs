@@ -13,6 +13,7 @@ namespace AgentCore.LLMCore
         void PrepareRequest(LLMRequestBase request);
         void OnChunk(LLMStreamChunk chunk);
         object BuildResponse(string finishReason, int inputTokens, int outputTokens);
+        string GetOutputTextForTokenCount(object response);
     }
     public abstract class LLMRequestBase
     {

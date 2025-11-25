@@ -13,6 +13,7 @@ namespace AgentCore.LLMCore
 {
     public abstract class LLMClientBase : ILLMClient
     {
+        private readonly ILLMPipeline _pipeline;
         private readonly IToolCatalog _tools;
         private readonly IToolCallParser _parser;
         private readonly ITokenizer _tokenizer;
@@ -40,107 +41,38 @@ namespace AgentCore.LLMCore
             _tokenManager = tokenManager;
             _retryPolicy = retryPolicy;
             _logger = logger;
+
+            _pipeline = new LLMPipeline(
+                _retryPolicy,
+                _trimmer,
+                _tokenizer,
+                _tokenManager,
+                _logger,
+                _initOptions);
         }
 
         #region abstract methods providers must implement 
         protected abstract IAsyncEnumerable<LLMStreamChunk> StreamAsync(
             LLMRequestBase request,
             CancellationToken ct);
-        #endregion
+        #endregion 
 
-        private async Task<object> RunPipelineAsync(
+        private async Task<TResponse> ExecuteWithHandlerAsync<TResponse>(
             LLMRequestBase request,
             IChunkHandler handler,
             Action<LLMStreamChunk>? onStream,
             CancellationToken ct)
         {
-            // ---- TRIM CONTEXT FIRST ----
-            request.Prompt = _trimmer.Trim(
-                request.Prompt,
-                request.Options?.MaxOutputTokens,
-                request.Model
-            );
+            handler.PrepareRequest(request);
 
-            int inTok = 0;
-            int outTok = 0;
-            string finish = "stop";
+            var result = await _pipeline.RunAsync(
+            request,
+            handler,
+            r => StreamAsync(r, ct),
+            onStream,
+            ct);
 
-            var liveLog = new StringBuilder();
-
-            if (_logger.IsEnabled(LogLevel.Trace))
-            {
-                _logger.LogTrace("► Outbound Messages:\n{Json}",
-                    JsonConvert.SerializeObject(request.Prompt.ToLogList(), Formatting.Indented));
-            }
-
-            // ---- SINGLE STREAM LOOP ----
-            await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
-                request,
-                r => StreamAsync(r, ct),
-                ct))
-            {
-                switch (chunk.Kind)
-                {
-                    case StreamKind.Text:
-                        var txt = chunk.AsText() ?? "";
-                        liveLog.Append(txt);
-
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
-                        break;
-
-                    case StreamKind.ToolCallDelta:
-                        var td = chunk.AsToolCallDelta();
-                        liveLog.Append(td.Delta);
-
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ [{Name}] Args: {Args}",
-                                td.Name, liveLog.ToString());
-                        break;
-                }
-
-                if (chunk.InputTokens.HasValue)
-                    inTok = chunk.InputTokens.Value;
-
-                if (chunk.OutputTokens.HasValue)
-                    outTok = chunk.OutputTokens.Value;
-
-                if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
-                    finish = chunk.FinishReason;
-
-                onStream?.Invoke(chunk);
-                handler.OnChunk(chunk);
-            }
-
-            // ---- FALLBACK TOKEN COUNTING ----
-            if (inTok <= 0)
-            {
-                inTok = _tokenizer.Count(
-                    request.Prompt.ToJson(ChatFilter.All),
-                    request.Model ?? _initOptions.Model
-                );
-            }
-
-            var response = handler.BuildResponse(finish, inTok, outTok);
-
-            if (outTok <= 0)
-            {
-                outTok = response switch
-                {
-                    LLMResponse r =>
-                        _tokenizer.Count(r.AssistantMessage ?? "",
-                            request.Model ?? _initOptions.Model),
-
-                    LLMStructuredResponse<object> s =>
-                        _tokenizer.Count(s.RawJson.ToString(),
-                            request.Model ?? _initOptions.Model),
-
-                    _ => outTok
-                };
-            }
-
-            _tokenManager.Record(inTok, outTok);
-            return response;
+            return (TResponse)result;
         }
 
         public async Task<LLMStructuredResponse<T>> ExecuteAsync<T>(
@@ -148,37 +80,23 @@ namespace AgentCore.LLMCore
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            var handler = new StructuredHandler<T>(request, _parser, _tools);
-
-            handler.PrepareRequest(request);
-
-            var result = await RunPipelineAsync(
-                request,
-                handler,
+            return await ExecuteWithHandlerAsync<LLMStructuredResponse<T>>
+                (request,
+                new StructuredHandler<T>(request, _parser, _tools),
                 onStream,
                 ct);
-
-            return (LLMStructuredResponse<T>)result;
         }
-
-
 
         public async Task<LLMResponse> ExecuteAsync(
             LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            var handler = new TextToolCallHandler(_parser, _tools, request.Prompt);
-
-            handler.PrepareRequest(request);
-
-            var result = await RunPipelineAsync(
-                request,
-                handler,
+            return await ExecuteWithHandlerAsync<LLMResponse>
+                (request,
+                new TextToolCallHandler(_parser, _tools, request.Prompt),
                 onStream,
                 ct);
-
-            return (LLMResponse)result;
         }
 
     }

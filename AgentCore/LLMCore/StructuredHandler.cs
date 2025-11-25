@@ -94,5 +94,10 @@ namespace AgentCore.LLMCore
                 output
             );
         }
+        public string GetOutputTextForTokenCount(object response)
+        {
+            var r = (LLMStructuredResponse<T>)response;
+            return r.RawJson.ToString();
+        }
     }
 }
