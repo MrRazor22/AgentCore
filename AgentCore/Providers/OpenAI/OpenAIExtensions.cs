@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.JsonSchema;
+using AgentCore.Json;
 using AgentCore.LLMCore.Client;
 using AgentCore.Tools;
 using OpenAI.Chat;
