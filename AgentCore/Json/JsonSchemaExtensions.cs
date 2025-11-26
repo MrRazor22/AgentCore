@@ -7,8 +7,23 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Reflection;
 
-namespace AgentCore.JsonSchema
+namespace AgentCore.Json
 {
+    public sealed class SchemaValidationError
+    {
+        public string Param { get; }
+        public string? Path { get; }
+        public string Message { get; }
+        public string ErrorType { get; }
+
+        public SchemaValidationError(string param, string? path, string message, string errorType)
+        {
+            Param = param;
+            Path = path;
+            Message = message;
+            ErrorType = errorType;
+        }
+    }
     public static class JsonSchemaExtensions
     {
         public static JObject GetSchemaFor<T>() => typeof(T).GetSchemaForType();
@@ -190,6 +205,101 @@ namespace AgentCore.JsonSchema
                 type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort) || type == typeof(sbyte))
                 return "integer";
             return "object";
+        }
+        public static List<SchemaValidationError> Validate(
+            this JObject schema,
+            JToken? node,
+            string path = "")
+        {
+            var errors = new List<SchemaValidationError>();
+
+            if (node == null)
+            {
+                if (schema["required"] is JArray arr && arr.Count > 0)
+                    errors.Add(new SchemaValidationError(path, path, "Value required but missing.", "missing"));
+                return errors;
+            }
+
+            var type = schema["type"]?.ToString();
+            switch (type)
+            {
+                case "string":
+                    if (node.Type != JTokenType.String)
+                        errors.Add(new SchemaValidationError(path, path, "Expected string", "type_error"));
+                    break;
+
+                case "integer":
+                    if (node.Type != JTokenType.Integer)
+                        errors.Add(new SchemaValidationError(path, path, "Expected integer", "type_error"));
+                    break;
+
+                case "number":
+                    if (node.Type != JTokenType.Float && node.Type != JTokenType.Integer)
+                        errors.Add(new SchemaValidationError(path, path, "Expected number", "type_error"));
+                    break;
+
+                case "boolean":
+                    if (node.Type != JTokenType.Boolean)
+                        errors.Add(new SchemaValidationError(path, path, "Expected boolean", "type_error"));
+                    break;
+
+                case "array":
+                    if (node.Type != JTokenType.Array)
+                    {
+                        errors.Add(new SchemaValidationError(path, path, "Expected array", "type_error"));
+                    }
+                    else if (schema["items"] is JObject itemSchema)
+                    {
+                        var arrNode = (JArray)node;
+                        for (int i = 0; i < arrNode.Count; i++)
+                            errors.AddRange(
+                                itemSchema.Validate(arrNode[i], $"{path}[{i}]")
+                            );
+                    }
+                    break;
+
+                case "object":
+                    if (node.Type != JTokenType.Object)
+                    {
+                        errors.Add(new SchemaValidationError(path, path, "Expected object", "type_error"));
+                    }
+                    else if (schema["properties"] is JObject props)
+                    {
+                        var objNode = (JObject)node;
+
+                        foreach (var kvp in props)
+                        {
+                            var key = kvp.Key;
+                            var childSchema = (JObject)kvp.Value;
+
+                            if (!objNode.ContainsKey(key))
+                            {
+                                if (schema["required"] is JArray reqArr &&
+                                    reqArr.Any(r => r?.ToString() == key))
+                                {
+                                    errors.Add(new SchemaValidationError(
+                                        key,
+                                        $"{path}.{key}".Trim('.'),
+                                        $"Missing required field '{key}'",
+                                        "missing"
+                                    ));
+                                }
+                            }
+                            else
+                            {
+                                errors.AddRange(
+                                    childSchema.Validate(
+                                        objNode[key],
+                                        $"{path}.{key}".Trim('.')
+                                    )
+                                );
+                            }
+                        }
+                    }
+                    break;
+            }
+
+            return errors;
         }
     }
 }

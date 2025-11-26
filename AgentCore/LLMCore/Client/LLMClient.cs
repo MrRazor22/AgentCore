@@ -220,11 +220,11 @@ namespace AgentCore.LLMCore.Client
     public sealed class LLMResponse : LLMResponseBase
     {
         public string? AssistantMessage { get; }
-        public ToolCall ToolCall { get; }
+        public ToolCall? ToolCall { get; }
 
         public LLMResponse(
             string? assistantMessage,
-            ToolCall toolCall,
+            ToolCall? toolCall,
             string finishReason,
             int input,
             int output)

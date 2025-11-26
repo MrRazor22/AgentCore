@@ -75,9 +75,8 @@ namespace AgentCore.Runtime
             Services.AddSingleton<IToolCallParser, ToolCallParser>();
             Services.AddSingleton<IContextBudgetManager>(sp =>
             {
-                var tokenizer = sp.GetRequiredService<ITokenizer>();
                 var tokenEstimator = sp.GetRequiredService<ITokenEstimator>();
-                return new ContextBudgetManager(new ContextBudgetOptions(), tokenizer, tokenEstimator);
+                return new ContextBudgetManager(new ContextBudgetOptions(), tokenEstimator);
             });
             Services.AddSingleton<ITokenManager, TokenManager>();
             Services.AddSingleton<IRetryPolicy, RetryPolicy>();

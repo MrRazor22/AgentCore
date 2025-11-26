@@ -1,4 +1,4 @@
-﻿using AgentCore.JsonSchema;
+﻿using AgentCore.Json;
 using AgentCore.LLMCore.Client;
 using AgentCore.LLMCore.Pipeline;
 using AgentCore.Tools;
@@ -75,9 +75,8 @@ namespace AgentCore.LLMCore.Handlers
                 throw new RetryException("Return valid JSON matching the schema.");
             }
 
-            var errors = _parser.ValidateAgainstSchema(
+            var errors = _request.Schema.Validate(
                 json,
-                _request.Schema,
                 _request.ResultType.Name
             );
 

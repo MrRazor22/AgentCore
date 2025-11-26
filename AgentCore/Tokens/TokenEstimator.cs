@@ -1,4 +1,5 @@
-﻿using AgentCore.LLMCore.Client;
+﻿using AgentCore.Chat;
+using AgentCore.LLMCore.Client;
 
 namespace AgentCore.Tokens
 {
@@ -6,6 +7,7 @@ namespace AgentCore.Tokens
     {
         int Estimate(LLMRequestBase request);
         int Estimate(LLMResponseBase response, string? model = null);
+        int Estimate(Conversation convo, string? model = null);
     }
 
     public sealed class TokenEstimator : ITokenEstimator
@@ -24,6 +26,11 @@ namespace AgentCore.Tokens
         public int Estimate(LLMResponseBase response, string? model = null)
         {
             string payload = response.ToSerializablePayload();
+            return _tokenizer.Count(payload, model);
+        }
+        public int Estimate(Conversation convo, string? model = null)
+        {
+            string payload = convo.ToJson();
             return _tokenizer.Count(payload, model);
         }
     }

@@ -69,8 +69,7 @@ namespace AgentCore.Runtime
 
             builder.Services.AddSingleton<IContextBudgetManager>(sp =>
             {
-                var tokenizer = sp.GetRequiredService<ITokenizer>();
-                return new ContextBudgetManager(options, tokenizer, sp.GetRequiredService<ITokenEstimator>());
+                return new ContextBudgetManager(options, sp.GetRequiredService<ITokenEstimator>());
             });
 
             return builder;

@@ -19,14 +19,12 @@ namespace AgentCore.Tokens
 
     internal sealed class ContextBudgetManager : IContextBudgetManager
     {
-        private readonly ITokenizer _tokenizer;
         private readonly ITokenEstimator _estimator;
         private readonly ContextBudgetOptions _opts;
 
-        public ContextBudgetManager(ContextBudgetOptions opts, ITokenizer tokenizer, ITokenEstimator estimator)
+        public ContextBudgetManager(ContextBudgetOptions opts, ITokenEstimator estimator)
         {
             _estimator = estimator ?? throw new ArgumentNullException(nameof(estimator));
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
             _opts = opts ?? throw new ArgumentNullException(nameof(opts));
 
             if (_opts.MaxContextTokens <= 0)
@@ -59,7 +57,7 @@ namespace AgentCore.Tokens
             // We always work on a clone (NON-mutating behavior)
             var trimmed = req.Prompt.Clone();
 
-            int count = _estimator.Estimate(req);
+            int count = _estimator.Estimate(trimmed, model);
             if (count <= limit)
                 return trimmed;
 
@@ -71,7 +69,7 @@ namespace AgentCore.Tokens
             // ---- Remove tool noise ----
             trimmed.RemoveAll(c => c.Role == Role.Tool);
 
-            count = _estimator.Estimate(req);
+            count = _estimator.Estimate(trimmed, model);
             if (count <= limit)
                 return trimmed;
 
@@ -85,7 +83,7 @@ namespace AgentCore.Tokens
             {
                 trimmed.Remove(core[idx]);
                 idx++;
-                count = _estimator.Estimate(req);
+                count = _estimator.Estimate(trimmed, model);
             }
 
             // ---- Ensure system messages remain at the top ----
