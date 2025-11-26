@@ -1,5 +1,4 @@
-﻿using AgentCore.Chat;
-using AgentCore.JsonSchema;
+﻿using AgentCore.JsonSchema;
 using AgentCore.LLMCore.Client;
 using AgentCore.LLMCore.Pipeline;
 using AgentCore.Tools;

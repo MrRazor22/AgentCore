@@ -1,5 +1,4 @@
 ﻿using AgentCore.Chat;
-using AgentCore.Providers.OpenAI;
 using AgentCore.Tools;
 using Newtonsoft.Json.Linq;
 using System;

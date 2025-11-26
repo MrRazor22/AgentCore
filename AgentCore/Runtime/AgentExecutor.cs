@@ -2,8 +2,6 @@
 using AgentCore.LLMCore.Client;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace AgentCore.Runtime
@@ -43,13 +41,23 @@ namespace AgentCore.Runtime
             while (iteration < _maxIterations && !ctx.CancellationToken.IsCancellationRequested)
             {
                 // STREAM LIVE
-                var result = await llm.GetResponseAsync(
-                    ctx.ScratchPad,
-                    _toolMode,
-                    _model,
-                    _opts,
+                var result = await llm.ExecuteAsync(
+                    new LLMRequest(
+                        prompt: ctx.ScratchPad,
+                        toolCallMode: _toolMode,
+                        model: _model,
+                        options: _opts
+                    ),
                     ctx.CancellationToken,
-                    s => ctx.Stream?.Invoke(s));
+                    chunk =>
+                    {
+                        if (chunk.Kind == StreamKind.Text)
+                        {
+                            var text = chunk.AsText();
+                            if (!string.IsNullOrWhiteSpace(text))
+                                ctx.Stream?.Invoke(text);
+                        }
+                    });
 
                 // text 
                 ctx.ScratchPad.AddAssistant(result.AssistantMessage);

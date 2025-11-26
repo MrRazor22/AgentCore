@@ -2,9 +2,7 @@
 using AgentCore.JsonSchema;
 using AgentCore.LLMCore.Client;
 using AgentCore.Tools;
-using OpenAI;
 using OpenAI.Chat;
-using SharpToken;
 using System;
 using System.Collections.Generic;
 using System.Linq;
