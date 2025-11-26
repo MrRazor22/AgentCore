@@ -33,11 +33,11 @@ namespace AgentCore.LLMCore.Pipeline
     /// <summary>
     /// Default policy, preserves existing retry loops (JSON + Tool calls).
     /// </summary>
-    public sealed class DefaultRetryPolicy : IRetryPolicy
+    public sealed class RetryPolicy : IRetryPolicy
     {
         private readonly RetryPolicyOptions _options;
 
-        public DefaultRetryPolicy(IOptions<RetryPolicyOptions>? options = null)
+        public RetryPolicy(IOptions<RetryPolicyOptions>? options = null)
         {
             _options = options?.Value ?? new RetryPolicyOptions();
         }

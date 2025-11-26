@@ -1,8 +1,10 @@
 ﻿using AgentCore.Chat;
+using AgentCore.Providers.OpenAI;
 using AgentCore.Tools;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,7 +31,7 @@ namespace AgentCore.LLMCore.Client
             Model = model;
             Options = options;
         }
-
+        public abstract string ToSerializablePayload();
         public abstract LLMRequestBase DeepClone();
     }
     public sealed class LLMRequest : LLMRequestBase
@@ -48,7 +50,34 @@ namespace AgentCore.LLMCore.Client
             AllowedTools = allowedTools;
             ToolCallMode = toolCallMode;
         }
+        public override string ToSerializablePayload()
+        {
+            var root = new JObject
+            {
+                ["model"] = Model,
+                ["messages"] = JArray.FromObject(
+                    Prompt.Select(m => new
+                    {
+                        role = m.Role,
+                        content = m.Content
+                    })
+                )
+            };
 
+            if (AllowedTools != null)
+            {
+                root["tools"] = JArray.FromObject(
+                    AllowedTools.Select(t => new
+                    {
+                        name = t.Name,
+                        schema = t.ParametersSchema
+                    })
+                );
+                root["tool_choice"] = ToolCallMode.ToString();
+            }
+
+            return root.ToString(Newtonsoft.Json.Formatting.None);
+        }
         public override LLMRequestBase DeepClone()
         {
             return new LLMRequest(
@@ -82,7 +111,38 @@ namespace AgentCore.LLMCore.Client
             ToolCallMode = toolCallMode;
             Schema = null;
         }
+        public override string ToSerializablePayload()
+        {
+            var root = new JObject
+            {
+                ["model"] = Model,
+                ["messages"] = JArray.FromObject(
+                    Prompt.Select(m => new
+                    {
+                        role = m.Role,
+                        content = m.Content
+                    })
+                ),
+                ["response_schema"] = JObject.Parse(
+                    Schema?.ToString() ?? "{}"
+                )
+            };
 
+            if (AllowedTools != null)
+            {
+                root["tools"] = JArray.FromObject(
+                    AllowedTools.Select(t => new
+                    {
+                        name = t.Name,
+                        schema = t.ParametersSchema
+                    })
+                );
+
+                root["tool_choice"] = ToolCallMode.ToString();
+            }
+
+            return root.ToString(Newtonsoft.Json.Formatting.None);
+        }
         public override LLMRequestBase DeepClone()
         {
             return new LLMStructuredRequest(

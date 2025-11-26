@@ -67,18 +67,20 @@ namespace AgentCore.Runtime
         {
             Services.AddSingleton<IAgentMemory, FileMemory>();
             Services.AddSingleton<ITokenizer, SharpTokenTokenizer>();
+            Services.AddSingleton<ITokenEstimator, TokenEstimator>();
             Services.AddSingleton<ToolRegistryCatalog>();
             Services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolCatalog>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolRuntime, ToolRuntime>();
             Services.AddSingleton<IToolCallParser, ToolCallParser>();
-            Services.AddSingleton<IContextTrimmer>(sp =>
+            Services.AddSingleton<IContextBudgetManager>(sp =>
             {
                 var tokenizer = sp.GetRequiredService<ITokenizer>();
-                return new SlidingWindowTrimmer(tokenizer, new ContextTrimOptions());
+                var tokenEstimator = sp.GetRequiredService<ITokenEstimator>();
+                return new ContextBudgetManager(new ContextBudgetOptions(), tokenizer, tokenEstimator);
             });
             Services.AddSingleton<ITokenManager, TokenManager>();
-            Services.AddSingleton<IRetryPolicy, DefaultRetryPolicy>();
+            Services.AddSingleton<IRetryPolicy, RetryPolicy>();
             Services.Configure<RetryPolicyOptions>(_ => { });
             Services.AddLogging(b => b.AddSimpleConsole(o =>
             {

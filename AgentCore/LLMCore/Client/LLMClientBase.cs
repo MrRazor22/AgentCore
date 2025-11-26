@@ -19,7 +19,8 @@ namespace AgentCore.LLMCore.Client
         private readonly IToolCatalog _tools;
         private readonly IToolCallParser _parser;
         private readonly ITokenizer _tokenizer;
-        private readonly IContextTrimmer _trimmer;
+        private readonly ITokenEstimator _estimator;
+        private readonly IContextBudgetManager _trimmer;
         private readonly ITokenManager _tokenManager;
         private readonly IRetryPolicy _retryPolicy;
         private readonly ILogger<ILLMClient> _logger;
@@ -28,29 +29,33 @@ namespace AgentCore.LLMCore.Client
         public LLMClientBase(
             LLMInitOptions opts,
             IToolCatalog registry,
-            IToolCallParser parser,
             ITokenizer tokenizer,
-            IContextTrimmer trimmer,
+            ITokenEstimator estimator,
+            IContextBudgetManager trimmer,
             ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
+            IToolCallParser parser,
             ILogger<ILLMClient> logger)
         {
             _initOptions = opts;
             _tools = registry;
-            _parser = parser;
             _tokenizer = tokenizer;
+            _estimator = estimator;
             _trimmer = trimmer;
             _tokenManager = tokenManager;
             _retryPolicy = retryPolicy;
+            _parser = parser;
             _logger = logger;
 
             _pipeline = new LLMPipeline(
-                _retryPolicy,
-                _trimmer,
+                _initOptions,
                 _tokenizer,
+                _estimator,
+                _trimmer,
                 _tokenManager,
-                _logger,
-                _initOptions);
+                _retryPolicy,
+                _logger
+                );
         }
 
         #region abstract methods providers must implement 

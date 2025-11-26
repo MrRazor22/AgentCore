@@ -23,24 +23,28 @@ namespace AgentCore.LLMCore.Pipeline
     public sealed class LLMPipeline : ILLMPipeline
     {
         private readonly IRetryPolicy _retryPolicy;
-        private readonly IContextTrimmer _trimmer;
+        private readonly IContextBudgetManager _ctxManager;
         private readonly ITokenizer _tokenizer;
         private readonly ITokenManager _tokenManager;
+        private readonly ITokenEstimator _tokenEstimator;
         private readonly ILogger _logger;
         private readonly LLMInitOptions _opts;
 
         public LLMPipeline(
-            IRetryPolicy retryPolicy,
-            IContextTrimmer trimmer,
+            LLMInitOptions opts,
             ITokenizer tokenizer,
+            ITokenEstimator tokenEstimator,
+            IContextBudgetManager ctxManager,
             ITokenManager tokenManager,
-            ILogger logger,
-            LLMInitOptions opts)
+            IRetryPolicy retryPolicy,
+            ILogger logger
+            )
         {
             _retryPolicy = retryPolicy;
-            _trimmer = trimmer;
+            _ctxManager = ctxManager;
             _tokenizer = tokenizer;
             _tokenManager = tokenManager;
+            _tokenEstimator = tokenEstimator;
             _logger = logger;
             _opts = opts;
         }
@@ -53,8 +57,8 @@ namespace AgentCore.LLMCore.Pipeline
             CancellationToken ct)
         {
             // ---- TRIM CONTEXT FIRST ----
-            request.Prompt = _trimmer.Trim(
-                request.Prompt,
+            request.Prompt = _ctxManager.Trim(
+                request,
                 request.Options?.MaxOutputTokens,
                 request.Model
             );
@@ -124,8 +128,7 @@ namespace AgentCore.LLMCore.Pipeline
             // ---- FALLBACK OUTPUT TOKENS ----
             if (outTok <= 0)
             {
-                var text = handler.GetOutputTextForTokenCount(response);
-                outTok = _tokenizer.Count(text, request.Model ?? _opts.Model);
+                outTok = _tokenEstimator.Estimate(request);
             }
 
             _tokenManager.Record(inTok, outTok);

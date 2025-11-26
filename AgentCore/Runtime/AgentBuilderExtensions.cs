@@ -28,19 +28,21 @@ namespace AgentCore.Runtime
                 var logger = sp.GetRequiredService<ILogger<ILLMClient>>();
                 var registry = sp.GetRequiredService<IToolCatalog>();
                 var tokenizer = sp.GetRequiredService<ITokenizer>();
-                var trimmer = sp.GetRequiredService<IContextTrimmer>();
+                var estimator = sp.GetRequiredService<ITokenEstimator>();
+                var ctxManager = sp.GetRequiredService<IContextBudgetManager>();
                 var tokenManager = sp.GetRequiredService<ITokenManager>();
-                var parser = sp.GetRequiredService<IToolCallParser>();
                 var retry = sp.GetRequiredService<IRetryPolicy>();
+                var parser = sp.GetRequiredService<IToolCallParser>();
 
                 return new OpenAILLMClient(
                     opts,
                     registry,
-                    parser,
                     tokenizer,
-                    trimmer,
+                    estimator,
+                    ctxManager,
                     tokenManager,
                     retry,
+                    parser,
                     logger);
             });
 
@@ -55,22 +57,22 @@ namespace AgentCore.Runtime
             else
                 builder.Services.Configure<RetryPolicyOptions>(_ => { }); // defaults
 
-            builder.Services.AddSingleton<IRetryPolicy, DefaultRetryPolicy>();
+            builder.Services.AddSingleton<IRetryPolicy, RetryPolicy>();
             return builder;
         }
 
         //context trimmer
         public static AgentBuilder AddContextTrimming(
            this AgentBuilder builder,
-           Action<ContextTrimOptions> configure)
+           Action<ContextBudgetOptions> configure)
         {
-            var options = new ContextTrimOptions();
+            var options = new ContextBudgetOptions();
             configure(options);
 
-            builder.Services.AddSingleton<IContextTrimmer>(sp =>
+            builder.Services.AddSingleton<IContextBudgetManager>(sp =>
             {
                 var tokenizer = sp.GetRequiredService<ITokenizer>();
-                return new SlidingWindowTrimmer(tokenizer, options);
+                return new ContextBudgetManager(options, tokenizer, sp.GetRequiredService<ITokenEstimator>());
             });
 
             return builder;

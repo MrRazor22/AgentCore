@@ -1,4 +1,5 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLMCore.Client;
 using SharpToken;
 using System;
 using System.Linq;
@@ -6,26 +7,27 @@ using System.Reflection;
 
 namespace AgentCore.Tokens
 {
-    public sealed class ContextTrimOptions
+    public sealed class ContextBudgetOptions
     {
         public int MaxContextTokens { get; set; } = 8000;
-        public double Margin { get; set; } = 0.8;
+        public double Margin { get; set; } = 0.6;
         public string? TokenizerModel { get; set; } = null;
     }
 
-    public interface IContextTrimmer
+    public interface IContextBudgetManager
     {
-        Conversation Trim(Conversation convo, int? maxTokens = null, string? model = null);
-        int Estimate(Conversation convo, string? model = null);
+        Conversation Trim(LLMRequestBase req, int? requiredGap = null, string? model = null);
     }
 
-    internal sealed class SlidingWindowTrimmer : IContextTrimmer
+    internal sealed class ContextBudgetManager : IContextBudgetManager
     {
         private readonly ITokenizer _tokenizer;
-        private readonly ContextTrimOptions _opts;
+        private readonly ITokenEstimator _estimator;
+        private readonly ContextBudgetOptions _opts;
 
-        public SlidingWindowTrimmer(ITokenizer tokenizer, ContextTrimOptions opts)
+        public ContextBudgetManager(ContextBudgetOptions opts, ITokenizer tokenizer, ITokenEstimator estimator)
         {
+            _estimator = estimator ?? throw new ArgumentNullException(nameof(estimator));
             _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
             _opts = opts ?? throw new ArgumentNullException(nameof(opts));
 
@@ -33,26 +35,33 @@ namespace AgentCore.Tokens
                 _opts.MaxContextTokens = 8000;
 
             if (_opts.Margin <= 0)
-                _opts.Margin = 1.0;
+                _opts.Margin = 0.6;
         }
 
         public Conversation Trim(
-            Conversation convo,
-            int? maxTokens = null,
+            LLMRequestBase req,
+            int? requiredGap = null,
             string? model = null)
         {
-            if (convo == null)
-                throw new ArgumentNullException(nameof(convo));
+            if (req == null)
+                throw new ArgumentNullException(nameof(req));
 
             // ---- Determine limits ----
-            int effectiveMax = maxTokens ?? _opts.MaxContextTokens;
-            int limit = (int)(effectiveMax * _opts.Margin);
+            int limit;
+            if (requiredGap != null)
+            {
+                limit = _opts.MaxContextTokens - requiredGap.Value;
+            }
+            else
+            {
+                limit = (int)(_opts.MaxContextTokens * _opts.Margin);
+            }
             string tokenizerModel = _opts.TokenizerModel ?? model;
 
             // We always work on a clone (NON-mutating behavior)
-            var trimmed = convo.Clone();
+            var trimmed = req.Prompt.Clone();
 
-            int count = Estimate(trimmed, tokenizerModel);
+            int count = _estimator.Estimate(req);
             if (count <= limit)
                 return trimmed;
 
@@ -64,7 +73,7 @@ namespace AgentCore.Tokens
             // ---- Remove tool noise ----
             trimmed.RemoveAll(c => c.Role == Role.Tool);
 
-            count = Estimate(trimmed, tokenizerModel);
+            count = _estimator.Estimate(req);
             if (count <= limit)
                 return trimmed;
 
@@ -78,7 +87,7 @@ namespace AgentCore.Tokens
             {
                 trimmed.Remove(core[idx]);
                 idx++;
-                count = Estimate(trimmed, tokenizerModel);
+                count = _estimator.Estimate(req);
             }
 
             // ---- Ensure system messages remain at the top ----
@@ -89,13 +98,6 @@ namespace AgentCore.Tokens
             }
 
             return trimmed;
-        }
-
-        public int Estimate(Conversation convo, string? model = null)
-        {
-            if (convo == null) throw new ArgumentNullException(nameof(convo));
-            string serialized = convo.ToJson(ChatFilter.All);
-            return _tokenizer.Count(serialized, _opts.TokenizerModel ?? model);
         }
     }
 }
