@@ -175,23 +175,28 @@ namespace AgentCore.Runtime
                 var executor = _executorFactory();
                 await executor.ExecuteAsync(ctx).ConfigureAwait(false);
 
-                // Update memory
-                await _memory.UpdateAsync(SessionId, goal, ctx.Response.Message).ConfigureAwait(false);
-
-                return ctx.Response;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                ctx.SetResult("Error: Operation canceled by user.", null);
-                return ctx.Response;
+                // DO NOT overwrite partial text
+                // Just let ctx.Response stay as produced by executor
             }
             catch (Exception ex)
             {
                 var logger = scope.ServiceProvider.GetService<ILogger<Agent>>();
                 logger?.LogError(ex, "Agent execution failed");
+
+                // overwrite response on *actual* errors
                 ctx.SetResult($"Error: {ex.Message}", null);
-                return ctx.Response;
             }
+            finally
+            {
+                // ALWAYS update memory — success, partial, or error
+                await _memory.UpdateAsync(SessionId, goal, ctx.Response.Message)
+                             .ConfigureAwait(false);
+            }
+
+            return ctx.Response;
         }
 
         public static AgentBuilder CreateBuilder() => new AgentBuilder();

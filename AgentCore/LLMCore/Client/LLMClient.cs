@@ -15,7 +15,6 @@ namespace AgentCore.LLMCore.Client
         void PrepareRequest(LLMRequestBase request);
         void OnChunk(LLMStreamChunk chunk);
         object BuildResponse(string finishReason, int inputTokens, int outputTokens);
-        string GetOutputTextForTokenCount(object response);
     }
     public abstract class LLMRequestBase
     {
@@ -172,7 +171,7 @@ namespace AgentCore.LLMCore.Client
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
 
-        Task<LLMStructuredResponse<T>> ExecuteAsync<T>(
+        Task<LLMStructuredResponse> ExecuteAsync<T>(
             LLMStructuredRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
@@ -248,14 +247,14 @@ namespace AgentCore.LLMCore.Client
         }
     }
 
-    public sealed class LLMStructuredResponse<T> : LLMResponseBase
+    public sealed class LLMStructuredResponse : LLMResponseBase
     {
         public JToken RawJson { get; }
-        public T Result { get; }
+        public object Result { get; }
 
         public LLMStructuredResponse(
             JToken rawJson,
-            T result,
+            object result,
             string finishReason,
             int inputTokens,
             int outputTokens)

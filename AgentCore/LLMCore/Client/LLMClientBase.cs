@@ -61,6 +61,7 @@ namespace AgentCore.LLMCore.Client
             IChunkHandler handler,
             Action<LLMStreamChunk>? onStream,
             CancellationToken ct)
+            where TResponse : LLMResponseBase
         {
             handler.PrepareRequest(request);
 
@@ -74,14 +75,14 @@ namespace AgentCore.LLMCore.Client
             return (TResponse)result;
         }
 
-        public async Task<LLMStructuredResponse<T>> ExecuteAsync<T>(
+        public async Task<LLMStructuredResponse> ExecuteAsync<T>(
             LLMStructuredRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            return await ExecuteWithHandlerAsync<LLMStructuredResponse<T>>
+            return await ExecuteWithHandlerAsync<LLMStructuredResponse>
                 (request,
-                new StructuredHandler<T>(request, _parser, _tools),
+                new StructuredHandler(request, _parser, _tools),
                 onStream,
                 ct);
         }

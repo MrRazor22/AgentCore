@@ -70,7 +70,7 @@ namespace AgentCore.LLMCore.Handlers
         public object BuildResponse(string finish, int input, int output)
         {
             return new LLMResponse(
-                _firstTool == null ? _text.ToString().Trim() : null,
+                _text.ToString().Trim(),
                 _firstTool,
                 finish,
                 input,
@@ -110,12 +110,6 @@ namespace AgentCore.LLMCore.Handlers
                 throw new RetryException(ex.Message);
             }
         }
-        public string GetOutputTextForTokenCount(object response)
-        {
-            var r = (LLMResponse)response;
-            return r.AssistantMessage ?? "";
-        }
-
     }
 
 }

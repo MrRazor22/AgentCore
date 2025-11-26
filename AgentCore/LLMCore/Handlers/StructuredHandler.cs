@@ -10,13 +10,16 @@ using System.Text;
 
 namespace AgentCore.LLMCore.Handlers
 {
-    internal sealed class StructuredHandler<T> : IChunkHandler
+    internal sealed class StructuredHandler : IChunkHandler
     {
         private readonly IToolCallParser _parser;
         private readonly IToolCatalog _tools;
         private readonly LLMStructuredRequest _request;
         private readonly StringBuilder _jsonBuffer = new StringBuilder();
-        private static readonly ConcurrentDictionary<string, JObject> _schemaCache = new ConcurrentDictionary<string, JObject>();
+
+        // Cache schemas by type
+        private static readonly ConcurrentDictionary<string, JObject> _schemaCache =
+            new ConcurrentDictionary<string, JObject>();
 
         public StructuredHandler(
             LLMStructuredRequest request,
@@ -30,13 +33,13 @@ namespace AgentCore.LLMCore.Handlers
 
         public void PrepareRequest(LLMRequestBase request)
         {
-            var req = request as LLMStructuredRequest;
-            req.ResultType = typeof(T);
+            var req = (LLMStructuredRequest)request;
 
             string key = req.ResultType.FullName;
+
             req.Schema = _schemaCache.GetOrAdd(
                 key,
-                _ => typeof(T).GetSchemaForType()
+                _ => req.ResultType.GetSchemaForType()
             );
 
             req.AllowedTools =
@@ -49,24 +52,23 @@ namespace AgentCore.LLMCore.Handlers
 
         public void OnChunk(LLMStreamChunk chunk)
         {
-            if (chunk.Kind == StreamKind.Text)
-            {
-                var txt = chunk.AsText();
-                if (!string.IsNullOrEmpty(txt))
-                    _jsonBuffer.Append(txt);
-            }
+            if (chunk.Kind != StreamKind.Text) return;
+
+            var txt = chunk.AsText();
+            if (!string.IsNullOrEmpty(txt))
+                _jsonBuffer.Append(txt);
         }
 
         public object BuildResponse(string finish, int input, int output)
         {
-            string rawText = _jsonBuffer.ToString();
-            if (string.IsNullOrWhiteSpace(rawText))
+            string raw = _jsonBuffer.ToString();
+            if (string.IsNullOrWhiteSpace(raw))
                 throw new RetryException("Empty response. Return valid JSON.");
 
             JToken json;
             try
             {
-                json = JToken.Parse(rawText);
+                json = JToken.Parse(raw);
             }
             catch
             {
@@ -81,24 +83,20 @@ namespace AgentCore.LLMCore.Handlers
 
             if (errors.Count > 0)
             {
-                var msg = string.Join("; ", errors.Select(e => e.Path + ": " + e.Message));
-                throw new RetryException("Validation failed: " + msg + ". Fix JSON.");
+                var msg = string.Join("; ", errors.Select(e => $"{e.Path}: {e.Message}"));
+                throw new RetryException("Validation failed: " + msg);
             }
 
-            T result = json.ToObject<T>();
+            // Deserialize into the runtime result type
+            object result = json.ToObject(_request.ResultType);
 
-            return new LLMStructuredResponse<T>(
+            return new LLMStructuredResponse(
                 json,
                 result,
                 finish,
                 input,
                 output
             );
-        }
-        public string GetOutputTextForTokenCount(object response)
-        {
-            var r = (LLMStructuredResponse<T>)response;
-            return r.RawJson.ToString();
         }
     }
 }

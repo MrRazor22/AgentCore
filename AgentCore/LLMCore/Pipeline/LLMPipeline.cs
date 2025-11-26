@@ -13,7 +13,7 @@ namespace AgentCore.LLMCore.Pipeline
 {
     public interface ILLMPipeline
     {
-        Task<object> RunAsync(
+        Task<LLMResponseBase> RunAsync(
             LLMRequestBase request,
             IChunkHandler handler,
             Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
@@ -43,18 +43,24 @@ namespace AgentCore.LLMCore.Pipeline
             _logger = logger;
         }
 
-        public async Task<object> RunAsync(
-            LLMRequestBase request,
-            IChunkHandler handler,
-            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
-            Action<LLMStreamChunk>? onStream,
-            CancellationToken ct)
+        public async Task<LLMResponseBase> RunAsync(
+             LLMRequestBase request,
+             IChunkHandler handler,
+             Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
+             Action<LLMStreamChunk>? onStream,
+             CancellationToken ct)
         {
-            // ---- TRIM CONTEXT FIRST ----
             request.Prompt = _ctxManager.Trim(
                 request,
                 request.Options?.MaxOutputTokens,
                 request.Model
+            );
+
+            _logger.LogDebug("► Trimmed Prompt:\n{Json}",
+                JsonConvert.SerializeObject(
+                    request.Prompt.ToLogList(),
+                    Formatting.Indented
+                )
             );
 
             int inTok = 0;
@@ -69,75 +75,82 @@ namespace AgentCore.LLMCore.Pipeline
                     JsonConvert.SerializeObject(request.Prompt.ToLogList(), Formatting.Indented));
             }
 
-            // ---- SINGLE STREAM LOOP ----
-            await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
-                request,
-                streamFactory,
-                ct))
+            LLMResponseBase? response = null;
+            try
             {
-                switch (chunk.Kind)
+                await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
+                    request,
+                    streamFactory,
+                    ct))
                 {
-                    case StreamKind.Text:
-                        var txt = chunk.AsText() ?? "";
-                        liveLog.Append(txt);
+                    switch (chunk.Kind)
+                    {
+                        case StreamKind.Text:
+                            var txt = chunk.AsText() ?? "";
+                            liveLog.Append(txt);
 
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
-                        break;
+                            if (_logger.IsEnabled(LogLevel.Trace))
+                                _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
+                            break;
 
-                    case StreamKind.ToolCallDelta:
-                        var td = chunk.AsToolCallDelta();
-                        liveLog.Append(td.Delta);
+                        case StreamKind.ToolCallDelta:
+                            var td = chunk.AsToolCallDelta();
+                            liveLog.Append(td.Delta);
 
-                        if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ [{Name}] Args: {Args}",
-                                td.Name, liveLog.ToString());
-                        break;
+                            if (_logger.IsEnabled(LogLevel.Trace))
+                                _logger.LogTrace("◄ [{Name}] Args: {Args}",
+                                    td.Name, liveLog.ToString());
+                            break;
+                    }
+
+                    if (chunk.InputTokens.HasValue)
+                        inTok = chunk.InputTokens.Value;
+
+                    if (chunk.OutputTokens.HasValue)
+                        outTok = chunk.OutputTokens.Value;
+
+                    if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
+                        finish = chunk.FinishReason;
+
+                    onStream?.Invoke(chunk);
+                    handler.OnChunk(chunk);
                 }
-
-                if (chunk.InputTokens.HasValue)
-                    inTok = chunk.InputTokens.Value;
-
-                if (chunk.OutputTokens.HasValue)
-                    outTok = chunk.OutputTokens.Value;
-
-                if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
-                    finish = chunk.FinishReason;
-
-                onStream?.Invoke(chunk);
-                handler.OnChunk(chunk);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                finish = "cancelled";
+            }
+            finally
+            {
+                var actualIn = inTok;
+                var actualOut = outTok;
 
-            var actualIn = inTok;
-            var actualOut = outTok;
+                var debug = _logger.IsEnabled(LogLevel.Debug);
 
-            var debug = _logger.IsEnabled(LogLevel.Debug);
+                var estIn = (actualIn <= 0 || debug)
+                    ? _tokenEstimator.Estimate(request)
+                    : 0;
 
-            // compute estimation only when needed OR debug wants visibility
-            var estIn = (actualIn <= 0 || debug)
-                ? _tokenEstimator.Estimate(request)
-                : 0;
+                var resolvedIn = actualIn > 0 ? actualIn : estIn;
 
-            var resolvedIn = actualIn > 0 ? actualIn : estIn;
+                response = (LLMResponseBase)handler.BuildResponse(
+                    finish,
+                    resolvedIn,
+                    actualOut
+                );
 
-            var response = (LLMResponseBase)handler.BuildResponse(finish, resolvedIn, actualOut);
+                var estOut = (actualOut <= 0 || debug)
+                    ? _tokenEstimator.Estimate(response, request.Model)
+                    : 0;
 
-            var estOut = (actualOut <= 0 || debug)
-                ? _tokenEstimator.Estimate(response, request.Model)
-                : 0;
+                var resolvedOut = actualOut > 0 ? actualOut : estOut;
 
-            var resolvedOut = actualOut > 0 ? actualOut : estOut;
+                _tokenManager.Record(resolvedIn, resolvedOut);
 
-            _tokenManager.Record(resolvedIn, resolvedOut);
-
-            // normal logging: only resolved usage
-            _logger.LogInformation($"Tokens In={resolvedIn} | Out={resolvedOut}");
-
-            // debug logging: add estimation
-            if (debug) _logger.LogDebug($"Estimation In={estIn} | Out={estOut}");
-
-            return response;
+                _logger.LogInformation($"Tokens In={resolvedIn} | Out={resolvedOut}");
+                if (debug) _logger.LogDebug($"Estimation In={estIn} | Out={estOut}");
+            }
+            return response!;
         }
     }
-
 }
