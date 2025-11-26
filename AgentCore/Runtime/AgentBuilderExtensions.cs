@@ -27,7 +27,6 @@ namespace AgentCore.Runtime
             {
                 var logger = sp.GetRequiredService<ILogger<ILLMClient>>();
                 var registry = sp.GetRequiredService<IToolCatalog>();
-                var tokenizer = sp.GetRequiredService<ITokenizer>();
                 var estimator = sp.GetRequiredService<ITokenEstimator>();
                 var ctxManager = sp.GetRequiredService<IContextBudgetManager>();
                 var tokenManager = sp.GetRequiredService<ITokenManager>();
@@ -37,7 +36,6 @@ namespace AgentCore.Runtime
                 return new OpenAILLMClient(
                     opts,
                     registry,
-                    tokenizer,
                     estimator,
                     ctxManager,
                     tokenManager,

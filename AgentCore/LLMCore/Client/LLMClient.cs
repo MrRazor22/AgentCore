@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -215,6 +216,7 @@ namespace AgentCore.LLMCore.Client
             InputTokens = inputTokens;
             OutputTokens = outputTokens;
         }
+        public abstract string ToSerializablePayload();
     }
 
     public sealed class LLMResponse : LLMResponseBase
@@ -233,6 +235,18 @@ namespace AgentCore.LLMCore.Client
             AssistantMessage = assistantMessage;
             ToolCall = toolCall;
         }
+        public override string ToSerializablePayload()
+        {
+            var sb = new StringBuilder();
+
+            if (!string.IsNullOrEmpty(AssistantMessage))
+                sb.Append(AssistantMessage);
+
+            if (ToolCall != null)
+                sb.Append(ToolCall.Arguments?.ToString() ?? "");
+
+            return sb.ToString();
+        }
     }
 
     public sealed class LLMStructuredResponse<T> : LLMResponseBase
@@ -250,6 +264,10 @@ namespace AgentCore.LLMCore.Client
         {
             RawJson = rawJson;
             Result = result;
+        }
+        public override string ToSerializablePayload()
+        {
+            return RawJson.ToString(Newtonsoft.Json.Formatting.None);
         }
     }
 

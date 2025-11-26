@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 
 namespace AgentCore.Tokens
@@ -23,19 +24,8 @@ namespace AgentCore.Tokens
 
     public interface ITokenManager
     {
-        /// <summary>
-        /// Record token usage. If source is null, uses current step from StepContext.
-        /// </summary>
         void Record(int cumulativeInputTokens, int cumulativeOutputTokens, string? source = null);
-
-        /// <summary>
-        /// Get total tokens used across all calls.
-        /// </summary>
         TokenUsage GetTotals();
-
-        /// <summary>
-        /// Get token usage broken down by source (step name, etc).
-        /// </summary>
         IReadOnlyDictionary<string, TokenUsage> GetBySource();
     }
 
@@ -46,7 +36,6 @@ namespace AgentCore.Tokens
         private int _output;
         private readonly Dictionary<string, TokenUsage> _sources = new Dictionary<string, TokenUsage>();
         private readonly object _lock = new object();
-
         public void Record(int totalInputTokensSoFar, int totalOutputTokensSoFar, string? source = null)
         {
             lock (_lock)

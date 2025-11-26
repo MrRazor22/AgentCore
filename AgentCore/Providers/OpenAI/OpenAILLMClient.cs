@@ -30,14 +30,13 @@ namespace AgentCore.Providers.OpenAI
         public OpenAILLMClient(
             LLMInitOptions opts,
             IToolCatalog registry,
-            ITokenizer tokenizer,
             ITokenEstimator estimator,
             IContextBudgetManager trimmer,
             ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
             IToolCallParser parser,
             ILogger<ILLMClient> logger
-        ) : base(opts, registry, tokenizer, estimator, trimmer, tokenManager, retryPolicy, parser, logger)
+        ) : base(opts, registry, estimator, trimmer, tokenManager, retryPolicy, parser, logger)
         {
             _client = new OpenAIClient(
                 credential: new ApiKeyCredential(_initOptions.ApiKey),

@@ -18,7 +18,6 @@ namespace AgentCore.LLMCore.Client
         private readonly ILLMPipeline _pipeline;
         private readonly IToolCatalog _tools;
         private readonly IToolCallParser _parser;
-        private readonly ITokenizer _tokenizer;
         private readonly ITokenEstimator _estimator;
         private readonly IContextBudgetManager _trimmer;
         private readonly ITokenManager _tokenManager;
@@ -29,7 +28,6 @@ namespace AgentCore.LLMCore.Client
         public LLMClientBase(
             LLMInitOptions opts,
             IToolCatalog registry,
-            ITokenizer tokenizer,
             ITokenEstimator estimator,
             IContextBudgetManager trimmer,
             ITokenManager tokenManager,
@@ -39,7 +37,6 @@ namespace AgentCore.LLMCore.Client
         {
             _initOptions = opts;
             _tools = registry;
-            _tokenizer = tokenizer;
             _estimator = estimator;
             _trimmer = trimmer;
             _tokenManager = tokenManager;
@@ -48,8 +45,6 @@ namespace AgentCore.LLMCore.Client
             _logger = logger;
 
             _pipeline = new LLMPipeline(
-                _initOptions,
-                _tokenizer,
                 _estimator,
                 _trimmer,
                 _tokenManager,

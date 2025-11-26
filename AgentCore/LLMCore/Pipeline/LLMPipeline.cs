@@ -24,15 +24,11 @@ namespace AgentCore.LLMCore.Pipeline
     {
         private readonly IRetryPolicy _retryPolicy;
         private readonly IContextBudgetManager _ctxManager;
-        private readonly ITokenizer _tokenizer;
         private readonly ITokenManager _tokenManager;
         private readonly ITokenEstimator _tokenEstimator;
         private readonly ILogger _logger;
-        private readonly LLMInitOptions _opts;
 
         public LLMPipeline(
-            LLMInitOptions opts,
-            ITokenizer tokenizer,
             ITokenEstimator tokenEstimator,
             IContextBudgetManager ctxManager,
             ITokenManager tokenManager,
@@ -42,11 +38,9 @@ namespace AgentCore.LLMCore.Pipeline
         {
             _retryPolicy = retryPolicy;
             _ctxManager = ctxManager;
-            _tokenizer = tokenizer;
             _tokenManager = tokenManager;
             _tokenEstimator = tokenEstimator;
             _logger = logger;
-            _opts = opts;
         }
 
         public async Task<object> RunAsync(
@@ -114,24 +108,34 @@ namespace AgentCore.LLMCore.Pipeline
                 handler.OnChunk(chunk);
             }
 
-            // ---- FALLBACK TOKEN COUNTING ----
-            if (inTok <= 0)
-            {
-                inTok = _tokenizer.Count(
-                    request.Prompt.ToJson(ChatFilter.All),
-                    request.Model ?? _opts.Model
-                );
-            }
+            var actualIn = inTok;
+            var actualOut = outTok;
 
-            var response = handler.BuildResponse(finish, inTok, outTok);
+            var debug = _logger.IsEnabled(LogLevel.Debug);
 
-            // ---- FALLBACK OUTPUT TOKENS ----
-            if (outTok <= 0)
-            {
-                outTok = _tokenEstimator.Estimate(request);
-            }
+            // compute estimation only when needed OR debug wants visibility
+            var estIn = (actualIn <= 0 || debug)
+                ? _tokenEstimator.Estimate(request)
+                : 0;
 
-            _tokenManager.Record(inTok, outTok);
+            var resolvedIn = actualIn > 0 ? actualIn : estIn;
+
+            var response = (LLMResponseBase)handler.BuildResponse(finish, resolvedIn, actualOut);
+
+            var estOut = (actualOut <= 0 || debug)
+                ? _tokenEstimator.Estimate(response, request.Model)
+                : 0;
+
+            var resolvedOut = actualOut > 0 ? actualOut : estOut;
+
+            _tokenManager.Record(resolvedIn, resolvedOut);
+
+            // normal logging: only resolved usage
+            _logger.LogInformation($"Tokens In={resolvedIn} | Out={resolvedOut}");
+
+            // debug logging: add estimation
+            if (debug) _logger.LogDebug($"Estimation In={estIn} | Out={estOut}");
+
             return response;
         }
     }
