@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Tools;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -57,25 +58,50 @@ namespace AgentCore.LLMCore.Client
                 ["messages"] = JArray.FromObject(
                     Prompt.Select(m => new
                     {
-                        role = m.Role,
+                        role = m.Role.ToString().ToLower(), // Ensure lowercase (user, system, assistant)
                         content = m.Content
                     })
                 )
             };
 
-            if (AllowedTools != null)
+            // 2. Tools
+            // Tools require a specific "type": "function" wrapper that consumes tokens.
+            if (AllowedTools != null && AllowedTools.Any())
             {
                 root["tools"] = JArray.FromObject(
                     AllowedTools.Select(t => new
                     {
-                        name = t.Name,
-                        schema = t.ParametersSchema
+                        type = "function",
+                        function = new
+                        {
+                            name = t.Name,
+                            description = t.Description, // Important: Descriptions consume many tokens
+                            parameters = t.ParametersSchema
+                        }
                     })
                 );
-                root["tool_choice"] = ToolCallMode.ToString();
+
+                // 3. Tool Choice mapping
+                // Logic to handle specific enums or "auto" / "none"
+                if (ToolCallMode == ToolCallMode.Disabled || ToolCallMode.None == ToolCallMode)
+                {
+                    root["tool_choice"] = "none";
+                }
+                else if (ToolCallMode == ToolCallMode.Auto)
+                {
+                    root["tool_choice"] = "auto";
+                }
+                else if (ToolCallMode == ToolCallMode.Required)
+                {
+                    root["tool_choice"] = "required";
+                }
+                // If you support forcing a specific tool, you would handle that object creation here
             }
 
-            return root.ToString(Newtonsoft.Json.Formatting.None);
+            // 4. Token Counting Formatting
+            // Formatting.None removes whitespace, which is usually how APIs receive it.
+            // However, if you want to count tokens, consistency is key.
+            return root.ToString(Formatting.None);
         }
         public override LLMRequestBase DeepClone()
         {
@@ -118,29 +144,67 @@ namespace AgentCore.LLMCore.Client
                 ["messages"] = JArray.FromObject(
                     Prompt.Select(m => new
                     {
-                        role = m.Role,
+                        role = m.Role.ToString().ToLower(), // Ensure lowercase (user, system, assistant)
                         content = m.Content
                     })
-                ),
-                ["response_schema"] = JObject.Parse(
-                    Schema?.ToString() ?? "{}"
                 )
             };
 
-            if (AllowedTools != null)
+            // 1. Structured Output (JSON Schema)
+            // OpenAI uses "response_format" -> "json_schema". 
+            // Just dumping it into "response_schema" usually isn't enough for the tokenizer to see the real overhead.
+            if (Schema != null)
+            {
+                root["response_format"] = new JObject
+                {
+                    ["type"] = "json_schema",
+                    ["json_schema"] = new JObject
+                    {
+                        ["name"] = ResultType.Name,
+                        ["strict"] = true,
+                        ["schema"] = Schema
+                    }
+                };
+            }
+
+            // 2. Tools
+            // Tools require a specific "type": "function" wrapper that consumes tokens.
+            if (AllowedTools != null && AllowedTools.Any())
             {
                 root["tools"] = JArray.FromObject(
                     AllowedTools.Select(t => new
                     {
-                        name = t.Name,
-                        schema = t.ParametersSchema
+                        type = "function",
+                        function = new
+                        {
+                            name = t.Name,
+                            description = t.Description, // Important: Descriptions consume many tokens
+                            parameters = t.ParametersSchema
+                        }
                     })
                 );
 
-                root["tool_choice"] = ToolCallMode.ToString();
+                // 3. Tool Choice mapping
+                // Logic to handle specific enums or "auto" / "none"
+                if (ToolCallMode == ToolCallMode.Disabled || ToolCallMode.None == ToolCallMode)
+                {
+                    root["tool_choice"] = "none";
+                }
+                else if (ToolCallMode == ToolCallMode.Auto)
+                {
+                    root["tool_choice"] = "auto";
+                }
+                else if (ToolCallMode == ToolCallMode.Required)
+                {
+                    root["tool_choice"] = "required";
+                }
+                // If you support forcing a specific tool, you would handle that object creation here
             }
 
-            return root.ToString(Newtonsoft.Json.Formatting.None);
+            // 4. Token Counting Formatting
+            // Formatting.None removes whitespace, which is usually how APIs receive it.
+            // However, if you want to count tokens, consistency is key.
+            return root.ToString(Formatting.None);
         }
         public override LLMRequestBase DeepClone()
         {
