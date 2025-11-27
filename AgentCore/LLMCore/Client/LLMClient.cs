@@ -20,12 +20,12 @@ namespace AgentCore.LLMCore.Client
     public abstract class LLMRequestBase
     {
         public Conversation Prompt { get; internal set; }
-        public string Model { get; }
-        public LLMGenerationOptions Options { get; }
+        public string? Model { get; }
+        public LLMGenerationOptions? Options { get; }
         protected LLMRequestBase(
             Conversation prompt,
-            string model = null,
-            LLMGenerationOptions options = null)
+            string? model = null,
+            LLMGenerationOptions? options = null)
         {
             Prompt = prompt;
             Model = model;
@@ -37,14 +37,14 @@ namespace AgentCore.LLMCore.Client
     public sealed class LLMRequest : LLMRequestBase
     {
         public ToolCallMode ToolCallMode { get; }
-        public IEnumerable<Tool> AllowedTools { get; internal set; }
+        public IEnumerable<Tool>? AllowedTools { get; internal set; }
 
         public LLMRequest(
             Conversation prompt,
             ToolCallMode toolCallMode = ToolCallMode.Auto,
-            IEnumerable<Tool> allowedTools = null,
-            string model = null,
-            LLMGenerationOptions options = null)
+            IEnumerable<Tool>? allowedTools = null,
+            string? model = null,
+            LLMGenerationOptions? options = null)
             : base(prompt, model, options)
         {
             AllowedTools = allowedTools;
@@ -55,17 +55,9 @@ namespace AgentCore.LLMCore.Client
             var root = new JObject
             {
                 ["model"] = Model,
-                ["messages"] = JArray.FromObject(
-                    Prompt.Select(m => new
-                    {
-                        role = m.Role.ToString().ToLower(), // Ensure lowercase (user, system, assistant)
-                        content = m.Content
-                    })
-                )
+                ["messages"] = JArray.FromObject(Prompt.GetSerializableMessages())
             };
 
-            // 2. Tools
-            // Tools require a specific "type": "function" wrapper that consumes tokens.
             if (AllowedTools != null && AllowedTools.Any())
             {
                 root["tools"] = JArray.FromObject(
@@ -75,32 +67,14 @@ namespace AgentCore.LLMCore.Client
                         function = new
                         {
                             name = t.Name,
-                            description = t.Description, // Important: Descriptions consume many tokens
+                            description = t.Description,
                             parameters = t.ParametersSchema
                         }
                     })
                 );
 
-                // 3. Tool Choice mapping
-                // Logic to handle specific enums or "auto" / "none"
-                if (ToolCallMode == ToolCallMode.Disabled || ToolCallMode.None == ToolCallMode)
-                {
-                    root["tool_choice"] = "none";
-                }
-                else if (ToolCallMode == ToolCallMode.Auto)
-                {
-                    root["tool_choice"] = "auto";
-                }
-                else if (ToolCallMode == ToolCallMode.Required)
-                {
-                    root["tool_choice"] = "required";
-                }
-                // If you support forcing a specific tool, you would handle that object creation here
+                root["tool_choice"] = ToolCallMode.ToString().ToLower();
             }
-
-            // 4. Token Counting Formatting
-            // Formatting.None removes whitespace, which is usually how APIs receive it.
-            // However, if you want to count tokens, consistency is key.
             return root.ToString(Formatting.None);
         }
         public override LLMRequestBase DeepClone()
@@ -117,18 +91,18 @@ namespace AgentCore.LLMCore.Client
     public sealed class LLMStructuredRequest : LLMRequestBase
     {
         public Type ResultType { get; internal set; }
-        public JObject Schema { get; internal set; }
+        public JObject? Schema { get; internal set; }
 
-        public IEnumerable<Tool> AllowedTools { get; internal set; }
+        public IEnumerable<Tool>? AllowedTools { get; internal set; }
         public ToolCallMode ToolCallMode { get; }
 
         public LLMStructuredRequest(
             Conversation prompt,
             Type resultType,
-            IEnumerable<Tool> allowedTools = null,
+            IEnumerable<Tool>? allowedTools = null,
             ToolCallMode toolCallMode = ToolCallMode.Disabled,
-            string model = null,
-            LLMGenerationOptions options = null)
+            string? model = null,
+            LLMGenerationOptions? options = null)
             : base(prompt, model, options)
         {
             ResultType = resultType;
@@ -141,18 +115,9 @@ namespace AgentCore.LLMCore.Client
             var root = new JObject
             {
                 ["model"] = Model,
-                ["messages"] = JArray.FromObject(
-                    Prompt.Select(m => new
-                    {
-                        role = m.Role.ToString().ToLower(), // Ensure lowercase (user, system, assistant)
-                        content = m.Content
-                    })
-                )
+                ["messages"] = JArray.FromObject(Prompt.GetSerializableMessages())
             };
 
-            // 1. Structured Output (JSON Schema)
-            // OpenAI uses "response_format" -> "json_schema". 
-            // Just dumping it into "response_schema" usually isn't enough for the tokenizer to see the real overhead.
             if (Schema != null)
             {
                 root["response_format"] = new JObject
@@ -167,8 +132,6 @@ namespace AgentCore.LLMCore.Client
                 };
             }
 
-            // 2. Tools
-            // Tools require a specific "type": "function" wrapper that consumes tokens.
             if (AllowedTools != null && AllowedTools.Any())
             {
                 root["tools"] = JArray.FromObject(
@@ -183,27 +146,8 @@ namespace AgentCore.LLMCore.Client
                         }
                     })
                 );
-
-                // 3. Tool Choice mapping
-                // Logic to handle specific enums or "auto" / "none"
-                if (ToolCallMode == ToolCallMode.Disabled || ToolCallMode.None == ToolCallMode)
-                {
-                    root["tool_choice"] = "none";
-                }
-                else if (ToolCallMode == ToolCallMode.Auto)
-                {
-                    root["tool_choice"] = "auto";
-                }
-                else if (ToolCallMode == ToolCallMode.Required)
-                {
-                    root["tool_choice"] = "required";
-                }
-                // If you support forcing a specific tool, you would handle that object creation here
+                root["tool_choice"] = ToolCallMode.ToString().ToLower();
             }
-
-            // 4. Token Counting Formatting
-            // Formatting.None removes whitespace, which is usually how APIs receive it.
-            // However, if you want to count tokens, consistency is key.
             return root.ToString(Formatting.None);
         }
         public override LLMRequestBase DeepClone()
@@ -305,7 +249,19 @@ namespace AgentCore.LLMCore.Client
                 sb.Append(AssistantMessage);
 
             if (ToolCall != null)
-                sb.Append(ToolCall.Arguments?.ToString() ?? "");
+            {
+                // The ID accounts for ~3-5 tokens
+                if (!string.IsNullOrEmpty(ToolCall.Id))
+                    sb.Append(ToolCall.Id);
+
+                // The Name accounts for ~2-5 tokens
+                if (!string.IsNullOrEmpty(ToolCall.Name))
+                    sb.Append(ToolCall.Name);
+
+                // The Arguments account for the rest
+                if (ToolCall.Arguments != null)
+                    sb.Append(ToolCall.Arguments.ToString(Newtonsoft.Json.Formatting.None));
+            }
 
             return sb.ToString();
         }

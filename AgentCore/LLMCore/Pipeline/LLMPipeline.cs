@@ -56,24 +56,14 @@ namespace AgentCore.LLMCore.Pipeline
                 request.Model
             );
 
-            _logger.LogDebug("► Trimmed Prompt:\n{Json}",
-                JsonConvert.SerializeObject(
-                    request.Prompt.ToLogList(),
-                    Formatting.Indented
-                )
-            );
+            if(_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
 
             int inTok = 0;
             int outTok = 0;
             string finish = "stop";
 
             var liveLog = new StringBuilder();
-
-            if (_logger.IsEnabled(LogLevel.Trace))
-            {
-                _logger.LogTrace("► Outbound Messages:\n{Json}",
-                    JsonConvert.SerializeObject(request.Prompt.ToLogList(), Formatting.Indented));
-            }
 
             LLMResponseBase? response = null;
             try

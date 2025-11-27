@@ -65,47 +65,7 @@ namespace AgentCore.Chat
         }
         public static string ToJson(this Conversation chat, ChatFilter filter = ChatFilter.All)
         {
-            var items = new List<object>();
-
-            foreach (var c in chat)
-            {
-                if (!ShouldInclude(c, filter))
-                    continue;
-
-                var obj = new Dictionary<string, object>();
-                obj["role"] = c.Role.ToString().ToLowerInvariant();
-
-                var text = c.Content as TextContent;
-                if (text != null)
-                {
-                    obj["content"] = text.Text;
-                }
-
-                var call = c.Content as ToolCall;
-                if (call != null && (filter & ChatFilter.ToolCalls) != 0)
-                {
-                    obj["tool_calls"] = new object[]
-                    {
-                        new Dictionary<string, object>
-                        {
-                            { "id", call.Id },
-                            { "name", call.Name },
-                            { "arguments", JObject.Parse(call.Arguments != null ? call.Arguments.ToString(Formatting.None) : "{}") }
-                        }
-                    };
-                }
-
-                var result = c.Content as ToolCallResult;
-                if (result != null && (filter & ChatFilter.ToolResults) != 0)
-                {
-                    obj["tool_result"] = result.Result;
-                    obj["tool_id"] = result.Call.Id;
-                    obj["tool_name"] = result.Call.Name;
-                }
-
-                items.Add(obj);
-            }
-
+            var items = chat.GetSerializableMessages(filter);
             return JsonConvert.SerializeObject(items, Formatting.Indented);
         }
 
@@ -186,65 +146,71 @@ namespace AgentCore.Chat
                 _ => false
             };
         }
-        public static List<Dictionary<string, object>> ToLogList(this Conversation convo)
+
+        // This generates the standard API structure used by OpenAI/Anthropic/Mistral
+        public static List<Dictionary<string, object>> GetSerializableMessages(this Conversation chat, ChatFilter filter = ChatFilter.All)
         {
-            var list = new List<Dictionary<string, object>>();
+            var items = new List<Dictionary<string, object>>();
 
-            foreach (var chat in convo)
+            foreach (var c in chat)
             {
-                var item = new Dictionary<string, object>();
-                item["role"] = chat.Role.ToString();
+                if (!ShouldInclude(c, filter))
+                    continue;
 
-                object contentObj;
+                var msg = new Dictionary<string, object>();
 
-                // TextContent
-                TextContent txt = chat.Content as TextContent;
-                if (txt != null)
+                // Standardize Role: Always lowercase (user, assistant, system, tool)
+                msg["role"] = c.Role.ToString().ToLowerInvariant();
+
+                // Case 1: Text Content
+                if (c.Content is TextContent text)
                 {
-                    contentObj = txt.Text;
+                    msg["content"] = text.Text;
                 }
-                else
+                // Case 2: Tool Call (The Request)
+                else if (c.Content is ToolCall call && (filter & ChatFilter.ToolCalls) != 0)
                 {
-                    // ToolCall
-                    ToolCall call = chat.Content as ToolCall;
-                    if (call != null)
+                    // detected inline tool calls have content, use "tool_calls" array
+                    msg["content"] = call.Message;
+                    msg["tool_calls"] = new List<object>
+                {
+                    new Dictionary<string, object>
                     {
-                        var callDict = new Dictionary<string, object>();
-                        callDict["type"] = "tool_call";
-                        callDict["id"] = call.Id;
-                        callDict["name"] = call.Name;
-                        callDict["arguments"] = call.Arguments;
-
-                        contentObj = callDict;
-                    }
-                    else
-                    {
-                        // ToolCallResult
-                        ToolCallResult result = chat.Content as ToolCallResult;
-                        if (result != null)
-                        {
-                            var resDict = new Dictionary<string, object>();
-                            resDict["type"] = "tool_result";
-                            resDict["call"] = result.Call != null ? result.Call.Name : null;
-                            resDict["result"] = result.Result;
-
-                            contentObj = resDict;
-                        }
-                        else
-                        {
-                            // fallback
-                            contentObj = chat.Content != null
-                                ? chat.Content.ToString()
-                                : "<null>";
+                        { "id", call.Id },
+                        { "type", "function" }, // API standard field
+                        { "function", new Dictionary<string, object>
+                            {
+                                { "name", call.Name },
+                                // Parse JSON string to Object so it serializes clean, 
+                                // or fallback to empty object
+                                { "arguments", call.Arguments != null
+                                    ? JObject.Parse(call.Arguments.ToString())
+                                    : new JObject()
+                                }
+                            }
                         }
                     }
+                };
+                }
+                // Case 3: Tool Result (The Response)
+                else if (c.Content is ToolCallResult result && (filter & ChatFilter.ToolResults) != 0)
+                {
+                    // OpenAI Standard for results:
+                    // Role must be "tool", Needs "tool_call_id", Content is the result string
+
+                    msg["tool_call_id"] = result.Call.Id;
+                    msg["content"] = result.Result;
+
+                    // Note: Your old code had custom fields like 'tool_name'. 
+                    // If you strictly need them for internal logs, add them conditionally, 
+                    // but they aren't sent to the LLM.
+                    // msg["_debug_tool_name"] = result.Call.Name; 
                 }
 
-                item["content"] = contentObj;
-                list.Add(item);
+                items.Add(msg);
             }
 
-            return list;
+            return items;
         }
     }
 }
