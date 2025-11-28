@@ -9,7 +9,7 @@ namespace AgentCore.Tools
     public interface IToolRuntime
     {
         Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
-        Task<ToolCallResult> HandleToolCallsAsync(ToolCall call, CancellationToken ct = default);
+        Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
     }
 
     public sealed class ToolRuntime : IToolRuntime
@@ -90,7 +90,7 @@ namespace AgentCore.Tools
 
             return finalArgs;
         }
-        public async Task<ToolCallResult> HandleToolCallsAsync(ToolCall call, CancellationToken ct = default)
+        public async Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -105,10 +105,6 @@ namespace AgentCore.Tools
             {
                 var result = await InvokeAsync(call, ct).ConfigureAwait(false);
                 return new ToolCallResult(call, result);
-            }
-            catch (ToolValidationAggregateException vex)
-            {
-                return new ToolCallResult(call, vex);
             }
             catch (ToolExecutionException tex)
             {

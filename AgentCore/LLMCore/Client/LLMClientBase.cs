@@ -75,7 +75,7 @@ namespace AgentCore.LLMCore.Client
             return (TResponse)result;
         }
 
-        public async Task<LLMStructuredResponse> ExecuteAsync<T>(
+        public async Task<LLMStructuredResponse> ExecuteAsync(
             LLMStructuredRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)

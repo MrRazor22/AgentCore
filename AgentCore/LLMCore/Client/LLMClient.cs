@@ -179,7 +179,7 @@ namespace AgentCore.LLMCore.Client
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
 
-        Task<LLMStructuredResponse> ExecuteAsync<T>(
+        Task<LLMStructuredResponse> ExecuteAsync(
             LLMStructuredRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
@@ -260,7 +260,7 @@ namespace AgentCore.LLMCore.Client
 
                 // The Arguments account for the rest
                 if (ToolCall.Arguments != null)
-                    sb.Append(ToolCall.Arguments.ToString(Newtonsoft.Json.Formatting.None));
+                    sb.Append(ToolCall.Arguments.ToString(Formatting.None));
             }
 
             return sb.ToString();

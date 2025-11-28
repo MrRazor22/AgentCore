@@ -56,7 +56,7 @@ namespace AgentCore.LLMCore.Pipeline
                 request.Model
             );
 
-            if(_logger.IsEnabled(LogLevel.Trace))
+            if (_logger.IsEnabled(LogLevel.Trace))
                 _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
 
             int inTok = 0;
@@ -138,7 +138,7 @@ namespace AgentCore.LLMCore.Pipeline
                 _tokenManager.Record(resolvedIn, resolvedOut);
 
                 _logger.LogInformation($"Tokens In={resolvedIn} | Out={resolvedOut}");
-                if (debug) _logger.LogDebug($"Estimation In={estIn} | Out={estOut}");
+                if (debug) _logger.LogDebug($"Tokens(Est.) In={estIn} | Out={estOut}");
             }
             return response!;
         }

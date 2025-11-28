@@ -52,11 +52,7 @@ namespace AgentCore.Runtime
                     chunk =>
                     {
                         if (chunk.Kind == StreamKind.Text)
-                        {
-                            var text = chunk.AsText();
-                            if (!string.IsNullOrWhiteSpace(text))
-                                ctx.Stream?.Invoke(text);
-                        }
+                            ctx.Stream?.Invoke(chunk.AsText());
                     });
 
                 // text 
@@ -71,7 +67,7 @@ namespace AgentCore.Runtime
                 }
 
                 // RUN TOOL
-                var outputs = await runtime.HandleToolCallsAsync(toolCall, ctx.CancellationToken);
+                var outputs = await runtime.HandleToolCallAsync(toolCall, ctx.CancellationToken);
 
                 ctx.ScratchPad.AppendToolCallResult(outputs);
 
