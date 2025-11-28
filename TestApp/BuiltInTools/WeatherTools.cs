@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.LLMCore.BuiltInTools
+namespace AgentCore.LLM.BuiltInTools
 {
     [Description("Temperature Units")]
     public enum TempUnit

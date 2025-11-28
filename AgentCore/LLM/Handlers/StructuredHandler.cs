@@ -1,6 +1,6 @@
 ﻿using AgentCore.Json;
-using AgentCore.LLMCore.Client;
-using AgentCore.LLMCore.Pipeline;
+using AgentCore.LLM.Client;
+using AgentCore.LLM.Pipeline;
 using AgentCore.Tools;
 using Newtonsoft.Json.Linq;
 using System;
@@ -8,7 +8,7 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLMCore.Handlers
+namespace AgentCore.LLM.Handlers
 {
     internal sealed class StructuredHandler : IChunkHandler
     {

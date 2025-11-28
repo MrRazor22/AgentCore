@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.LLMCore.BuiltInTools
+namespace AgentCore.LLM.BuiltInTools
 {
     public class CountryInfo
     {

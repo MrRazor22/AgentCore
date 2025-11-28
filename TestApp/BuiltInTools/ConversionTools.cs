@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 
-namespace AgentCore.LLMCore.BuiltInTools
+namespace AgentCore.LLM.BuiltInTools
 {
     class ConversionTools
     {

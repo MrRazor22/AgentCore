@@ -1,5 +1,5 @@
 ﻿using AgentCore.BuiltInTools;
-using AgentCore.LLMCore.BuiltInTools;
+using AgentCore.LLM.BuiltInTools;
 using AgentCore.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

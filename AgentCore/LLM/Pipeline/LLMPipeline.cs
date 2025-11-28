@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLMCore.Client;
+using AgentCore.LLM.Client;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore.Pipeline
+namespace AgentCore.LLM.Pipeline
 {
     public interface ILLMPipeline
     {

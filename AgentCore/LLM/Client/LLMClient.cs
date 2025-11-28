@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore.Client
+namespace AgentCore.LLM.Client
 {
     public interface IChunkHandler
     {

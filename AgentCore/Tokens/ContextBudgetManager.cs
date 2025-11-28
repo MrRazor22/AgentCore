@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLMCore.Client;
+using AgentCore.LLM.Client;
 using System;
 using System.Linq;
 

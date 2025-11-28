@@ -1,5 +1,5 @@
-﻿using AgentCore.LLMCore.Handlers;
-using AgentCore.LLMCore.Pipeline;
+﻿using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
@@ -8,7 +8,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLMCore.Client
+namespace AgentCore.LLM.Client
 {
     public abstract class LLMClientBase : ILLMClient
     {
