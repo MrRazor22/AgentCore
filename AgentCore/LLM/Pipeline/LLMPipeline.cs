@@ -2,7 +2,6 @@
 using AgentCore.LLM.Client;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -90,7 +89,7 @@ namespace AgentCore.LLM.Pipeline
             finally
             {
                 // 1) First let handler build the response WITHOUT token usage
-                var tempResponse = handler.BuildResponse(finish, TokenUsage.Empty);
+                response = handler.BuildResponse(finish, TokenUsage.Empty);
 
                 // 2) Now compute tokens using actual serialized payload
                 int inTokens = tokenUsage.InputTokens;
@@ -100,24 +99,18 @@ namespace AgentCore.LLM.Pipeline
                     inTokens = _tokenManager.Count(request.ToSerializablePayload());
 
                 if (outTokens <= 0)
-                    outTokens = _tokenManager.Count(tempResponse.ToSerializablePayload());
+                    outTokens = _tokenManager.Count(response.ToSerializablePayload());
 
                 var final = new TokenUsage(inTokens, outTokens);
 
                 // 3) Now assign real usage into the response
-                tempResponse.TokenUsage = final;
-
-                // 4) And this becomes the final response
-                response = tempResponse;
+                response.TokenUsage = final;
 
                 // 5) Record usage
                 _tokenManager.Record(final);
             }
 
-
-
             return response;
         }
-
     }
 }

@@ -6,8 +6,8 @@ namespace AgentCore.Tokens
 {
     public class TokenUsage
     {
-        public int InputTokens { get; }
-        public int OutputTokens { get; }
+        public int InputTokens { get; set; }
+        public int OutputTokens { get; set; }
         public int Total => InputTokens + OutputTokens;
 
         public TokenUsage(int input, int output)
@@ -30,8 +30,7 @@ namespace AgentCore.Tokens
     {
         private readonly ILogger<TokenManager> _logger;
 
-        private int _totalIn;
-        private int _totalOut;
+        private TokenUsage _cumulativeTokens = TokenUsage.Empty;
         private readonly object _lock = new object();
 
         public TokenManager(ILogger<TokenManager> logger)
@@ -39,7 +38,6 @@ namespace AgentCore.Tokens
             _logger = logger;
         }
 
-        // simple estimation
         public int Count(string payload)
         {
             if (string.IsNullOrEmpty(payload))
@@ -56,13 +54,13 @@ namespace AgentCore.Tokens
 
             lock (_lock)
             {
-                _totalIn += usage.InputTokens;
-                _totalOut += usage.OutputTokens;
+                _cumulativeTokens.InputTokens += usage.InputTokens;
+                _cumulativeTokens.OutputTokens += usage.OutputTokens;
 
-                _logger.LogInformation(
-                    "TokenManager +{In} In, +{Out} Out",
+                _logger.LogInformation("TokenManager In: {In} | Out: {Out} | Total so far: {total}",
                     usage.InputTokens,
-                    usage.OutputTokens
+                    usage.OutputTokens,
+                    _cumulativeTokens.Total
                 );
             }
         }
@@ -71,7 +69,7 @@ namespace AgentCore.Tokens
         {
             lock (_lock)
             {
-                return new TokenUsage(_totalIn, _totalOut);
+                return _cumulativeTokens;
             }
         }
     }

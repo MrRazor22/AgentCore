@@ -56,9 +56,6 @@ namespace AgentCore.LLM.Handlers
                         var txt = chunk.AsText();
                         if (string.IsNullOrEmpty(txt)) return;
 
-                        // EXACT same repeat protection
-                        CheckRepeat(txt);
-
                         _text.Append(txt);
 
                         // inbound text log moved here 1:1
@@ -107,12 +104,6 @@ namespace AgentCore.LLM.Handlers
                 tokenUsage
             );
 
-        }
-
-        private void CheckRepeat(string text)
-        {
-            if (_request.Prompt.IsLastAssistantMessageSame(text))
-                throw new RetryException("You repeated the same assistant response.");
         }
 
         private ToolCall ValidateTool(ToolCall raw)
