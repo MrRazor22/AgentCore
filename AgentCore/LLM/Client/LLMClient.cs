@@ -1,4 +1,5 @@
 ﻿using AgentCore.Chat;
+using AgentCore.Tokens;
 using AgentCore.Tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,7 +16,7 @@ namespace AgentCore.LLM.Client
     {
         void PrepareRequest(LLMRequestBase request);
         void OnChunk(LLMStreamChunk chunk);
-        object BuildResponse(string finishReason, int inputTokens, int outputTokens);
+        LLMResponseBase BuildResponse(string finishReason, TokenUsage tokenUsage);
     }
     public abstract class LLMRequestBase
     {
@@ -210,17 +211,14 @@ namespace AgentCore.LLM.Client
     public abstract class LLMResponseBase
     {
         public string FinishReason { get; }
-        public int InputTokens { get; }
-        public int OutputTokens { get; }
+        public TokenUsage? TokenUsage { get; internal set; }
 
         protected LLMResponseBase(
             string finishReason,
-            int inputTokens,
-            int outputTokens)
+            TokenUsage? tokenUsage = null)
         {
             FinishReason = finishReason ?? "stop";
-            InputTokens = inputTokens;
-            OutputTokens = outputTokens;
+            TokenUsage = tokenUsage ?? TokenUsage.Empty;
         }
         public abstract string ToSerializablePayload();
     }
@@ -234,9 +232,8 @@ namespace AgentCore.LLM.Client
             string? assistantMessage,
             ToolCall? toolCall,
             string finishReason,
-            int input,
-            int output)
-            : base(finishReason, input, output)
+            TokenUsage? tokenUsage)
+            : base(finishReason, tokenUsage)
         {
             AssistantMessage = assistantMessage;
             ToolCall = toolCall;
@@ -270,22 +267,21 @@ namespace AgentCore.LLM.Client
     public sealed class LLMStructuredResponse : LLMResponseBase
     {
         public JToken RawJson { get; }
-        public object Result { get; }
+        public object? Result { get; }
 
         public LLMStructuredResponse(
             JToken rawJson,
-            object result,
+            object? result,
             string finishReason,
-            int inputTokens,
-            int outputTokens)
-            : base(finishReason, inputTokens, outputTokens)
+            TokenUsage tokenUsage)
+            : base(finishReason, tokenUsage)
         {
             RawJson = rawJson;
             Result = result;
         }
         public override string ToSerializablePayload()
         {
-            return RawJson.ToString(Newtonsoft.Json.Formatting.None);
+            return RawJson.ToString(Formatting.None);
         }
     }
 
@@ -308,31 +304,26 @@ namespace AgentCore.LLM.Client
         public StreamKind Kind { get; }
         public object? Payload { get; }     // unified extensible payload
         public string? FinishReason { get; }
-        public int? InputTokens { get; }
-        public int? OutputTokens { get; }
 
         public LLMStreamChunk(
             StreamKind kind,
             object? payload = null,
-            string? finish = null,
-            int? input = null,
-            int? output = null)
+            string? finish = null)
         {
             Kind = kind;
             Payload = payload;
             FinishReason = finish;
-            InputTokens = input;
-            OutputTokens = output;
         }
     }
     public static class LLMStreamChunkExtensions
     {
+        public static TokenUsage? AsTokenUsage(this LLMStreamChunk chunk)
+            => chunk.Payload as TokenUsage;
         public static string? AsText(this LLMStreamChunk chunk)
             => chunk.Payload as string;
-
         public static ToolCall? AsToolCall(this LLMStreamChunk chunk)
             => chunk.Payload as ToolCall;
-        public static ToolCallDelta AsToolCallDelta(this LLMStreamChunk chunk)
+        public static ToolCallDelta? AsToolCallDelta(this LLMStreamChunk chunk)
             => chunk.Payload as ToolCallDelta;
     }
     public class ToolCallDelta

@@ -1,7 +1,10 @@
-﻿using AgentCore.Json;
+﻿using AgentCore.Chat;
+using AgentCore.Json;
 using AgentCore.LLM.Client;
 using AgentCore.LLM.Pipeline;
+using AgentCore.Tokens;
 using AgentCore.Tools;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
@@ -10,37 +13,42 @@ using System.Text;
 
 namespace AgentCore.LLM.Handlers
 {
-    internal sealed class StructuredHandler : IChunkHandler
+    public delegate StructuredHandler StructuredHandlerFactory();
+    public sealed class StructuredHandler : IChunkHandler
     {
-        private readonly IToolCallParser _parser;
+        private readonly ILogger<StructuredHandler> _logger;
         private readonly IToolCatalog _tools;
-        private readonly LLMStructuredRequest _request;
-        private readonly StringBuilder _jsonBuffer = new StringBuilder();
 
-        // Cache schemas by type
-        private static readonly ConcurrentDictionary<string, JObject> _schemaCache =
-            new ConcurrentDictionary<string, JObject>();
+        private LLMStructuredRequest? _request;
+        private readonly StringBuilder _jsonBuffer = new StringBuilder();
+        private static readonly ConcurrentDictionary<Type, JObject> _schemaCache
+            = new ConcurrentDictionary<Type, JObject>();
 
         public StructuredHandler(
-            LLMStructuredRequest request,
-            IToolCallParser parser,
-            IToolCatalog tools)
+            IToolCatalog tools,
+            ILogger<StructuredHandler> logger)
         {
-            _request = request;
-            _parser = parser;
             _tools = tools;
+            _logger = logger;
         }
 
         public void PrepareRequest(LLMRequestBase request)
         {
+            _request = (LLMStructuredRequest)request;
+
+            if (_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogTrace("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
+
             var req = (LLMStructuredRequest)request;
+            var type = req.ResultType;
 
-            string key = req.ResultType.FullName;
+            if (!_schemaCache.TryGetValue(type, out var schema))
+            {
+                schema = type.GetSchemaForType();
+                _schemaCache[type] = schema;
+            }
 
-            req.Schema = _schemaCache.GetOrAdd(
-                key,
-                _ => req.ResultType.GetSchemaForType()
-            );
+            req.Schema = schema;
 
             req.AllowedTools =
                 req.ToolCallMode == ToolCallMode.Disabled
@@ -55,11 +63,16 @@ namespace AgentCore.LLM.Handlers
             if (chunk.Kind != StreamKind.Text) return;
 
             var txt = chunk.AsText();
-            if (!string.IsNullOrEmpty(txt))
-                _jsonBuffer.Append(txt);
+            if (string.IsNullOrEmpty(txt)) return;
+
+            // inbound log moved here exactly
+            if (_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogTrace("◄ Inbound Stream: {Text}", txt);
+
+            _jsonBuffer.Append(txt);
         }
 
-        public object BuildResponse(string finish, int input, int output)
+        public LLMResponseBase BuildResponse(string finishReason, TokenUsage tokenUsage)
         {
             string raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
@@ -75,26 +88,21 @@ namespace AgentCore.LLM.Handlers
                 throw new RetryException("Return valid JSON matching the schema.");
             }
 
-            var errors = _request.Schema.Validate(
-                json,
-                _request.ResultType.Name
-            );
+            var errors = _request?.Schema?.Validate(json, _request.ResultType.Name);
 
-            if (errors.Count > 0)
+            if (errors?.Count! > 0)
             {
                 var msg = string.Join("; ", errors.Select(e => $"{e.Path}: {e.Message}"));
                 throw new RetryException("Validation failed: " + msg);
             }
 
-            // Deserialize into the runtime result type
-            object result = json.ToObject(_request.ResultType);
+            object? result = json.ToObject(_request?.ResultType!);
 
             return new LLMStructuredResponse(
                 json,
                 result,
-                finish,
-                input,
-                output
+                finishReason,
+                tokenUsage
             );
         }
     }

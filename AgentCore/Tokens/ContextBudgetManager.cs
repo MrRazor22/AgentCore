@@ -14,17 +14,17 @@ namespace AgentCore.Tokens
 
     public interface IContextBudgetManager
     {
-        Conversation Trim(LLMRequestBase req, int? requiredGap = null, string? model = null);
+        Conversation Trim(LLMRequestBase req, int? requiredGap = null);
     }
 
     internal sealed class ContextBudgetManager : IContextBudgetManager
     {
-        private readonly ITokenEstimator _estimator;
+        private readonly ITokenManager _tokenManager;
         private readonly ContextBudgetOptions _opts;
 
-        public ContextBudgetManager(ContextBudgetOptions opts, ITokenEstimator estimator)
+        public ContextBudgetManager(ContextBudgetOptions opts, ITokenManager tokenManager)
         {
-            _estimator = estimator ?? throw new ArgumentNullException(nameof(estimator));
+            _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
             _opts = opts ?? throw new ArgumentNullException(nameof(opts));
 
             if (_opts.MaxContextTokens <= 0)
@@ -36,57 +36,50 @@ namespace AgentCore.Tokens
 
         public Conversation Trim(
             LLMRequestBase req,
-            int? requiredGap = null,
-            string? model = null)
+            int? requiredGap = null)
         {
             if (req == null)
                 throw new ArgumentNullException(nameof(req));
 
-            // ---- Determine limits ----
             int limit;
             if (requiredGap != null)
-            {
                 limit = _opts.MaxContextTokens - requiredGap.Value;
-            }
             else
-            {
                 limit = (int)(_opts.MaxContextTokens * _opts.Margin);
-            }
-            string tokenizerModel = _opts.TokenizerModel ?? model;
 
-            // We always work on a clone (NON-mutating behavior)
+            // clone always
             var trimmed = req.Prompt.Clone();
 
-            int count = _estimator.Estimate(trimmed, model);
+            int count = _tokenManager.Count(trimmed.ToJson());
             if (count <= limit)
                 return trimmed;
 
-            // ---- Keep system messages ----
+            // keep system
             var systemMessages = trimmed
                 .Where(c => c.Role == Role.System)
                 .ToList();
 
-            // ---- Remove tool noise ----
+            // drop tool messages
             trimmed.RemoveAll(c => c.Role == Role.Tool);
 
-            count = _estimator.Estimate(trimmed, model);
+            count = _tokenManager.Count(trimmed.ToJson());
             if (count <= limit)
                 return trimmed;
 
-            // ---- Sliding window for user/assistant context ----
+            // sliding window
             var core = trimmed
                 .Where(c => c.Role == Role.User || c.Role == Role.Assistant)
                 .ToList();
 
             int idx = 0;
-            while (count > limit && idx < core.Count - 1) // keep at least 1 turn
+            while (count > limit && idx < core.Count - 1)
             {
                 trimmed.Remove(core[idx]);
                 idx++;
-                count = _estimator.Estimate(trimmed, model);
+                count = _tokenManager.Count(trimmed.ToJson());
             }
 
-            // ---- Ensure system messages remain at the top ----
+            // ensure system on top
             foreach (var sys in systemMessages)
             {
                 if (!trimmed.Contains(sys))
@@ -96,4 +89,5 @@ namespace AgentCore.Tokens
             return trimmed;
         }
     }
+
 }

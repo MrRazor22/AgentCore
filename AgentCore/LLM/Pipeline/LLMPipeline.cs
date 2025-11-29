@@ -25,11 +25,9 @@ namespace AgentCore.LLM.Pipeline
         private readonly IRetryPolicy _retryPolicy;
         private readonly IContextBudgetManager _ctxManager;
         private readonly ITokenManager _tokenManager;
-        private readonly ITokenEstimator _tokenEstimator;
         private readonly ILogger _logger;
 
         public LLMPipeline(
-            ITokenEstimator tokenEstimator,
             IContextBudgetManager ctxManager,
             ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
@@ -39,71 +37,50 @@ namespace AgentCore.LLM.Pipeline
             _retryPolicy = retryPolicy;
             _ctxManager = ctxManager;
             _tokenManager = tokenManager;
-            _tokenEstimator = tokenEstimator;
             _logger = logger;
         }
-
         public async Task<LLMResponseBase> RunAsync(
-             LLMRequestBase request,
-             IChunkHandler handler,
-             Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
-             Action<LLMStreamChunk>? onStream,
-             CancellationToken ct)
+            LLMRequestBase request,
+            IChunkHandler handler,
+            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
+            Action<LLMStreamChunk>? onStream,
+            CancellationToken ct)
         {
             request.Prompt = _ctxManager.Trim(
                 request,
-                request.Options?.MaxOutputTokens,
-                request.Model
+                request.Options?.MaxOutputTokens
             );
 
             if (_logger.IsEnabled(LogLevel.Trace))
                 _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
 
-            int inTok = 0;
-            int outTok = 0;
+            TokenUsage tokenUsage = TokenUsage.Empty;
             string finish = "stop";
 
             var liveLog = new StringBuilder();
+            LLMResponseBase? response;
 
-            LLMResponseBase? response = null;
             try
             {
                 await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
                     request,
-                    streamFactory,
+                    r => Iterate(),
                     ct))
                 {
-                    switch (chunk.Kind)
-                    {
-                        case StreamKind.Text:
-                            var txt = chunk.AsText() ?? "";
-                            liveLog.Append(txt);
+                    onStream?.Invoke(chunk);
+                    handler.OnChunk(chunk);
 
-                            if (_logger.IsEnabled(LogLevel.Trace))
-                                _logger.LogTrace("◄ Inbound Stream: {Text}", liveLog.ToString());
-                            break;
-
-                        case StreamKind.ToolCallDelta:
-                            var td = chunk.AsToolCallDelta();
-                            liveLog.Append(td.Delta);
-
-                            if (_logger.IsEnabled(LogLevel.Trace))
-                                _logger.LogTrace("◄ [{Name}] Args: {Args}",
-                                    td.Name, liveLog.ToString());
-                            break;
-                    }
-
-                    if (chunk.InputTokens.HasValue)
-                        inTok = chunk.InputTokens.Value;
-
-                    if (chunk.OutputTokens.HasValue)
-                        outTok = chunk.OutputTokens.Value;
+                    if (chunk.Kind == StreamKind.Usage)
+                        tokenUsage = chunk.AsTokenUsage() ?? TokenUsage.Empty;
 
                     if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
                         finish = chunk.FinishReason;
+                }
 
-                    onStream?.Invoke(chunk);
-                    handler.OnChunk(chunk);
+                async IAsyncEnumerable<LLMStreamChunk> Iterate()
+                {
+                    await foreach (var chunk in streamFactory(request))
+                        yield return chunk;
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -112,35 +89,35 @@ namespace AgentCore.LLM.Pipeline
             }
             finally
             {
-                var actualIn = inTok;
-                var actualOut = outTok;
+                // 1) First let handler build the response WITHOUT token usage
+                var tempResponse = handler.BuildResponse(finish, TokenUsage.Empty);
 
-                var debug = _logger.IsEnabled(LogLevel.Debug);
+                // 2) Now compute tokens using actual serialized payload
+                int inTokens = tokenUsage.InputTokens;
+                int outTokens = tokenUsage.OutputTokens;
 
-                var estIn = (actualIn <= 0 || debug)
-                    ? _tokenEstimator.Estimate(request)
-                    : 0;
+                if (inTokens <= 0)
+                    inTokens = _tokenManager.Count(request.ToSerializablePayload());
 
-                var resolvedIn = actualIn > 0 ? actualIn : estIn;
+                if (outTokens <= 0)
+                    outTokens = _tokenManager.Count(tempResponse.ToSerializablePayload());
 
-                response = (LLMResponseBase)handler.BuildResponse(
-                    finish,
-                    resolvedIn,
-                    actualOut
-                );
+                var final = new TokenUsage(inTokens, outTokens);
 
-                var estOut = (actualOut <= 0 || debug)
-                    ? _tokenEstimator.Estimate(response, request.Model)
-                    : 0;
+                // 3) Now assign real usage into the response
+                tempResponse.TokenUsage = final;
 
-                var resolvedOut = actualOut > 0 ? actualOut : estOut;
+                // 4) And this becomes the final response
+                response = tempResponse;
 
-                _tokenManager.Record(resolvedIn, resolvedOut);
-
-                _logger.LogInformation($"Tokens In={resolvedIn} | Out={resolvedOut}");
-                if (debug) _logger.LogDebug($"Tokens(Est.) In={estIn} | Out={estOut}");
+                // 5) Record usage
+                _tokenManager.Record(final);
             }
-            return response!;
+
+
+
+            return response;
         }
+
     }
 }

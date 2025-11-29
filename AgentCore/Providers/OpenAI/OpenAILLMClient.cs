@@ -1,10 +1,9 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.LLM.Client;
+using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
-using AgentCore.Tools;
-using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using OpenAI;
@@ -30,14 +29,11 @@ namespace AgentCore.Providers.OpenAI
         private string? _defaultModel;
         public OpenAILLMClient(
             LLMInitOptions opts,
-            IToolCatalog registry,
-            ITokenEstimator estimator,
-            IContextBudgetManager trimmer,
-            ITokenManager tokenManager,
-            IRetryPolicy retryPolicy,
-            IToolCallParser parser,
-            ILogger<ILLMClient> logger
-        ) : base(opts, registry, estimator, trimmer, tokenManager, retryPolicy, parser, logger)
+            ILLMPipeline pipeline,
+            TextHandlerFactory textFactory,
+            StructuredHandlerFactory structFactory,
+            ILogger<ILLMClient> logger)
+         : base(opts, pipeline, textFactory, structFactory, logger)
         {
             _client = new OpenAIClient(
                 credential: new ApiKeyCredential(_initOptions.ApiKey),
@@ -211,8 +207,7 @@ namespace AgentCore.Providers.OpenAI
             // === USAGE ===
             yield return new LLMStreamChunk(
                 StreamKind.Usage,
-                input: inputTokens,
-                output: outputTokens
+                payload: new TokenUsage(inputTokens, outputTokens)
             );
 
             // === FINISH ===

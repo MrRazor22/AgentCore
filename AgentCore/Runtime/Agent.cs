@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Client;
+using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using AgentCore.Tools;
@@ -66,8 +67,6 @@ namespace AgentCore.Runtime
         public AgentBuilder()
         {
             Services.AddSingleton<IAgentMemory, FileMemory>();
-            Services.AddSingleton<ITokenizer, SharpTokenTokenizer>();
-            Services.AddSingleton<ITokenEstimator, TokenEstimator>();
             Services.AddSingleton<ToolRegistryCatalog>();
             Services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolCatalog>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
@@ -75,12 +74,36 @@ namespace AgentCore.Runtime
             Services.AddSingleton<IToolCallParser, ToolCallParser>();
             Services.AddSingleton<IContextBudgetManager>(sp =>
             {
-                var tokenEstimator = sp.GetRequiredService<ITokenEstimator>();
-                return new ContextBudgetManager(new ContextBudgetOptions(), tokenEstimator);
+                var tokenMgr = sp.GetRequiredService<ITokenManager>();
+                return new ContextBudgetManager(new ContextBudgetOptions(), tokenMgr);
             });
             Services.AddSingleton<ITokenManager, TokenManager>();
             Services.AddSingleton<IRetryPolicy, RetryPolicy>();
             Services.Configure<RetryPolicyOptions>(_ => { });
+            Services.AddSingleton<ILLMPipeline>(sp =>
+            {
+                return new LLMPipeline(
+                    sp.GetRequiredService<IContextBudgetManager>(),
+                    sp.GetRequiredService<ITokenManager>(),
+                    sp.GetRequiredService<IRetryPolicy>(),
+                    sp.GetRequiredService<ILogger<LLMPipeline>>()
+                );
+            });
+            // Handlers
+            Services.AddTransient<TextToolCallHandler>();
+            Services.AddTransient<StructuredHandler>();
+
+            // Factories
+            Services.AddSingleton<TextHandlerFactory>(sp =>
+            {
+                return () => sp.GetRequiredService<TextToolCallHandler>();
+            });
+
+            Services.AddSingleton<StructuredHandlerFactory>(sp =>
+            {
+                return () => sp.GetRequiredService<StructuredHandler>();
+            });
+
             Services.AddLogging(b => b.AddSimpleConsole(o =>
             {
                 o.SingleLine = false;
