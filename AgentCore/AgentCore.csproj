@@ -16,6 +16,9 @@
 		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="10.0.0" />
 		<PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
 		<PackageReference Include="OpenAI" Version="2.7.0" />
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>AgentCore.Tests</_Parameter1>
+		</AssemblyAttribute>
 	</ItemGroup>
 
 </Project>

@@ -17,7 +17,7 @@ namespace AgentCore.Tokens
         Conversation Trim(LLMRequestBase req, int? requiredGap = null);
     }
 
-    internal sealed class ContextBudgetManager : IContextBudgetManager
+    public sealed class ContextBudgetManager : IContextBudgetManager
     {
         private readonly ITokenManager _tokenManager;
         private readonly ContextBudgetOptions _opts;
