@@ -218,7 +218,7 @@ namespace AgentCore.LLM.Client
             TokenUsage? tokenUsage = null)
         {
             FinishReason = finishReason ?? "stop";
-            TokenUsage = tokenUsage ?? TokenUsage.Empty;
+            TokenUsage = tokenUsage ?? new TokenUsage();
         }
         public abstract string ToSerializablePayload();
     }

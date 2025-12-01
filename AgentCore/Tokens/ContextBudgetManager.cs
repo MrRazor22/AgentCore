@@ -14,7 +14,7 @@ namespace AgentCore.Tokens
 
     public interface IContextBudgetManager
     {
-        Conversation Trim(LLMRequestBase req, int? requiredGap = null);
+        Conversation Trim(Conversation reqPrompt, int? requiredGap = null);
     }
 
     public sealed class ContextBudgetManager : IContextBudgetManager
@@ -34,12 +34,10 @@ namespace AgentCore.Tokens
                 _opts.Margin = 0.6;
         }
 
-        public Conversation Trim(
-            LLMRequestBase req,
-            int? requiredGap = null)
+        public Conversation Trim(Conversation reqPrompt, int? requiredGap = null)
         {
-            if (req == null)
-                throw new ArgumentNullException(nameof(req));
+            if (reqPrompt == null)
+                throw new ArgumentNullException(nameof(reqPrompt));
 
             int limit;
             if (requiredGap != null)
@@ -48,7 +46,7 @@ namespace AgentCore.Tokens
                 limit = (int)(_opts.MaxContextTokens * _opts.Margin);
 
             // clone always
-            var trimmed = req.Prompt.Clone();
+            var trimmed = reqPrompt.Clone();
 
             int count = _tokenManager.Count(trimmed.ToJson());
             if (count <= limit)

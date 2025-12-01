@@ -39,15 +39,24 @@ namespace AgentCore.Tools
         {
             return new ToolRegistryCatalog(tools);
         }
-
         public void Register(params Delegate[] funcs)
         {
+            if (funcs == null)
+                throw new ArgumentNullException(nameof(funcs));
+
             foreach (var f in funcs)
             {
+                if (f == null)
+                    throw new ArgumentNullException(nameof(funcs), "Delegate cannot be null.");
+
+                if (!IsMethodJsonCompatible(f.Method))
+                    continue;
+
                 var tool = CreateToolFromDelegate(f);
                 _registeredTools.Add(tool);
             }
         }
+
         public void RegisterAll<T>()
         {
             var methods = typeof(T)
@@ -56,6 +65,8 @@ namespace AgentCore.Tools
 
             foreach (var method in methods)
             {
+                if (!IsMethodJsonCompatible(method))
+                    continue;
                 try
                 {
                     var paramTypes = method.GetParameters()
@@ -85,6 +96,8 @@ namespace AgentCore.Tools
 
             foreach (var method in methods)
             {
+                if (!IsMethodJsonCompatible(method))
+                    continue;
                 try
                 {
                     var paramTypes = method.GetParameters()
@@ -153,5 +166,27 @@ namespace AgentCore.Tools
                 Function = func
             };
         }
+        private static bool IsMethodJsonCompatible(MethodInfo m)
+        {
+            // reject open generic methods
+            if (m.ContainsGenericParameters)
+                return false;
+
+            // reject open generic return type
+            if (m.ReturnType.ContainsGenericParameters)
+                return false;
+
+            foreach (var p in m.GetParameters())
+            {
+                var t = p.ParameterType;
+
+                if (t.IsByRef) return false;          // ref / out
+                if (t.IsPointer) return false;        // unsafe pointer
+                if (t.ContainsGenericParameters) return false;  // open generic param
+            }
+
+            return true;
+        }
+
     }
 }

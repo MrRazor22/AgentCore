@@ -46,14 +46,14 @@ namespace AgentCore.LLM.Pipeline
             CancellationToken ct)
         {
             request.Prompt = _ctxManager.Trim(
-                request,
+                request.Prompt,
                 request.Options?.MaxOutputTokens
             );
 
             if (_logger.IsEnabled(LogLevel.Trace))
                 _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
 
-            TokenUsage tokenUsage = TokenUsage.Empty;
+            TokenUsage tokenUsage = new TokenUsage();
             string finish = "stop";
 
             var liveLog = new StringBuilder();
@@ -70,7 +70,7 @@ namespace AgentCore.LLM.Pipeline
                     handler.OnChunk(chunk);
 
                     if (chunk.Kind == StreamKind.Usage)
-                        tokenUsage = chunk.AsTokenUsage() ?? TokenUsage.Empty;
+                        tokenUsage = chunk.AsTokenUsage() ?? new TokenUsage();
 
                     if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
                         finish = chunk.FinishReason;
@@ -89,7 +89,7 @@ namespace AgentCore.LLM.Pipeline
             finally
             {
                 // 1) First let handler build the response WITHOUT token usage
-                response = handler.BuildResponse(finish, TokenUsage.Empty);
+                response = handler.BuildResponse(finish, new TokenUsage());
 
                 // 2) Now compute tokens using actual serialized payload
                 int inTokens = tokenUsage.InputTokens;

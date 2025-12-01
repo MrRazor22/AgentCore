@@ -8,7 +8,14 @@ namespace AgentCore.Tools
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ToolAttribute : Attribute
     {
-        public string? Description { get; set; }
+        public string? Description { get; }
+
+        public ToolAttribute() { }
+
+        public ToolAttribute(string description)
+        {
+            Description = description;
+        }
     }
 
     public class Tool

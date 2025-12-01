@@ -1,83 +1,82 @@
-﻿using AgentCore.LLM.Client;
+﻿using AgentCore.Chat;
+using AgentCore.LLM.Client;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging.Abstractions;
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AgentCore.Tests.LLM
 {
-    public class LLMPipeline_Tests
+    public sealed class LLMPipeline_Tests
     {
         [Fact]
-        public async Task Pipeline_ProcessesChunks()
+        public async Task Pipeline_PassesChunks_AndBuildsResponse()
         {
-            var pipeline = new LLMPipeline(
-                new FakeCtxMgr(),
-                new FakeTokenMgr(),
-                new FakeRetry(),
-                NullLogger.Instance);
+            var ctx = new FakeCtx();
+            var tokens = new FakeTokenManager();
+            var retry = new FakeRetry();
+            var pipeline = new LLMPipeline(ctx, tokens, retry, NullLogger.Instance);
 
             var handler = new FakeHandler();
-            var req = new FakeReq();
+            var req = new LLMRequest(new Conversation().AddUser("x"));
 
-            var res = await pipeline.RunAsync(
+            LLMResponseBase resp = await pipeline.RunAsync(
                 req,
                 handler,
                 _ => FakeStream(),
                 null,
-                CancellationToken.None);
+                CancellationToken.None
+            );
 
-            Assert.Equal("stop", res.FinishReason);
-            Assert.Contains("hi", handler.Text);
+            Assert.IsType<LLMResponse>(resp);
+            Assert.Equal("stop", resp.FinishReason);
+            Assert.True(resp.TokenUsage.Total > 0);
         }
 
-        async IAsyncEnumerable<LLMStreamChunk> FakeStream()
+        private async IAsyncEnumerable<LLMStreamChunk> FakeStream()
         {
             yield return new LLMStreamChunk(StreamKind.Text, "hi");
-            yield return new LLMStreamChunk(StreamKind.Finish, finish: "stop");
+            yield return new LLMStreamChunk(StreamKind.Usage, new TokenUsage(3, 2));
+            yield return new LLMStreamChunk(StreamKind.Finish, null, "stop");
+            await Task.CompletedTask;
         }
 
-        class FakeReq : LLMRequestBase
+        private sealed class FakeHandler : IChunkHandler
         {
-            public FakeReq() : base(new AgentCore.Chat.Conversation()) { }
-            public override LLMRequestBase DeepClone() => new FakeReq();
-            public override string ToSerializablePayload() => "";
-        }
-
-        class FakeCtxMgr : IContextBudgetManager
-        {
-            public AgentCore.Chat.Conversation Trim(LLMRequestBase r, int? g) => r.Prompt;
-        }
-
-        class FakeRetry : IRetryPolicy
-        {
-            public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(LLMRequestBase o, System.Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> f, CancellationToken ct = default)
-            {
-                await foreach (var c in f(o)) yield return c;
-            }
-        }
-
-        class FakeTokenMgr : ITokenManager
-        {
-            public int Count(string p) => 1;
-            public void Record(TokenUsage u) { }
-            public TokenUsage GetTotals() => TokenUsage.Empty;
-        }
-
-        class FakeHandler : IChunkHandler
-        {
-            public string Text = "";
-            public void PrepareRequest(LLMRequestBase r) { }
+            private readonly StringBuilder sb = new StringBuilder();
+            public void PrepareRequest(LLMRequestBase req) { }
             public void OnChunk(LLMStreamChunk c)
             {
-                if (c.AsText() != null) Text += c.AsText();
+                if (c.Kind == StreamKind.Text)
+                    sb.Append(c.AsText());
             }
-            public LLMResponseBase BuildResponse(string f, TokenUsage t)
-                => new LLMResponse(Text, null, f, t);
+            public LLMResponseBase BuildResponse(string f, TokenUsage u)
+                => new LLMResponse(sb.ToString(), null, f, u);
+        }
+
+        private sealed class FakeCtx : IContextBudgetManager
+        {
+            public Conversation Trim(Conversation c, int? x = null) => c;
+        }
+
+        private sealed class FakeRetry : IRetryPolicy
+        {
+            public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
+                LLMRequestBase r,
+                Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> f,
+                [EnumeratorCancellation] CancellationToken ct = default)
+            {
+                await foreach (var c in f(r))
+                    yield return c;
+            }
+        }
+
+        private sealed class FakeTokenManager : ITokenManager
+        {
+            public int Count(string payload) => 1;
+            public void Record(TokenUsage u) { }
+            public TokenUsage GetTotals() => new TokenUsage(0, 0);
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,11 +38,19 @@ namespace AgentCore.Tools
                 var func = tool.Function;
                 var method = func.Method;
                 var returnType = method.ReturnType;
+                var methodParams = method.GetParameters();
+                int expectedJson = methodParams.Count(p => p.ParameterType != typeof(CancellationToken));
+                var jsonParams = toolCall.Parameters ?? Array.Empty<object>();
+
+                if (jsonParams.Length != expectedJson)
+                    throw new TargetParameterCountException();
+
+                // always inject CT if method wants it
+                object?[] finalArgs = InjectCancellationToken(toolCall, method, ct);
 
                 if (typeof(Task).IsAssignableFrom(returnType))
                 {
                     ct.ThrowIfCancellationRequested();
-                    object?[] finalArgs = InjectCancellationToken(toolCall, method, ct);
                     var task = (Task)func.DynamicInvoke(finalArgs);
                     await task.ConfigureAwait(false);
 
@@ -54,7 +63,8 @@ namespace AgentCore.Tools
                     return null;
                 }
 
-                return func.DynamicInvoke(toolCall.Parameters);
+                // synchronous call, CT still injected
+                return func.DynamicInvoke(finalArgs);
             }
             catch (OperationCanceledException)
             {
@@ -69,27 +79,23 @@ namespace AgentCore.Tools
             }
         }
 
-        private static object?[] InjectCancellationToken(ToolCall toolCall, MethodInfo method, CancellationToken ct)
+        private static object?[] InjectCancellationToken(ToolCall call, MethodInfo method, CancellationToken ct)
         {
-            var finalArgs = new object?[method.GetParameters().Length];
+            var methodParams = method.GetParameters();
+            var finalArgs = new object?[methodParams.Length];
 
             int jsonIndex = 0;
-            for (int i = 0; i < method.GetParameters().Length; i++)
+            foreach (var p in methodParams)
             {
-                var p = method.GetParameters()[i];
-
-                if (p.ParameterType == typeof(CancellationToken))
-                {
-                    finalArgs[i] = ct;
-                }
-                else
-                {
-                    finalArgs[i] = toolCall.Parameters[jsonIndex++];
-                }
+                finalArgs[jsonIndex] =
+                    p.ParameterType == typeof(CancellationToken)
+                    ? ct
+                    : call.Parameters[jsonIndex++];
             }
 
             return finalArgs;
         }
+
         public async Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

@@ -10,13 +10,11 @@ namespace AgentCore.Tokens
         public int OutputTokens { get; set; }
         public int Total => InputTokens + OutputTokens;
 
-        public TokenUsage(int input, int output)
+        public TokenUsage(int input = 0, int output = 0)
         {
             InputTokens = input;
             OutputTokens = output;
         }
-
-        public static readonly TokenUsage Empty = new TokenUsage(0, 0);
     }
 
     public interface ITokenManager
@@ -30,7 +28,7 @@ namespace AgentCore.Tokens
     {
         private readonly ILogger<TokenManager> _logger;
 
-        private TokenUsage _cumulativeTokens = TokenUsage.Empty;
+        private TokenUsage _cumulativeTokens = new TokenUsage(0, 0);
         private readonly object _lock = new object();
 
         public TokenManager(ILogger<TokenManager> logger)
