@@ -14,9 +14,9 @@ namespace AgentCore.LLM.Handlers
     public delegate TextToolCallHandler TextHandlerFactory();
     public sealed class TextToolCallHandler : IChunkHandler
     {
-        private readonly ILogger<TextToolCallHandler> _logger;
         private readonly IToolCallParser _parser;
         private readonly IToolCatalog _tools;
+        private readonly ILogger<TextToolCallHandler> _logger;
 
         private LLMRequest _request;
         private readonly StringBuilder _text = new StringBuilder();
@@ -42,9 +42,6 @@ namespace AgentCore.LLM.Handlers
                     : _request.AllowedTools?.Any() == true
                         ? _request.AllowedTools.ToArray()
                         : _tools.RegisteredTools.ToArray();
-
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace("► Outbound Messages:\n{Json}", _request.Prompt.ToJson());
         }
 
         public void OnChunk(LLMStreamChunk chunk)
@@ -63,7 +60,7 @@ namespace AgentCore.LLM.Handlers
                             _logger.LogTrace("◄ Inbound Stream: {Text}", _text.ToString());
 
                         // same inline detection
-                        var inline = _parser.ExtractInlineToolCall(txt);
+                        var inline = _parser.ExtractInlineToolCall(_text.ToString());
                         if (inline.Call != null && _firstTool == null)
                             _firstTool = ValidateTool(inline.Call);
 
@@ -95,15 +92,13 @@ namespace AgentCore.LLM.Handlers
             }
         }
 
-        public LLMResponseBase BuildResponse(string finishReason, TokenUsage? tokenUsage)
+        public LLMResponseBase BuildResponse(string finishReason)
         {
             return new LLMResponse(
                 _text.ToString().Trim(),
                 _firstTool,
-                finishReason,
-                tokenUsage
+                finishReason
             );
-
         }
 
         private ToolCall ValidateTool(ToolCall raw)

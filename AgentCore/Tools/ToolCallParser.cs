@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace AgentCore.Tools
 {
@@ -21,7 +22,7 @@ namespace AgentCore.Tools
 
     public interface IToolCallParser
     {
-        InlineToolCall ExtractInlineToolCall(string content, bool strict = false);
+        InlineToolCall ExtractInlineToolCall(string content);
         object[] ParseToolParams(string toolName, JObject arguments);
     }
 
@@ -38,7 +39,7 @@ namespace AgentCore.Tools
             _toolCatalog = toolCatalog;
         }
 
-        public InlineToolCall ExtractInlineToolCall(string content, bool strict = false)
+        public InlineToolCall ExtractInlineToolCall(string content)
         {
             foreach (var (start, end, obj) in content.FindAllJsonObjects())
             {
@@ -77,7 +78,6 @@ namespace AgentCore.Tools
             var methodParams = method.GetParameters();
             var argsObj = arguments ?? throw new ArgumentException("Arguments null");
 
-            // Wrap single complex param if needed
             if (methodParams.Length == 1 &&
                 !methodParams[0].ParameterType.IsSimpleType() &&
                 !argsObj.ContainsKey(methodParams[0].Name))
@@ -85,24 +85,23 @@ namespace AgentCore.Tools
                 argsObj = new JObject { [methodParams[0].Name] = argsObj };
             }
 
-            var paramValues = new object[methodParams.Length];
-            for (int i = 0; i < methodParams.Length; i++)
+            var paramValues = new List<object?>();
+            foreach (var p in methodParams)
             {
-                var p = methodParams[i];
+                if (p.ParameterType == typeof(CancellationToken))
+                    continue;
+
                 var node = argsObj[p.Name];
 
                 if (node == null)
                 {
                     if (p.HasDefaultValue)
-                        paramValues[i] = p.DefaultValue;
-                    else if (!p.ParameterType.IsValueType || Nullable.GetUnderlyingType(p.ParameterType) != null)
-                        paramValues[i] = null;
+                        paramValues.Add(p.DefaultValue);
                     else
                         throw new ToolValidationException(p.Name, "Missing required parameter.");
                     continue;
                 }
 
-                // Validate against schema
                 var schema = p.ParameterType.GetSchemaForType();
                 var errors = schema.Validate(node, p.Name);
                 if (errors.Any())
@@ -110,7 +109,7 @@ namespace AgentCore.Tools
 
                 try
                 {
-                    paramValues[i] = node.ToObject(p.ParameterType);
+                    paramValues.Add(node.ToObject(p.ParameterType));
                 }
                 catch (Exception ex)
                 {
@@ -118,7 +117,7 @@ namespace AgentCore.Tools
                 }
             }
 
-            return paramValues;
+            return paramValues.ToArray();
         }
     }
 }

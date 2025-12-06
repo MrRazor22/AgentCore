@@ -62,7 +62,6 @@ namespace AgentCore.Tokens
                 );
             }
         }
-
         public TokenUsage GetTotals()
         {
             lock (_lock)

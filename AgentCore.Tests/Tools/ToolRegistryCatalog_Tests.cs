@@ -261,5 +261,59 @@ namespace AgentCore.Tests.Tools
 
             Assert.True(reg.Contains("Many"));
         }
+
+        [Fact]
+        public void Register_OptionalAndNullableRules_AreAppliedCorrectly()
+        {
+            var reg = new ToolRegistryCatalog();
+
+            [Tool]
+            static int Mix(int a, string? b, int? c, CancellationToken ct = default) => 0;
+
+            reg.Register((Func<int, string?, int?, CancellationToken, int>)Mix);
+
+            var t = reg.Get("Mix");
+            Assert.NotNull(t);
+
+            var props = (JObject)t.ParametersSchema["properties"];
+            var req = (JArray)t.ParametersSchema["required"];
+
+            Assert.True(props.ContainsKey("a"));
+            Assert.True(req.Contains("a"));
+
+            Assert.True(props.ContainsKey("b"));
+            Assert.False(req.Contains("b"));
+
+            Assert.True(props.ContainsKey("c"));
+            Assert.False(req.Contains("c"));
+
+            Assert.False(props.ContainsKey("ct"));
+        }
+
+        public class Obj
+        {
+            public string X { get; set; }
+            public int? Y { get; set; }
+        }
+
+        // Define the tool method OUTSIDE the test method
+        [Tool]
+        private static int T(Obj o, CancellationToken ct)
+        {
+            return 0;
+        }
+        [Fact]
+        public void Register_ComplexType_WithOptionalMembers_StillAccepted()
+        {
+            var reg = new ToolRegistryCatalog();
+
+            // Register the tool explicitly
+            reg.Register((Func<Obj, CancellationToken, int>)T);
+
+            var t = reg.Get("T");
+            var props = (JObject)t.ParametersSchema["properties"];
+
+            Assert.True(props.ContainsKey("o"));
+        }
     }
 }

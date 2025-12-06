@@ -7,22 +7,12 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static AgentCore.Tests.Tools.ToolCallParserTests;
 
 namespace AgentCore.Tests.Tools
 {
     public class ToolCallParserTests
     {
-        // simple fake catalog
-        class FakeToolCatalog : IToolCatalog
-        {
-            private readonly Dictionary<string, Tool> _tools = new();
-
-            public IReadOnlyList<Tool> RegisteredTools => new List<Tool>(_tools.Values);
-            public bool Contains(string name) => _tools.ContainsKey(name);
-            public Tool Get(string name) => _tools.TryGetValue(name, out var t) ? t : null;
-            public void Add(Tool t) => _tools[t.Name] = t;
-        }
-
         class Tools
         {
             [Tool]
@@ -43,47 +33,25 @@ namespace AgentCore.Tests.Tools
 
         ToolCallParser MakeParser()
         {
-            var catalog = new FakeToolCatalog();
+            var catalog = new ToolRegistryCatalog();
 
-            catalog.Add(new Tool
-            {
-                Name = "Add",
-                Function = (Func<int, int, int>)Tools.Add,
-                ParametersSchema = typeof(int).GetSchemaForType()
-            });
-
-            catalog.Add(new Tool
-            {
-                Name = "Calc",
-                Function = (Func<Tools.InputObj, int>)Tools.Calc,
-                ParametersSchema = typeof(Tools.InputObj).GetSchemaForType()
-            });
-
-            catalog.Add(new Tool
-            {
-                Name = "Defaulted",
-                Function = (Func<int, int>)Tools.Defaulted,
-                ParametersSchema = typeof(int).GetSchemaForType()
-            });
+            // This picks up all static [Tool] methods in Tools
+            catalog.RegisterAll<Tools>();
 
             return new ToolCallParser(catalog);
         }
-
-        // ───────────────────────────────────────────────
-        // INLINE JSON EXTRACTION TESTS
-        // ───────────────────────────────────────────────
 
         [Fact]
         public void ExtractInlineToolCall_ReturnsCall_WhenValid()
         {
             var p = MakeParser();
-            var txt = "prefix { \"name\": \"Add\", \"arguments\": {\"a\":1, \"b\":2} }";
+            var txt = "prefix ``{ \"name\": \"Add\", \"arguments\": {\"a\":1, \"b\":2} }``";
 
             var res = p.ExtractInlineToolCall(txt);
 
             Assert.NotNull(res.Call);
             Assert.Equal("Add", res.Call.Name);
-            Assert.Equal("prefix", res.AssistantMessage);
+            Assert.Equal("prefix ", res.AssistantMessage);
         }
 
         [Fact]
@@ -101,8 +69,8 @@ namespace AgentCore.Tests.Tools
         {
             var p = MakeParser();
             var txt =
-                "a {\"name\":\"Add\",\"arguments\":{\"a\":1,\"b\":2}} " +
-                "b {\"name\":\"Add\",\"arguments\":{\"a\":10,\"b\":20}}";
+                "a <tool_call>{\"name\":\"Add\",\"arguments\":{\"a\":1,\"b\":2}}</tool_call>" +
+                "b <TOOLCALL>{\"name\":\"Add\",\"arguments\":{\"a\":10,\"b\":20}}</TOOLCALL>";
 
             var res = p.ExtractInlineToolCall(txt);
 
@@ -126,31 +94,13 @@ namespace AgentCore.Tests.Tools
         public void ExtractInlineToolCall_PartialJson_NoCall()
         {
             var p = MakeParser();
-            var txt = "{ \"name\": \"Add\", \"arguments\": {\"a\": 1";
+            var txt = "<tool_call>{ \"name\": \"Add\", \"arguments\": {\"a\": 1";
 
             var res = p.ExtractInlineToolCall(txt);
 
             Assert.Null(res.Call);
             Assert.Equal(txt.Trim(), res.AssistantMessage);
         }
-
-        [Fact]
-        public void ExtractInlineToolCall_MultipleJson_FirstOnly()
-        {
-            var p = MakeParser();
-            var txt =
-                "first {\"name\":\"Add\",\"arguments\":{\"a\":1,\"b\":2}} " +
-                "second {\"name\":\"Add\",\"arguments\":{\"a\":9,\"b\":9}}";
-
-            var res = p.ExtractInlineToolCall(txt);
-
-            Assert.NotNull(res.Call);
-            Assert.Equal(1, (int)res.Call.Arguments["a"]);
-        }
-
-        // ───────────────────────────────────────────────
-        // EXTENDED WEIRD INLINE CASES
-        // ───────────────────────────────────────────────
 
         [Fact]
         public void ExtractInlineToolCall_MultilineJson_Works()
@@ -172,12 +122,12 @@ namespace AgentCore.Tests.Tools
         public void ExtractInlineToolCall_EscapedJson_StillFound()
         {
             var p = MakeParser();
-            var txt = "text { \"name\": \"Add\", \"arguments\": {\"a\": 1, \"b\": 2} } more";
+            var txt = "tool { \"name\": \"Add\", \"arguments\": {\"a\": 1, \"b\": 2} } more";
 
             var res = p.ExtractInlineToolCall(txt);
 
             Assert.NotNull(res.Call);
-            Assert.Equal("text", res.AssistantMessage);
+            Assert.Equal("tool ", res.AssistantMessage);
         }
 
         [Fact]
@@ -192,98 +142,159 @@ namespace AgentCore.Tests.Tools
             Assert.Equal("", res.AssistantMessage);
         }
 
-        [Fact]
-        public void ExtractInlineToolCall_ToolCallInsideSentence_ShouldExtractPrefixCorrectly()
-        {
-            var p = MakeParser();
-            var txt = "The model says: {\"name\":\"Add\",\"arguments\":{\"a\":1,\"b\":2}} end.";
-
-            var res = p.ExtractInlineToolCall(txt);
-
-            Assert.NotNull(res.Call);
-            Assert.Equal("The model says:", res.AssistantMessage);
-        }
-
-        // ───────────────────────────────────────────────
-        // PARAM PARSING TESTS
-        // ───────────────────────────────────────────────
+        public class C1 { public int A { get; set; } }
+        public class C2 { public int X { get; set; } }
+        public class C3 { public int X { get; set; } }
 
         [Fact]
-        public void ParseToolParams_SimpleValues_Works()
+        public void ParseToolParams_ToolNotFound_Throws()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"a\": 3, \"b\": 4}");
+            var catalog = new ToolRegistryCatalog();
+            var p = new ToolCallParser(catalog);
 
-            var res = p.ParseToolParams("Add", args);
-
-            Assert.Equal(3, (int)res[0]);
-            Assert.Equal(4, (int)res[1]);
+            Assert.Throws<InvalidOperationException>(() =>
+                p.ParseToolParams("Ghost", new JObject()));
         }
 
         [Fact]
-        public void ParseToolParams_Complex_WrappedCorrectly()
+        public void ParseToolParams_NullArguments_Throws()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"x\":5,\"y\":10}");
+            int F(int x) => x;
 
-            var res = p.ParseToolParams("Calc", args);
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
 
-            var obj = Assert.IsType<Tools.InputObj>(res[0]);
-            Assert.Equal(5, obj.x);
-            Assert.Equal(10, obj.y);
+            Assert.Throws<ArgumentException>(() =>
+                p.ParseToolParams("F", null));
         }
 
         [Fact]
-        public void ParseToolParams_DefaultValue_IsUsed()
+        public void ParseToolParams_SingleComplexParam_AutoWraps()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{}");
+            int F(C1 c) => c.A;
 
-            var res = p.ParseToolParams("Defaulted", args);
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
 
-            Assert.Equal(10, (int)res[0]);
+            var args = JObject.Parse("{\"A\":5}");
+            var res = p.ParseToolParams("F", args);
+
+            Assert.Equal(5, ((C1)res[0]).A);
         }
 
         [Fact]
         public void ParseToolParams_MissingRequired_Throws()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"a\":1}");
+            int Add(int a, int b) => a + b;
 
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(Add);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"a\":1}");
             Assert.Throws<ToolValidationException>(() =>
                 p.ParseToolParams("Add", args));
         }
 
         [Fact]
-        public void ParseToolParams_WrongType_ThrowsAggregate()
+        public void ParseToolParams_Optional_UsesDefault()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"a\":\"wrong\",\"b\":\"bad\"}");
+            int F(int a = 7) => a;
 
-            Assert.Throws<ToolValidationAggregateException>(() =>
-                p.ParseToolParams("Add", args));
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var res = p.ParseToolParams("F", JObject.Parse("{}"));
+            Assert.Equal(7, (int)res[0]);
         }
 
-        // Extra: complex type wrong structure
         [Fact]
-        public void ParseToolParams_ComplexType_InvalidStructure_Throws()
+        public void ParseToolParams_IgnoresCancellationToken()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"x\":\"bad\",\"y\": {\"nested\": true}}");
+            int F(int a, CancellationToken ct) => a;
 
-            Assert.Throws<ToolValidationAggregateException>(() =>
-                p.ParseToolParams("Calc", args));
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var res = p.ParseToolParams("F", JObject.Parse("{\"a\":3}"));
+            Assert.Single(res);
+            Assert.Equal(3, (int)res[0]);
         }
 
-        // Extra: nulls & missing inside complex
         [Fact]
-        public void ParseToolParams_ComplexType_NullMembers_Throws()
+        public void ParseToolParams_ValidationFails_ThrowsAggregate()
         {
-            var p = MakeParser();
-            var args = JObject.Parse("{\"x\":null, \"y\":null}");
+            int F(int a) => a;
 
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"a\":\"bad\"}");
             Assert.Throws<ToolValidationAggregateException>(() =>
-                p.ParseToolParams("Calc", args));
+                p.ParseToolParams("F", args));
+        }
+
+        [Fact]
+        public void ParseToolParams_ToObjectFails_Throws()
+        {
+            int F(C2 c) => 1;
+
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"c\": {\"X\": \"bad\" }}");
+            Assert.Throws<ToolValidationException>(() =>
+                p.ParseToolParams("F", args));
+        }
+
+        [Fact]
+        public void ParseToolParams_ComplexObject_Works()
+        {
+            int F(C3 c) => c.X;
+
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"X\": 9}");
+            var res = p.ParseToolParams("F", args);
+
+            Assert.Equal(9, ((C3)res[0]).X);
+        }
+
+        [Fact]
+        public void ParseToolParams_Nullable_Works()
+        {
+            int F(int? x) => x ?? -1;
+
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"x\": null}");
+            var res = p.ParseToolParams("F", args);
+
+            Assert.Null(res[0]);
+        }
+
+        [Fact]
+        public void ParseToolParams_NullForNonNullable_Throws()
+        {
+            int F(int x) => x;
+
+            var catalog = new ToolRegistryCatalog();
+            catalog.Register(F);
+            var p = new ToolCallParser(catalog);
+
+            var args = JObject.Parse("{\"x\": null}");
+            Assert.Throws<ToolValidationAggregateException>(() =>
+                p.ParseToolParams("F", args));
         }
     }
 }

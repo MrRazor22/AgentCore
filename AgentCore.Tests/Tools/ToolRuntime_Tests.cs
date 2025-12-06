@@ -207,5 +207,93 @@ namespace AgentCore.Tests.Tools
             await Assert.ThrowsAsync<ToolExecutionException>(() =>
                 r.InvokeAsync(Call("Async", 1))); // extra arg invalid
         }
+
+        [Fact]
+        public async Task InvokeAsync_Required_Optional_CT_Flow_Works()
+        {
+            var catalog = new FakeCatalog();
+
+            // signature: int X(int a, int b = 9, CancellationToken ct)
+            int X(int a, int b, CancellationToken ct)
+            {
+                if (!ct.CanBeCanceled)
+                    throw new Exception("CT not injected");
+                return a + b;
+            }
+
+            catalog.Add("X", (Func<int, int, CancellationToken, int>)X);
+
+            var runtime = new ToolRuntime(catalog);
+
+            // simulate ParseToolParams output (parser stripped CT)
+            var call = new ToolCall(
+                id: Guid.NewGuid().ToString(),
+                name: "X",
+                arguments: JObject.Parse("{\"a\":4,\"b\":6}"),
+                parameters: new object[] { 4, 6 },   // ONLY JSON params
+                message: null
+            );
+
+            var cts = new CancellationTokenSource();
+            var result = await runtime.InvokeAsync(call, cts.Token);
+
+            Assert.Equal(10, result);   // 4 + 6
+        }
+        [Fact]
+        public async Task InvokeAsync_MixedParams_OptionalNullable_CT_AllCorrect()
+        {
+            var catalog = new FakeCatalog();
+
+            [Tool]
+            static int M(int a, string? b, int? c, CancellationToken ct = default)
+            {
+                if (!ct.CanBeCanceled) throw new Exception("CT missing");
+                return a + (b?.Length ?? 0) + (c ?? 0);
+            }
+
+            catalog.Add("M", (Func<int, string?, int?, CancellationToken, int>)M);
+
+            var parserCatalog = new FakeCatalog();
+            parserCatalog.Add("M", (Func<int, string?, int?, CancellationToken, int>)M);
+
+            var parser = new ToolCallParser(parserCatalog);
+
+            var args = JObject.Parse("{\"a\":1, \"b\":\"xx\"}");
+            var parsed = parser.ParseToolParams("M", args); // c omitted → null, CT stripped
+
+            var call = new ToolCall("id", "M", args, parsed, null);
+            var runtime = new ToolRuntime(catalog);
+
+            var res = await runtime.InvokeAsync(call, new CancellationTokenSource().Token);
+
+            Assert.Equal(1 + 2 + 0, res);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_RequiredOptionalNullable_AllThreeAligned()
+        {
+            var catalog = new FakeCatalog();
+
+            [Tool]
+            static int T(int req, int? opt, int opt2 = 5) => req + (opt ?? 0) + opt2;
+
+            catalog.Add("T", (Func<int, int?, int, int>)T);
+
+            var parserCatalog = new FakeCatalog();
+            parserCatalog.Add("T", (Func<int, int?, int, int>)T);
+
+            var parser = new ToolCallParser(parserCatalog);
+
+            var args = JObject.Parse("{\"req\":10}"); // opt=null, opt2=default
+
+            var parsed = parser.ParseToolParams("T", args);
+
+            var call = new ToolCall("id", "T", args, parsed, null);
+            var runtime = new ToolRuntime(catalog);
+
+            var res = await runtime.InvokeAsync(call);
+
+            Assert.Equal(10 + 0 + 5, res);
+        }
     }
 }

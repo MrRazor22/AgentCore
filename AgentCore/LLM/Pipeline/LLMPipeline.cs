@@ -50,17 +50,18 @@ namespace AgentCore.LLM.Pipeline
                 request.Options?.MaxOutputTokens
             );
 
+            handler.PrepareRequest(request);
+
             if (_logger.IsEnabled(LogLevel.Trace))
                 _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
 
-            TokenUsage tokenUsage = new TokenUsage();
+            LLMResponseBase response = null!;
+            TokenUsage? usageReported = null;
             string finish = "stop";
-
-            var liveLog = new StringBuilder();
-            LLMResponseBase? response;
 
             try
             {
+                // Stream with retry protection - handler.OnChunk() can throw RetryException
                 await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
                     request,
                     r => Iterate(),
@@ -70,7 +71,7 @@ namespace AgentCore.LLM.Pipeline
                     handler.OnChunk(chunk);
 
                     if (chunk.Kind == StreamKind.Usage)
-                        tokenUsage = chunk.AsTokenUsage() ?? new TokenUsage();
+                        usageReported = chunk.AsTokenUsage() ?? new TokenUsage();
 
                     if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
                         finish = chunk.FinishReason;
@@ -88,26 +89,23 @@ namespace AgentCore.LLM.Pipeline
             }
             finally
             {
-                // 1) First let handler build the response WITHOUT token usage
-                response = handler.BuildResponse(finish, new TokenUsage());
+                // Build response content
+                response = handler.BuildResponse(finish);
 
-                // 2) Now compute tokens using actual serialized payload
-                int inTokens = tokenUsage.InputTokens;
-                int outTokens = tokenUsage.OutputTokens;
+                // Resolve token usage
+                if (usageReported != null)
+                {
+                    response.TokenUsage = usageReported;
+                }
+                else
+                {
+                    var inTok = _tokenManager.Count(request.ToSerializablePayload());
+                    var outTok = _tokenManager.Count(response.ToSerializablePayload());
+                    response.TokenUsage = new TokenUsage(inTok, outTok);
+                }
 
-                if (inTokens <= 0)
-                    inTokens = _tokenManager.Count(request.ToSerializablePayload());
-
-                if (outTokens <= 0)
-                    outTokens = _tokenManager.Count(response.ToSerializablePayload());
-
-                var final = new TokenUsage(inTokens, outTokens);
-
-                // 3) Now assign real usage into the response
-                response.TokenUsage = final;
-
-                // 5) Record usage
-                _tokenManager.Record(final);
+                // Record for tracking
+                _tokenManager.Record(response.TokenUsage);
             }
 
             return response;

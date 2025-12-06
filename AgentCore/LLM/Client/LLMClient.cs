@@ -16,7 +16,7 @@ namespace AgentCore.LLM.Client
     {
         void PrepareRequest(LLMRequestBase request);
         void OnChunk(LLMStreamChunk chunk);
-        LLMResponseBase BuildResponse(string finishReason, TokenUsage tokenUsage);
+        LLMResponseBase BuildResponse(string finishReason);
     }
     public abstract class LLMRequestBase
     {
@@ -211,14 +211,23 @@ namespace AgentCore.LLM.Client
     public abstract class LLMResponseBase
     {
         public string FinishReason { get; }
-        public TokenUsage? TokenUsage { get; internal set; }
+        private TokenUsage? _tokenUsage;
+        public TokenUsage? TokenUsage
+        {
+            get => _tokenUsage;
+            internal set
+            {
+                if (_tokenUsage != null)
+                    throw new InvalidOperationException("TokenUsage already set");
+                _tokenUsage = value;
+            }
+        }
 
         protected LLMResponseBase(
-            string finishReason,
-            TokenUsage? tokenUsage = null)
+            string finishReason)
         {
             FinishReason = finishReason ?? "stop";
-            TokenUsage = tokenUsage ?? new TokenUsage();
+            TokenUsage = null;
         }
         public abstract string ToSerializablePayload();
     }
@@ -231,9 +240,8 @@ namespace AgentCore.LLM.Client
         public LLMResponse(
             string? assistantMessage,
             ToolCall? toolCall,
-            string finishReason,
-            TokenUsage? tokenUsage)
-            : base(finishReason, tokenUsage)
+            string finishReason)
+            : base(finishReason)
         {
             AssistantMessage = assistantMessage;
             ToolCall = toolCall;
@@ -272,9 +280,8 @@ namespace AgentCore.LLM.Client
         public LLMStructuredResponse(
             JToken rawJson,
             object? result,
-            string finishReason,
-            TokenUsage tokenUsage)
-            : base(finishReason, tokenUsage)
+            string finishReason)
+            : base(finishReason)
         {
             RawJson = rawJson;
             Result = result;

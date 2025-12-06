@@ -36,9 +36,6 @@ namespace AgentCore.LLM.Handlers
         {
             _request = (LLMStructuredRequest)request;
 
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
-
             var req = (LLMStructuredRequest)request;
             var type = req.ResultType;
 
@@ -72,7 +69,7 @@ namespace AgentCore.LLM.Handlers
             _jsonBuffer.Append(txt);
         }
 
-        public LLMResponseBase BuildResponse(string finishReason, TokenUsage tokenUsage)
+        public LLMResponseBase BuildResponse(string finishReason)
         {
             string raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
@@ -101,8 +98,7 @@ namespace AgentCore.LLM.Handlers
             return new LLMStructuredResponse(
                 json,
                 result,
-                finishReason,
-                tokenUsage
+                finishReason
             );
         }
     }
