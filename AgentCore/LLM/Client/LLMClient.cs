@@ -296,7 +296,6 @@ namespace AgentCore.LLM.Client
     {
         Text,
         ToolCallDelta,
-        ToolCall,
         Usage,
         Finish,
         // future:
@@ -335,6 +334,7 @@ namespace AgentCore.LLM.Client
     }
     public class ToolCallDelta
     {
+        public string? Id { get; set; }
         public string? Name { get; set; }
         public string? Delta { get; set; }
     }

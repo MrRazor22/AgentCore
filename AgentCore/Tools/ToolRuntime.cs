@@ -26,9 +26,7 @@ namespace AgentCore.Tools
             if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
             ct.ThrowIfCancellationRequested();
 
-            var tool = _tools.Get(toolCall.Name);
-            if (tool?.Function == null)
-                throw new ToolExecutionException(
+            var tool = _tools.Get(toolCall.Name) ?? throw new ToolExecutionException(
                     toolCall.Name,
                     $"Tool '{toolCall.Name}' not registered or has no function.",
                     new InvalidOperationException());
@@ -38,15 +36,8 @@ namespace AgentCore.Tools
                 var func = tool.Function;
                 var method = func.Method;
                 var returnType = method.ReturnType;
-                var methodParams = method.GetParameters();
-                int expectedJson = methodParams.Count(p => p.ParameterType != typeof(CancellationToken));
-                var jsonParams = toolCall.Parameters ?? Array.Empty<object>();
 
-                if (jsonParams.Length != expectedJson)
-                    throw new TargetParameterCountException();
-
-                // always inject CT if method wants it
-                object?[] finalArgs = InjectCancellationToken(toolCall, method, ct);
+                var finalArgs = InjectCancellationToken(toolCall.Parameters, method, ct);
 
                 if (typeof(Task).IsAssignableFrom(returnType))
                 {
@@ -79,18 +70,26 @@ namespace AgentCore.Tools
             }
         }
 
-        private static object?[] InjectCancellationToken(ToolCall call, MethodInfo method, CancellationToken ct)
+        private static object?[] InjectCancellationToken(object[] toolParams, MethodInfo method, CancellationToken ct)
         {
             var methodParams = method.GetParameters();
             var finalArgs = new object?[methodParams.Length];
 
-            int jsonIndex = 0;
-            foreach (var p in methodParams)
+            int srcIndex = 0; // index into toolParams[]
+
+            for (int i = 0; i < methodParams.Length; i++)
             {
-                finalArgs[jsonIndex] =
-                    p.ParameterType == typeof(CancellationToken)
-                    ? ct
-                    : call.Parameters[jsonIndex++];
+                var mp = methodParams[i];
+
+                if (mp.ParameterType == typeof(CancellationToken))
+                {
+                    finalArgs[i] = ct;
+                }
+                else
+                {
+                    finalArgs[i] = toolParams[srcIndex];
+                    srcIndex++;
+                }
             }
 
             return finalArgs;

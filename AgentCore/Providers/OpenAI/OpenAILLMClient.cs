@@ -1,11 +1,8 @@
-﻿using AgentCore.Chat;
-using AgentCore.Json;
-using AgentCore.LLM.Client;
+﻿using AgentCore.LLM.Client;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using OpenAI;
 using OpenAI.Chat;
 using System;
@@ -14,7 +11,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -36,12 +32,12 @@ namespace AgentCore.Providers.OpenAI
          : base(opts, pipeline, textFactory, structFactory, logger)
         {
             _client = new OpenAIClient(
-                credential: new ApiKeyCredential(_initOptions.ApiKey),
+                credential: new ApiKeyCredential(_initOptions.ApiKey!),
                 options: new OpenAIClientOptions { Endpoint = new Uri(_initOptions.BaseUrl) }
             );
 
             _defaultModel = _initOptions.Model;
-            _chatClients[_defaultModel] = _client.GetChatClient(_defaultModel);
+            _chatClients[_defaultModel!] = _client.GetChatClient(_defaultModel);
         }
 
         private ChatClient GetChatClient(string? model = null)
@@ -58,36 +54,76 @@ namespace AgentCore.Providers.OpenAI
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             var chat = GetChatClient(request.Model);
+            ChatCompletionOptions options = ConfigureChatCompletionOptions(request);
 
+            var stream = chat.CompleteChatStreamingAsync(
+                request.Prompt.ToChatMessages(),
+                options,
+                ct
+            );
+
+            string? pendingName = null;
+            string? pendingId = null;
+
+            await foreach (var update in stream.WithCancellation(ct))
+            {
+                if (update.ContentUpdate != null)
+                {
+                    foreach (var c in update.ContentUpdate)
+                        if (c.Text != null)
+                            yield return new LLMStreamChunk(StreamKind.Text, c.Text);
+                }
+
+                if (update.ToolCallUpdates != null)
+                {
+                    foreach (var tcu in update.ToolCallUpdates)
+                    {
+                        pendingId ??= tcu.ToolCallId;
+                        pendingName ??= tcu.FunctionName;
+                        var delta = tcu.FunctionArgumentsUpdate?.ToString();
+
+                        if (!string.IsNullOrEmpty(delta))
+                        {
+                            yield return new LLMStreamChunk(
+                                StreamKind.ToolCallDelta,
+                                new ToolCallDelta { Id = pendingId, Name = pendingName, Delta = delta }
+                            );
+                        }
+                    }
+                }
+
+                if (update.Usage != null)
+                {
+                    yield return new LLMStreamChunk(
+                        StreamKind.Usage,
+                        new TokenUsage(update.Usage.InputTokenCount, update.Usage.OutputTokenCount)
+                    );
+                }
+
+                if (update.FinishReason != null)
+                {
+                    yield return new LLMStreamChunk(
+                        StreamKind.Finish,
+                        finish: update.FinishReason.Value.ToString()
+                    );
+                }
+            }
+        }
+
+        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequestBase request)
+        {
             var options = new ChatCompletionOptions();
             options.ApplySamplingOptions(request);
-
-            // unified init
-            bool isStructured = false;
-            string? toolId = null;
-            string? toolName = null;
-            StringBuilder toolArgsSb = new StringBuilder();
-            StringBuilder? jsonBuffer = null;
-
-            // -------------------------------------------
-            // ONE switch to configure EVERYTHING
-            // -------------------------------------------
             switch (request)
             {
                 case LLMStructuredRequest sreq:
-                    isStructured = true;
-
-                    // structured config
                     options.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
                         "structured_response",
                         BinaryData.FromString(
-                            sreq.Schema.ToString(Newtonsoft.Json.Formatting.None)
+                            sreq.Schema!.ToString(Newtonsoft.Json.Formatting.None)
                         ),
                         jsonSchemaIsStrict: true
                     );
-
-                    // ALSO init json buffer
-                    jsonBuffer = new StringBuilder();
 
                     // ALSO tools if allowed (Structured may allow tools)
                     if (sreq.AllowedTools != null)
@@ -105,7 +141,7 @@ namespace AgentCore.Providers.OpenAI
                     options.ToolChoice = toolReq.ToolCallMode.ToChatToolChoice();
                     options.AllowParallelToolCalls = false;
 
-                    foreach (var t in toolReq.AllowedTools.ToChatTools())
+                    foreach (var t in toolReq.AllowedTools!.ToChatTools())
                         options.Tools.Add(t);
 
                     break;
@@ -115,108 +151,7 @@ namespace AgentCore.Providers.OpenAI
                     break;
             }
 
-
-            var stream = chat.CompleteChatStreamingAsync(
-                request.Prompt.ToChatMessages(),
-                options,
-                ct
-            );
-
-            // Usage & finish
-            int inputTokens = 0;
-            int outputTokens = 0;
-            string? finishReason = null;
-
-            await foreach (var update in stream.WithCancellation(ct))
-            {
-                // === TOKEN USAGE ===
-                if (update.Usage != null)
-                {
-                    inputTokens = update.Usage.InputTokenCount;
-                    outputTokens = update.Usage.OutputTokenCount;
-                }
-
-                // === TEXT (also contains structured output JSON if in that mode) ===
-                if (update.ContentUpdate != null)
-                {
-                    foreach (var c in update.ContentUpdate)
-                    {
-                        if (c.Text != null)
-                        {
-                            var text = c.Text;
-
-                            // Emit text chunk ALWAYS
-                            yield return new LLMStreamChunk(
-                                StreamKind.Text,
-                                payload: text
-                            );
-
-                            // Also collect into JSON buffer if structured
-                            if (isStructured)
-                                jsonBuffer!.Append(text);
-                        }
-                    }
-                }
-
-                // === TOOL CALL FRAGMENTS ===
-                if (update.ToolCallUpdates != null)
-                {
-                    foreach (var tcu in update.ToolCallUpdates)
-                    {
-                        toolId ??= tcu.ToolCallId;
-                        toolName ??= tcu.FunctionName;
-
-                        var delta = tcu.FunctionArgumentsUpdate?.ToString();
-                        if (!string.IsNullOrEmpty(delta))
-                        {
-                            toolArgsSb.Append(delta);
-
-                            // Emit delta
-                            // Emit
-                            yield return new LLMStreamChunk(
-                                StreamKind.ToolCallDelta,
-                                new ToolCallDelta { Name = toolName, Delta = delta }
-                                );
-                        }
-                    }
-                }
-
-                // === TOOL CALL ASSEMBLED ===
-                if (toolArgsSb.Length > 0 &&
-                    toolArgsSb.ToString().TryParseCompleteJson(out _))
-                {
-                    JObject args;
-                    try { args = JObject.Parse(toolArgsSb.ToString()); }
-                    catch { args = new JObject(); }
-
-                    yield return new LLMStreamChunk(
-                        StreamKind.ToolCall,
-                        new ToolCall(toolId!, toolName!, args)
-                    );
-
-                    toolArgsSb.Clear();
-                    toolId = null;
-                    toolName = null;
-                }
-
-                // === FINISH REASON ===
-                if (update.FinishReason != null)
-                    finishReason = update.FinishReason.Value.ToString();
-            }
-
-            // === USAGE ===
-            yield return new LLMStreamChunk(
-                StreamKind.Usage,
-                payload: new TokenUsage(inputTokens, outputTokens)
-            );
-
-            // === FINISH ===
-            yield return new LLMStreamChunk(
-                StreamKind.Finish,
-                finish: finishReason ?? "stop",
-                payload: isStructured ? jsonBuffer?.ToString() : null
-            );
+            return options;
         }
-
     }
 }

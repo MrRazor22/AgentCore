@@ -1,10 +1,12 @@
 ﻿using AgentCore.Chat;
+using AgentCore.Json;
 using AgentCore.LLM.Client;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Linq;
 using System.Text;
@@ -12,6 +14,7 @@ using System.Text;
 namespace AgentCore.LLM.Handlers
 {
     public delegate TextToolCallHandler TextHandlerFactory();
+
     public sealed class TextToolCallHandler : IChunkHandler
     {
         private readonly IToolCallParser _parser;
@@ -19,13 +22,19 @@ namespace AgentCore.LLM.Handlers
         private readonly ILogger<TextToolCallHandler> _logger;
 
         private LLMRequest _request;
+
         private readonly StringBuilder _text = new StringBuilder();
         private ToolCall? _firstTool;
 
+        // For delta assembly
+        private readonly StringBuilder _toolArgs = new StringBuilder();
+        private string? _pendingToolName;
+        private string? _pendingToolId;
+
         public TextToolCallHandler(
-        IToolCallParser parser,
-        IToolCatalog tools,
-        ILogger<TextToolCallHandler> logger)
+            IToolCallParser parser,
+            IToolCatalog tools,
+            ILogger<TextToolCallHandler> logger)
         {
             _parser = parser;
             _tools = tools;
@@ -55,14 +64,13 @@ namespace AgentCore.LLM.Handlers
 
                         _text.Append(txt);
 
-                        // inbound text log moved here 1:1
                         if (_logger.IsEnabled(LogLevel.Trace))
                             _logger.LogTrace("◄ Inbound Stream: {Text}", _text.ToString());
 
-                        // same inline detection
+                        // Just store it and validate later when BuildResponse() runs.
                         var inline = _parser.ExtractInlineToolCall(_text.ToString());
                         if (inline.Call != null && _firstTool == null)
-                            _firstTool = ValidateTool(inline.Call);
+                            _firstTool = inline.Call;
 
                         break;
                     }
@@ -72,21 +80,15 @@ namespace AgentCore.LLM.Handlers
                         var td = chunk.AsToolCallDelta();
                         if (td == null || string.IsNullOrEmpty(td.Delta)) return;
 
-                        _text.Append(td.Delta);
+                        _pendingToolName ??= td.Name;
+                        _pendingToolId ??= td.Id ?? Guid.NewGuid().ToString();
 
-                        // inbound tool-delta log moved here 1:1
+                        _toolArgs.Append(td.Delta);
+
                         if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ [{Name}] Args: {Args}", td.Name, _text.ToString());
+                            _logger.LogTrace("◄ [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
 
-                        break;
-                    }
-
-                case StreamKind.ToolCall:
-                    {
-                        if (_firstTool != null) return;
-                        var raw = chunk.AsToolCall();
-                        if (raw != null)
-                            _firstTool = ValidateTool(raw);
+                        TryAssembleToolCall();
                         break;
                     }
             }
@@ -94,11 +96,34 @@ namespace AgentCore.LLM.Handlers
 
         public LLMResponseBase BuildResponse(string finishReason)
         {
+            if (_firstTool != null)
+                _firstTool = ValidateTool(_firstTool);
+
             return new LLMResponse(
                 _text.ToString().Trim(),
                 _firstTool,
                 finishReason
             );
+        }
+
+        private void TryAssembleToolCall()
+        {
+            if (_toolArgs.Length == 0) return;
+
+            var raw = _toolArgs.ToString();
+            if (!raw.TryParseCompleteJson(out _))
+                return;
+
+            JObject args;
+            try { args = JObject.Parse(raw); }
+            catch { args = new JObject(); }
+
+            if (_firstTool == null)
+                _firstTool = new ToolCall(_pendingToolId!, _pendingToolName!, args);
+
+            _toolArgs.Clear();
+            _pendingToolName = null;
+            _pendingToolId = null;
         }
 
         private ToolCall ValidateTool(ToolCall raw)
@@ -119,7 +144,8 @@ namespace AgentCore.LLM.Handlers
             }
             catch (ToolValidationAggregateException ex)
             {
-                throw new RetryException("Invalid arguments: " +
+                throw new RetryException(
+                    "Invalid arguments: " +
                     ex.Errors.Select(e => e.Message).ToJoinedString("; "));
             }
             catch (ToolValidationException ex)
@@ -128,6 +154,4 @@ namespace AgentCore.LLM.Handlers
             }
         }
     }
-
 }
-
