@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Json;
+using AgentCore.Utils;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -113,7 +114,7 @@ namespace AgentCore.Tools
                 }
                 catch (Exception ex)
                 {
-                    throw new ToolValidationException(p.Name, $"Invalid type for parameter. {ex.Message}");
+                    throw new ToolValidationException(p.Name, ex.Message);
                 }
             }
 
@@ -128,20 +129,27 @@ public sealed class ToolValidationAggregateException : Exception
     public IReadOnlyList<SchemaValidationError> Errors { get; }
 
     public ToolValidationAggregateException(IEnumerable<SchemaValidationError> errors)
-        : base("Tool validation failed") => Errors = errors.ToList();
+        : base("Tool validation failed")
+    {
+        Errors = errors.ToList();
+    }
 
     public override string ToString()
-        => $"Validation failed for the following {Errors.Count} parameters:\n" +
-        $" {string.Join(", ", Errors.Select(e => e.ToString()))}";
+        => Errors.Select(e => e.ToString()).ToJoinedString("; ");
 }
+
 //on param wrong
 public sealed class ToolValidationException : Exception
 {
     public string ParamName { get; }
 
     public ToolValidationException(string param, string msg)
-        : base($"Validation failed for parameter '{param}'. Details: '{msg}'") => ParamName = param;
+        : base(msg)
+    {
+        ParamName = param;
+    }
 
     public override string ToString()
-        => $"[{ParamName}] => {Message}";
+        => $"{ParamName}: {Message}";
 }
+

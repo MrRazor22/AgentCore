@@ -28,7 +28,7 @@ namespace AgentCore.Tools
 
             var tool = _tools.Get(toolCall.Name) ?? throw new ToolExecutionException(
                     toolCall.Name,
-                    $"Tool '{toolCall.Name}' not registered or has no function.",
+                    $"Tool '{toolCall.Name}' not registered.",
                     new InvalidOperationException());
 
             try
@@ -64,9 +64,10 @@ namespace AgentCore.Tools
             catch (Exception ex)
             {
                 throw new ToolExecutionException(
-                    toolCall.Name,
-                    $"Failed to invoke tool `{toolCall.Name}`: {ex.Message}",
-                    ex);
+                       toolCall.Name,
+                       ex.Message,
+                       ex
+                   );
             }
         }
 
@@ -121,8 +122,14 @@ namespace AgentCore.Tools
     public sealed class ToolExecutionException : Exception
     {
         public string ToolName { get; }
+
         public ToolExecutionException(string toolName, string message, Exception inner)
-            : base(message, inner) => ToolName = toolName;
-        public override string ToString() => $"Tool '{ToolName}' failed. Reason: '{Message}'";
+            : base(message, inner)
+        {
+            ToolName = toolName;
+        }
+
+        public override string ToString()
+            => $"{ToolName}: {Message}";
     }
 }

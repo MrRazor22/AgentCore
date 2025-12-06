@@ -65,7 +65,7 @@ namespace AgentCore.LLM.Handlers
                         _text.Append(txt);
 
                         if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ Inbound Stream: {Text}", _text.ToString());
+                            _logger.LogTrace("◄ Stream: {Text}", _text.ToString());
 
                         // Just store it and validate later when BuildResponse() runs.
                         var inline = _parser.ExtractInlineToolCall(_text.ToString());
@@ -86,7 +86,7 @@ namespace AgentCore.LLM.Handlers
                         _toolArgs.Append(td.Delta);
 
                         if (_logger.IsEnabled(LogLevel.Trace))
-                            _logger.LogTrace("◄ [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
+                            _logger.LogTrace("◄ Stream: [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
 
                         TryAssembleToolCall();
                         break;
@@ -129,7 +129,7 @@ namespace AgentCore.LLM.Handlers
         private ToolCall ValidateTool(ToolCall raw)
         {
             if (!_tools.RegisteredTools.Any(t => t.Name == raw.Name))
-                throw new RetryException($"Tool `{raw.Name}` is invalid.");
+                throw new RetryException($"{raw.Name}: invalid tool");
 
             try
             {
@@ -142,16 +142,15 @@ namespace AgentCore.LLM.Handlers
                     parsed
                 );
             }
-            catch (ToolValidationAggregateException ex)
+            catch (Exception ex) when (
+                 ex is ToolValidationException ||
+                 ex is ToolValidationAggregateException ||
+                 ex is ToolExecutionException
+             )
             {
-                throw new RetryException(
-                    "Invalid arguments: " +
-                    ex.Errors.Select(e => e.Message).ToJoinedString("; "));
+                throw new RetryException(ex.ToString());
             }
-            catch (ToolValidationException ex)
-            {
-                throw new RetryException(ex.Message);
-            }
+
         }
     }
 }

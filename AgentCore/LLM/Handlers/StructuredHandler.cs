@@ -64,7 +64,7 @@ namespace AgentCore.LLM.Handlers
 
             // inbound log moved here exactly
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace("◄ Inbound Stream: {Text}", txt);
+                _logger.LogTrace("◄ Stream: {Text}", txt);
 
             _jsonBuffer.Append(txt);
         }

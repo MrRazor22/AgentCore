@@ -53,7 +53,7 @@ namespace AgentCore.LLM.Pipeline
             handler.PrepareRequest(request);
 
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogDebug("► Outbound Messages:\n{Json}", request.Prompt.ToJson());
+                _logger.LogDebug("► LLM Request:\n{Json}", request.ToSerializablePayload());
 
             LLMResponseBase response = null!;
             TokenUsage? usageReported = null;
@@ -91,6 +91,9 @@ namespace AgentCore.LLM.Pipeline
             {
                 // Build response content
                 response = handler.BuildResponse(finish);
+
+                if (_logger.IsEnabled(LogLevel.Trace))
+                    _logger.LogDebug("► LLM Response:\n{Json}", response.ToSerializablePayload());
 
                 // Resolve token usage
                 if (usageReported != null)
