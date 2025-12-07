@@ -92,16 +92,14 @@ namespace AgentCore.Runtime
             // Handlers
             Services.AddTransient<TextHandler>();
             Services.AddTransient<StructuredHandler>();
-
-            // Factories
-            Services.AddSingleton<TextHandlerFactory>(sp =>
+            Services.AddSingleton<HandlerResolver>(sp => request =>
             {
-                return () => sp.GetRequiredService<TextHandler>();
-            });
-
-            Services.AddSingleton<StructuredHandlerFactory>(sp =>
-            {
-                return () => sp.GetRequiredService<StructuredHandler>();
+                return request switch
+                {
+                    LLMTextRequest _ => sp.GetRequiredService<TextHandler>(),
+                    LLMStructuredRequest _ => sp.GetRequiredService<StructuredHandler>(),
+                    _ => throw new NotSupportedException("Unsupported LLM request: " + request.GetType().Name)
+                };
             });
 
             Services.AddLogging(b => b.AddSimpleConsole(o =>

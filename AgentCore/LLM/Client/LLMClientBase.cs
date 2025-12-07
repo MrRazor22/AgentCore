@@ -1,8 +1,5 @@
 ﻿using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
-using AgentCore.Tokens;
-using AgentCore.Tools;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -25,23 +22,23 @@ namespace AgentCore.LLM.Client
             Action<LLMStreamChunk>? onStream = null)
             where TResponse : LLMResponseBase;
     }
+
+    public delegate IChunkHandler HandlerResolver(LLMRequestBase request);
+
     public abstract class LLMClientBase : ILLMClient
     {
         protected readonly LLMInitOptions _initOptions;
         private readonly ILLMPipeline _pipeline;
-        private readonly TextHandlerFactory _textFactory;
-        private readonly StructuredHandlerFactory _structFactory;
+        private readonly HandlerResolver _resolver;
 
         public LLMClientBase(
             LLMInitOptions opts,
             ILLMPipeline pipeline,
-            TextHandlerFactory textFactory,
-            StructuredHandlerFactory structFactory)
+            HandlerResolver resolver)
         {
             _initOptions = opts;
             _pipeline = pipeline;
-            _textFactory = textFactory;
-            _structFactory = structFactory;
+            _resolver = resolver;
         }
 
 
@@ -52,26 +49,12 @@ namespace AgentCore.LLM.Client
         #endregion
 
         public async Task<TResponse> ExecuteAsync<TResponse>(
-        LLMRequestBase request,
-        CancellationToken ct = default,
-        Action<LLMStreamChunk>? onStream = null)
-        where TResponse : LLMResponseBase
+            LLMRequestBase request,
+            CancellationToken ct = default,
+            Action<LLMStreamChunk>? onStream = null)
+            where TResponse : LLMResponseBase
         {
-            IChunkHandler handler;
-
-            if (request is LLMTextRequest)
-            {
-                handler = _textFactory();
-            }
-            else if (request is LLMStructuredRequest)
-            {
-                handler = _structFactory();
-            }
-            else
-            {
-                throw new NotSupportedException(
-                    "Unsupported request type: " + request.GetType().Name);
-            }
+            var handler = _resolver(request);
 
             handler.PrepareRequest(request);
 

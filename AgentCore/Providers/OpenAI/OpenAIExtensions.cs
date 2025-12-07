@@ -35,8 +35,6 @@ namespace AgentCore.Providers.OpenAI
             ).ToList();
         }
 
-
-        // Converts ChatHistory to IEnumerable<ChatMessage> suitable for OpenAI chat completion
         public static IEnumerable<ChatMessage> ToChatMessages(this Conversation history)
         {
             foreach (var msg in history)

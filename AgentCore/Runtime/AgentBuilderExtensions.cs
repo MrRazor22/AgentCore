@@ -20,17 +20,15 @@ namespace AgentCore.Runtime
             var opts = new LLMInitOptions();
             configure(opts);
 
-            builder.Services.AddTransient<TextHandler>();
-            builder.Services.AddTransient<StructuredHandler>();
-
-            builder.Services.AddSingleton<TextHandlerFactory>(sp =>
+            builder.Services.AddSingleton<HandlerResolver>(sp => request =>
             {
-                return () => sp.GetRequiredService<TextHandler>();
-            });
-
-            builder.Services.AddSingleton<StructuredHandlerFactory>(sp =>
-            {
-                return () => sp.GetRequiredService<StructuredHandler>();
+                return request switch
+                {
+                    LLMTextRequest _ => sp.GetRequiredService<TextHandler>(),
+                    LLMStructuredRequest _ => sp.GetRequiredService<StructuredHandler>(),
+                    _ => throw new NotSupportedException(
+                        $"Unsupported LLM request type: {request.GetType().Name}")
+                };
             });
 
             builder.Services.AddSingleton<ILLMClient>(sp =>
@@ -38,8 +36,7 @@ namespace AgentCore.Runtime
                 return new OpenAILLMClient(
                     opts,
                     sp.GetRequiredService<ILLMPipeline>(),
-                    sp.GetRequiredService<TextHandlerFactory>(),
-                    sp.GetRequiredService<StructuredHandlerFactory>()
+                    sp.GetRequiredService<HandlerResolver>()
                 );
             });
 

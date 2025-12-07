@@ -25,9 +25,8 @@ namespace AgentCore.Providers.OpenAI
         public OpenAILLMClient(
             LLMInitOptions opts,
             ILLMPipeline pipeline,
-            TextHandlerFactory textFactory,
-            StructuredHandlerFactory structFactory)
-         : base(opts, pipeline, textFactory, structFactory)
+            HandlerResolver resolver)
+         : base(opts, pipeline, resolver)
         {
             _client = new OpenAIClient(
                 credential: new ApiKeyCredential(_initOptions.ApiKey!),
