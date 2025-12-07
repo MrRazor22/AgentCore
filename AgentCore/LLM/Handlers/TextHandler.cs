@@ -26,7 +26,9 @@ namespace AgentCore.LLM.Handlers
             ILogger<TextHandler> logger)
             : base(parser, tools, logger) { }
 
-        public override void OnRequest(LLMRequestBase request) { }
+        public override void OnRequest(LLMRequestBase request)
+        {
+        }
 
         protected override void OnChunk(LLMStreamChunk chunk)
         {
@@ -37,7 +39,7 @@ namespace AgentCore.LLM.Handlers
             _text.Append(txt);
 
             if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream Text: {Text}", txt);
+                Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
 
             // Check for inline tool calls (only if we haven't found one yet)
             if (_inlineTool == null)
@@ -53,6 +55,8 @@ namespace AgentCore.LLM.Handlers
             // Prefer the parameter (from base's tool call delta handling)
             // Fall back to inline tool if no native tool call was detected
             var finalTool = toolCall ?? _inlineTool;
+
+            Logger.LogInformation("► LLM Response [Text]: {Msg}", _text.ToString().Trim());
 
             return new LLMTextResponse(
                 _text.ToString().Trim(),

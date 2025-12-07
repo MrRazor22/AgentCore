@@ -1,7 +1,9 @@
-﻿using AgentCore.LLM.Client;
+﻿using AgentCore.Json;
+using AgentCore.LLM.Client;
 using AgentCore.LLM.Handlers;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -51,8 +53,8 @@ namespace AgentCore.LLM.Pipeline
 
             handler.PrepareRequest(request);
 
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogDebug("► LLM Request:\n{Json}", request.ToPayloadString());
+            _logger.LogTrace("► LLM Request [Payload]:\n{Json}", request.ToPayloadJson().AsPrettyJson());
+
 
             LLMResponseBase response = null!;
             TokenUsage? usageReported = null;
@@ -91,9 +93,7 @@ namespace AgentCore.LLM.Pipeline
                 // Build response content
                 response = handler.BuildResponse(finish);
 
-                if (_logger.IsEnabled(LogLevel.Trace))
-                    _logger.LogDebug("► LLM Response:\n{Json}", response.ToPayloadString());
-
+                _logger.LogTrace("► LLM Response [Payload]:\n{Json}", response.ToPayloadJson().AsPrettyJson());
                 // Resolve token usage
                 if (usageReported != null)
                 {
@@ -101,8 +101,9 @@ namespace AgentCore.LLM.Pipeline
                 }
                 else
                 {
-                    var inTok = _tokenManager.Count(request.ToPayloadString());
-                    var outTok = _tokenManager.Count(response.ToPayloadString());
+                    _logger.LogDebug("Tokens Approximated!");
+                    var inTok = _tokenManager.Count(request.ToPayloadJson().ToString());
+                    var outTok = _tokenManager.Count(response.ToPayloadJson().ToString());
                     response.TokenUsage = new TokenUsage(inTok, outTok);
                 }
 

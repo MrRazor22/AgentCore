@@ -10,6 +10,13 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Client
 {
+    public sealed class LLMInitOptions
+    {
+        public string? BaseUrl { get; set; } = null;
+        public string? ApiKey { get; set; } = null;
+        public string? Model { get; set; } = null;
+    }
+
     public interface ILLMClient
     {
         Task<TResponse> ExecuteAsync<TResponse>(

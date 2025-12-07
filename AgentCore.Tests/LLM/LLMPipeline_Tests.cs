@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Client;
+using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -46,7 +47,7 @@ namespace AgentCore.Tests.LLM
         {
             private readonly StringBuilder sb = new StringBuilder();
             public void PrepareRequest(LLMRequestBase req) { }
-            public void OnChunk(LLMStreamChunk c)
+            public void HandleChunk(LLMStreamChunk c)
             {
                 if (c.Kind == StreamKind.Text)
                     sb.Append(c.AsText());

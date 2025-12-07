@@ -43,6 +43,7 @@ namespace AgentCore.LLM.Handlers
         public void PrepareRequest(LLMRequestBase request)
         {
             request.ResolvedTools = Tools.RegisteredTools;
+            Logger.LogInformation("► LLM Request: {Msg}", request.Prompt.LastOrDefault().AsPrettyJson());
             OnRequest(request);
         }
         public abstract void OnRequest(LLMRequestBase request);
@@ -69,7 +70,7 @@ namespace AgentCore.LLM.Handlers
             ToolArgBuilder.Append(td.Delta);
 
             if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream ToolCall: [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
+                Logger.LogDebug("◄ Stream [ToolCall]: [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
 
             TryAssembleToolCall();
         }

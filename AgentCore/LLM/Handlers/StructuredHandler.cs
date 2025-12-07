@@ -47,8 +47,7 @@ namespace AgentCore.LLM.Handlers
             var txt = chunk.AsText();
             if (string.IsNullOrEmpty(txt)) return;
 
-            if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream Text: {Text}", txt);
+            Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
 
             _jsonBuffer.Append(txt);
         }
@@ -77,6 +76,8 @@ namespace AgentCore.LLM.Handlers
             }
 
             var result = json.ToObject(_request.ResultType);
+
+            Logger.LogInformation("► LLM Response [Structured]: {Msg}", json.AsPrettyJson());
 
             return new LLMStructuredResponse(
                 toolCall: firstTool,
