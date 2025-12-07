@@ -38,15 +38,14 @@ namespace AgentCore.Tests.Runtime
                     ToolCall? tool = null;
                     foreach (var s in script)
                     {
-                        if (s.Kind == StreamKind.ToolCall)
+                        if (s.Kind == StreamKind.ToolCallDelta)
                             tool = s.AsToolCall();
                     }
 
                     return Task.FromResult(new LLMResponse(
                         txt,
                         tool,
-                        "stop",
-                        new TokenUsage(1, 1)
+                        "stop"
                     ));
                 }
 
@@ -106,7 +105,7 @@ namespace AgentCore.Tests.Runtime
             {
                 new LLMStreamChunk(StreamKind.Text, ""),
                 new LLMStreamChunk(
-                    StreamKind.ToolCall,
+                    StreamKind.ToolCallDelta,
                     new ToolCall("id1", "Square", JObject.Parse("{\"x\":4}"))
                 )
             });
@@ -136,7 +135,7 @@ namespace AgentCore.Tests.Runtime
                     fake.Scripts.Enqueue(new List<LLMStreamChunk>
         {
             new LLMStreamChunk(
-                StreamKind.ToolCall,
+                StreamKind.ToolCallDelta,
                 new ToolCall("id", "Square", JObject.Parse("{\"x\":2}"))
             )
         });

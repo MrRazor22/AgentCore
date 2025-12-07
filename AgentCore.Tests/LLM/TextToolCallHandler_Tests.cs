@@ -47,7 +47,6 @@ namespace AgentCore.Tests.LLM
         LLMStreamChunk Txt(string t) => new LLMStreamChunk(StreamKind.Text, t);
         LLMStreamChunk Delta(string name, string d) =>
             new LLMStreamChunk(StreamKind.ToolCallDelta, new ToolCallDelta { Name = name, Delta = d });
-        LLMStreamChunk Call(ToolCall c) => new LLMStreamChunk(StreamKind.ToolCall, c);
 
         TextToolCallHandler Handler(FakeParser p = null, FakeCatalog c = null)
             => new TextToolCallHandler(p ?? new FakeParser(), c ?? new FakeCatalog(), NullLogger<TextToolCallHandler>.Instance);
@@ -64,7 +63,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("hello "));
             h.OnChunk(Txt("world"));
 
-            var r = (LLMResponse)h.BuildResponse("stop", new TokenUsage());
+            var r = (LLMResponse)h.BuildResponse("stop");
 
             Assert.Equal("hello world", r.AssistantMessage);
             Assert.Null(r.ToolCall);
@@ -88,7 +87,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("me\":\"Add\",\"argu"));
             h.OnChunk(Txt("ments\":{\"x\":1}} done"));
 
-            var r = (LLMResponse)h.BuildResponse("stop", new TokenUsage());
+            var r = (LLMResponse)h.BuildResponse("stop");
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -110,9 +109,9 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Delta("Add", "1}"));
 
             var finalCall = new ToolCall("id", "Add", JObject.Parse("{\"x\":1}"));
-            h.OnChunk(Call(finalCall));
+            h.OnChunk(new LLMStreamChunk(StreamKind.ToolCallDelta, finalCall));
 
-            var r = (LLMResponse)h.BuildResponse("stop", new TokenUsage());
+            var r = (LLMResponse)h.BuildResponse("stop");
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -130,7 +129,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("hi {\"name\":\"Add\""));
             h.OnChunk(Txt(", \"arguments\": BROKEN }"));
 
-            var r = (LLMResponse)h.BuildResponse("stop", new TokenUsage());
+            var r = (LLMResponse)h.BuildResponse("stop");
 
             Assert.Null(r.ToolCall);
         }
@@ -153,7 +152,7 @@ namespace AgentCore.Tests.LLM
 
             h.OnChunk(Txt("hey {\"something\":1}"));
 
-            Assert.Throws<RetryException>(() => h.BuildResponse("stop", new TokenUsage()));
+            Assert.Throws<RetryException>(() => h.BuildResponse("stop"));
         }
 
         // ================================================================
@@ -175,7 +174,7 @@ namespace AgentCore.Tests.LLM
 
             h.OnChunk(Txt("running... {\"foo\":1}"));
 
-            Assert.Throws<RetryException>(() => h.BuildResponse("stop", new TokenUsage()));
+            Assert.Throws<RetryException>(() => h.BuildResponse("stop"));
         }
     }
 }

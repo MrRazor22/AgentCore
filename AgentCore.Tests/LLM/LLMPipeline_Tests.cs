@@ -51,8 +51,8 @@ namespace AgentCore.Tests.LLM
                 if (c.Kind == StreamKind.Text)
                     sb.Append(c.AsText());
             }
-            public LLMResponseBase BuildResponse(string f, TokenUsage u)
-                => new LLMResponse(sb.ToString(), null, f, u);
+            public LLMResponseBase BuildResponse(string f)
+                => new LLMResponse(sb.ToString(), null, f);
         }
 
         private sealed class FakeCtx : IContextBudgetManager
