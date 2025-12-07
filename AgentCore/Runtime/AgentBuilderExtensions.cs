@@ -20,12 +20,12 @@ namespace AgentCore.Runtime
             var opts = new LLMInitOptions();
             configure(opts);
 
-            builder.Services.AddTransient<TextToolCallHandler>();
+            builder.Services.AddTransient<TextHandler>();
             builder.Services.AddTransient<StructuredHandler>();
 
             builder.Services.AddSingleton<TextHandlerFactory>(sp =>
             {
-                return () => sp.GetRequiredService<TextToolCallHandler>();
+                return () => sp.GetRequiredService<TextHandler>();
             });
 
             builder.Services.AddSingleton<StructuredHandlerFactory>(sp =>

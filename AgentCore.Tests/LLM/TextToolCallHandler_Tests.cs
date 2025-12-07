@@ -43,13 +43,13 @@ namespace AgentCore.Tests.LLM
             }
         }
 
-        LLMRequest Req() => new LLMRequest(new Conversation());
+        LLMTextRequest Req() => new LLMTextRequest(new Conversation());
         LLMStreamChunk Txt(string t) => new LLMStreamChunk(StreamKind.Text, t);
         LLMStreamChunk Delta(string name, string d) =>
             new LLMStreamChunk(StreamKind.ToolCallDelta, new ToolCallDelta { Name = name, Delta = d });
 
-        TextToolCallHandler Handler(FakeParser p = null, FakeCatalog c = null)
-            => new TextToolCallHandler(p ?? new FakeParser(), c ?? new FakeCatalog(), NullLogger<TextToolCallHandler>.Instance);
+        TextHandler Handler(FakeParser p = null, FakeCatalog c = null)
+            => new TextHandler(p ?? new FakeParser(), c ?? new FakeCatalog(), NullLogger<TextHandler>.Instance);
 
         // ================================================================
         // ✔️ TEST 1: PURE TEXT
@@ -63,7 +63,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("hello "));
             h.OnChunk(Txt("world"));
 
-            var r = (LLMResponse)h.BuildResponse("stop");
+            var r = (LLMTextResponse)h.BuildResponse("stop");
 
             Assert.Equal("hello world", r.AssistantMessage);
             Assert.Null(r.ToolCall);
@@ -87,7 +87,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("me\":\"Add\",\"argu"));
             h.OnChunk(Txt("ments\":{\"x\":1}} done"));
 
-            var r = (LLMResponse)h.BuildResponse("stop");
+            var r = (LLMTextResponse)h.BuildResponse("stop");
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -111,7 +111,7 @@ namespace AgentCore.Tests.LLM
             var finalCall = new ToolCall("id", "Add", JObject.Parse("{\"x\":1}"));
             h.OnChunk(new LLMStreamChunk(StreamKind.ToolCallDelta, finalCall));
 
-            var r = (LLMResponse)h.BuildResponse("stop");
+            var r = (LLMTextResponse)h.BuildResponse("stop");
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -129,7 +129,7 @@ namespace AgentCore.Tests.LLM
             h.OnChunk(Txt("hi {\"name\":\"Add\""));
             h.OnChunk(Txt(", \"arguments\": BROKEN }"));
 
-            var r = (LLMResponse)h.BuildResponse("stop");
+            var r = (LLMTextResponse)h.BuildResponse("stop");
 
             Assert.Null(r.ToolCall);
         }

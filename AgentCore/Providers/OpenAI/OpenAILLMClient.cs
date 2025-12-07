@@ -48,7 +48,37 @@ namespace AgentCore.Providers.OpenAI
             var key = model ?? _defaultModel ?? throw new InvalidOperationException("Model not specified.");
             return _chatClients.GetOrAdd(key, m => _client.GetChatClient(m));
         }
+        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequestBase request)
+        {
+            var options = new ChatCompletionOptions();
+            options.ApplySamplingOptions(request);
+            options.AllowParallelToolCalls = false; // intentionally does this to avoud multi tool calls as llm suck at it now
 
+            switch (request)
+            {
+                case LLMStructuredRequest sreq:
+                    options.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
+                        "structured_response",
+                        BinaryData.FromString(sreq.Schema!.ToString(Newtonsoft.Json.Formatting.None)),
+                        jsonSchemaIsStrict: true
+                    );
+
+                    options.ToolChoice = sreq.ToolCallMode.ToChatToolChoice();
+                    foreach (var t in sreq.AllowedTools!.ToChatTools()) options.Tools.Add(t);
+                    break;
+
+                case LLMTextRequest toolReq:
+                    options.ToolChoice = toolReq.ToolCallMode.ToChatToolChoice();
+                    foreach (var t in toolReq.AllowedTools!.ToChatTools()) options.Tools.Add(t);
+                    break;
+
+                default:
+                    // text-only request: nothing needed
+                    break;
+            }
+
+            return options;
+        }
         protected override async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
             LLMRequestBase request,
             [EnumeratorCancellation] CancellationToken ct = default)
@@ -62,96 +92,47 @@ namespace AgentCore.Providers.OpenAI
                 ct
             );
 
-            string? pendingName = null;
-            string? pendingId = null;
+            string? pendingToolName = null;
+            string? pendingToolId = null;
 
             await foreach (var update in stream.WithCancellation(ct))
             {
-                if (update.ContentUpdate != null)
-                {
-                    foreach (var c in update.ContentUpdate)
-                        if (c.Text != null)
-                            yield return new LLMStreamChunk(StreamKind.Text, c.Text);
-                }
+                // TEXT
+                if (update.ContentUpdate is { } content)
+                    foreach (var c in content)
+                        if (c.Text is { } t)
+                            yield return new LLMStreamChunk(StreamKind.Text, t);
 
-                if (update.ToolCallUpdates != null)
-                {
-                    foreach (var tcu in update.ToolCallUpdates)
+                // TOOL CALL DELTA
+                if (update.ToolCallUpdates is { } tcuList)
+                    foreach (var tcu in tcuList)
                     {
-                        pendingId ??= tcu.ToolCallId;
-                        pendingName ??= tcu.FunctionName;
-                        var delta = tcu.FunctionArgumentsUpdate?.ToString();
+                        pendingToolId ??= tcu.ToolCallId;
+                        pendingToolName ??= tcu.FunctionName;
 
-                        if (!string.IsNullOrEmpty(delta))
-                        {
+                        if (tcu.FunctionArgumentsUpdate is { } argToken)
                             yield return new LLMStreamChunk(
                                 StreamKind.ToolCallDelta,
-                                new ToolCallDelta { Id = pendingId, Name = pendingName, Delta = delta }
-                            );
-                        }
+                                new ToolCallDelta
+                                {
+                                    Id = pendingToolId,
+                                    Name = pendingToolName,
+                                    Delta = argToken.ToString()
+                                });
                     }
-                }
 
-                if (update.Usage != null)
-                {
+                // USAGE
+                if (update.Usage is { } usage)
                     yield return new LLMStreamChunk(
                         StreamKind.Usage,
-                        new TokenUsage(update.Usage.InputTokenCount, update.Usage.OutputTokenCount)
-                    );
-                }
+                        new TokenUsage(usage.InputTokenCount, usage.OutputTokenCount));
 
-                if (update.FinishReason != null)
-                {
+                // FINISH
+                if (update.FinishReason is { } finish)
                     yield return new LLMStreamChunk(
                         StreamKind.Finish,
-                        finish: update.FinishReason.Value.ToString()
-                    );
-                }
+                        finish: finish.ToString());
             }
-        }
-
-        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequestBase request)
-        {
-            var options = new ChatCompletionOptions();
-            options.ApplySamplingOptions(request);
-            switch (request)
-            {
-                case LLMStructuredRequest sreq:
-                    options.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
-                        "structured_response",
-                        BinaryData.FromString(
-                            sreq.Schema!.ToString(Newtonsoft.Json.Formatting.None)
-                        ),
-                        jsonSchemaIsStrict: true
-                    );
-
-                    // ALSO tools if allowed (Structured may allow tools)
-                    if (sreq.AllowedTools != null)
-                    {
-                        options.ToolChoice = sreq.ToolCallMode.ToChatToolChoice();
-                        options.AllowParallelToolCalls = false; // intentionally does this to avoud multi tool calls as llm suck at it now
-
-                        foreach (var t in sreq.AllowedTools.ToChatTools())
-                            options.Tools.Add(t);
-                    }
-                    break;
-
-                case LLMRequest toolReq:
-                    // tool-only request
-                    options.ToolChoice = toolReq.ToolCallMode.ToChatToolChoice();
-                    options.AllowParallelToolCalls = false;
-
-                    foreach (var t in toolReq.AllowedTools!.ToChatTools())
-                        options.Tools.Add(t);
-
-                    break;
-
-                default:
-                    // text-only request: nothing needed
-                    break;
-            }
-
-            return options;
         }
     }
 }

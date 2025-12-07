@@ -42,7 +42,7 @@ namespace AgentCore.Runtime
             {
                 // STREAM LIVE
                 var result = await llm.ExecuteAsync(
-                    new LLMRequest(
+                    new LLMTextRequest(
                         prompt: ctx.ScratchPad,
                         toolCallMode: _toolMode,
                         model: _model,

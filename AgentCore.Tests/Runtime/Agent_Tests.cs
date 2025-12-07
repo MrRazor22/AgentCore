@@ -21,8 +21,8 @@ namespace AgentCore.Tests.Runtime
             {
                 public Queue<List<LLMStreamChunk>> Scripts = new Queue<List<LLMStreamChunk>>();
 
-                public Task<LLMResponse> ExecuteAsync(
-                    LLMRequest request,
+                public Task<LLMTextResponse> ExecuteAsync(
+                    LLMTextRequest request,
                     CancellationToken ct = default,
                     Action<LLMStreamChunk>? onStream = null)
                 {
@@ -42,7 +42,7 @@ namespace AgentCore.Tests.Runtime
                             tool = s.AsToolCall();
                     }
 
-                    return Task.FromResult(new LLMResponse(
+                    return Task.FromResult(new LLMTextResponse(
                         txt,
                         tool,
                         "stop"

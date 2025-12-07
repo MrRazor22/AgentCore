@@ -19,7 +19,7 @@ namespace AgentCore.Tests.LLM
             var pipeline = new LLMPipeline(ctx, tokens, retry, NullLogger.Instance);
 
             var handler = new FakeHandler();
-            var req = new LLMRequest(new Conversation().AddUser("x"));
+            var req = new LLMTextRequest(new Conversation().AddUser("x"));
 
             LLMResponseBase resp = await pipeline.RunAsync(
                 req,
@@ -29,7 +29,7 @@ namespace AgentCore.Tests.LLM
                 CancellationToken.None
             );
 
-            Assert.IsType<LLMResponse>(resp);
+            Assert.IsType<LLMTextResponse>(resp);
             Assert.Equal("stop", resp.FinishReason);
             Assert.True(resp.TokenUsage.Total > 0);
         }
@@ -52,7 +52,7 @@ namespace AgentCore.Tests.LLM
                     sb.Append(c.AsText());
             }
             public LLMResponseBase BuildResponse(string f)
-                => new LLMResponse(sb.ToString(), null, f);
+                => new LLMTextResponse(sb.ToString(), null, f);
         }
 
         private sealed class FakeCtx : IContextBudgetManager

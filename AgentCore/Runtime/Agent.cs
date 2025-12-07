@@ -90,13 +90,13 @@ namespace AgentCore.Runtime
                 );
             });
             // Handlers
-            Services.AddTransient<TextToolCallHandler>();
+            Services.AddTransient<TextHandler>();
             Services.AddTransient<StructuredHandler>();
 
             // Factories
             Services.AddSingleton<TextHandlerFactory>(sp =>
             {
-                return () => sp.GetRequiredService<TextToolCallHandler>();
+                return () => sp.GetRequiredService<TextHandler>();
             });
 
             Services.AddSingleton<StructuredHandlerFactory>(sp =>

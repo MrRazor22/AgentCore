@@ -14,64 +14,54 @@ using System.Text;
 namespace AgentCore.LLM.Handlers
 {
     public delegate StructuredHandler StructuredHandlerFactory();
-    public sealed class StructuredHandler : IChunkHandler
-    {
-        private readonly ILogger<StructuredHandler> _logger;
-        private readonly IToolCatalog _tools;
 
-        private LLMStructuredRequest? _request;
+    public sealed class StructuredHandler : BaseChunkHandler
+    {
+        private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new ConcurrentDictionary<Type, JObject>();
         private readonly StringBuilder _jsonBuffer = new StringBuilder();
-        private static readonly ConcurrentDictionary<Type, JObject> _schemaCache
-            = new ConcurrentDictionary<Type, JObject>();
+        private LLMStructuredRequest _request;
 
         public StructuredHandler(
+            IToolCallParser parser,
             IToolCatalog tools,
             ILogger<StructuredHandler> logger)
+            : base(parser, tools, logger) { }
+
+        public override void PrepareRequest(LLMRequestBase req)
         {
-            _tools = tools;
-            _logger = logger;
-        }
+            _request = (LLMStructuredRequest)req;
 
-        public void PrepareRequest(LLMRequestBase request)
-        {
-            _request = (LLMStructuredRequest)request;
-
-            var req = (LLMStructuredRequest)request;
-            var type = req.ResultType;
-
-            if (!_schemaCache.TryGetValue(type, out var schema))
+            if (!SchemaCache.TryGetValue(_request.ResultType, out var schema))
             {
-                schema = type.GetSchemaForType();
-                _schemaCache[type] = schema;
+                schema = _request.ResultType.GetSchemaForType();
+                SchemaCache[_request.ResultType] = schema;
             }
 
-            req.Schema = schema;
-
-            req.AllowedTools =
-                req.ToolCallMode == ToolCallMode.Disabled
+            _request.Schema = schema;
+            _request.AllowedTools =
+                _request.ToolCallMode == ToolCallMode.Disabled
                     ? Array.Empty<Tool>()
-                    : req.AllowedTools?.Any() == true
-                        ? req.AllowedTools.ToArray()
-                        : _tools.RegisteredTools.ToArray();
+                    : _request.AllowedTools?.Any() == true
+                        ? _request.AllowedTools.ToArray()
+                        : Tools.RegisteredTools.ToArray();
         }
 
-        public void OnChunk(LLMStreamChunk chunk)
+        protected override void HandleSpecificChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
 
             var txt = chunk.AsText();
             if (string.IsNullOrEmpty(txt)) return;
 
-            // inbound log moved here exactly
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogTrace("◄ Stream: {Text}", txt);
+            if (Logger.IsEnabled(LogLevel.Trace))
+                Logger.LogTrace("◄ Stream: {Text}", txt);
 
             _jsonBuffer.Append(txt);
         }
 
-        public LLMResponseBase BuildResponse(string finishReason)
+        protected override LLMResponseBase BuildFinalResponse(string finishReason)
         {
-            string raw = _jsonBuffer.ToString();
+            var raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
                 throw new RetryException("Empty response. Return valid JSON.");
 
@@ -85,20 +75,21 @@ namespace AgentCore.LLM.Handlers
                 throw new RetryException("Return valid JSON matching the schema.");
             }
 
-            var errors = _request?.Schema?.Validate(json, _request.ResultType.Name);
-
-            if (errors?.Count! > 0)
+            var errors = _request.Schema?.Validate(json, _request.ResultType.Name);
+            if (errors?.Count > 0)
             {
                 var msg = string.Join("; ", errors.Select(e => $"{e.Path}: {e.Message}"));
                 throw new RetryException("Validation failed: " + msg);
             }
 
-            object? result = json.ToObject(_request?.ResultType!);
+            var result = json.ToObject(_request.ResultType);
 
             return new LLMStructuredResponse(
-                json,
-                result,
-                finishReason
+                assistantMessage: null,
+                toolCall: FirstTool,
+                rawJson: json,
+                result: result,
+                finishReason: finishReason
             );
         }
     }

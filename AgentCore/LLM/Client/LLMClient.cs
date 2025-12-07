@@ -1,11 +1,13 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Tokens;
 using AgentCore.Tools;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,12 +37,12 @@ namespace AgentCore.LLM.Client
         public abstract string ToSerializablePayload();
         public abstract LLMRequestBase DeepClone();
     }
-    public sealed class LLMRequest : LLMRequestBase
+    public class LLMTextRequest : LLMRequestBase
     {
         public ToolCallMode ToolCallMode { get; }
         public IEnumerable<Tool>? AllowedTools { get; internal set; }
 
-        public LLMRequest(
+        public LLMTextRequest(
             Conversation prompt,
             ToolCallMode toolCallMode = ToolCallMode.Auto,
             IEnumerable<Tool>? allowedTools = null,
@@ -76,11 +78,11 @@ namespace AgentCore.LLM.Client
 
                 root["tool_choice"] = ToolCallMode.ToString().ToLower();
             }
-            return root.ToString(Formatting.None);
+            return root.ToString(Formatting.Indented);
         }
         public override LLMRequestBase DeepClone()
         {
-            return new LLMRequest(
+            return new LLMTextRequest(
                 prompt: Prompt.Clone(),     // **only deep clone here**
                 toolCallMode: ToolCallMode,
                 allowedTools: AllowedTools, // allowed to share — immutable list
@@ -89,13 +91,10 @@ namespace AgentCore.LLM.Client
             );
         }
     }
-    public sealed class LLMStructuredRequest : LLMRequestBase
+    public sealed class LLMStructuredRequest : LLMTextRequest
     {
         public Type ResultType { get; internal set; }
         public JObject? Schema { get; internal set; }
-
-        public IEnumerable<Tool>? AllowedTools { get; internal set; }
-        public ToolCallMode ToolCallMode { get; }
 
         public LLMStructuredRequest(
             Conversation prompt,
@@ -104,13 +103,12 @@ namespace AgentCore.LLM.Client
             ToolCallMode toolCallMode = ToolCallMode.Disabled,
             string? model = null,
             LLMGenerationOptions? options = null)
-            : base(prompt, model, options)
+            : base(prompt, toolCallMode, allowedTools, model, options)
         {
             ResultType = resultType;
-            AllowedTools = allowedTools;
-            ToolCallMode = toolCallMode;
             Schema = null;
         }
+
         public override string ToSerializablePayload()
         {
             var root = new JObject
@@ -142,30 +140,34 @@ namespace AgentCore.LLM.Client
                         function = new
                         {
                             name = t.Name,
-                            description = t.Description, // Important: Descriptions consume many tokens
+                            description = t.Description,
                             parameters = t.ParametersSchema
                         }
                     })
                 );
+
                 root["tool_choice"] = ToolCallMode.ToString().ToLower();
             }
-            return root.ToString(Formatting.None);
+
+            return root.ToString(Formatting.Indented);
         }
+
         public override LLMRequestBase DeepClone()
         {
             return new LLMStructuredRequest(
-                prompt: Prompt.Clone(),        // **deep clone prompt only**
+                prompt: Prompt.Clone(),
                 resultType: ResultType,
-                allowedTools: AllowedTools,    // immutable list shared
+                allowedTools: AllowedTools,
                 toolCallMode: ToolCallMode,
                 model: Model,
                 options: Options
             )
             {
-                Schema = Schema                 // Schema is immutable — share
+                Schema = Schema
             };
         }
     }
+
     public sealed class LLMInitOptions
     {
         public string? BaseUrl { get; set; } = null;
@@ -175,8 +177,8 @@ namespace AgentCore.LLM.Client
 
     public interface ILLMClient
     {
-        Task<LLMResponse> ExecuteAsync(
-            LLMRequest request,
+        Task<LLMTextResponse> ExecuteAsync(
+            LLMTextRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
 
@@ -232,12 +234,12 @@ namespace AgentCore.LLM.Client
         public abstract string ToSerializablePayload();
     }
 
-    public sealed class LLMResponse : LLMResponseBase
+    public class LLMTextResponse : LLMResponseBase
     {
         public string? AssistantMessage { get; }
         public ToolCall? ToolCall { get; }
 
-        public LLMResponse(
+        public LLMTextResponse(
             string? assistantMessage,
             ToolCall? toolCall,
             string finishReason)
@@ -265,32 +267,35 @@ namespace AgentCore.LLM.Client
 
                 // The Arguments account for the rest
                 if (ToolCall.Arguments != null)
-                    sb.Append(ToolCall.Arguments.ToString(Formatting.None));
+                    sb.Append(ToolCall.Arguments.ToString(Formatting.Indented));
             }
 
             return sb.ToString();
         }
     }
-
-    public sealed class LLMStructuredResponse : LLMResponseBase
+    public sealed class LLMStructuredResponse : LLMTextResponse
     {
         public JToken RawJson { get; }
         public object? Result { get; }
 
         public LLMStructuredResponse(
+            string? assistantMessage,
+            ToolCall? toolCall,
             JToken rawJson,
             object? result,
             string finishReason)
-            : base(finishReason)
+            : base(assistantMessage, toolCall, finishReason)
         {
             RawJson = rawJson;
             Result = result;
         }
+
         public override string ToSerializablePayload()
         {
-            return RawJson.ToString(Formatting.None);
+            return RawJson.ToString(Formatting.Indented);
         }
     }
+
 
     public enum StreamKind
     {

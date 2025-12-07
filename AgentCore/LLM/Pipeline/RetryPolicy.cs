@@ -9,6 +9,10 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Pipeline
 {
+    public class RetryException : Exception
+    {
+        public RetryException(string message) : base(message) { }
+    }
     public sealed class RetryPolicyOptions
     {
         public int MaxRetries { get; set; } = 3;
@@ -24,10 +28,6 @@ namespace AgentCore.LLM.Pipeline
             LLMRequestBase originalRequest,
             Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> factory,
             [EnumeratorCancellation] CancellationToken ct = default);
-    }
-    public class RetryException : Exception
-    {
-        public RetryException(string message) : base(message) { }
     }
 
     /// <summary>

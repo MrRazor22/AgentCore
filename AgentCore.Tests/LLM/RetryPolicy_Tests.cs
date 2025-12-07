@@ -32,7 +32,7 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("fix me");
             }
 
-            var req = new LLMRequest(new Conversation().AddUser("hi"));
+            var req = new LLMTextRequest(new Conversation().AddUser("hi"));
             var results = new List<LLMStreamChunk>();
 
             await foreach (var c in policy.ExecuteStreamAsync(req, Fake))
@@ -62,7 +62,7 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("err");
             }
 
-            var req = new LLMRequest(new Conversation());
+            var req = new LLMTextRequest(new Conversation());
 
             int count = 0;
             await foreach (var _ in policy.ExecuteStreamAsync(req, Fake))
@@ -90,7 +90,7 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("oops");
             }
 
-            var req = new LLMRequest(new Conversation().AddUser("x"));
+            var req = new LLMTextRequest(new Conversation().AddUser("x"));
             var items = new List<LLMStreamChunk>();
 
             await foreach (var c in policy.ExecuteStreamAsync(req, Fake))
@@ -121,7 +121,7 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("fix me");
             }
 
-            var req = new LLMRequest(new Conversation().AddUser("hi"));
+            var req = new LLMTextRequest(new Conversation().AddUser("hi"));
 
             await foreach (var _ in policy.ExecuteStreamAsync(req, Fake))
             {

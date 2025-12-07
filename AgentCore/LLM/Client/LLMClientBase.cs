@@ -57,13 +57,13 @@ namespace AgentCore.LLM.Client
 
             return (TResponse)result;
         }
-        public async Task<LLMResponse> ExecuteAsync(
-            LLMRequest request,
+        public async Task<LLMTextResponse> ExecuteAsync(
+            LLMTextRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
             var handler = _textFactory();  // DI-created
-            return await ExecuteWithHandlerAsync<LLMResponse>(
+            return await ExecuteWithHandlerAsync<LLMTextResponse>(
                 request, handler, onStream, ct);
         }
 
