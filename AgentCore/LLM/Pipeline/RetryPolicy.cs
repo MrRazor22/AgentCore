@@ -25,8 +25,8 @@ namespace AgentCore.LLM.Pipeline
     public interface IRetryPolicy
     {
         IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
-            LLMRequestBase originalRequest,
-            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> factory,
+            Conversation originalRequest,
+            Func<Conversation, IAsyncEnumerable<LLMStreamChunk>> factory,
             [EnumeratorCancellation] CancellationToken ct = default);
     }
 
@@ -43,18 +43,18 @@ namespace AgentCore.LLM.Pipeline
         }
 
         public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
-            LLMRequestBase originalRequest,
-            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
+            Conversation originalRequest,
+            Func<Conversation, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
-            var workingRequest = originalRequest.DeepClone();
+            var workingRequest = originalRequest.Clone();
 
             for (int attempt = 0; attempt <= _options.MaxRetries; attempt++)
             {
                 using var timeoutCts = new CancellationTokenSource(_options.Timeout);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
-                var cloned = workingRequest.DeepClone();
+                var cloned = workingRequest.Clone();
                 var stream = streamFactory(cloned);
                 var enumerator = stream.GetAsyncEnumerator(linked.Token);
 
@@ -93,7 +93,7 @@ namespace AgentCore.LLM.Pipeline
                     yield break;
 
                 // teach the model what to fix
-                workingRequest.Prompt.AddAssistant(reason);
+                workingRequest.AddAssistant(reason);
 
                 // artificial retry chunk for visibility
                 yield return new LLMStreamChunk(

@@ -39,8 +39,7 @@ namespace AgentCore.Runtime
                     opts,
                     sp.GetRequiredService<ILLMPipeline>(),
                     sp.GetRequiredService<TextHandlerFactory>(),
-                    sp.GetRequiredService<StructuredHandlerFactory>(),
-                    sp.GetRequiredService<ILogger<ILLMClient>>()
+                    sp.GetRequiredService<StructuredHandlerFactory>()
                 );
             });
 

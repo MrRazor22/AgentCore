@@ -24,7 +24,7 @@ namespace AgentCore.Tests.LLM
 
             int calls = 0;
 
-            async IAsyncEnumerable<LLMStreamChunk> Fake(LLMRequestBase r)
+            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
             {
                 calls++;
                 await Task.Yield();
@@ -35,7 +35,7 @@ namespace AgentCore.Tests.LLM
             var req = new LLMTextRequest(new Conversation().AddUser("hi"));
             var results = new List<LLMStreamChunk>();
 
-            await foreach (var c in policy.ExecuteStreamAsync(req, Fake))
+            await foreach (var c in policy.ExecuteStreamAsync(req.Prompt, Fake))
                 results.Add(c);
 
             Assert.Equal(2, calls);
@@ -54,7 +54,7 @@ namespace AgentCore.Tests.LLM
 
             int calls = 0;
 
-            async IAsyncEnumerable<LLMStreamChunk> Fake(LLMRequestBase r)
+            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
             {
                 calls++;
                 await Task.Yield();
@@ -65,7 +65,7 @@ namespace AgentCore.Tests.LLM
             var req = new LLMTextRequest(new Conversation());
 
             int count = 0;
-            await foreach (var _ in policy.ExecuteStreamAsync(req, Fake))
+            await foreach (var _ in policy.ExecuteStreamAsync(req.Prompt, Fake))
                 count++;
 
             Assert.Equal(1, calls);
@@ -83,7 +83,7 @@ namespace AgentCore.Tests.LLM
 
             var policy = new RetryPolicy(opts);
 
-            async IAsyncEnumerable<LLMStreamChunk> Fake(LLMRequestBase r)
+            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
             {
                 await Task.Yield();
                 if (false) yield break;
@@ -93,7 +93,7 @@ namespace AgentCore.Tests.LLM
             var req = new LLMTextRequest(new Conversation().AddUser("x"));
             var items = new List<LLMStreamChunk>();
 
-            await foreach (var c in policy.ExecuteStreamAsync(req, Fake))
+            await foreach (var c in policy.ExecuteStreamAsync(req.Prompt, Fake))
                 items.Add(c);
 
             Assert.Single(items);
@@ -111,9 +111,9 @@ namespace AgentCore.Tests.LLM
 
             var policy = new RetryPolicy(opts);
 
-            LLMRequestBase? captured = null;
+            Conversation? captured = null;
 
-            async IAsyncEnumerable<LLMStreamChunk> Fake(LLMRequestBase r)
+            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
             {
                 captured = r;   // this is the cloned working request
                 await Task.Yield();
@@ -123,7 +123,7 @@ namespace AgentCore.Tests.LLM
 
             var req = new LLMTextRequest(new Conversation().AddUser("hi"));
 
-            await foreach (var _ in policy.ExecuteStreamAsync(req, Fake))
+            await foreach (var _ in policy.ExecuteStreamAsync(req.Prompt, Fake))
             {
                 // ignore retry chunk
             }
@@ -133,7 +133,7 @@ namespace AgentCore.Tests.LLM
 
             // working clone should have been mutated
             Assert.NotNull(captured);
-            Assert.Contains(captured!.Prompt, m => m.Role == Role.Assistant);
+            Assert.Contains(captured, m => m.Role == Role.Assistant);
         }
     }
 }

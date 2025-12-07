@@ -21,10 +21,11 @@ namespace AgentCore.Tests.Runtime
             {
                 public Queue<List<LLMStreamChunk>> Scripts = new Queue<List<LLMStreamChunk>>();
 
-                public Task<LLMTextResponse> ExecuteAsync(
-                    LLMTextRequest request,
-                    CancellationToken ct = default,
-                    Action<LLMStreamChunk>? onStream = null)
+                public async Task<TResponse> ExecuteAsync<TResponse>(
+                   LLMRequestBase request,
+                   CancellationToken ct = default,
+                   Action<LLMStreamChunk>? onStream = null)
+                   where TResponse : LLMResponseBase
                 {
                     var script = Scripts.Dequeue();
 
@@ -42,19 +43,14 @@ namespace AgentCore.Tests.Runtime
                             tool = s.AsToolCall();
                     }
 
-                    return Task.FromResult(new LLMTextResponse(
+                    var result = Task.FromResult(new LLMTextResponse(
                         txt,
                         tool,
                         "stop"
-                    ));
-                }
+                    )).Result;
 
-                // unused for tests
-                public Task<LLMStructuredResponse> ExecuteAsync(
-                    LLMStructuredRequest request,
-                    CancellationToken ct = default,
-                    Action<LLMStreamChunk>? onStream = null)
-                    => throw new NotImplementedException();
+                    return (TResponse)(LLMResponseBase)result;
+                }
             }
 
             // a simple tool for testing

@@ -63,8 +63,8 @@ namespace AgentCore.Tests.LLM
         private sealed class FakeRetry : IRetryPolicy
         {
             public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
-                LLMRequestBase r,
-                Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> f,
+                Conversation r,
+                Func<Conversation, IAsyncEnumerable<LLMStreamChunk>> f,
                 [EnumeratorCancellation] CancellationToken ct = default)
             {
                 await foreach (var c in f(r))

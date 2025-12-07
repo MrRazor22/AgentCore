@@ -27,7 +27,7 @@ namespace AgentCore.LLM.Handlers
             ILogger<StructuredHandler> logger)
             : base(parser, tools, logger) { }
 
-        public override void PrepareRequest(LLMRequestBase req)
+        public override void PrepareSpecificRequest(LLMRequestBase req)
         {
             _request = (LLMStructuredRequest)req;
 
@@ -38,12 +38,6 @@ namespace AgentCore.LLM.Handlers
             }
 
             _request.Schema = schema;
-            _request.AllowedTools =
-                _request.ToolCallMode == ToolCallMode.Disabled
-                    ? Array.Empty<Tool>()
-                    : _request.AllowedTools?.Any() == true
-                        ? _request.AllowedTools.ToArray()
-                        : Tools.RegisteredTools.ToArray();
         }
 
         protected override void HandleSpecificChunk(LLMStreamChunk chunk)
@@ -85,7 +79,6 @@ namespace AgentCore.LLM.Handlers
             var result = json.ToObject(_request.ResultType);
 
             return new LLMStructuredResponse(
-                assistantMessage: null,
                 toolCall: FirstTool,
                 rawJson: json,
                 result: result,

@@ -10,26 +10,31 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Client
 {
+    public interface ILLMClient
+    {
+        Task<TResponse> ExecuteAsync<TResponse>(
+            LLMRequestBase request,
+            CancellationToken ct = default,
+            Action<LLMStreamChunk>? onStream = null)
+            where TResponse : LLMResponseBase;
+    }
     public abstract class LLMClientBase : ILLMClient
     {
         protected readonly LLMInitOptions _initOptions;
         private readonly ILLMPipeline _pipeline;
         private readonly TextHandlerFactory _textFactory;
         private readonly StructuredHandlerFactory _structFactory;
-        private readonly ILogger<ILLMClient> _logger;
 
         public LLMClientBase(
             LLMInitOptions opts,
             ILLMPipeline pipeline,
             TextHandlerFactory textFactory,
-            StructuredHandlerFactory structFactory,
-            ILogger<ILLMClient> logger)
+            StructuredHandlerFactory structFactory)
         {
             _initOptions = opts;
             _pipeline = pipeline;
             _textFactory = textFactory;
             _structFactory = structFactory;
-            _logger = logger;
         }
 
 
@@ -37,45 +42,40 @@ namespace AgentCore.LLM.Client
         protected abstract IAsyncEnumerable<LLMStreamChunk> StreamAsync(
             LLMRequestBase request,
             CancellationToken ct);
-        #endregion 
+        #endregion
 
-        private async Task<TResponse> ExecuteWithHandlerAsync<TResponse>(
-            LLMRequestBase request,
-            IChunkHandler handler,
-            Action<LLMStreamChunk>? onStream,
-            CancellationToken ct)
-            where TResponse : LLMResponseBase
+        public async Task<TResponse> ExecuteAsync<TResponse>(
+        LLMRequestBase request,
+        CancellationToken ct = default,
+        Action<LLMStreamChunk>? onStream = null)
+        where TResponse : LLMResponseBase
         {
+            IChunkHandler handler;
+
+            if (request is LLMTextRequest)
+            {
+                handler = _textFactory();
+            }
+            else if (request is LLMStructuredRequest)
+            {
+                handler = _structFactory();
+            }
+            else
+            {
+                throw new NotSupportedException(
+                    "Unsupported request type: " + request.GetType().Name);
+            }
+
             handler.PrepareRequest(request);
 
             var result = await _pipeline.RunAsync(
-            request,
-            handler,
-            r => StreamAsync(r, ct),
-            onStream,
-            ct);
+                request,
+                handler,
+                r => StreamAsync(r, ct),
+                onStream,
+                ct);
 
             return (TResponse)result;
         }
-        public async Task<LLMTextResponse> ExecuteAsync(
-            LLMTextRequest request,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? onStream = null)
-        {
-            var handler = _textFactory();  // DI-created
-            return await ExecuteWithHandlerAsync<LLMTextResponse>(
-                request, handler, onStream, ct);
-        }
-
-        public async Task<LLMStructuredResponse> ExecuteAsync(
-            LLMStructuredRequest request,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? onStream = null)
-        {
-            var handler = _structFactory();  // DI-created
-            return await ExecuteWithHandlerAsync<LLMStructuredResponse>(
-                request, handler, onStream, ct);
-        }
-
     }
 }

@@ -14,46 +14,30 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Client
 {
-    public interface IChunkHandler
-    {
-        void PrepareRequest(LLMRequestBase request);
-        void OnChunk(LLMStreamChunk chunk);
-        LLMResponseBase BuildResponse(string finishReason);
-    }
     public abstract class LLMRequestBase
     {
         public Conversation Prompt { get; internal set; }
+        public ToolCallMode ToolCallMode { get; }
         public string? Model { get; }
         public LLMGenerationOptions? Options { get; }
+        public IEnumerable<Tool>? ResolvedTools { get; internal set; }
+
         protected LLMRequestBase(
             Conversation prompt,
+            ToolCallMode toolCallMode = ToolCallMode.Auto,
             string? model = null,
             LLMGenerationOptions? options = null)
         {
             Prompt = prompt;
+            ToolCallMode = toolCallMode;
             Model = model;
             Options = options;
         }
-        public abstract string ToSerializablePayload();
-        public abstract LLMRequestBase DeepClone();
-    }
-    public class LLMTextRequest : LLMRequestBase
-    {
-        public ToolCallMode ToolCallMode { get; }
-        public IEnumerable<Tool>? AllowedTools { get; internal set; }
 
-        public LLMTextRequest(
-            Conversation prompt,
-            ToolCallMode toolCallMode = ToolCallMode.Auto,
-            IEnumerable<Tool>? allowedTools = null,
-            string? model = null,
-            LLMGenerationOptions? options = null)
-            : base(prompt, model, options)
-        {
-            AllowedTools = allowedTools;
-            ToolCallMode = toolCallMode;
-        }
-        public override string ToSerializablePayload()
+        // SUBCLASS ONLY IMPLEMENTS THIS — returns JSON fragment
+        protected abstract JObject GetPayloadJson();
+        //just for token counting approximation in case model sdidnt give token usage 
+        public string ToPayloadString()
         {
             var root = new JObject
             {
@@ -61,65 +45,76 @@ namespace AgentCore.LLM.Client
                 ["messages"] = JArray.FromObject(Prompt.GetSerializableMessages())
             };
 
-            if (AllowedTools != null && AllowedTools.Any())
+            // Add subclass JSON fragment
+            var extra = GetPayloadJson();
+            if (extra != null)
             {
-                root["tools"] = JArray.FromObject(
-                    AllowedTools.Select(t => new
-                    {
-                        type = "function",
-                        function = new
-                        {
-                            name = t.Name,
-                            description = t.Description,
-                            parameters = t.ParametersSchema
-                        }
-                    })
-                );
-
-                root["tool_choice"] = ToolCallMode.ToString().ToLower();
+                foreach (var prop in extra.Properties())
+                    root[prop.Name] = prop.Value;
             }
+
+            AddTools(root);
+
             return root.ToString(Formatting.Indented);
         }
-        public override LLMRequestBase DeepClone()
+
+        private void AddTools(JObject root)
         {
-            return new LLMTextRequest(
-                prompt: Prompt.Clone(),     // **only deep clone here**
-                toolCallMode: ToolCallMode,
-                allowedTools: AllowedTools, // allowed to share — immutable list
-                model: Model,
-                options: Options
+            if (ResolvedTools == null || !ResolvedTools.Any())
+                return;
+
+            root["tools"] = new JArray(
+                ResolvedTools.Select(t => new JObject
+                {
+                    ["type"] = "function",
+                    ["function"] = new JObject
+                    {
+                        ["name"] = t.Name,
+                        ["description"] = t.Description,
+                        ["parameters"] = t.ParametersSchema
+                    }
+                })
             );
+
+            root["tool_choice"] = ToolCallMode.ToString().ToLower();
         }
     }
-    public sealed class LLMStructuredRequest : LLMTextRequest
+
+    public sealed class LLMTextRequest : LLMRequestBase
     {
-        public Type ResultType { get; internal set; }
-        public JObject? Schema { get; internal set; }
+        public LLMTextRequest(
+            Conversation prompt,
+            ToolCallMode toolCallMode = ToolCallMode.Auto,
+            string? model = null,
+            LLMGenerationOptions? options = null)
+            : base(prompt, toolCallMode, model, options) { }
+
+        protected override JObject GetPayloadJson() => new JObject();
+    }
+    public sealed class LLMStructuredRequest : LLMRequestBase
+    {
+        public Type ResultType { get; }
+        public JObject? Schema { get; set; }
 
         public LLMStructuredRequest(
             Conversation prompt,
             Type resultType,
-            IEnumerable<Tool>? allowedTools = null,
-            ToolCallMode toolCallMode = ToolCallMode.Disabled,
+            ToolCallMode mode,
             string? model = null,
             LLMGenerationOptions? options = null)
-            : base(prompt, toolCallMode, allowedTools, model, options)
+            : base(prompt, mode, model, options)
         {
             ResultType = resultType;
-            Schema = null;
         }
 
-        public override string ToSerializablePayload()
+        protected override JObject GetPayloadJson()
         {
-            var root = new JObject
-            {
-                ["model"] = Model,
-                ["messages"] = JArray.FromObject(Prompt.GetSerializableMessages())
-            };
+            if (Schema == null)
+                return new JObject();
 
-            if (Schema != null)
+            return new JObject
             {
-                root["response_format"] = new JObject
+                ["response_format"] = new JObject
                 {
                     ["type"] = "json_schema",
                     ["json_schema"] = new JObject
@@ -128,45 +123,11 @@ namespace AgentCore.LLM.Client
                         ["strict"] = true,
                         ["schema"] = Schema
                     }
-                };
-            }
-
-            if (AllowedTools != null && AllowedTools.Any())
-            {
-                root["tools"] = JArray.FromObject(
-                    AllowedTools.Select(t => new
-                    {
-                        type = "function",
-                        function = new
-                        {
-                            name = t.Name,
-                            description = t.Description,
-                            parameters = t.ParametersSchema
-                        }
-                    })
-                );
-
-                root["tool_choice"] = ToolCallMode.ToString().ToLower();
-            }
-
-            return root.ToString(Formatting.Indented);
-        }
-
-        public override LLMRequestBase DeepClone()
-        {
-            return new LLMStructuredRequest(
-                prompt: Prompt.Clone(),
-                resultType: ResultType,
-                allowedTools: AllowedTools,
-                toolCallMode: ToolCallMode,
-                model: Model,
-                options: Options
-            )
-            {
-                Schema = Schema
+                }
             };
         }
     }
+
 
     public sealed class LLMInitOptions
     {
@@ -174,20 +135,6 @@ namespace AgentCore.LLM.Client
         public string? ApiKey { get; set; } = null;
         public string? Model { get; set; } = null;
     }
-
-    public interface ILLMClient
-    {
-        Task<LLMTextResponse> ExecuteAsync(
-            LLMTextRequest request,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? onStream = null);
-
-        Task<LLMStructuredResponse> ExecuteAsync(
-            LLMStructuredRequest request,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? onStream = null);
-    }
-
 
     public enum ToolCallMode
     {
@@ -209,11 +156,12 @@ namespace AgentCore.LLM.Client
         public float? PresencePenalty { get; set; }
         public float? TopK { get; set; }
     }
-
     public abstract class LLMResponseBase
     {
         public string FinishReason { get; }
+        public ToolCall? ToolCall { get; }
         private TokenUsage? _tokenUsage;
+
         public TokenUsage? TokenUsage
         {
             get => _tokenUsage;
@@ -225,77 +173,84 @@ namespace AgentCore.LLM.Client
             }
         }
 
-        protected LLMResponseBase(
-            string finishReason)
+        protected LLMResponseBase(ToolCall? toolCall, string finishReason)
         {
+            ToolCall = toolCall;
             FinishReason = finishReason ?? "stop";
-            TokenUsage = null;
         }
-        public abstract string ToSerializablePayload();
-    }
 
-    public class LLMTextResponse : LLMResponseBase
+        // CHILD returns JSON payload for THIS response type
+        protected abstract JObject GetPayloadJson();
+
+        public string ToPayloadString()
+        {
+            var root = GetPayloadJson();
+
+            // Add tool call, if any
+            if (ToolCall != null)
+            {
+                var toolObj = new JObject
+                {
+                    ["id"] = ToolCall.Id,
+                };
+
+                if (!string.IsNullOrEmpty(ToolCall.Name))
+                    toolObj["name"] = ToolCall.Name;
+
+                if (ToolCall.Arguments != null)
+                    toolObj["arguments"] = ToolCall.Arguments;
+
+                root["tool_call"] = toolObj;
+            }
+
+            return root.ToString(Formatting.Indented);
+        }
+    }
+    public sealed class LLMTextResponse : LLMResponseBase
     {
         public string? AssistantMessage { get; }
-        public ToolCall? ToolCall { get; }
 
         public LLMTextResponse(
             string? assistantMessage,
             ToolCall? toolCall,
             string finishReason)
-            : base(finishReason)
+            : base(toolCall, finishReason)
         {
             AssistantMessage = assistantMessage;
-            ToolCall = toolCall;
         }
-        public override string ToSerializablePayload()
+
+        protected override JObject GetPayloadJson()
         {
-            var sb = new StringBuilder();
-
-            if (!string.IsNullOrEmpty(AssistantMessage))
-                sb.Append(AssistantMessage);
-
-            if (ToolCall != null)
+            return new JObject
             {
-                // The ID accounts for ~3-5 tokens
-                if (!string.IsNullOrEmpty(ToolCall.Id))
-                    sb.Append(ToolCall.Id);
-
-                // The Name accounts for ~2-5 tokens
-                if (!string.IsNullOrEmpty(ToolCall.Name))
-                    sb.Append(ToolCall.Name);
-
-                // The Arguments account for the rest
-                if (ToolCall.Arguments != null)
-                    sb.Append(ToolCall.Arguments.ToString(Formatting.Indented));
-            }
-
-            return sb.ToString();
+                ["message"] = AssistantMessage ?? ""
+            };
         }
     }
-    public sealed class LLMStructuredResponse : LLMTextResponse
+    public sealed class LLMStructuredResponse : LLMResponseBase
     {
         public JToken RawJson { get; }
         public object? Result { get; }
 
         public LLMStructuredResponse(
-            string? assistantMessage,
-            ToolCall? toolCall,
             JToken rawJson,
             object? result,
+            ToolCall? toolCall,
             string finishReason)
-            : base(assistantMessage, toolCall, finishReason)
+            : base(toolCall, finishReason)
         {
             RawJson = rawJson;
             Result = result;
         }
 
-        public override string ToSerializablePayload()
+        protected override JObject GetPayloadJson()
         {
-            return RawJson.ToString(Formatting.Indented);
+            return new JObject
+            {
+                ["result_json"] = RawJson
+            };
         }
     }
-
 
     public enum StreamKind
     {

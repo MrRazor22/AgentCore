@@ -26,16 +26,7 @@ namespace AgentCore.LLM.Handlers
             ILogger<TextHandler> logger)
             : base(parser, tools, logger) { }
 
-        public override void PrepareRequest(LLMRequestBase request)
-        {
-            _request = (LLMTextRequest)request;
-            _request.AllowedTools =
-                _request.ToolCallMode == ToolCallMode.Disabled
-                    ? Array.Empty<Tool>()
-                    : _request.AllowedTools?.Any() == true
-                        ? _request.AllowedTools.ToArray()
-                        : Tools.RegisteredTools.ToArray();
-        }
+        public override void PrepareSpecificRequest(LLMRequestBase request) { }
 
         protected override void HandleSpecificChunk(LLMStreamChunk chunk)
         {

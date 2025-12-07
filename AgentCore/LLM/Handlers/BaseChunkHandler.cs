@@ -12,13 +12,18 @@ using System.Text;
 
 namespace AgentCore.LLM.Handlers
 {
+    public interface IChunkHandler
+    {
+        void PrepareRequest(LLMRequestBase request);
+        void OnChunk(LLMStreamChunk chunk);
+        LLMResponseBase BuildResponse(string finishReason);
+    }
     public abstract class BaseChunkHandler : IChunkHandler
     {
         protected readonly IToolCallParser Parser;
         protected readonly IToolCatalog Tools;
         protected readonly ILogger Logger;
 
-        protected readonly StringBuilder Text = new StringBuilder();
         protected readonly StringBuilder ToolArgBuilder = new StringBuilder();
 
         protected ToolCall? FirstTool;
@@ -35,7 +40,16 @@ namespace AgentCore.LLM.Handlers
             Logger = logger;
         }
 
-        public abstract void PrepareRequest(LLMRequestBase request);
+        public void PrepareRequest(LLMRequestBase request)
+        {
+            request.ResolvedTools =
+                request.ToolCallMode == ToolCallMode.Disabled
+                    ? Array.Empty<Tool>()
+                    : Tools.RegisteredTools.ToArray();
+
+            PrepareSpecificRequest(request);
+        }
+        public abstract void PrepareSpecificRequest(LLMRequestBase request);
 
         public void OnChunk(LLMStreamChunk chunk)
         {

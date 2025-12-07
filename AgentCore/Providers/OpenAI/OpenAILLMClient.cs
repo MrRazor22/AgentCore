@@ -21,15 +21,13 @@ namespace AgentCore.Providers.OpenAI
         private OpenAIClient? _client;
         private readonly ConcurrentDictionary<string, ChatClient> _chatClients =
             new ConcurrentDictionary<string, ChatClient>(StringComparer.OrdinalIgnoreCase);
-
         private string? _defaultModel;
         public OpenAILLMClient(
             LLMInitOptions opts,
             ILLMPipeline pipeline,
             TextHandlerFactory textFactory,
-            StructuredHandlerFactory structFactory,
-            ILogger<ILLMClient> logger)
-         : base(opts, pipeline, textFactory, structFactory, logger)
+            StructuredHandlerFactory structFactory)
+         : base(opts, pipeline, textFactory, structFactory)
         {
             _client = new OpenAIClient(
                 credential: new ApiKeyCredential(_initOptions.ApiKey!),
@@ -39,7 +37,6 @@ namespace AgentCore.Providers.OpenAI
             _defaultModel = _initOptions.Model;
             _chatClients[_defaultModel!] = _client.GetChatClient(_defaultModel);
         }
-
         private ChatClient GetChatClient(string? model = null)
         {
             if (_client == null)
@@ -64,12 +61,12 @@ namespace AgentCore.Providers.OpenAI
                     );
 
                     options.ToolChoice = sreq.ToolCallMode.ToChatToolChoice();
-                    foreach (var t in sreq.AllowedTools!.ToChatTools()) options.Tools.Add(t);
+                    foreach (var t in sreq.ResolvedTools!.ToChatTools()) options.Tools.Add(t);
                     break;
 
                 case LLMTextRequest toolReq:
                     options.ToolChoice = toolReq.ToolCallMode.ToChatToolChoice();
-                    foreach (var t in toolReq.AllowedTools!.ToChatTools()) options.Tools.Add(t);
+                    foreach (var t in toolReq.ResolvedTools!.ToChatTools()) options.Tools.Add(t);
                     break;
 
                 default:

@@ -1,10 +1,9 @@
-﻿using AgentCore.Chat;
-using AgentCore.LLM.Client;
+﻿using AgentCore.LLM.Client;
+using AgentCore.LLM.Handlers;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -53,7 +52,7 @@ namespace AgentCore.LLM.Pipeline
             handler.PrepareRequest(request);
 
             if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogDebug("► LLM Request:\n{Json}", request.ToSerializablePayload());
+                _logger.LogDebug("► LLM Request:\n{Json}", request.ToPayloadString());
 
             LLMResponseBase response = null!;
             TokenUsage? usageReported = null;
@@ -63,7 +62,7 @@ namespace AgentCore.LLM.Pipeline
             {
                 // Stream with retry protection - handler.OnChunk() can throw RetryException
                 await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
-                    request,
+                    request.Prompt,
                     r => Iterate(),
                     ct))
                 {
@@ -93,7 +92,7 @@ namespace AgentCore.LLM.Pipeline
                 response = handler.BuildResponse(finish);
 
                 if (_logger.IsEnabled(LogLevel.Trace))
-                    _logger.LogDebug("► LLM Response:\n{Json}", response.ToSerializablePayload());
+                    _logger.LogDebug("► LLM Response:\n{Json}", response.ToPayloadString());
 
                 // Resolve token usage
                 if (usageReported != null)
@@ -102,8 +101,8 @@ namespace AgentCore.LLM.Pipeline
                 }
                 else
                 {
-                    var inTok = _tokenManager.Count(request.ToSerializablePayload());
-                    var outTok = _tokenManager.Count(response.ToSerializablePayload());
+                    var inTok = _tokenManager.Count(request.ToPayloadString());
+                    var outTok = _tokenManager.Count(response.ToPayloadString());
                     response.TokenUsage = new TokenUsage(inTok, outTok);
                 }
 
