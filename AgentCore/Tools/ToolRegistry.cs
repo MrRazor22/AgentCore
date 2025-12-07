@@ -13,7 +13,7 @@ namespace AgentCore.Tools
     public interface IToolCatalog
     {
         IReadOnlyList<Tool> RegisteredTools { get; }
-        Tool Get(string toolName); // return null if not found  
+        Tool? Get(string toolName); // return null if not found  
         bool Contains(string toolName);
     }
 

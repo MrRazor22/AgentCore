@@ -18,7 +18,7 @@ namespace AgentCore.LLM.Handlers
     public sealed class TextHandler : BaseChunkHandler
     {
         private readonly StringBuilder _text = new StringBuilder();
-        private LLMTextRequest _request;
+        private ToolCall? _inlineTool; // Track inline tool locally
 
         public TextHandler(
             IToolCallParser parser,
@@ -26,31 +26,37 @@ namespace AgentCore.LLM.Handlers
             ILogger<TextHandler> logger)
             : base(parser, tools, logger) { }
 
-        public override void PrepareSpecificRequest(LLMRequestBase request) { }
+        public override void OnRequest(LLMRequestBase request) { }
 
-        protected override void HandleSpecificChunk(LLMStreamChunk chunk)
+        protected override void OnChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
-
             var txt = chunk.AsText();
             if (string.IsNullOrEmpty(txt)) return;
 
             _text.Append(txt);
 
             if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream: {Text}", txt);
+                Logger.LogTrace("◄ Stream Text: {Text}", txt);
 
-            // Check for inline tool calls
-            var inline = Parser.ExtractInlineToolCall(_text.ToString());
-            if (inline.Call != null && FirstTool == null)
-                FirstTool = inline.Call;
+            // Check for inline tool calls (only if we haven't found one yet)
+            if (_inlineTool == null)
+            {
+                var inline = Parser.ExtractInlineToolCall(_text.ToString());
+                if (inline.Call != null)
+                    _inlineTool = inline.Call;
+            }
         }
 
-        protected override LLMResponseBase BuildFinalResponse(string finishReason)
+        protected override LLMResponseBase OnResponse(ToolCall? toolCall, string finishReason)
         {
+            // Prefer the parameter (from base's tool call delta handling)
+            // Fall back to inline tool if no native tool call was detected
+            var finalTool = toolCall ?? _inlineTool;
+
             return new LLMTextResponse(
                 _text.ToString().Trim(),
-                FirstTool,
+                finalTool,
                 finishReason
             );
         }

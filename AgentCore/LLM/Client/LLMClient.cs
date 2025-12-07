@@ -140,8 +140,7 @@ namespace AgentCore.LLM.Client
     {
         None,     // expose tools but forbid calls
         Auto,     // allow text or tool calls
-        Required,  // force tool call 
-        Disabled,  // Don't send tools to LLM at all
+        Required  // force tool call 
     }
 
     public sealed class LLMGenerationOptions

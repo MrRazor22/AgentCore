@@ -60,8 +60,8 @@ namespace AgentCore.Tests.LLM
             var h = Handler();
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("hello "));
-            h.OnChunk(Txt("world"));
+            h.HandleChunk(Txt("hello "));
+            h.HandleChunk(Txt("world"));
 
             var r = (LLMTextResponse)h.BuildResponse("stop");
 
@@ -83,9 +83,9 @@ namespace AgentCore.Tests.LLM
             var h = Handler(parser, catalog);
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("Okay running now {\"na"));
-            h.OnChunk(Txt("me\":\"Add\",\"argu"));
-            h.OnChunk(Txt("ments\":{\"x\":1}} done"));
+            h.HandleChunk(Txt("Okay running now {\"na"));
+            h.HandleChunk(Txt("me\":\"Add\",\"argu"));
+            h.HandleChunk(Txt("ments\":{\"x\":1}} done"));
 
             var r = (LLMTextResponse)h.BuildResponse("stop");
 
@@ -104,12 +104,12 @@ namespace AgentCore.Tests.LLM
             var h = Handler(parser, catalog);
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("Working..."));
-            h.OnChunk(Delta("Add", "{\"x\":"));
-            h.OnChunk(Delta("Add", "1}"));
+            h.HandleChunk(Txt("Working..."));
+            h.HandleChunk(Delta("Add", "{\"x\":"));
+            h.HandleChunk(Delta("Add", "1}"));
 
             var finalCall = new ToolCall("id", "Add", JObject.Parse("{\"x\":1}"));
-            h.OnChunk(new LLMStreamChunk(StreamKind.ToolCallDelta, finalCall));
+            h.HandleChunk(new LLMStreamChunk(StreamKind.ToolCallDelta, finalCall));
 
             var r = (LLMTextResponse)h.BuildResponse("stop");
 
@@ -126,8 +126,8 @@ namespace AgentCore.Tests.LLM
             var h = Handler(parser);
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("hi {\"name\":\"Add\""));
-            h.OnChunk(Txt(", \"arguments\": BROKEN }"));
+            h.HandleChunk(Txt("hi {\"name\":\"Add\""));
+            h.HandleChunk(Txt(", \"arguments\": BROKEN }"));
 
             var r = (LLMTextResponse)h.BuildResponse("stop");
 
@@ -150,7 +150,7 @@ namespace AgentCore.Tests.LLM
             var h = Handler(parser, catalog);
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("hey {\"something\":1}"));
+            h.HandleChunk(Txt("hey {\"something\":1}"));
 
             Assert.Throws<RetryException>(() => h.BuildResponse("stop"));
         }
@@ -172,7 +172,7 @@ namespace AgentCore.Tests.LLM
             var h = Handler(parser, catalog);
             h.PrepareRequest(Req());
 
-            h.OnChunk(Txt("running... {\"foo\":1}"));
+            h.HandleChunk(Txt("running... {\"foo\":1}"));
 
             Assert.Throws<RetryException>(() => h.BuildResponse("stop"));
         }

@@ -67,7 +67,7 @@ namespace AgentCore.LLM.Pipeline
                     ct))
                 {
                     onStream?.Invoke(chunk);
-                    handler.OnChunk(chunk);
+                    handler.HandleChunk(chunk);
 
                     if (chunk.Kind == StreamKind.Usage)
                         usageReported = chunk.AsTokenUsage() ?? new TokenUsage();

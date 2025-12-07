@@ -27,7 +27,7 @@ namespace AgentCore.LLM.Handlers
             ILogger<StructuredHandler> logger)
             : base(parser, tools, logger) { }
 
-        public override void PrepareSpecificRequest(LLMRequestBase req)
+        public override void OnRequest(LLMRequestBase req)
         {
             _request = (LLMStructuredRequest)req;
 
@@ -40,7 +40,7 @@ namespace AgentCore.LLM.Handlers
             _request.Schema = schema;
         }
 
-        protected override void HandleSpecificChunk(LLMStreamChunk chunk)
+        protected override void OnChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
 
@@ -48,12 +48,12 @@ namespace AgentCore.LLM.Handlers
             if (string.IsNullOrEmpty(txt)) return;
 
             if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream: {Text}", txt);
+                Logger.LogTrace("◄ Stream Text: {Text}", txt);
 
             _jsonBuffer.Append(txt);
         }
 
-        protected override LLMResponseBase BuildFinalResponse(string finishReason)
+        protected override LLMResponseBase OnResponse(ToolCall? firstTool, string finishReason)
         {
             var raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
@@ -79,7 +79,7 @@ namespace AgentCore.LLM.Handlers
             var result = json.ToObject(_request.ResultType);
 
             return new LLMStructuredResponse(
-                toolCall: FirstTool,
+                toolCall: firstTool,
                 rawJson: json,
                 result: result,
                 finishReason: finishReason

@@ -15,20 +15,20 @@ namespace AgentCore.LLM.Handlers
     public interface IChunkHandler
     {
         void PrepareRequest(LLMRequestBase request);
-        void OnChunk(LLMStreamChunk chunk);
+        void HandleChunk(LLMStreamChunk chunk);
         LLMResponseBase BuildResponse(string finishReason);
     }
     public abstract class BaseChunkHandler : IChunkHandler
     {
+        private readonly StringBuilder ToolArgBuilder = new StringBuilder();
+
+        private ToolCall? _firstTool;
+        private string? _pendingToolId;
+        private string? _pendingToolName;
+
         protected readonly IToolCallParser Parser;
         protected readonly IToolCatalog Tools;
         protected readonly ILogger Logger;
-
-        protected readonly StringBuilder ToolArgBuilder = new StringBuilder();
-
-        protected ToolCall? FirstTool;
-        protected string? PendingToolId;
-        protected string? PendingToolName;
 
         protected BaseChunkHandler(
             IToolCallParser parser,
@@ -42,42 +42,34 @@ namespace AgentCore.LLM.Handlers
 
         public void PrepareRequest(LLMRequestBase request)
         {
-            request.ResolvedTools =
-                request.ToolCallMode == ToolCallMode.Disabled
-                    ? Array.Empty<Tool>()
-                    : Tools.RegisteredTools.ToArray();
-
-            PrepareSpecificRequest(request);
+            request.ResolvedTools = Tools.RegisteredTools;
+            OnRequest(request);
         }
-        public abstract void PrepareSpecificRequest(LLMRequestBase request);
+        public abstract void OnRequest(LLMRequestBase request);
 
-        public void OnChunk(LLMStreamChunk chunk)
+        public void HandleChunk(LLMStreamChunk chunk)
         {
-            // Centralized tool handling - EVERYONE needs this
             if (chunk.Kind == StreamKind.ToolCallDelta)
             {
                 HandleToolDelta(chunk.AsToolCallDelta());
                 return;
             }
-
-            // Let derived handlers handle their specific chunks
-            HandleSpecificChunk(chunk);
+            OnChunk(chunk);
         }
 
-        // Each handler implements its own chunk handling
-        protected abstract void HandleSpecificChunk(LLMStreamChunk chunk);
+        protected abstract void OnChunk(LLMStreamChunk chunk);
 
         private void HandleToolDelta(ToolCallDelta? td)
         {
             if (td == null || string.IsNullOrEmpty(td.Delta)) return;
 
-            PendingToolName ??= td.Name;
-            PendingToolId ??= td.Id ?? Guid.NewGuid().ToString();
+            _pendingToolName ??= td.Name;
+            _pendingToolId ??= td.Id ?? Guid.NewGuid().ToString();
 
             ToolArgBuilder.Append(td.Delta);
 
             if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogTrace("◄ Stream: [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
+                Logger.LogTrace("◄ Stream ToolCall: [{Name}] Args Delta: {Delta}", td.Name, td.Delta);
 
             TryAssembleToolCall();
         }
@@ -94,17 +86,17 @@ namespace AgentCore.LLM.Handlers
             try { args = JObject.Parse(raw); }
             catch { args = new JObject(); }
 
-            if (FirstTool == null)
-                FirstTool = new ToolCall(PendingToolId!, PendingToolName!, args);
+            if (_firstTool == null)
+                _firstTool = new ToolCall(_pendingToolId!, _pendingToolName!, args);
 
             ToolArgBuilder.Clear();
-            PendingToolName = null;
-            PendingToolId = null;
+            _pendingToolName = null;
+            _pendingToolId = null;
         }
 
         protected ToolCall ValidateTool(ToolCall raw)
         {
-            if (!Tools.RegisteredTools.Any(t => t.Name == raw.Name))
+            if (!Tools.Contains(raw.Name))
                 throw new RetryException($"{raw.Name}: invalid tool");
 
             try
@@ -129,12 +121,12 @@ namespace AgentCore.LLM.Handlers
 
         public LLMResponseBase BuildResponse(string finishReason)
         {
-            if (FirstTool != null)
-                FirstTool = ValidateTool(FirstTool);
+            if (_firstTool != null)
+                _firstTool = ValidateTool(_firstTool);
 
-            return BuildFinalResponse(finishReason);
+            return OnResponse(_firstTool, finishReason);
         }
 
-        protected abstract LLMResponseBase BuildFinalResponse(string finishReason);
+        protected abstract LLMResponseBase OnResponse(ToolCall? toolCall, string finishReason);
     }
 }
