@@ -65,7 +65,11 @@ namespace AgentCore.Runtime
 
             builder.Services.AddSingleton<IContextBudgetManager>(sp =>
             {
-                return new ContextBudgetManager(options, sp.GetRequiredService<ITokenManager>());
+                return new ContextBudgetManager(
+                    options,
+                    sp.GetRequiredService<ITokenManager>(),
+                    sp.GetRequiredService<ILogger<ContextBudgetManager>>()
+                    );
             });
 
             return builder;

@@ -20,7 +20,7 @@ namespace AgentCore.Tests.LLM
                 InitialDelay = TimeSpan.Zero
             });
 
-            var policy = new RetryPolicy(opts);
+            var policy = new RetryPolicy(null, opts);
 
             int calls = 0;
 
@@ -50,7 +50,7 @@ namespace AgentCore.Tests.LLM
                 MaxRetries = 0
             });
 
-            var policy = new RetryPolicy(opts);
+            var policy = new RetryPolicy(null, opts);
 
             int calls = 0;
 
@@ -81,7 +81,7 @@ namespace AgentCore.Tests.LLM
                 InitialDelay = TimeSpan.Zero
             });
 
-            var policy = new RetryPolicy(opts);
+            var policy = new RetryPolicy(null, opts);
 
             async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
             {
@@ -109,7 +109,7 @@ namespace AgentCore.Tests.LLM
                 InitialDelay = TimeSpan.Zero
             });
 
-            var policy = new RetryPolicy(opts);
+            var policy = new RetryPolicy(null, opts);
 
             Conversation? captured = null;
 

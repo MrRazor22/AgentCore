@@ -1,4 +1,5 @@
-﻿using AgentCore.Json;
+﻿using AgentCore.Chat;
+using AgentCore.Json;
 using AgentCore.LLM.Client;
 using AgentCore.LLM.Handlers;
 using AgentCore.Tokens;
@@ -11,6 +12,10 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Pipeline
 {
+    public sealed class EarlyStopException : Exception
+    {
+        public EarlyStopException(string message = "early-stop") : base(message) { }
+    }
     public interface ILLMPipeline
     {
         Task<LLMResponseBase> RunAsync(
@@ -25,14 +30,14 @@ namespace AgentCore.LLM.Pipeline
         private readonly IRetryPolicy _retryPolicy;
         private readonly IContextBudgetManager _ctxManager;
         private readonly ITokenManager _tokenManager;
-        private readonly ILogger _logger;
+        private readonly ILogger<LLMPipeline> _logger;
 
         public LLMPipeline(
             IContextBudgetManager ctxManager,
             ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
-            ILogger logger
-            )
+            ILogger<LLMPipeline> logger
+        )
         {
             _retryPolicy = retryPolicy;
             _ctxManager = ctxManager;
@@ -46,10 +51,8 @@ namespace AgentCore.LLM.Pipeline
             Action<LLMStreamChunk>? onStream,
             CancellationToken ct)
         {
-            request.Prompt = _ctxManager.Trim(
-                request.Prompt,
-                request.Options?.MaxOutputTokens
-            );
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            ApplyTrim(request.Prompt, request);
 
             handler.PrepareRequest(request);
 
@@ -58,60 +61,67 @@ namespace AgentCore.LLM.Pipeline
 
             LLMResponseBase response = null!;
             TokenUsage? usageReported = null;
-            string finish = "stop";
+            FinishReason finish = FinishReason.Stop;
 
             try
             {
-                // Stream with retry protection - handler.OnChunk() can throw RetryException
+                async IAsyncEnumerable<LLMStreamChunk> IterateChunk(Conversation retryPrompt)
+                {
+                    ApplyTrim(retryPrompt, request);
+                    request.Prompt = retryPrompt;
+                    await foreach (var chunk in streamFactory(request))
+                    {
+                        onStream?.Invoke(chunk);
+                        handler.HandleChunk(chunk);
+                        yield return chunk;
+                    }
+                }
+
                 await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
                     request.Prompt,
-                    r => Iterate(),
+                    retryPrompt => IterateChunk(retryPrompt),
                     ct))
                 {
-                    onStream?.Invoke(chunk);
-                    handler.HandleChunk(chunk);
-
                     if (chunk.Kind == StreamKind.Usage)
                         usageReported = chunk.AsTokenUsage() ?? new TokenUsage();
 
-                    if (chunk.Kind == StreamKind.Finish && chunk.FinishReason != null)
-                        finish = chunk.FinishReason;
-                }
-
-                async IAsyncEnumerable<LLMStreamChunk> Iterate()
-                {
-                    await foreach (var chunk in streamFactory(request))
-                        yield return chunk;
+                    if (chunk.Kind == StreamKind.Finish)
+                        finish = chunk.AsFinishReason() ?? FinishReason.Stop;
                 }
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (EarlyStopException ese)
             {
-                finish = "cancelled";
+                _logger.LogWarning("► EarlyStopException:\n{ese}", ese.Message);
+            }
+            catch (OperationCanceledException oce) when (ct.IsCancellationRequested)
+            {
+                _logger.LogWarning("► OperationCanceledException:\n{ese}", oce);
+                finish = FinishReason.Cancelled;
             }
             finally
             {
-                // Build response content
                 response = handler.BuildResponse(finish);
 
-                _logger.LogTrace("► LLM Response [Payload]:\n{Json}", response.ToPayloadJson().AsPrettyJson());
-                // Resolve token usage
-                if (usageReported != null)
-                {
-                    response.TokenUsage = usageReported;
-                }
-                else
-                {
-                    _logger.LogDebug("Tokens Approximated!");
-                    var inTok = _tokenManager.Count(request.ToPayloadJson().ToString());
-                    var outTok = _tokenManager.Count(response.ToPayloadJson().ToString());
-                    response.TokenUsage = new TokenUsage(inTok, outTok);
-                }
+                sw.Stop();
+                _logger.LogInformation("► Call Duration: {ms} ms", sw.ElapsedMilliseconds);
 
-                // Record for tracking
-                _tokenManager.Record(response.TokenUsage);
+                _logger.LogTrace("► LLM Response [Payload]:\n{Json}", response.ToPayloadJson().AsPrettyJson());
+
+                response.TokenUsage = _tokenManager.ResolveAndRecord(
+                    request.ToPayloadJson().ToString(),
+                    response.ToPayloadJson().ToString(),
+                    usageReported
+                );
             }
 
             return response;
+        }
+        private void ApplyTrim(Conversation convo, LLMRequestBase request)
+        {
+            request.Prompt = _ctxManager.Trim(
+                convo,
+                request.Options?.MaxOutputTokens
+            );
         }
     }
 }

@@ -56,8 +56,6 @@ namespace AgentCore.LLM.Client
         {
             var handler = _resolver(request);
 
-            handler.PrepareRequest(request);
-
             var result = await _pipeline.RunAsync(
                 request,
                 handler,

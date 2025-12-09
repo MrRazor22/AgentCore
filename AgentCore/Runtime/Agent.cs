@@ -74,8 +74,10 @@ namespace AgentCore.Runtime
             Services.AddSingleton<IToolCallParser, ToolCallParser>();
             Services.AddSingleton<IContextBudgetManager>(sp =>
             {
-                var tokenMgr = sp.GetRequiredService<ITokenManager>();
-                return new ContextBudgetManager(new ContextBudgetOptions(), tokenMgr);
+                return new ContextBudgetManager(
+                    new ContextBudgetOptions(),
+                    sp.GetRequiredService<ITokenManager>(),
+                    sp.GetRequiredService<ILogger<ContextBudgetManager>>());
             });
             Services.AddSingleton<ITokenManager, TokenManager>();
             Services.AddSingleton<IRetryPolicy, RetryPolicy>();
@@ -107,6 +109,11 @@ namespace AgentCore.Runtime
                 o.SingleLine = false;
                 o.TimestampFormat = "hh:mm:ss ";
             }));
+            Services.Configure<LoggerFilterOptions>(o =>
+            {
+                o.MinLevel = LogLevel.Trace;   // global output level for ILogger<T>
+            });
+
             Services.AddSingleton<IAgentExecutor, ToolCallingLoop>();
         }
 

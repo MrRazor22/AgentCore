@@ -5,10 +5,16 @@ using System;
 
 namespace AgentCore.LLM.Client
 {
+    public enum FinishReason
+    {
+        Stop,
+        ToolCall,
+        Cancelled
+    }
     public abstract class LLMResponseBase
     {
         private TokenUsage? _tokenUsage;
-        public string FinishReason { get; }
+        public FinishReason FinishReason { get; }
         public ToolCall? ToolCall { get; }
 
         public TokenUsage? TokenUsage
@@ -22,10 +28,10 @@ namespace AgentCore.LLM.Client
             }
         }
 
-        protected LLMResponseBase(ToolCall? toolCall, string finishReason)
+        protected LLMResponseBase(ToolCall? toolCall, FinishReason finishReason)
         {
             ToolCall = toolCall;
-            FinishReason = finishReason ?? "stop";
+            FinishReason = finishReason;
         }
 
         // CHILD returns JSON payload for THIS response type
@@ -62,7 +68,7 @@ namespace AgentCore.LLM.Client
         public LLMTextResponse(
             string? assistantMessage,
             ToolCall? toolCall,
-            string finishReason)
+            FinishReason finishReason)
             : base(toolCall, finishReason)
         {
             AssistantMessage = assistantMessage;
@@ -85,7 +91,7 @@ namespace AgentCore.LLM.Client
             JToken rawJson,
             object? result,
             ToolCall? toolCall,
-            string finishReason)
+            FinishReason finishReason)
             : base(toolCall, finishReason)
         {
             RawJson = rawJson;

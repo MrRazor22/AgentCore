@@ -46,7 +46,7 @@ namespace AgentCore.Tests.Runtime
                     var result = Task.FromResult(new LLMTextResponse(
                         txt,
                         tool,
-                        "stop"
+                        FinishReason.Stop
                     )).Result;
 
                     return (TResponse)(LLMResponseBase)result;
@@ -81,7 +81,7 @@ namespace AgentCore.Tests.Runtime
                 fake.Scripts.Enqueue(new List<LLMStreamChunk>
             {
                 new LLMStreamChunk(StreamKind.Text, "hello"),
-                new LLMStreamChunk(StreamKind.Finish, null, "stop")
+                new LLMStreamChunk(StreamKind.Finish, null, FinishReason.Stop)
             });
 
                 var agent = BuildAgent(fake);
@@ -110,7 +110,7 @@ namespace AgentCore.Tests.Runtime
                 fake.Scripts.Enqueue(new List<LLMStreamChunk>
             {
                 new LLMStreamChunk(StreamKind.Text, "done"),
-                new LLMStreamChunk(StreamKind.Finish, null, "stop")
+                new LLMStreamChunk(StreamKind.Finish, null, FinishReason.Stop)
             });
 
                 var agent = BuildAgent(fake);
@@ -140,7 +140,7 @@ namespace AgentCore.Tests.Runtime
                 // final text (never reached because maxIterations = 3)
                 fake.Scripts.Enqueue(new List<LLMStreamChunk>
     {
-        new LLMStreamChunk(StreamKind.Text, "stop")
+        new LLMStreamChunk(StreamKind.Text, FinishReason.Stop)
     });
 
                 var agent = BuildAgent(fake);
@@ -191,7 +191,7 @@ namespace AgentCore.Tests.Runtime
             {
                 new LLMStreamChunk(StreamKind.Text, "a"),
                 new LLMStreamChunk(StreamKind.Text, "b"),
-                new LLMStreamChunk(StreamKind.Finish, null, "stop")
+                new LLMStreamChunk(StreamKind.Finish, null, FinishReason.Stop)
             });
 
                 var agent = BuildAgent(fake);

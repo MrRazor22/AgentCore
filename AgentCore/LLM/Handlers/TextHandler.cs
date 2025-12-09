@@ -19,6 +19,8 @@ namespace AgentCore.LLM.Handlers
     {
         private readonly StringBuilder _text = new StringBuilder();
         private ToolCall? _inlineTool; // Track inline tool locally
+        private int _lastScanPos = 0;
+
 
         public TextHandler(
             IToolCallParser parser,
@@ -41,19 +43,18 @@ namespace AgentCore.LLM.Handlers
             if (Logger.IsEnabled(LogLevel.Trace))
                 Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
 
-            // Check for inline tool calls (only if we haven't found one yet)
-            if (_inlineTool == null)
-            {
-                var inline = Parser.ExtractInlineToolCall(_text.ToString());
-                if (inline.Call != null)
-                    _inlineTool = inline.Call;
-            }
+            var newPortion = _text.ToString(_lastScanPos, _text.Length - _lastScanPos);
+            _lastScanPos = _text.Length;
+
+            var inline = Parser.ExtractInlineToolCall(newPortion);
+            if (inline.Call == null) return;
+
+            if (_inlineTool == null) _inlineTool = ValidateTool(inline.Call);
+            else throw new EarlyStopException("Second inline tool call detected");
         }
 
-        protected override LLMResponseBase OnResponse(ToolCall? toolCall, string finishReason)
+        protected override LLMResponseBase OnResponse(ToolCall? toolCall, FinishReason finishReason)
         {
-            // Prefer the parameter (from base's tool call delta handling)
-            // Fall back to inline tool if no native tool call was detected
             var finalTool = toolCall ?? _inlineTool;
 
             Logger.LogInformation("► LLM Response [Text]: {Msg}", _text.ToString().Trim());

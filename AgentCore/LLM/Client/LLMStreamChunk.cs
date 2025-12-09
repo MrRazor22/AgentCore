@@ -23,12 +23,12 @@ namespace AgentCore.LLM.Client
     {
         public StreamKind Kind { get; }
         public object? Payload { get; }     // unified extensible payload
-        public string? FinishReason { get; }
+        public FinishReason? FinishReason { get; }
 
         public LLMStreamChunk(
             StreamKind kind,
             object? payload = null,
-            string? finish = null)
+            FinishReason? finish = null)
         {
             Kind = kind;
             Payload = payload;
@@ -37,6 +37,8 @@ namespace AgentCore.LLM.Client
     }
     public static class LLMStreamChunkExtensions
     {
+        public static FinishReason? AsFinishReason(this LLMStreamChunk chunk)
+             => chunk.Payload as FinishReason?;
         public static TokenUsage? AsTokenUsage(this LLMStreamChunk chunk)
             => chunk.Payload as TokenUsage;
         public static string? AsText(this LLMStreamChunk chunk)

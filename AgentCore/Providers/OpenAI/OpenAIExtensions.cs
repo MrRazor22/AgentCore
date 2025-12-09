@@ -11,6 +11,16 @@ namespace AgentCore.Providers.OpenAI
 {
     public static class OpenAIExtensions
     {
+        public static FinishReason ToChatFinishReason(this ChatFinishReason reason)
+        {
+            return reason switch
+            {
+                ChatFinishReason.Stop => FinishReason.Stop,
+                ChatFinishReason.ToolCalls => FinishReason.ToolCall,
+                _ => FinishReason.Stop
+            };
+        }
+
         public static ChatToolChoice ToChatToolChoice(this ToolCallMode mode)
         {
             return mode switch

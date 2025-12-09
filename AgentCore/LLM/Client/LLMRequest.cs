@@ -65,7 +65,7 @@ namespace AgentCore.LLM.Client
             }
 
             AddTools(root);
-
+            AddOptions(root);
             return root;
         }
 
@@ -88,6 +88,20 @@ namespace AgentCore.LLM.Client
             );
 
             root["tool_choice"] = ToolCallMode.ToString().ToLower();
+        }
+        private void AddOptions(JObject root)  // New: Ensures options (e.g., max_tokens) always wire.
+        {
+            if (Options == null) return;
+
+            if (Options.Temperature.HasValue) root["temperature"] = Options.Temperature.Value;
+            if (Options.TopP.HasValue) root["top_p"] = Options.TopP.Value;
+            if (Options.MaxOutputTokens.HasValue) root["max_tokens"] = Options.MaxOutputTokens.Value;
+            if (Options.Seed.HasValue) root["seed"] = Options.Seed.Value;
+            if (Options.StopSequences?.Any() == true) root["stop"] = JArray.FromObject(Options.StopSequences);
+            if (Options.LogitBias?.Any() == true) root["logit_bias"] = JObject.FromObject(Options.LogitBias);
+            if (Options.FrequencyPenalty.HasValue) root["frequency_penalty"] = Options.FrequencyPenalty.Value;
+            if (Options.PresencePenalty.HasValue) root["presence_penalty"] = Options.PresencePenalty.Value;
+            if (Options.TopK.HasValue) root["top_k"] = Options.TopK.Value;
         }
     }
 

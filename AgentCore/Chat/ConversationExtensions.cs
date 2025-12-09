@@ -212,5 +212,17 @@ namespace AgentCore.Chat
 
             return items;
         }
+        public static void RemoveToolCallBlock(this Conversation convo, Chat toolMsg)
+        {
+            int idx = convo.IndexOf(toolMsg);
+            if (idx <= 0) return;
+
+            var prev = convo[idx - 1];
+
+            if (prev.Role == Role.Assistant && prev.Content is ToolCall)
+                convo.Remove(prev);
+
+            convo.Remove(toolMsg);
+        }
     }
 }

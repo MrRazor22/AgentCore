@@ -38,12 +38,6 @@ namespace TestApp
                     o.PersistDir = "D:\\agenty\\memory";
                 });
 
-
-                builder.Services.Configure<LoggerFilterOptions>(opts =>
-                {
-                    opts.MinLevel = LogLevel.Trace;
-                });
-
                 builder.Services.AddLogging(logging =>
                 {
                     logging.ClearProviders();

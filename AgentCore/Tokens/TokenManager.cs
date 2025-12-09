@@ -21,6 +21,10 @@ namespace AgentCore.Tokens
     {
         int Count(string payload);
         void Record(TokenUsage usage);
+        TokenUsage ResolveAndRecord(
+            string requestPayload,
+            string responsePayload,
+            TokenUsage? usageReported);
         TokenUsage GetTotals();
     }
 
@@ -55,13 +59,32 @@ namespace AgentCore.Tokens
                 _cumulativeTokens.InputTokens += usage.InputTokens;
                 _cumulativeTokens.OutputTokens += usage.OutputTokens;
 
-                _logger.LogInformation("TokenManager In: {In} | Out: {Out} | Total so far: {total}",
+                _logger.LogInformation("Token Usage Recorded In: {In} | Out: {Out} | Total so far: {total}",
                     usage.InputTokens,
                     usage.OutputTokens,
                     _cumulativeTokens.Total
                 );
             }
         }
+        public TokenUsage ResolveAndRecord(
+            string requestPayload,
+            string responsePayload,
+            TokenUsage? usageReported)
+        {
+            int inTok = Count(requestPayload);
+            int outTok = Count(responsePayload);
+
+            _logger.LogDebug(
+                "Approximated Token Usage In: {In} | Out: {Out}",
+                inTok, outTok
+            );
+
+            var finalUsage = usageReported ?? new TokenUsage(inTok, outTok);
+
+            Record(finalUsage);
+            return finalUsage;
+        }
+
         public TokenUsage GetTotals()
         {
             lock (_lock)

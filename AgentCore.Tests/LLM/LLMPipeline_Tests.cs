@@ -17,7 +17,7 @@ namespace AgentCore.Tests.LLM
             var ctx = new FakeCtx();
             var tokens = new FakeTokenManager();
             var retry = new FakeRetry();
-            var pipeline = new LLMPipeline(ctx, tokens, retry, NullLogger.Instance);
+            var pipeline = new LLMPipeline(ctx, tokens, retry, NullLogger<LLMPipeline>.Instance);
 
             var handler = new FakeHandler();
             var req = new LLMTextRequest(new Conversation().AddUser("x"));
@@ -31,7 +31,7 @@ namespace AgentCore.Tests.LLM
             );
 
             Assert.IsType<LLMTextResponse>(resp);
-            Assert.Equal("stop", resp.FinishReason);
+            Assert.Equal(FinishReason.Stop, resp.FinishReason);
             Assert.True(resp.TokenUsage.Total > 0);
         }
 
@@ -39,7 +39,7 @@ namespace AgentCore.Tests.LLM
         {
             yield return new LLMStreamChunk(StreamKind.Text, "hi");
             yield return new LLMStreamChunk(StreamKind.Usage, new TokenUsage(3, 2));
-            yield return new LLMStreamChunk(StreamKind.Finish, null, "stop");
+            yield return new LLMStreamChunk(StreamKind.Finish, null, FinishReason.Stop);
             await Task.CompletedTask;
         }
 
@@ -52,7 +52,7 @@ namespace AgentCore.Tests.LLM
                 if (c.Kind == StreamKind.Text)
                     sb.Append(c.AsText());
             }
-            public LLMResponseBase BuildResponse(string f)
+            public LLMResponseBase BuildResponse(FinishReason f)
                 => new LLMTextResponse(sb.ToString(), null, f);
         }
 

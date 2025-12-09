@@ -16,7 +16,7 @@ namespace AgentCore.LLM.Handlers
     {
         void PrepareRequest(LLMRequestBase request);
         void HandleChunk(LLMStreamChunk chunk);
-        LLMResponseBase BuildResponse(string finishReason);
+        LLMResponseBase BuildResponse(FinishReason finishReason);
     }
     public abstract class BaseChunkHandler : IChunkHandler
     {
@@ -29,7 +29,7 @@ namespace AgentCore.LLM.Handlers
         protected readonly IToolCallParser Parser;
         protected readonly IToolCatalog Tools;
         protected readonly ILogger Logger;
-
+        public bool HasToolCall => _firstTool != null;
         protected BaseChunkHandler(
             IToolCallParser parser,
             IToolCatalog tools,
@@ -87,8 +87,13 @@ namespace AgentCore.LLM.Handlers
             try { args = JObject.Parse(raw); }
             catch { args = new JObject(); }
 
-            if (_firstTool == null)
-                _firstTool = new ToolCall(_pendingToolId!, _pendingToolName!, args);
+            // If we already have a validated call → second call detected
+            if (_firstTool != null)
+                throw new EarlyStopException("Second tool call detected.");
+
+            // First tool call → VALIDATE IT NOW
+            var unvalidated = new ToolCall(_pendingToolId!, _pendingToolName!, args);
+            _firstTool = ValidateTool(unvalidated);   // NOW VALIDATED
 
             ToolArgBuilder.Clear();
             _pendingToolName = null;
@@ -113,21 +118,24 @@ namespace AgentCore.LLM.Handlers
             }
             catch (Exception ex) when (
                 ex is ToolValidationException ||
-                ex is ToolValidationAggregateException ||
-                ex is ToolExecutionException)
+                ex is ToolValidationAggregateException)
             {
                 throw new RetryException(ex.ToString());
             }
         }
 
-        public LLMResponseBase BuildResponse(string finishReason)
+        public LLMResponseBase BuildResponse(FinishReason finishReason)
         {
-            if (_firstTool != null)
-                _firstTool = ValidateTool(_firstTool);
+            if (finishReason == FinishReason.ToolCall)
+            {
+                if (_firstTool == null)
+                    throw new RetryException("Model indicated a tool call but none was provided.");
 
+            }
             return OnResponse(_firstTool, finishReason);
         }
 
-        protected abstract LLMResponseBase OnResponse(ToolCall? toolCall, string finishReason);
+
+        protected abstract LLMResponseBase OnResponse(ToolCall? toolCall, FinishReason finishReason);
     }
 }

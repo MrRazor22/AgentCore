@@ -52,8 +52,16 @@ namespace AgentCore.LLM.Handlers
             _jsonBuffer.Append(txt);
         }
 
-        protected override LLMResponseBase OnResponse(ToolCall? firstTool, string finishReason)
+        protected override LLMResponseBase OnResponse(ToolCall? firstTool, FinishReason finishReason)
         {
+            if (finishReason == FinishReason.Cancelled)
+                return new LLMStructuredResponse(
+                    toolCall: null,
+                    rawJson: JValue.CreateNull(),
+                    result: null,
+                    finishReason: finishReason
+                );
+
             var raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
                 throw new RetryException("Empty response. Return valid JSON.");

@@ -1,5 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Client;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
@@ -35,11 +36,13 @@ namespace AgentCore.LLM.Pipeline
     /// </summary>
     public sealed class RetryPolicy : IRetryPolicy
     {
+        private readonly ILogger<RetryPolicy> _logger;
         private readonly RetryPolicyOptions _options;
 
-        public RetryPolicy(IOptions<RetryPolicyOptions>? options = null)
+        public RetryPolicy(ILogger<RetryPolicy> logger, IOptions<RetryPolicyOptions>? options = null)
         {
             _options = options?.Value ?? new RetryPolicyOptions();
+            _logger = logger;
         }
 
         public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
@@ -94,20 +97,20 @@ namespace AgentCore.LLM.Pipeline
 
                 // teach the model what to fix
                 workingRequest.AddAssistant(reason);
-
+                _logger.LogWarning(
+                    "Retry {Attempt}: reason = {Reason}",
+                    attempt + 1,
+                    reason
+                );
                 // artificial retry chunk for visibility
-                yield return new LLMStreamChunk(
-                    StreamKind.Text,
-                    $"[retry {attempt + 1}] {reason}"
+                var delay = TimeSpan.FromMilliseconds(
+                    _options.InitialDelay.TotalMilliseconds *
+                    Math.Pow(_options.BackoffFactor, attempt)
                 );
 
-                await Task.Delay(
-                    TimeSpan.FromMilliseconds(
-                        _options.InitialDelay.TotalMilliseconds *
-                        Math.Pow(_options.BackoffFactor, attempt)
-                    ),
-                    ct
-                );
+                _logger.LogWarning("Waiting {Delay} before next attempt", delay);
+
+                await Task.Delay(delay, ct);
             }
         }
     }
