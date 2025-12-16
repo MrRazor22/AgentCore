@@ -1,6 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using OpenAI.Chat;
 using System;

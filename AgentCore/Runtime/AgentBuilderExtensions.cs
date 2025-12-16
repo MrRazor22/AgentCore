@@ -1,6 +1,5 @@
-﻿using AgentCore.LLM.Client;
-using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Pipeline;
+﻿using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Client;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Tokens;
 using AgentCore.Tools;

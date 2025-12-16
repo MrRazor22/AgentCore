@@ -1,4 +1,5 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Client;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;

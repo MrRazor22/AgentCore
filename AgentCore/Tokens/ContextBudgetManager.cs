@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;

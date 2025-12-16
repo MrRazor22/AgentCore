@@ -1,6 +1,6 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Client;
-using AgentCore.LLM.Pipeline;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;

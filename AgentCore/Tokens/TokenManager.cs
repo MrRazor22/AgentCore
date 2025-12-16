@@ -1,4 +1,4 @@
-﻿using AgentCore.LLM.Client;
+﻿using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
 using System;
 

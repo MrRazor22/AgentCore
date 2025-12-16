@@ -1,5 +1,5 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
@@ -8,7 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLM.Pipeline
+namespace AgentCore.LLM.Client
 {
     public class RetryException : Exception
     {

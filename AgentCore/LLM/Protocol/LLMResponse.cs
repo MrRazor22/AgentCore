@@ -3,7 +3,7 @@ using AgentCore.Tokens;
 using Newtonsoft.Json.Linq;
 using System;
 
-namespace AgentCore.LLM.Client
+namespace AgentCore.LLM.Protocol
 {
     public enum FinishReason
     {

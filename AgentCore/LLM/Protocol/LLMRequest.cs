@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLM.Client
+namespace AgentCore.LLM.Protocol
 {
     public enum ToolCallMode
     {

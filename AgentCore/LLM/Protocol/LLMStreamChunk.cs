@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace AgentCore.LLM.Client
+namespace AgentCore.LLM.Protocol
 {
     public enum StreamKind
     {

@@ -1,6 +1,6 @@
 ﻿using AgentCore.Chat;
+using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Client;
-using AgentCore.LLM.Pipeline;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tools;

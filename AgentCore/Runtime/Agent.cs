@@ -1,7 +1,7 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Pipeline;
+using AgentCore.LLM.Client;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
