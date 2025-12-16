@@ -15,7 +15,7 @@ namespace AgentCore.LLM.Client
     {
         private TokenUsage? _tokenUsage;
         public FinishReason FinishReason { get; }
-        public ToolCall? ToolCall { get; }
+        public ToolCall? ToolCall { internal set; get; }
 
         public TokenUsage? TokenUsage
         {
@@ -90,8 +90,8 @@ namespace AgentCore.LLM.Client
         public LLMStructuredResponse(
             JToken rawJson,
             object? result,
-            ToolCall? toolCall,
-            FinishReason finishReason)
+            FinishReason finishReason = FinishReason.Stop,
+            ToolCall? toolCall = null)
             : base(toolCall, finishReason)
         {
             RawJson = rawJson;

@@ -15,19 +15,19 @@ namespace AgentCore.LLM.Handlers
 {
     public delegate StructuredHandler StructuredHandlerFactory();
 
-    public sealed class StructuredHandler : BaseChunkHandler
+    public sealed class StructuredHandler : IChunkHandler
     {
         private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new ConcurrentDictionary<Type, JObject>();
         private readonly StringBuilder _jsonBuffer = new StringBuilder();
         private LLMStructuredRequest _request;
+        private ILogger<StructuredHandler> Logger { get; }
 
-        public StructuredHandler(
-            IToolCallParser parser,
-            IToolCatalog tools,
-            ILogger<StructuredHandler> logger)
-            : base(parser, tools, logger) { }
+        public StructuredHandler(ILogger<StructuredHandler> logger)
+        {
+            Logger = logger;
+        }
 
-        public override void OnRequest(LLMRequestBase req)
+        public void OnRequest(LLMRequestBase req)
         {
             _request = (LLMStructuredRequest)req;
 
@@ -40,7 +40,7 @@ namespace AgentCore.LLM.Handlers
             _request.Schema = schema;
         }
 
-        protected override void OnChunk(LLMStreamChunk chunk)
+        public void OnChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
 
@@ -52,7 +52,7 @@ namespace AgentCore.LLM.Handlers
             _jsonBuffer.Append(txt);
         }
 
-        protected override LLMResponseBase OnResponse(ToolCall? firstTool, FinishReason finishReason)
+        public LLMResponseBase OnResponse(FinishReason finishReason)
         {
             if (finishReason == FinishReason.Cancelled)
                 return new LLMStructuredResponse(
@@ -88,7 +88,6 @@ namespace AgentCore.LLM.Handlers
             Logger.LogInformation("► LLM Response [Structured]: {Msg}", json.AsPrettyJson());
 
             return new LLMStructuredResponse(
-                toolCall: firstTool,
                 rawJson: json,
                 result: result,
                 finishReason: finishReason

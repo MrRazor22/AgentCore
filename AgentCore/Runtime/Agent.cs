@@ -67,30 +67,28 @@ namespace AgentCore.Runtime
         public AgentBuilder()
         {
             Services.AddSingleton<IAgentMemory, FileMemory>();
+
+            // Tools
             Services.AddSingleton<ToolRegistryCatalog>();
             Services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolCatalog>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
             Services.AddSingleton<IToolRuntime, ToolRuntime>();
             Services.AddSingleton<IToolCallParser, ToolCallParser>();
+
+            // Token + context
+            Services.AddSingleton<ITokenManager, TokenManager>();
             Services.AddSingleton<IContextBudgetManager>(sp =>
-            {
-                return new ContextBudgetManager(
+                new ContextBudgetManager(
                     new ContextBudgetOptions(),
                     sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<ILogger<ContextBudgetManager>>());
-            });
-            Services.AddSingleton<ITokenManager, TokenManager>();
-            Services.AddSingleton<IRetryPolicy, RetryPolicy>();
+                    sp.GetRequiredService<ILogger<ContextBudgetManager>>()
+                )
+            );
+
+            // Retry
             Services.Configure<RetryPolicyOptions>(_ => { });
-            Services.AddSingleton<ILLMPipeline>(sp =>
-            {
-                return new LLMPipeline(
-                    sp.GetRequiredService<IContextBudgetManager>(),
-                    sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<IRetryPolicy>(),
-                    sp.GetRequiredService<ILogger<LLMPipeline>>()
-                );
-            });
+            Services.AddSingleton<IRetryPolicy, RetryPolicy>();
+
             // Handlers
             Services.AddTransient<TextHandler>();
             Services.AddTransient<StructuredHandler>();
@@ -104,6 +102,7 @@ namespace AgentCore.Runtime
                 };
             });
 
+            //Logging
             Services.AddLogging(b => b.AddSimpleConsole(o =>
             {
                 o.SingleLine = false;
@@ -114,6 +113,7 @@ namespace AgentCore.Runtime
                 o.MinLevel = LogLevel.Trace;   // global output level for ILogger<T>
             });
 
+            //Executor
             Services.AddSingleton<IAgentExecutor, ToolCallingLoop>();
         }
 

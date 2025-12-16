@@ -14,31 +14,25 @@ namespace AgentCore.Runtime
     {
         //Open AI
         public static AgentBuilder AddOpenAI(
-            this AgentBuilder builder,
-            Action<LLMInitOptions> configure)
+             this AgentBuilder builder,
+             Action<LLMInitOptions> configure)
         {
             var opts = new LLMInitOptions();
             configure(opts);
 
-            builder.Services.AddSingleton<HandlerResolver>(sp => request =>
-            {
-                return request switch
-                {
-                    LLMTextRequest _ => sp.GetRequiredService<TextHandler>(),
-                    LLMStructuredRequest _ => sp.GetRequiredService<StructuredHandler>(),
-                    _ => throw new NotSupportedException(
-                        $"Unsupported LLM request type: {request.GetType().Name}")
-                };
-            });
-
             builder.Services.AddSingleton<ILLMClient>(sp =>
-            {
-                return new OpenAILLMClient(
+                new OpenAILLMClient(
                     opts,
-                    sp.GetRequiredService<ILLMPipeline>(),
-                    sp.GetRequiredService<HandlerResolver>()
-                );
-            });
+                    sp.GetRequiredService<IContextBudgetManager>(),
+                    sp.GetRequiredService<ITokenManager>(),
+                    sp.GetRequiredService<IRetryPolicy>(),
+                    sp.GetRequiredService<IToolCallParser>(),
+                    sp.GetRequiredService<IToolCatalog>(),
+                    sp.GetRequiredService<HandlerResolver>(),
+                    sp.GetRequiredService<ILogger<LLMClientBase>>(),
+                    sp.GetRequiredService<ILogger<OpenAILLMClient>>()
+                )
+            );
 
             return builder;
         }

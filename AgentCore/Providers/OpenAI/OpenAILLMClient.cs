@@ -2,6 +2,7 @@
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Pipeline;
 using AgentCore.Tokens;
+using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
@@ -23,10 +24,24 @@ namespace AgentCore.Providers.OpenAI
             new ConcurrentDictionary<string, ChatClient>(StringComparer.OrdinalIgnoreCase);
         private string? _defaultModel;
         public OpenAILLMClient(
-            LLMInitOptions opts,
-            ILLMPipeline pipeline,
-            HandlerResolver resolver)
-         : base(opts, pipeline, resolver)
+         LLMInitOptions opts,
+         IContextBudgetManager ctxManager,
+         ITokenManager tokenManager,
+         IRetryPolicy retryPolicy,
+         IToolCallParser parser,
+         IToolCatalog tools,
+         HandlerResolver resolver,
+         ILogger<LLMClientBase> baseLogger,
+         ILogger<OpenAILLMClient> logger)
+         : base(
+             opts,
+             ctxManager,
+             tokenManager,
+             retryPolicy,
+             parser,
+             tools,
+             resolver,
+             baseLogger)
         {
             _client = new OpenAIClient(
                 credential: new ApiKeyCredential(_initOptions.ApiKey!),

@@ -15,24 +15,26 @@ namespace AgentCore.LLM.Handlers
 {
     public delegate TextHandler TextHandlerFactory();
 
-    public sealed class TextHandler : BaseChunkHandler
+    public sealed class TextHandler : IChunkHandler
     {
+        private readonly ILogger<TextHandler> _logger;
+        private readonly IToolCallParser _parser;
         private readonly StringBuilder _text = new StringBuilder();
-        private ToolCall? _inlineTool; // Track inline tool locally
-        private int _lastScanPos = 0;
-
+        private ToolCall? _inlineTool;
 
         public TextHandler(
             IToolCallParser parser,
-            IToolCatalog tools,
             ILogger<TextHandler> logger)
-            : base(parser, tools, logger) { }
+        {
+            _parser = parser;
+            _logger = logger;
+        }
 
-        public override void OnRequest(LLMRequestBase request)
+        public void OnRequest(LLMRequestBase request)
         {
         }
 
-        protected override void OnChunk(LLMStreamChunk chunk)
+        public void OnChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
 
@@ -41,29 +43,30 @@ namespace AgentCore.LLM.Handlers
 
             _text.Append(txt);
 
-            if (Logger.IsEnabled(LogLevel.Trace))
-                Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
+            if (_logger.IsEnabled(LogLevel.Trace))
+                _logger.LogDebug("◄ Stream [Text]: {Text}", txt);
 
             if (_inlineTool != null) return;
 
-            var match = Parser.TryMatch(_text.ToString());
+            var match = _parser.TryMatch(_text.ToString());
             if (match == null) return;
 
-            _inlineTool = ValidateTool(match.Call);
+            _inlineTool = match.Call;   // RAW ToolCall only
+            _text.Length = match.Start; // strip tool JSON from visible text
 
-            // cut tool syntax from visible text
-            _text.Length = match.Start;
+            throw new EarlyStopException("Inline tool call detected.");
         }
 
-        protected override LLMResponseBase OnResponse(ToolCall? toolCall, FinishReason finishReason)
+        public LLMResponseBase OnResponse(FinishReason finishReason)
         {
-            var finalTool = toolCall ?? _inlineTool;
-
-            Logger.LogInformation("► LLM Response [Text]: {Msg}", _text.ToString().Trim());
+            _logger.LogInformation(
+                "► LLM Response [Text]: {Msg}",
+                _text.ToString().Trim()
+            );
 
             return new LLMTextResponse(
                 _text.ToString().Trim(),
-                finalTool,
+                _inlineTool,
                 finishReason
             );
         }
