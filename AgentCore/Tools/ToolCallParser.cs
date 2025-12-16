@@ -9,21 +9,23 @@ using System.Threading;
 
 namespace AgentCore.Tools
 {
-    public sealed class InlineToolCall
+    public sealed class InlineToolMatch
     {
-        public ToolCall? Call { get; }
-        public string AssistantMessage { get; }
+        public int Start { get; }
+        public int End { get; }
+        public ToolCall Call { get; }
 
-        public InlineToolCall(ToolCall? call, string assistantMessage)
+        public InlineToolMatch(int start, int end, ToolCall call)
         {
+            Start = start;
+            End = end;
             Call = call;
-            AssistantMessage = assistantMessage;
         }
     }
 
     public interface IToolCallParser
     {
-        InlineToolCall ExtractInlineToolCall(string content);
+        InlineToolMatch TryMatch(string content);
         object[] ParseToolParams(string toolName, JObject arguments);
     }
 
@@ -40,33 +42,26 @@ namespace AgentCore.Tools
             _toolCatalog = toolCatalog;
         }
 
-        public InlineToolCall ExtractInlineToolCall(string content)
+        public InlineToolMatch? TryMatch(string content)
         {
             foreach (var (start, end, obj) in content.FindAllJsonObjects())
             {
-                var name = obj[NameTag]?.ToString();
-                var args = obj[ArgumentsTag] as JObject;
-
+                var name = obj["name"]?.ToString();
+                var args = obj["arguments"] as JObject;
                 if (name == null || args == null) continue;
                 if (!_toolCatalog.Contains(name)) continue;
 
-                var id = obj[IdTag]?.ToString() ?? Guid.NewGuid().ToString();
-                var assistantMsg = obj[AssistantMessageTag]?.ToString();
+                var id = obj["id"]?.ToString() ?? Guid.NewGuid().ToString();
 
-                // RAW tool call: no param parsing here
-                var rawCall = new ToolCall(
+                var call = new ToolCall(
                     id,
                     name,
-                    args,
-                    parameters: null,
-                    message: assistantMsg
+                    args
                 );
 
-                var prefix = content.Substring(0, start).Trim();
-                return new InlineToolCall(rawCall, prefix);
+                return new InlineToolMatch(start, end, call);
             }
-            // no tool call found – treat entire text as assistant message
-            return new InlineToolCall(null, content.Trim());
+            return null;
         }
 
         public object[] ParseToolParams(string toolName, JObject arguments)

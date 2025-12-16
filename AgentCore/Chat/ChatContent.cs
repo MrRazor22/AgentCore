@@ -19,16 +19,12 @@ namespace AgentCore.Chat
     public class ToolCall : IChatContent
     {
         [JsonConstructor]
-        public ToolCall(string id, string name, JObject arguments)
+
+        public ToolCall(string id, string name, JObject arguments, object[] parameters = null, string message = null)
         {
             Id = id;
             Name = name;
             Arguments = arguments ?? new JObject();
-        }
-
-        public ToolCall(string id, string name, JObject arguments, object[] parameters, string message = null)
-            : this(id, name, arguments)
-        {
             Parameters = parameters;
             Message = message;
         }

@@ -35,6 +35,7 @@ namespace AgentCore.LLM.Handlers
         protected override void OnChunk(LLMStreamChunk chunk)
         {
             if (chunk.Kind != StreamKind.Text) return;
+
             var txt = chunk.AsText();
             if (string.IsNullOrEmpty(txt)) return;
 
@@ -43,14 +44,15 @@ namespace AgentCore.LLM.Handlers
             if (Logger.IsEnabled(LogLevel.Trace))
                 Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
 
-            var newPortion = _text.ToString(_lastScanPos, _text.Length - _lastScanPos);
-            _lastScanPos = _text.Length;
+            if (_inlineTool != null) return;
 
-            var inline = Parser.ExtractInlineToolCall(newPortion);
-            if (inline.Call == null) return;
+            var match = Parser.TryMatch(_text.ToString());
+            if (match == null) return;
 
-            if (_inlineTool == null) _inlineTool = ValidateTool(inline.Call);
-            else throw new EarlyStopException("Second inline tool call detected");
+            _inlineTool = ValidateTool(match.Call);
+
+            // cut tool syntax from visible text
+            _text.Length = match.Start;
         }
 
         protected override LLMResponseBase OnResponse(ToolCall? toolCall, FinishReason finishReason)
