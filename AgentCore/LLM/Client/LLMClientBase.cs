@@ -91,23 +91,15 @@ namespace AgentCore.LLM.Client
             where TResponse : LLMResponseBase
         {
             var handler = _resolver(request);
-
-            var result = await RunAsync(
-                request,
-                handler,
-                r => StreamAsync(r, ct),
-                onStream,
-                ct);
-
+            var result = await RunAsync(request, handler, ct, onStream);
             return (TResponse)result;
         }
 
-        public async Task<LLMResponseBase> RunAsync(
+        private async Task<LLMResponseBase> RunAsync(
             LLMRequestBase request,
             IChunkHandler handler,
-            Func<LLMRequestBase, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
-            Action<LLMStreamChunk>? onStream,
-            CancellationToken ct)
+            CancellationToken ct,
+            Action<LLMStreamChunk>? onStream)
         {
             // RESET per-request tool state
             _firstTool = null;
@@ -129,7 +121,7 @@ namespace AgentCore.LLM.Client
                 ApplyTrim(retryPrompt, request);
                 request.Prompt = retryPrompt;
 
-                await foreach (var chunk in streamFactory(request))
+                await foreach (var chunk in StreamAsync(request, ct))
                 {
                     onStream?.Invoke(chunk);
 
