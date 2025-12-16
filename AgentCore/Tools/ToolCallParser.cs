@@ -31,11 +31,6 @@ namespace AgentCore.Tools
 
     public sealed class ToolCallParser : IToolCallParser
     {
-        private const string NameTag = "name";
-        private const string ArgumentsTag = "arguments";
-        private const string AssistantMessageTag = "message";
-        private const string IdTag = "id";
-
         private IToolCatalog _toolCatalog;
         public ToolCallParser(IToolCatalog toolCatalog)
         {
