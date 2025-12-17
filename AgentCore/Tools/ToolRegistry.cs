@@ -13,7 +13,7 @@ namespace AgentCore.Tools
     public interface IToolCatalog
     {
         IReadOnlyList<Tool> RegisteredTools { get; }
-        Tool? Get(string toolName); // return null if not found  
+        Tool? Get(string toolName);
         bool Contains(string toolName);
     }
 
@@ -24,21 +24,22 @@ namespace AgentCore.Tools
         void RegisterAll<T>(T instance);
     }
 
-    internal class ToolRegistryCatalog : IToolRegistry, IToolCatalog
+    internal sealed class ToolRegistryCatalog : IToolRegistry, IToolCatalog
     {
         private readonly List<Tool> _registeredTools;
 
-        public ToolRegistryCatalog(IEnumerable<Tool> tools = null)
+        public ToolRegistryCatalog(IEnumerable<Tool>? tools = null)
         {
-            _registeredTools = tools != null ? new List<Tool>(tools) : new List<Tool>();
+            _registeredTools = tools != null
+                ? new List<Tool>(tools)
+                : new List<Tool>();
         }
 
         public IReadOnlyList<Tool> RegisteredTools => _registeredTools;
 
         public static implicit operator ToolRegistryCatalog(List<Tool> tools)
-        {
-            return new ToolRegistryCatalog(tools);
-        }
+            => new ToolRegistryCatalog(tools);
+
         public void Register(params Delegate[] funcs)
         {
             if (funcs == null)
@@ -53,6 +54,15 @@ namespace AgentCore.Tools
                     continue;
 
                 var tool = CreateToolFromDelegate(f);
+
+                if (_registeredTools.Any(t =>
+                    t.Name.Equals(tool.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new InvalidOperationException(
+                        $"Duplicate tool name exposed to LLM: '{tool.Name}'. " +
+                        $"Tool names must be globally unique.");
+                }
+
                 _registeredTools.Add(tool);
             }
         }
@@ -67,6 +77,7 @@ namespace AgentCore.Tools
             {
                 if (!IsMethodJsonCompatible(method))
                     continue;
+
                 try
                 {
                     var paramTypes = method.GetParameters()
@@ -83,7 +94,7 @@ namespace AgentCore.Tools
                 }
                 catch
                 {
-                    // skip if not compatible
+                    // skip incompatible methods
                 }
             }
         }
@@ -98,6 +109,7 @@ namespace AgentCore.Tools
             {
                 if (!IsMethodJsonCompatible(method))
                     continue;
+
                 try
                 {
                     var paramTypes = method.GetParameters()
@@ -117,42 +129,55 @@ namespace AgentCore.Tools
                 }
                 catch
                 {
-                    // skip if not compatible
+                    // skip incompatible methods
                 }
             }
         }
 
-        public bool Contains(string toolName) => _registeredTools.Any(t =>
+        public bool Contains(string toolName)
+            => _registeredTools.Any(t =>
                 t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
+
         public Tool? Get(string toolName)
-            => _registeredTools.FirstOrDefault(t => t.Name.Equals(toolName, StringComparison.InvariantCultureIgnoreCase));
-        private Tool CreateToolFromDelegate(Delegate func)
+            => _registeredTools.FirstOrDefault(t =>
+                t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
+
+        private static Tool CreateToolFromDelegate(Delegate func)
         {
             var method = func.Method;
+
+            var declaringType = method.DeclaringType
+                ?? throw new InvalidOperationException("Tool method has no declaring type.");
+
+            // globally unique name
+            var toolName = $"{declaringType.Name}.{method.Name}";
+
             var description =
-                 method.GetCustomAttribute<ToolAttribute>()?.Description
-                 ?? method.GetCustomAttribute<DescriptionAttribute>()?.Description
-                 ?? method.Name;
-            var parameters = method.GetParameters();
+                method.GetCustomAttribute<ToolAttribute>()?.Description
+                ?? method.GetCustomAttribute<DescriptionAttribute>()?.Description
+                ?? toolName;
 
             var properties = new JObject();
             var required = new JArray();
 
-            foreach (var param in parameters)
+            foreach (var param in method.GetParameters())
             {
                 if (param.ParameterType == typeof(CancellationToken))
-                    continue; // skip it completely
+                    continue;
 
                 var name = param.Name!;
-                var desc = param.GetCustomAttribute<DescriptionAttribute>()?.Description ?? name;
-                var typeSchema = param.ParameterType.GetSchemaForType();
-                typeSchema[JsonSchemaConstants.DescriptionKey] = typeSchema[JsonSchemaConstants.DescriptionKey] ?? desc;
+                var schema = param.ParameterType.GetSchemaForType();
 
-                properties[name] = typeSchema;
-                if (!param.IsOptional) required.Add(name);
+                var desc = param.GetCustomAttribute<DescriptionAttribute>()?.Description ?? name;
+                schema[JsonSchemaConstants.DescriptionKey] ??= desc;
+
+                properties[name] = schema;
+
+                if (!param.IsOptional)
+                    required.Add(name);
             }
 
-            var schema = new JsonSchemaBuilder()
+            var schemaObject = new JsonSchemaBuilder()
                 .Type<object>()
                 .Properties(properties)
                 .Required(required)
@@ -160,19 +185,18 @@ namespace AgentCore.Tools
 
             return new Tool
             {
-                Name = method.Name,
+                Name = toolName,
                 Description = description,
-                ParametersSchema = schema, // already JObject
+                ParametersSchema = schemaObject,
                 Function = func
             };
         }
+
         private static bool IsMethodJsonCompatible(MethodInfo m)
         {
-            // reject open generic methods
             if (m.ContainsGenericParameters)
                 return false;
 
-            // reject open generic return type
             if (m.ReturnType.ContainsGenericParameters)
                 return false;
 
@@ -180,13 +204,12 @@ namespace AgentCore.Tools
             {
                 var t = p.ParameterType;
 
-                if (t.IsByRef) return false;          // ref / out
-                if (t.IsPointer) return false;        // unsafe pointer
-                if (t.ContainsGenericParameters) return false;  // open generic param
+                if (t.IsByRef) return false;
+                if (t.IsPointer) return false;
+                if (t.ContainsGenericParameters) return false;
             }
 
             return true;
         }
-
     }
 }

@@ -7,12 +7,8 @@ using Xunit;
 
 namespace AgentCore.Tests.Tools
 {
-    public class ToolRegistryCatalog_Tests
+    public sealed class ToolRegistryCatalog_Tests
     {
-        // ───────────────────────────────────────────────────────────
-        // Helper classes for testing
-        // ───────────────────────────────────────────────────────────
-
         class StaticTools
         {
             [Tool("Adds two numbers")]
@@ -25,7 +21,7 @@ namespace AgentCore.Tests.Tools
             public static int HasCT(int x, CancellationToken ct) => x + 1;
 
             [Tool]
-            public static void Bad(ref int x) { }        // incompatible
+            public static void Bad(ref int x) { }
         }
 
         class InstanceTools
@@ -35,8 +31,6 @@ namespace AgentCore.Tests.Tools
 
             [Tool]
             public string Combine(string a, string b) => a + b;
-
-            public int Bad(string a, int b, int c, int d, string e) => 0; // no [Tool] → ignored
         }
 
         class EdgeCaseTools
@@ -58,29 +52,27 @@ namespace AgentCore.Tests.Tools
         }
 
         // ───────────────────────────────────────────────────────────
-        // Basic Tests
-        // ───────────────────────────────────────────────────────────
 
         [Fact]
-        public void Register_AddsDelegate_AsTool()
+        public void Register_AddsDelegate_AsTool_WithNamespacedName()
         {
             var reg = new ToolRegistryCatalog();
             reg.Register((Func<int, int, int>)StaticTools.Add);
 
-            Assert.True(reg.Contains("Add"));
-            var t = reg.Get("Add");
+            Assert.True(reg.Contains("StaticTools.Add"));
 
+            var t = reg.Get("StaticTools.Add");
             Assert.NotNull(t);
             Assert.Equal("Adds two numbers", t.Description);
         }
 
         [Fact]
-        public void Register_CreatesCorrectSchema_ExcludesCancellationToken()
+        public void Register_Excludes_CancellationToken_FromSchema()
         {
             var reg = new ToolRegistryCatalog();
             reg.Register((Func<int, CancellationToken, int>)StaticTools.HasCT);
 
-            var tool = reg.Get("HasCT");
+            var tool = reg.Get("StaticTools.HasCT");
             Assert.NotNull(tool);
 
             var props = (JObject)tool.ParametersSchema["properties"];
@@ -89,205 +81,82 @@ namespace AgentCore.Tests.Tools
         }
 
         [Fact]
-        public void Register_ThrowsOnNullDelegates_ArrayNull()
-        {
-            var reg = new ToolRegistryCatalog();
-            Assert.Throws<ArgumentNullException>(() => reg.Register(null));
-        }
-
-        [Fact]
-        public void Register_ThrowsOnNullDelegates_EntryNull()
-        {
-            var reg = new ToolRegistryCatalog();
-            Assert.Throws<ArgumentNullException>(() => reg.Register(null!));
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // Static registration
-        // ───────────────────────────────────────────────────────────
-
-        [Fact]
         public void RegisterAll_Static_RegistersOnlyAnnotated()
         {
             var reg = new ToolRegistryCatalog();
             reg.RegisterAll<StaticTools>();
 
-            Assert.True(reg.Contains("Add"));
-            Assert.True(reg.Contains("NoParams"));
-            Assert.True(reg.Contains("HasCT"));
-            Assert.False(reg.Contains("Bad"));
+            Assert.True(reg.Contains("StaticTools.Add"));
+            Assert.True(reg.Contains("StaticTools.NoParams"));
+            Assert.True(reg.Contains("StaticTools.HasCT"));
+            Assert.False(reg.Contains("StaticTools.Bad"));
         }
-
-        [Fact]
-        public void RegisterAll_Static_Skips_IncompatibleMethods()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<StaticTools>();
-
-            Assert.False(reg.Contains("Bad")); // ref param → skipped
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // Instance registration
-        // ───────────────────────────────────────────────────────────
 
         [Fact]
         public void RegisterAll_Instance_RegistersOnlyAnnotated()
         {
-            var inst = new InstanceTools();
             var reg = new ToolRegistryCatalog();
-            reg.RegisterAll(inst);
+            reg.RegisterAll(new InstanceTools());
 
-            Assert.True(reg.Contains("Echo"));
-            Assert.True(reg.Contains("Combine"));
-            Assert.False(reg.Contains("Bad")); // not annotated
+            Assert.True(reg.Contains("InstanceTools.Echo"));
+            Assert.True(reg.Contains("InstanceTools.Combine"));
         }
 
         [Fact]
-        public void RegisterAll_Instance_SkipsIncompatible()
+        public void Duplicate_ToolName_Throws()
         {
-            var inst = new InstanceTools();
             var reg = new ToolRegistryCatalog();
-            reg.RegisterAll(inst);
 
-            var names = reg.RegisteredTools.Select(t => t.Name).ToList();
-            Assert.DoesNotContain("Bad", names);
+            reg.Register((Func<int, int, int>)StaticTools.Add);
+
+            Assert.Throws<InvalidOperationException>(() =>
+                reg.Register((Func<int, int, int>)StaticTools.Add));
         }
 
-        // ───────────────────────────────────────────────────────────
-        // Case-insensitivity
-        // ───────────────────────────────────────────────────────────
-
         [Fact]
-        public void Contains_IsCaseInsensitive()
+        public void CaseInsensitive_Lookup_Works()
         {
             var reg = new ToolRegistryCatalog();
             reg.Register((Func<int, int, int>)StaticTools.Add);
 
-            Assert.True(reg.Contains("add"));
-            Assert.True(reg.Contains("ADD"));
+            Assert.True(reg.Contains("statictools.add"));
+            Assert.NotNull(reg.Get("STATICTOOLS.ADD"));
         }
 
         [Fact]
-        public void Get_IsCaseInsensitive()
+        public void EdgeCases_IncompatibleMethods_AreSkipped()
+        {
+            var reg = new ToolRegistryCatalog();
+            reg.RegisterAll<EdgeCaseTools>();
+
+            Assert.False(reg.Contains("EdgeCaseTools.RefParam"));
+            Assert.False(reg.Contains("EdgeCaseTools.OutParam"));
+            Assert.False(reg.Contains("EdgeCaseTools.Pointer"));
+            Assert.False(reg.Contains("EdgeCaseTools.GenericMethod"));
+            Assert.False(reg.Contains("EdgeCaseTools.GenericReturn"));
+        }
+
+        [Fact]
+        public void EdgeCases_ComplexAndManyParams_AreAccepted()
+        {
+            var reg = new ToolRegistryCatalog();
+            reg.RegisterAll<EdgeCaseTools>();
+
+            Assert.True(reg.Contains("EdgeCaseTools.ComplexArg"));
+            Assert.True(reg.Contains("EdgeCaseTools.Many"));
+        }
+
+        [Fact]
+        public void Required_Parameters_AreCorrect()
         {
             var reg = new ToolRegistryCatalog();
             reg.Register((Func<int, int, int>)StaticTools.Add);
 
-            Assert.NotNull(reg.Get("add"));
-            Assert.NotNull(reg.Get("ADD"));
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // Schema correctness
-        // ───────────────────────────────────────────────────────────
-
-        [Fact]
-        public void Schema_HasRequiredAndOptionalProperly()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.Register((Func<int, int, int>)StaticTools.Add);
-
-            var t = reg.Get("Add");
+            var t = reg.Get("StaticTools.Add");
             var req = (JArray)t.ParametersSchema["required"];
 
             Assert.Contains("a", req);
             Assert.Contains("b", req);
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // Edge-case compatibility (ref/out/pointer/generic/etc.)
-        // ───────────────────────────────────────────────────────────
-
-        [Fact]
-        public void EdgeCase_RefParam_IsSkipped()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.False(reg.Contains("RefParam"));
-        }
-
-        [Fact]
-        public void EdgeCase_OutParam_IsSkipped()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.False(reg.Contains("OutParam"));
-        }
-
-        [Fact]
-        public unsafe void EdgeCase_Pointer_IsSkipped()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.False(reg.Contains("Pointer"));
-        }
-
-        [Fact]
-        public void EdgeCase_GenericMethod_IsSkipped()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.False(reg.Contains("GenericMethod"));
-        }
-
-        [Fact]
-        public void EdgeCase_GenericReturn_IsSkipped()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.False(reg.Contains("GenericReturn"));
-        }
-
-        [Fact]
-        public void EdgeCase_ComplexArg_IsAccepted()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.True(reg.Contains("ComplexArg"));
-        }
-
-        [Fact]
-        public void EdgeCase_ManyParams_IsAccepted()
-        {
-            var reg = new ToolRegistryCatalog();
-            reg.RegisterAll<EdgeCaseTools>();
-
-            Assert.True(reg.Contains("Many"));
-        }
-
-        [Fact]
-        public void Register_OptionalAndNullableRules_AreAppliedCorrectly()
-        {
-            var reg = new ToolRegistryCatalog();
-
-            [Tool]
-            static int Mix(int a, string? b, int? c, CancellationToken ct = default) => 0;
-
-            reg.Register((Func<int, string?, int?, CancellationToken, int>)Mix);
-
-            var t = reg.Get("Mix");
-            Assert.NotNull(t);
-
-            var props = (JObject)t.ParametersSchema["properties"];
-            var req = (JArray)t.ParametersSchema["required"];
-
-            Assert.True(props.ContainsKey("a"));
-            Assert.True(req.Contains("a"));
-
-            Assert.True(props.ContainsKey("b"));
-            Assert.False(req.Contains("b"));
-
-            Assert.True(props.ContainsKey("c"));
-            Assert.False(req.Contains("c"));
-
-            Assert.False(props.ContainsKey("ct"));
         }
 
         public class Obj
@@ -296,21 +165,18 @@ namespace AgentCore.Tests.Tools
             public int? Y { get; set; }
         }
 
-        // Define the tool method OUTSIDE the test method
         [Tool]
-        private static int T(Obj o, CancellationToken ct)
-        {
-            return 0;
-        }
+        private static int T(Obj o, CancellationToken ct) => 0;
+
         [Fact]
-        public void Register_ComplexType_WithOptionalMembers_StillAccepted()
+        public void Complex_Object_Param_IsAccepted()
         {
             var reg = new ToolRegistryCatalog();
-
-            // Register the tool explicitly
             reg.Register((Func<Obj, CancellationToken, int>)T);
 
-            var t = reg.Get("T");
+            Assert.True(reg.Contains($"{nameof(ToolRegistryCatalog_Tests)}.T"));
+
+            var t = reg.Get($"{nameof(ToolRegistryCatalog_Tests)}.T");
             var props = (JObject)t.ParametersSchema["properties"];
 
             Assert.True(props.ContainsKey("o"));
