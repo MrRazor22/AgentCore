@@ -89,7 +89,10 @@ namespace AgentCore.Tokens
         {
             lock (_lock)
             {
-                return _cumulativeTokens;
+                return new TokenUsage(
+                    _cumulativeTokens.InputTokens,
+                    _cumulativeTokens.OutputTokens
+                );
             }
         }
     }

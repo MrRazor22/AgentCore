@@ -57,8 +57,8 @@ namespace AgentCore.Tests.Runtime
             var convo = await _memory.RecallAsync("s1", "q2");
 
             Assert.Equal(2, convo.Count);
-            Assert.Equal("q1", convo[0].Content.ToString());
-            Assert.Equal("a1", convo[1].Content.ToString());
+            Assert.Equal("q1", ((TextContent)convo[0].Content).Text);
+            Assert.Equal("a1", ((TextContent)convo[1].Content).Text);
         }
 
         [Fact]

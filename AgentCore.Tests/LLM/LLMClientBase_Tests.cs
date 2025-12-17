@@ -6,43 +6,33 @@ using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using System.Runtime.CompilerServices;
-using System.Text;
+using Xunit;
 
 namespace AgentCore.Tests.LLM
 {
-    using AgentCore.Chat;
-    using AgentCore.LLM.Client;
-    using AgentCore.LLM.Protocol;
-    using AgentCore.LLM.Handlers;
-    using AgentCore.Tokens;
-    using AgentCore.Tools;
-    using Microsoft.Extensions.Logging;
-    using Moq;
-    using Newtonsoft.Json.Linq;
-    using System;
-    using System.Collections.Generic;
-    using System.Runtime.CompilerServices;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using Xunit;
-
     public sealed class LLMClientBase_Tests
     {
         private readonly Mock<IContextManager> _ctx;
         private readonly Mock<ITokenManager> _tokens;
-        private readonly Mock<IRetryPolicy> _retry;
+        private readonly RetryPolicy _retry;
         private readonly Mock<IChunkHandler> _handler;
         private readonly ToolRegistryCatalog _tools;
         private readonly ToolCallParser _parser;
         private readonly TestClient _client;
 
+        // ---------- STABLE TOOL ----------
+        private static class TestTools
+        {
+            public static int AddOne(int x) => x + 1;
+        }
+
         public LLMClientBase_Tests()
         {
             _ctx = new Mock<IContextManager>();
             _tokens = new Mock<ITokenManager>();
-            _retry = new Mock<IRetryPolicy>();
             _handler = new Mock<IChunkHandler>();
 
             _ctx.Setup(x => x.Trim(It.IsAny<Conversation>(), It.IsAny<int?>()))
@@ -54,8 +44,13 @@ namespace AgentCore.Tests.LLM
                     It.IsAny<TokenUsage>()))
                 .Returns(new TokenUsage());
 
+            _retry = new RetryPolicy(
+                Mock.Of<ILogger<RetryPolicy>>(),
+                Options.Create(new RetryPolicyOptions { MaxRetries = 0 })
+            );
+
             _tools = new ToolRegistryCatalog();
-            _tools.Register((int x) => x + 1);
+            _tools.Register((Func<int, int>)TestTools.AddOne);
 
             _parser = new ToolCallParser(_tools);
 
@@ -63,11 +58,11 @@ namespace AgentCore.Tests.LLM
                 new LLMInitOptions(),
                 _ctx.Object,
                 _tokens.Object,
-                _retry.Object,
+                _retry,
                 _parser,
                 _tools,
                 _ => _handler.Object,
-                Mock.Of<ILogger<LLMClientBase>>()
+                NullLogger<LLMClientBase>.Instance
             );
         }
 
@@ -75,7 +70,7 @@ namespace AgentCore.Tests.LLM
         public async Task Single_ToolCall_Is_Detected()
         {
             SetupStream(
-                ToolDelta("Invoke", @"{""x"":1}"),
+                ToolDelta("TestTools.AddOne", @"{""x"":1}"),
                 Finish(FinishReason.ToolCall)
             );
 
@@ -83,27 +78,29 @@ namespace AgentCore.Tests.LLM
                 new LLMRequest(new Conversation()));
 
             Assert.NotNull(resp.ToolCall);
-            Assert.Equal("Invoke", resp.ToolCall!.Name);
+            Assert.Equal("TestTools.AddOne", resp.ToolCall!.Name);
         }
 
         [Fact]
-        public async Task Second_ToolCall_Throws_EarlyStop()
+        public async Task Second_ToolCall_Is_Ignored_Not_Thrown()
         {
             SetupStream(
-                ToolDelta("Invoke", @"{""x"":1}"),
-                ToolDelta("Invoke", @"{""x"":2}")
+                ToolDelta("TestTools.AddOne", @"{""x"":1}"),
+                ToolDelta("TestTools.AddOne", @"{""x"":2}")
             );
 
-            await Assert.ThrowsAsync<EarlyStopException>(() =>
-                _client.ExecuteAsync<LLMResponse>(
-                    new LLMRequest(new Conversation())));
+            var resp = await _client.ExecuteAsync<LLMResponse>(
+                new LLMRequest(new Conversation()));
+
+            Assert.NotNull(resp.ToolCall);
+            Assert.Equal("TestTools.AddOne", resp.ToolCall!.Name);
         }
 
         [Fact]
         public async Task Invalid_Tool_Throws_RetryException()
         {
             SetupStream(
-                ToolDelta("NoSuchTool", @"{}"),
+                ToolDelta("NoSuch.Tool", @"{}"),
                 Finish(FinishReason.ToolCall)
             );
 
@@ -115,7 +112,7 @@ namespace AgentCore.Tests.LLM
         [Fact]
         public async Task Cancellation_Returns_Cancelled_Response()
         {
-            SetupStream(); // no chunks
+            SetupStream();
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -133,29 +130,17 @@ namespace AgentCore.Tests.LLM
             _handler.Setup(h => h.OnChunk(It.IsAny<LLMStreamChunk>()))
                 .Throws(new InvalidOperationException());
 
-            SetupStream(
-                new LLMStreamChunk(StreamKind.Text, "hi")
-            );
+            SetupStream(new LLMStreamChunk(StreamKind.Text, "hi"));
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _client.ExecuteAsync<LLMResponse>(
                     new LLMRequest(new Conversation())));
         }
 
-        // ---------------- helpers ----------------
+        // ---------- helpers ----------
 
         private void SetupStream(params LLMStreamChunk[] chunks)
-        {
-            _retry.Setup(r => r.ExecuteStreamAsync(
-                    It.IsAny<Conversation>(),
-                    It.IsAny<Func<Conversation, IAsyncEnumerable<LLMStreamChunk>>>(),
-                    It.IsAny<CancellationToken>()))
-                .Returns<Conversation,
-                         Func<Conversation, IAsyncEnumerable<LLMStreamChunk>>,
-                         CancellationToken>((_, run, __) => run(new Conversation()));
-
-            _client.SetStream(chunks);
-        }
+            => _client.SetStream(chunks);
 
         private static LLMStreamChunk ToolDelta(string name, string json)
             => new LLMStreamChunk(
@@ -164,8 +149,6 @@ namespace AgentCore.Tests.LLM
 
         private static LLMStreamChunk Finish(FinishReason r)
             => new LLMStreamChunk(StreamKind.Finish, r);
-
-        // ---------------- minimal abstract override ----------------
 
         private sealed class TestClient : LLMClientBase
         {

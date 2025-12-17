@@ -128,14 +128,9 @@ namespace AgentCore.Tokens
             var rebuilt = Build(keepUA);
             int finalCount = _tokenManager.Count(rebuilt.ToJson());
 
-            while (finalCount > limit && keepUA.Count > 2)
+            while (finalCount > limit && keepUA.Count > 0)
             {
-                var candidate = keepUA[0];
-
-                if (candidate == lastUser || candidate == lastAssistant)
-                    break;
-
-                keepUA.RemoveAt(0);
+                keepUA.RemoveAt(0);   // drop oldest UA, no exceptions
                 rebuilt = Build(keepUA);
                 finalCount = _tokenManager.Count(rebuilt.ToJson());
             }

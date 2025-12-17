@@ -1,5 +1,7 @@
 ﻿using AgentCore.Tools;
 using Newtonsoft.Json.Linq;
+using System;
+using Xunit;
 
 namespace AgentCore.Tests.Tools
 {
@@ -7,14 +9,23 @@ namespace AgentCore.Tests.Tools
     {
         private readonly ToolCallParser _parser;
 
+        // helper container so declaring type is stable
+        private static class TestTools
+        {
+            public static int Sum(int a, int b) => a + b;
+            public static string Echo(string text) => text;
+            public static int Complex(ComplexArg arg) => arg.Value;
+        }
+
         public ToolCallParser_Tests()
         {
             var catalog = new ToolRegistryCatalog();
             catalog.Register(
-                (int a, int b) => a + b,
-                (string text) => text,
-                (ComplexArg arg) => arg.Value
+                (Func<int, int, int>)TestTools.Sum,
+                (Func<string, string>)TestTools.Echo,
+                (Func<ComplexArg, int>)TestTools.Complex
             );
+
             _parser = new ToolCallParser(catalog);
         }
 
@@ -27,13 +38,13 @@ namespace AgentCore.Tests.Tools
         [Fact]
         public void TryMatch_ValidTool_MatchesFirstOnly()
         {
-            var text = @"before {""name"":""Sum"",""arguments"":{""a"":1,""b"":2}}
-                     mid {""name"":""Echo"",""arguments"":{""text"":""x""}} after";
+            var text = @"before {""name"":""TestTools.Sum"",""arguments"":{""a"":1,""b"":2}}
+                         mid {""name"":""TestTools.Echo"",""arguments"":{""text"":""x""}} after";
 
             var match = _parser.TryMatch(text);
 
             Assert.NotNull(match);
-            Assert.Equal("Sum", match!.Call.Name);
+            Assert.Equal("TestTools.Sum", match!.Call.Name);
             Assert.Contains("before", text[..match.Start]);
             Assert.Contains("after", text[match.End..]);
         }
@@ -41,20 +52,21 @@ namespace AgentCore.Tests.Tools
         [Fact]
         public void TryMatch_JsonLikeButNotTool_Ignored()
         {
-            Assert.Null(_parser.TryMatch(@"{""title"":""Sum"",""arguments"":{""a"":1}}"));
+            Assert.Null(_parser.TryMatch(@"{""title"":""TestTools.Sum"",""arguments"":{""a"":1}}"));
         }
 
         [Fact]
         public void TryMatch_InvalidJson_Ignored()
         {
-            Assert.Null(_parser.TryMatch(@"{""name"":""Sum"",""arguments"":{""a"":1,}"));
+            Assert.Null(_parser.TryMatch(@"{""name"":""TestTools.Sum"",""arguments"":{""a"":1,}"));
         }
 
         [Fact]
         public void ParseToolParams_SimpleParams_Work()
         {
             var args = JObject.Parse(@"{""a"":1,""b"":2}");
-            var values = _parser.ParseToolParams("Sum", args);
+            var values = _parser.ParseToolParams("TestTools.Sum", args);
+
             Assert.Equal(new object[] { 1, 2 }, values);
         }
 
@@ -62,8 +74,10 @@ namespace AgentCore.Tests.Tools
         public void ParseToolParams_MissingRequired_Throws()
         {
             var args = JObject.Parse(@"{""a"":1}");
+
             var ex = Assert.Throws<ToolValidationException>(() =>
-                _parser.ParseToolParams("Sum", args));
+                _parser.ParseToolParams("TestTools.Sum", args));
+
             Assert.Equal("b", ex.ParamName);
         }
 
@@ -71,22 +85,24 @@ namespace AgentCore.Tests.Tools
         public void ParseToolParams_WrongTypes_ThrowsAggregate()
         {
             var args = JObject.Parse(@"{""a"":""x"",""b"":""y""}");
+
             Assert.Throws<ToolValidationAggregateException>(() =>
-                _parser.ParseToolParams("Sum", args));
+                _parser.ParseToolParams("TestTools.Sum", args));
         }
 
         [Fact]
         public void ParseToolParams_NullArguments_Throws()
         {
             Assert.Throws<ArgumentException>(() =>
-                _parser.ParseToolParams("Sum", null!));
+                _parser.ParseToolParams("TestTools.Sum", null!));
         }
 
         [Fact]
         public void ParseToolParams_ReferenceWrappedParam_Works()
         {
             var args = JObject.Parse(@"{""value"":5}");
-            var values = _parser.ParseToolParams("Complex", args);
+            var values = _parser.ParseToolParams("TestTools.Complex", args);
+
             Assert.Equal(5, values[0]);
         }
 
@@ -94,7 +110,8 @@ namespace AgentCore.Tests.Tools
         public void ParseToolParams_NestedJson_Works()
         {
             var args = JObject.Parse(@"{""arg"":{""value"":10}}");
-            var values = _parser.ParseToolParams("Complex", args);
+            var values = _parser.ParseToolParams("TestTools.Complex", args);
+
             Assert.Equal(10, ((ComplexArg)values[0]).Value);
         }
 
@@ -102,7 +119,7 @@ namespace AgentCore.Tests.Tools
         public void ParseToolParams_UnregisteredTool_Throws()
         {
             Assert.Throws<InvalidOperationException>(() =>
-                _parser.ParseToolParams("Missing", JObject.Parse("{}")));
+                _parser.ParseToolParams("Missing.Tool", JObject.Parse("{}")));
         }
 
         private sealed class ComplexArg
@@ -110,5 +127,4 @@ namespace AgentCore.Tests.Tools
             public int Value { get; set; }
         }
     }
-
 }

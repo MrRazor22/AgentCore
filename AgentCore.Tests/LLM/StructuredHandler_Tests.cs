@@ -4,7 +4,6 @@ using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Client;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AgentCore.Tests.LLM
@@ -29,7 +28,8 @@ namespace AgentCore.Tests.LLM
 
             _handler.OnRequest(req);
 
-            _handler.OnChunk(Text(@"{""value"":"));
+            // 🔴 MUST match schema casing
+            _handler.OnChunk(Text(@"{""Value"":"));
             _handler.OnChunk(Text(" 42"));
             _handler.OnChunk(Text("}"));
 

@@ -48,54 +48,54 @@ namespace AgentCore.LLM.Client
         }
 
         public async IAsyncEnumerable<LLMStreamChunk> ExecuteStreamAsync(
-            Conversation originalRequest,
-            Func<Conversation, IAsyncEnumerable<LLMStreamChunk>> streamFactory,
-            [EnumeratorCancellation] CancellationToken ct = default)
+             Conversation originalRequest,
+             Func<Conversation, IAsyncEnumerable<LLMStreamChunk>> factory,
+             [EnumeratorCancellation] CancellationToken ct = default)
         {
-            var workingRequest = originalRequest.Clone();
+            var working = originalRequest.Clone();
+            RetryException? lastRetry = null;
 
             for (int attempt = 0; attempt <= _options.MaxRetries; attempt++)
             {
-                var cloned = workingRequest.Clone();
-                var stream = streamFactory(cloned);
-                var enumerator = stream.GetAsyncEnumerator(ct);
+                ct.ThrowIfCancellationRequested();
 
-                bool retry = false;
-                string? reason = null;
+                var cloned = working.Clone();
+                IAsyncEnumerable<LLMStreamChunk> stream;
 
                 try
                 {
-                    while (true)
-                    {
-                        bool moved;
-                        try
-                        {
-                            moved = await enumerator.MoveNextAsync();
-                        }
-                        catch (RetryException rex)
-                        {
-                            retry = true;
-                            reason = rex.Message;
-                            break;
-                        }
-
-                        if (!moved)
-                            break;
-
-                        yield return enumerator.Current;
-                    }
+                    stream = factory(cloned);
                 }
-                finally
+                catch (RetryException rex)
                 {
-                    await enumerator.DisposeAsync();
+                    lastRetry = rex;
+                    goto Retry;
                 }
 
-                if (!retry || attempt == _options.MaxRetries)
-                    yield break;
+                await foreach (var chunk in Consume(stream, ct))
+                    yield return chunk;
 
-                workingRequest.AddAssistant(reason);
-                _logger.LogWarning("Retry {Attempt}: {Reason}", attempt + 1, reason);
+                yield break;
+
+            Retry:
+                if (attempt == _options.MaxRetries)
+                    throw lastRetry!;
+
+                working.AddAssistant(lastRetry!.Message);
+                _logger.LogWarning(
+                    "Retry {Attempt}: {Reason}",
+                    attempt + 1,
+                    lastRetry!.Message
+                );
             }
+        }
+
+        private static async IAsyncEnumerable<LLMStreamChunk> Consume(
+            IAsyncEnumerable<LLMStreamChunk> stream,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            await foreach (var c in stream.WithCancellation(ct))
+                yield return c;
         }
     }
 }

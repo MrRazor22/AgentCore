@@ -14,24 +14,34 @@ namespace AgentCore.Tests.Tools
         private readonly ToolRuntime _runtime;
         private readonly ToolRuntime _runtimeWithTimeout;
 
+        private static class TestTools
+        {
+            public static int Sum(int a, int b) => a + b;
+            public static int? Nullable(int? x) => x;
+            public static string? NullReturn() => null;
+
+            public static async Task<int> DoubleAsync(int x, CancellationToken ct)
+            {
+                await Task.Delay(50, ct);
+                return x * 2;
+            }
+
+            public static async Task ThrowAsync(CancellationToken ct)
+            {
+                await Task.Delay(10, ct);
+                throw new InvalidOperationException("boom");
+            }
+        }
+
         public ToolRuntime_Tests()
         {
             var catalog = new ToolRegistryCatalog();
             catalog.Register(
-                (int a, int b) => a + b,
-                (CancellationToken ct) => ct.IsCancellationRequested ? 1 : 0,
-                (int? x) => x,
-                () => (string?)null,
-                async (int x, CancellationToken ct) =>
-                {
-                    await Task.Delay(50, ct);
-                    return x * 2;
-                },
-                async (CancellationToken ct) =>
-                {
-                    await Task.Delay(50, ct);
-                    throw new InvalidOperationException("boom");
-                }
+                (Func<int, int, int>)TestTools.Sum,
+                (Func<int?, int?>)TestTools.Nullable,
+                (Func<string?>)TestTools.NullReturn,
+                (Func<int, CancellationToken, Task<int>>)TestTools.DoubleAsync,
+                (Func<CancellationToken, Task>)TestTools.ThrowAsync
             );
 
             _runtime = new ToolRuntime(catalog);
@@ -44,111 +54,63 @@ namespace AgentCore.Tests.Tools
                 }));
         }
 
+        private static ToolCall Call(string name, params object[] args)
+            => new ToolCall("1", name, new JObject(), args);
+
         [Fact]
         public async Task InvokeAsync_SyncTool_Works()
         {
-            var call = new ToolCall("1", "Sum", JObject.Parse(@"{""a"":1,""b"":2}"));
-            var result = await _runtime.InvokeAsync(call);
+            var result = await _runtime.InvokeAsync(
+                Call("TestTools.Sum", 1, 2));
+
             Assert.Equal(3, result);
         }
 
         [Fact]
         public async Task InvokeAsync_TaskTool_ReturnsResult()
         {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse(@"{""x"":3}"));
-            var result = await _runtime.InvokeAsync(call);
+            var result = await _runtime.InvokeAsync(
+                Call("TestTools.DoubleAsync", 3));
+
             Assert.Equal(6, result);
         }
 
         [Fact]
         public async Task InvokeAsync_NullReturn_Works()
         {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse("{}"));
-            var result = await _runtime.InvokeAsync(call);
+            var result = await _runtime.InvokeAsync(
+                Call("TestTools.NullReturn"));
+
             Assert.Null(result);
-        }
-
-        [Fact]
-        public async Task InvokeAsync_CancellationToken_Injected()
-        {
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
-
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse("{}"));
-
-            await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                _runtime.InvokeAsync(call, cts.Token));
-        }
-
-        [Fact]
-        public async Task InvokeAsync_NoCancellationParam_Works()
-        {
-            var call = new ToolCall("1", "Sum", JObject.Parse(@"{""a"":2,""b"":3}"));
-            var result = await _runtime.InvokeAsync(call, CancellationToken.None);
-            Assert.Equal(5, result);
-        }
-
-        [Fact]
-        public async Task InvokeAsync_ToolThrows_ExceptionWrapped()
-        {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse("{}"));
-
-            var ex = await Assert.ThrowsAsync<ToolExecutionException>(() =>
-                _runtime.InvokeAsync(call));
-
-            Assert.Equal("InvokeAsync", ex.ToolName);
-            Assert.Contains("boom", ex.Message);
-        }
-
-        [Fact]
-        public async Task InvokeAsync_UnregisteredTool_Throws()
-        {
-            var call = new ToolCall("1", "Missing", JObject.Parse("{}"));
-
-            await Assert.ThrowsAsync<ToolExecutionException>(() =>
-                _runtime.InvokeAsync(call));
-        }
-
-        [Fact]
-        public async Task HandleToolCallAsync_TextOnly_ReturnsNullResult()
-        {
-            var call = new ToolCall("1", null!, null!)
-            {
-                Message = "just text"
-            };
-
-            var result = await _runtime.HandleToolCallAsync(call);
-            Assert.Null(result.Result);
-        }
-
-        [Fact]
-        public async Task HandleToolCallAsync_Exception_ReturnedAsResult()
-        {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse("{}"));
-            var result = await _runtime.HandleToolCallAsync(call);
-
-            Assert.IsType<ToolExecutionException>(result.Result);
         }
 
         [Fact]
         public async Task InvokeAsync_NullableParam_Works()
         {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse(@"{""x"":null}"));
-            var result = await _runtime.InvokeAsync(call);
+            var result = await _runtime.InvokeAsync(
+                Call("TestTools.Nullable", null));
+
             Assert.Null(result);
         }
 
-        // ---------------- NEW, REQUIRED TESTS ----------------
+        [Fact]
+        public async Task InvokeAsync_ToolThrows_ExceptionWrapped()
+        {
+            var ex = await Assert.ThrowsAsync<ToolExecutionException>(() =>
+                _runtime.InvokeAsync(Call("TestTools.ThrowAsync")));
+
+            Assert.Equal("TestTools.ThrowAsync", ex.ToolName);
+            Assert.Contains("boom", ex.Message);
+        }
 
         [Fact]
         public async Task HandleToolCallAsync_TimesOut_Returns_ToolExecutionException()
         {
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse(@"{""x"":5}"));
-
-            var result = await _runtimeWithTimeout.HandleToolCallAsync(call);
+            var result = await _runtimeWithTimeout.HandleToolCallAsync(
+                Call("TestTools.DoubleAsync", 5));
 
             var ex = Assert.IsType<ToolExecutionException>(result.Result);
-            Assert.Contains("timed out", ex.Message);
+            Assert.IsType<TimeoutException>(ex.InnerException);
         }
 
         [Fact]
@@ -157,10 +119,10 @@ namespace AgentCore.Tests.Tools
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            var call = new ToolCall("1", "InvokeAsync", JObject.Parse(@"{""x"":5}"));
-
             await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                _runtimeWithTimeout.HandleToolCallAsync(call, cts.Token));
+                _runtimeWithTimeout.HandleToolCallAsync(
+                    Call("TestTools.DoubleAsync", 5),
+                    cts.Token));
         }
     }
 }

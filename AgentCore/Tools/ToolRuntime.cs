@@ -51,8 +51,10 @@ namespace AgentCore.Tools
                 var method = func.Method;
                 var returnType = method.ReturnType;
 
+                var toolParams = toolCall.Parameters ?? Array.Empty<object>();
+
                 var finalArgs = InjectCancellationToken(
-                    toolCall.Parameters,
+                    toolParams,
                     method,
                     ct);
 
@@ -149,9 +151,9 @@ namespace AgentCore.Tools
         }
 
         private static object?[] InjectCancellationToken(
-            object[] toolParams,
-            MethodInfo method,
-            CancellationToken ct)
+             object[] toolParams,
+             MethodInfo method,
+             CancellationToken ct)
         {
             var parameters = method.GetParameters();
             var args = new object?[parameters.Length];
@@ -160,10 +162,22 @@ namespace AgentCore.Tools
 
             for (int i = 0; i < parameters.Length; i++)
             {
-                if (parameters[i].ParameterType == typeof(CancellationToken))
+                var p = parameters[i];
+
+                if (p.ParameterType == typeof(CancellationToken))
+                {
                     args[i] = ct;
-                else
-                    args[i] = toolParams[src++];
+                    continue;
+                }
+
+                if (src >= toolParams.Length)
+                {
+                    // missing argument → use default or null
+                    args[i] = p.HasDefaultValue ? p.DefaultValue : null;
+                    continue;
+                }
+
+                args[i] = toolParams[src++];
             }
 
             return args;

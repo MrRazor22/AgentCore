@@ -2,11 +2,9 @@
 using AgentCore.LLM.Client;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
-using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AgentCore.Tests.LLM
@@ -15,10 +13,13 @@ namespace AgentCore.Tests.LLM
     {
         private readonly TextHandler _handler;
 
+        private static int Invoke(int x) => x + 1;
+
         public TextHandlerTests()
         {
             var tools = new ToolRegistryCatalog();
-            tools.Register((int x) => x + 1);
+
+            tools.Register((Func<int, int>)Invoke);
 
             var parser = new ToolCallParser(tools);
             _handler = new TextHandler(parser, Mock.Of<ILogger<TextHandler>>());
@@ -28,10 +29,11 @@ namespace AgentCore.Tests.LLM
         public void Streamed_Text_Forms_ToolCall_Triggers_EarlyStop_And_Strips_Text()
         {
             _handler.OnChunk(Text("before "));
-            _handler.OnChunk(Text(@"{""name"":""Invoke"","));
+            _handler.OnChunk(Text(@"{""name"":""TextHandlerTests.Invoke"","));
             _handler.OnChunk(Text(@"""arguments"":"));
             _handler.OnChunk(Text(@"{""x"":1}"));
 
+            // JSON completes here → EarlyStop MUST fire here
             Assert.Throws<EarlyStopException>(() =>
                 _handler.OnChunk(Text("} after")));
 
@@ -39,7 +41,7 @@ namespace AgentCore.Tests.LLM
 
             Assert.Equal("before", resp.AssistantMessage);
             Assert.NotNull(resp.ToolCall);
-            Assert.Equal("Invoke", resp.ToolCall!.Name);
+            Assert.Equal("TextHandlerTests.Invoke", resp.ToolCall!.Name);
         }
 
         [Fact]

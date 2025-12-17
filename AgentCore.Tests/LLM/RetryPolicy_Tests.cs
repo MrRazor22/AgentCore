@@ -1,17 +1,14 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Client;
-using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
-using AgentCore.Tokens;
-using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace AgentCore.Tests.LLM
 {
@@ -36,7 +33,6 @@ namespace AgentCore.Tests.LLM
             {
                 calls++;
                 yield return new LLMStreamChunk(StreamKind.Text, "ok");
-                yield break;
             }
 
             var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
@@ -46,7 +42,7 @@ namespace AgentCore.Tests.LLM
         }
 
         [Fact]
-        public async Task Retry_On_RetryException()
+        public async Task Retry_On_RetryException_Then_Succeeds()
         {
             var convo = new Conversation();
             int calls = 0;
@@ -68,7 +64,7 @@ namespace AgentCore.Tests.LLM
         }
 
         [Fact]
-        public async Task Stops_After_MaxRetries()
+        public async Task Stops_After_MaxRetries_Throws_RetryException()
         {
             var convo = new Conversation();
             int calls = 0;
@@ -79,9 +75,10 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("always bad");
             }
 
-            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
+            var ex = await Assert.ThrowsAsync<RetryException>(async () =>
+                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
 
-            Assert.Empty(chunks);
+            Assert.Equal("always bad", ex.Message);
             Assert.Equal(3, calls); // initial + 2 retries
         }
 
@@ -128,12 +125,13 @@ namespace AgentCore.Tests.LLM
                 throw new RetryException("fail");
             }
 
-            await Collect(_policy.ExecuteStreamAsync(convo, Factory));
+            await Assert.ThrowsAsync<RetryException>(async () =>
+                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
 
             Assert.True(seen.Count > 1);
         }
 
-        // ---------------- helpers ----------------
+        // ---------- helpers ----------
 
         private static async Task<List<LLMStreamChunk>> Collect(
             IAsyncEnumerable<LLMStreamChunk> stream)
@@ -144,5 +142,4 @@ namespace AgentCore.Tests.LLM
             return list;
         }
     }
-
 }
