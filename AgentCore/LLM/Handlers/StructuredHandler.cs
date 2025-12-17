@@ -27,7 +27,7 @@ namespace AgentCore.LLM.Handlers
             Logger = logger;
         }
 
-        public void OnRequest(LLMRequestBase req)
+        public void OnRequest(LLMRequest req)
         {
             _request = (LLMStructuredRequest)req;
 
@@ -52,7 +52,7 @@ namespace AgentCore.LLM.Handlers
             _jsonBuffer.Append(txt);
         }
 
-        public LLMResponseBase OnResponse(FinishReason finishReason)
+        public LLMResponse OnResponse(FinishReason finishReason)
         {
             if (finishReason == FinishReason.Cancelled)
                 return new LLMStructuredResponse(
@@ -84,8 +84,6 @@ namespace AgentCore.LLM.Handlers
             }
 
             var result = json.ToObject(_request.ResultType);
-
-            Logger.LogInformation("► LLM Response [Structured]: {Msg}", json.AsPrettyJson());
 
             return new LLMStructuredResponse(
                 rawJson: json,

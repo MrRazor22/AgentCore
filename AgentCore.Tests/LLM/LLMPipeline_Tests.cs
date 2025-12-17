@@ -20,9 +20,9 @@ namespace AgentCore.Tests.LLM
             var pipeline = new LLMPipeline(ctx, tokens, retry, NullLogger<LLMPipeline>.Instance);
 
             var handler = new FakeHandler();
-            var req = new LLMTextRequest(new Conversation().AddUser("x"));
+            var req = new LLMRequest(new Conversation().AddUser("x"));
 
-            LLMResponseBase resp = await pipeline.RunAsync(
+            LLMResponse resp = await pipeline.RunAsync(
                 req,
                 handler,
                 _ => FakeStream(),
@@ -30,7 +30,7 @@ namespace AgentCore.Tests.LLM
                 CancellationToken.None
             );
 
-            Assert.IsType<LLMTextResponse>(resp);
+            Assert.IsType<LLMResponse>(resp);
             Assert.Equal(FinishReason.Stop, resp.FinishReason);
             Assert.True(resp.TokenUsage.Total > 0);
         }
@@ -46,14 +46,14 @@ namespace AgentCore.Tests.LLM
         private sealed class FakeHandler : IChunkHandler
         {
             private readonly StringBuilder sb = new StringBuilder();
-            public void PrepareRequest(LLMRequestBase req) { }
+            public void PrepareRequest(LLMRequest req) { }
             public void HandleChunk(LLMStreamChunk c)
             {
                 if (c.Kind == StreamKind.Text)
                     sb.Append(c.AsText());
             }
-            public LLMResponseBase BuildResponse(FinishReason f)
-                => new LLMTextResponse(sb.ToString(), null, f);
+            public LLMResponse BuildResponse(FinishReason f)
+                => new LLMResponse(sb.ToString(), null, f);
         }
 
         private sealed class FakeCtx : IContextBudgetManager

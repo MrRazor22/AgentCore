@@ -59,7 +59,7 @@ namespace AgentCore.Tokens
                 _cumulativeTokens.InputTokens += usage.InputTokens;
                 _cumulativeTokens.OutputTokens += usage.OutputTokens;
 
-                _logger.LogInformation("Token Usage Recorded In: {In} | Out: {Out} | Total so far: {total}",
+                _logger.LogDebug("Token Usage Recorded In: {In} | Out: {Out} | Total so far: {total}",
                     usage.InputTokens,
                     usage.OutputTokens,
                     _cumulativeTokens.Total

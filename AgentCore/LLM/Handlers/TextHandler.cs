@@ -30,7 +30,7 @@ namespace AgentCore.LLM.Handlers
             _logger = logger;
         }
 
-        public void OnRequest(LLMRequestBase request)
+        public void OnRequest(LLMRequest request)
         {
         }
 
@@ -57,14 +57,9 @@ namespace AgentCore.LLM.Handlers
             throw new EarlyStopException("Inline tool call detected.");
         }
 
-        public LLMResponseBase OnResponse(FinishReason finishReason)
+        public LLMResponse OnResponse(FinishReason finishReason)
         {
-            _logger.LogInformation(
-                "► LLM Response [Text]: {Msg}",
-                _text.ToString().Trim()
-            );
-
-            return new LLMTextResponse(
+            return new LLMResponse(
                 _text.ToString().Trim(),
                 _inlineTool,
                 finishReason

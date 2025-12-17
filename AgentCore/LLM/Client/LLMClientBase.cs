@@ -19,9 +19,9 @@ namespace AgentCore.LLM.Client
     }
     public interface IChunkHandler
     {
-        void OnRequest(LLMRequestBase request);
+        void OnRequest(LLMRequest request);
         void OnChunk(LLMStreamChunk chunk);
-        LLMResponseBase OnResponse(FinishReason finishReason);
+        LLMResponse OnResponse(FinishReason finishReason);
     }
     public sealed class LLMInitOptions
     {
@@ -33,13 +33,13 @@ namespace AgentCore.LLM.Client
     public interface ILLMClient
     {
         Task<TResponse> ExecuteAsync<TResponse>(
-            LLMRequestBase request,
+            LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
-            where TResponse : LLMResponseBase;
+            where TResponse : LLMResponse;
     }
 
-    public delegate IChunkHandler HandlerResolver(LLMRequestBase request);
+    public delegate IChunkHandler HandlerResolver(LLMRequest request);
 
     public abstract class LLMClientBase : ILLMClient
     {
@@ -80,23 +80,23 @@ namespace AgentCore.LLM.Client
 
         #region abstract methods providers must implement 
         protected abstract IAsyncEnumerable<LLMStreamChunk> StreamAsync(
-            LLMRequestBase request,
+            LLMRequest request,
             CancellationToken ct);
         #endregion
 
         public async Task<TResponse> ExecuteAsync<TResponse>(
-            LLMRequestBase request,
+            LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
-            where TResponse : LLMResponseBase
+            where TResponse : LLMResponse
         {
             var handler = _resolver(request);
             var result = await RunAsync(request, handler, ct, onStream);
             return (TResponse)result;
         }
 
-        private async Task<LLMResponseBase> RunAsync(
-            LLMRequestBase request,
+        private async Task<LLMResponse> RunAsync(
+            LLMRequest request,
             IChunkHandler handler,
             CancellationToken ct,
             Action<LLMStreamChunk>? onStream)
@@ -107,11 +107,10 @@ namespace AgentCore.LLM.Client
             _pendingToolName = null;
             _toolArgBuilder.Clear();
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-
-            request.ResolvedTools = _tools.RegisteredTools;
+            request.AvailableTools = _tools.RegisteredTools;
             ApplyTrim(request.Prompt, request);
             handler.OnRequest(request);
+            _logger.LogInformation("► LLM Request: {Msg}", request.ToString());
 
             FinishReason finish = FinishReason.Stop;
             TokenUsage? usageReported = null;
@@ -133,6 +132,8 @@ namespace AgentCore.LLM.Client
                     yield return chunk;
                 }
             }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
 
             try
             {
@@ -162,18 +163,19 @@ namespace AgentCore.LLM.Client
             ValidateToolCall(response);
 
             response.TokenUsage = _tokenManager.ResolveAndRecord(
-                request.ToPayloadJson().ToString(),
-                response.ToPayloadJson().ToString(),
+                request.ToString(),
+                response.ToString(),
                 usageReported
             );
 
             sw.Stop();
+            _logger.LogInformation("► LLM Response: {Msg}", response.ToString());
             _logger.LogInformation("► Call Duration: {ms} ms", sw.ElapsedMilliseconds);
 
             return response;
         }
 
-        private void ValidateToolCall(LLMResponseBase response)
+        private void ValidateToolCall(LLMResponse response)
         {
             var tool = _firstTool ?? response.ToolCall;
 
@@ -246,7 +248,7 @@ namespace AgentCore.LLM.Client
             _pendingToolName = null;
         }
 
-        private void ApplyTrim(Conversation convo, LLMRequestBase request)
+        private void ApplyTrim(Conversation convo, LLMRequest request)
         {
             request.Prompt = _ctxManager.Trim(
                 convo,

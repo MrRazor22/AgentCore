@@ -42,8 +42,8 @@ namespace AgentCore.Runtime
             while (iteration < _maxIterations && !ctx.CancellationToken.IsCancellationRequested)
             {
                 // STREAM LIVE
-                var result = await llm.ExecuteAsync<LLMTextResponse>(
-                    new LLMTextRequest(
+                var result = await llm.ExecuteAsync<LLMResponse>(
+                    new LLMRequest(
                         prompt: ctx.ScratchPad,
                         toolCallMode: _toolMode,
                         model: _model,

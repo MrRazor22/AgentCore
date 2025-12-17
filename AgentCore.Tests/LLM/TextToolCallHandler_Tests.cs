@@ -43,7 +43,7 @@ namespace AgentCore.Tests.LLM
             }
         }
 
-        LLMTextRequest Req() => new LLMTextRequest(new Conversation());
+        LLMRequest Req() => new LLMRequest(new Conversation());
         LLMStreamChunk Txt(string t) => new LLMStreamChunk(StreamKind.Text, t);
         LLMStreamChunk Delta(string name, string d) =>
             new LLMStreamChunk(StreamKind.ToolCallDelta, new ToolCallDelta { Name = name, Delta = d });
@@ -63,7 +63,7 @@ namespace AgentCore.Tests.LLM
             h.HandleChunk(Txt("hello "));
             h.HandleChunk(Txt("world"));
 
-            var r = (LLMTextResponse)h.BuildResponse(FinishReason.Stop);
+            var r = (LLMResponse)h.BuildResponse(FinishReason.Stop);
 
             Assert.Equal("hello world", r.AssistantMessage);
             Assert.Null(r.ToolCall);
@@ -87,7 +87,7 @@ namespace AgentCore.Tests.LLM
             h.HandleChunk(Txt("me\":\"Add\",\"argu"));
             h.HandleChunk(Txt("ments\":{\"x\":1}} done"));
 
-            var r = (LLMTextResponse)h.BuildResponse(FinishReason.Stop);
+            var r = (LLMResponse)h.BuildResponse(FinishReason.Stop);
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -111,7 +111,7 @@ namespace AgentCore.Tests.LLM
             var finalCall = new ToolCall("id", "Add", JObject.Parse("{\"x\":1}"));
             h.HandleChunk(new LLMStreamChunk(StreamKind.ToolCallDelta, finalCall));
 
-            var r = (LLMTextResponse)h.BuildResponse(FinishReason.Stop);
+            var r = (LLMResponse)h.BuildResponse(FinishReason.Stop);
 
             Assert.Equal("Add", r.ToolCall.Name);
         }
@@ -129,7 +129,7 @@ namespace AgentCore.Tests.LLM
             h.HandleChunk(Txt("hi {\"name\":\"Add\""));
             h.HandleChunk(Txt(", \"arguments\": BROKEN }"));
 
-            var r = (LLMTextResponse)h.BuildResponse(FinishReason.Stop);
+            var r = (LLMResponse)h.BuildResponse(FinishReason.Stop);
 
             Assert.Null(r.ToolCall);
         }

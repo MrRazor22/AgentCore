@@ -22,10 +22,10 @@ namespace AgentCore.Tests.Runtime
                 public Queue<List<LLMStreamChunk>> Scripts = new Queue<List<LLMStreamChunk>>();
 
                 public async Task<TResponse> ExecuteAsync<TResponse>(
-                   LLMRequestBase request,
+                   LLMRequest request,
                    CancellationToken ct = default,
                    Action<LLMStreamChunk>? onStream = null)
-                   where TResponse : LLMResponseBase
+                   where TResponse : LLMResponse
                 {
                     var script = Scripts.Dequeue();
 
@@ -43,13 +43,13 @@ namespace AgentCore.Tests.Runtime
                             tool = s.AsToolCall();
                     }
 
-                    var result = Task.FromResult(new LLMTextResponse(
+                    var result = Task.FromResult(new LLMResponse(
                         txt,
                         tool,
                         FinishReason.Stop
                     )).Result;
 
-                    return (TResponse)(LLMResponseBase)result;
+                    return (TResponse)(LLMResponse)result;
                 }
             }
 

@@ -1,7 +1,10 @@
 ﻿using AgentCore.Chat;
+using AgentCore.Json;
 using AgentCore.Tokens;
+using AgentCore.Utils;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Linq;
 
 namespace AgentCore.LLM.Protocol
 {
@@ -11,11 +14,13 @@ namespace AgentCore.LLM.Protocol
         ToolCall,
         Cancelled
     }
-    public abstract class LLMResponseBase
+    public class LLMResponse
     {
         private TokenUsage? _tokenUsage;
-        public FinishReason FinishReason { get; }
+
+        public string? AssistantMessage { get; }
         public ToolCall? ToolCall { internal set; get; }
+        public FinishReason FinishReason { get; }
 
         public TokenUsage? TokenUsage
         {
@@ -28,61 +33,31 @@ namespace AgentCore.LLM.Protocol
             }
         }
 
-        protected LLMResponseBase(ToolCall? toolCall, FinishReason finishReason)
+        public LLMResponse(
+            string? assistantMessage,
+            ToolCall? toolCall,
+            FinishReason finishReason)
         {
+            AssistantMessage = assistantMessage;
             ToolCall = toolCall;
             FinishReason = finishReason;
         }
 
-        // CHILD returns JSON payload for THIS response type
-        protected abstract JObject GetPayloadJson();
-
-        public JObject ToPayloadJson()
+        public virtual string ToString()
         {
-            var root = GetPayloadJson();
-
-            // Add tool call, if any
-            if (ToolCall != null)
+            return new object?[]
             {
-                var toolObj = new JObject
-                {
-                    ["id"] = ToolCall.Id,
-                };
-
-                if (!string.IsNullOrEmpty(ToolCall.Name))
-                    toolObj["name"] = ToolCall.Name;
-
-                if (ToolCall.Arguments != null)
-                    toolObj["arguments"] = ToolCall.Arguments;
-
-                root["tool_call"] = toolObj;
+                FinishReason,
+                AssistantMessage,
+                ToolCall,
+                TokenUsage
             }
-
-            return root;
+            .Where(x => x != null)
+            .Select(x => x.AsPrettyJson())
+            .ToJoinedString("\n");
         }
     }
-    public sealed class LLMTextResponse : LLMResponseBase
-    {
-        public string? AssistantMessage { get; }
-
-        public LLMTextResponse(
-            string? assistantMessage,
-            ToolCall? toolCall,
-            FinishReason finishReason)
-            : base(toolCall, finishReason)
-        {
-            AssistantMessage = assistantMessage;
-        }
-
-        protected override JObject GetPayloadJson()
-        {
-            return new JObject
-            {
-                ["message"] = AssistantMessage ?? ""
-            };
-        }
-    }
-    public sealed class LLMStructuredResponse : LLMResponseBase
+    public sealed class LLMStructuredResponse : LLMResponse
     {
         public JToken RawJson { get; }
         public object? Result { get; }
@@ -92,20 +67,24 @@ namespace AgentCore.LLM.Protocol
             object? result,
             FinishReason finishReason = FinishReason.Stop,
             ToolCall? toolCall = null)
-            : base(toolCall, finishReason)
+            : base(assistantMessage: null, toolCall, finishReason)
         {
             RawJson = rawJson;
             Result = result;
         }
 
-        protected override JObject GetPayloadJson()
+        public override string ToString()
         {
-            return new JObject
-            {
-                ["result_json"] = RawJson
-            };
+            return base.ToString()
+                 + "\n"
+                 + new object?[]
+                   {
+                       RawJson,
+                       Result
+                   }
+                   .Where(x => x != null)
+                   .Select(x => x.AsPrettyJson())
+                   .ToJoinedString("\n");
         }
     }
-
-
 }

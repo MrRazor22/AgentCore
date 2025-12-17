@@ -59,7 +59,7 @@ namespace AgentCore.Providers.OpenAI
             var key = model ?? _defaultModel ?? throw new InvalidOperationException("Model not specified.");
             return _chatClients.GetOrAdd(key, m => _client.GetChatClient(m));
         }
-        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequestBase request)
+        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequest request)
         {
             var options = new ChatCompletionOptions();
             options.ApplySamplingOptions(request);
@@ -75,12 +75,12 @@ namespace AgentCore.Providers.OpenAI
                     );
 
                     options.ToolChoice = sreq.ToolCallMode.ToChatToolChoice();
-                    foreach (var t in sreq.ResolvedTools!.ToChatTools()) options.Tools.Add(t);
+                    foreach (var t in sreq.AvailableTools!.ToChatTools()) options.Tools.Add(t);
                     break;
 
-                case LLMTextRequest toolReq:
+                case LLMRequest toolReq:
                     options.ToolChoice = toolReq.ToolCallMode.ToChatToolChoice();
-                    foreach (var t in toolReq.ResolvedTools!.ToChatTools()) options.Tools.Add(t);
+                    foreach (var t in toolReq.AvailableTools!.ToChatTools()) options.Tools.Add(t);
                     break;
 
                 default:
@@ -91,7 +91,7 @@ namespace AgentCore.Providers.OpenAI
             return options;
         }
         protected override async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
-            LLMRequestBase request,
+            LLMRequest request,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             var chat = GetChatClient(request.Model);
