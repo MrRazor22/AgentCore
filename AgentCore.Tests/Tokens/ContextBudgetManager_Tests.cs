@@ -31,7 +31,7 @@ namespace AgentCore.Tests.Tokens
         [Fact]
         public void Trim_Throws_OnNull()
         {
-            var mgr = new ContextBudgetManager(new ContextBudgetOptions(), new FakeTokenMgr(), null);
+            var mgr = new ContextManager(new ContextBudgetOptions(), new FakeTokenMgr(), null);
             Assert.Throws<ArgumentNullException>(() => mgr.Trim(null));
         }
 
@@ -39,7 +39,7 @@ namespace AgentCore.Tests.Tokens
         public void Trim_NoChange_WhenWithinLimit()
         {
             var tm = new FakeTokenMgr { NextCount = 5 };
-            var mgr = new ContextBudgetManager(new ContextBudgetOptions { MaxContextTokens = 100, Margin = 1.0 }, tm, null);
+            var mgr = new ContextManager(new ContextBudgetOptions { MaxContextTokens = 100, Margin = 1.0 }, tm, null);
 
             var c = MakeConvo();
             var trimmed = mgr.Trim(c);
@@ -52,7 +52,7 @@ namespace AgentCore.Tests.Tokens
         {
             var tm = new FakeTokenMgr();
             var opts = new ContextBudgetOptions { MaxContextTokens = 100, Margin = 0.2 };
-            var mgr = new ContextBudgetManager(opts, tm, null);
+            var mgr = new ContextManager(opts, tm, null);
 
             var c = new Conversation();
             c.Add(Role.System, "sys");
@@ -73,7 +73,7 @@ namespace AgentCore.Tests.Tokens
             var tm = new FakeTokenMgr();
             tm.NextCount = 1000;
 
-            var mgr = new ContextBudgetManager(
+            var mgr = new ContextManager(
                 new ContextBudgetOptions { MaxContextTokens = 100, Margin = 0.2 },
                 tm,
                 null
@@ -93,7 +93,7 @@ namespace AgentCore.Tests.Tokens
             var tm = new FakeTokenMgr();
             tm.NextCount = 1000;
 
-            var mgr = new ContextBudgetManager(
+            var mgr = new ContextManager(
                 new ContextBudgetOptions { MaxContextTokens = 1000 },
                 tm,
                 null

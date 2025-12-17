@@ -25,7 +25,7 @@ namespace AgentCore.Providers.OpenAI
         private string? _defaultModel;
         public OpenAILLMClient(
          LLMInitOptions opts,
-         IContextBudgetManager ctxManager,
+         IContextManager ctxManager,
          ITokenManager tokenManager,
          IRetryPolicy retryPolicy,
          IToolCallParser parser,

@@ -13,16 +13,6 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Client
 {
-    public sealed class EarlyStopException : Exception
-    {
-        public EarlyStopException(string message = "early-stop") : base(message) { }
-    }
-    public interface IChunkHandler
-    {
-        void OnRequest(LLMRequest request);
-        void OnChunk(LLMStreamChunk chunk);
-        LLMResponse OnResponse(FinishReason finishReason);
-    }
     public sealed class LLMInitOptions
     {
         public string? BaseUrl { get; set; } = null;
@@ -46,7 +36,7 @@ namespace AgentCore.LLM.Client
         protected readonly LLMInitOptions _initOptions;
         private readonly HandlerResolver _resolver;
         private readonly IRetryPolicy _retryPolicy;
-        private readonly IContextBudgetManager _ctxManager;
+        private readonly IContextManager _ctxManager;
         private readonly ITokenManager _tokenManager;
         private readonly IToolCallParser _parser;
         private readonly IToolCatalog _tools;
@@ -59,7 +49,7 @@ namespace AgentCore.LLM.Client
 
         public LLMClientBase(
             LLMInitOptions opts,
-            IContextBudgetManager ctxManager,
+            IContextManager ctxManager,
             ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
             IToolCallParser parser,

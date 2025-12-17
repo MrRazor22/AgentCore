@@ -56,7 +56,7 @@ namespace AgentCore.Tests.LLM
                 => new LLMResponse(sb.ToString(), null, f);
         }
 
-        private sealed class FakeCtx : IContextBudgetManager
+        private sealed class FakeCtx : IContextManager
         {
             public Conversation Trim(Conversation c, int? x = null) => c;
         }

@@ -53,9 +53,9 @@ namespace AgentCore.LLM.Protocol
         {
             return new object?[]
             {
-                Model,
-                ToolCallMode,
-                Options,
+                //Model,
+                //ToolCallMode,
+                //Options,
                 AvailableTools,
                 Prompt.ToJson()
             }

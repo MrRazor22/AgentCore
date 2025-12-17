@@ -14,6 +14,10 @@ namespace AgentCore.LLM.Client
     {
         public RetryException(string message) : base(message) { }
     }
+    public sealed class EarlyStopException : Exception
+    {
+        public EarlyStopException(string message = "early-stop") : base(message) { }
+    }
     public sealed class RetryPolicyOptions
     {
         public int MaxRetries { get; set; } = 3;

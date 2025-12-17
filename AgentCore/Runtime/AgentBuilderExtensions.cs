@@ -22,7 +22,7 @@ namespace AgentCore.Runtime
             builder.Services.AddSingleton<ILLMClient>(sp =>
                 new OpenAILLMClient(
                     opts,
-                    sp.GetRequiredService<IContextBudgetManager>(),
+                    sp.GetRequiredService<IContextManager>(),
                     sp.GetRequiredService<ITokenManager>(),
                     sp.GetRequiredService<IRetryPolicy>(),
                     sp.GetRequiredService<IToolCallParser>(),
@@ -56,12 +56,12 @@ namespace AgentCore.Runtime
             var options = new ContextBudgetOptions();
             configure(options);
 
-            builder.Services.AddSingleton<IContextBudgetManager>(sp =>
+            builder.Services.AddSingleton<IContextManager>(sp =>
             {
-                return new ContextBudgetManager(
+                return new ContextManager(
                     options,
                     sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<ILogger<ContextBudgetManager>>()
+                    sp.GetRequiredService<ILogger<ContextManager>>()
                     );
             });
 

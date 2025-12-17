@@ -77,11 +77,11 @@ namespace AgentCore.Runtime
 
             // Token + context
             Services.AddSingleton<ITokenManager, TokenManager>();
-            Services.AddSingleton<IContextBudgetManager>(sp =>
-                new ContextBudgetManager(
+            Services.AddSingleton<IContextManager>(sp =>
+                new ContextManager(
                     new ContextBudgetOptions(),
                     sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<ILogger<ContextBudgetManager>>()
+                    sp.GetRequiredService<ILogger<ContextManager>>()
                 )
             );
 
