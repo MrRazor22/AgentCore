@@ -1,12 +1,18 @@
 ﻿using AgentCore.Chat;
+using Microsoft.Extensions.Options;
 using System;
-using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace AgentCore.Tools
 {
+    public sealed class ToolRuntimeOptions
+    {
+        // null = no timeout 
+        public TimeSpan? ExecutionTimeout { get; set; } = null;
+    }
+
     public interface IToolRuntime
     {
         Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
@@ -16,17 +22,25 @@ namespace AgentCore.Tools
     public sealed class ToolRuntime : IToolRuntime
     {
         private readonly IToolCatalog _tools;
+        private readonly ToolRuntimeOptions _options;
 
-        public ToolRuntime(IToolCatalog registry)
+        public ToolRuntime(
+            IToolCatalog registry,
+            IOptions<ToolRuntimeOptions>? options = null)
         {
             _tools = registry ?? throw new ArgumentNullException(nameof(registry));
+            _options = options?.Value ?? new ToolRuntimeOptions();
         }
+
         public async Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
         {
-            if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
+            if (toolCall == null)
+                throw new ArgumentNullException(nameof(toolCall));
+
             ct.ThrowIfCancellationRequested();
 
-            var tool = _tools.Get(toolCall.Name) ?? throw new ToolExecutionException(
+            var tool = _tools.Get(toolCall.Name)
+                ?? throw new ToolExecutionException(
                     toolCall.Name,
                     $"Tool '{toolCall.Name}' not registered.",
                     new InvalidOperationException());
@@ -37,24 +51,27 @@ namespace AgentCore.Tools
                 var method = func.Method;
                 var returnType = method.ReturnType;
 
-                var finalArgs = InjectCancellationToken(toolCall.Parameters, method, ct);
+                var finalArgs = InjectCancellationToken(
+                    toolCall.Parameters,
+                    method,
+                    ct);
 
                 if (typeof(Task).IsAssignableFrom(returnType))
                 {
-                    ct.ThrowIfCancellationRequested();
-                    var task = (Task)func.DynamicInvoke(finalArgs);
+                    var task = (Task)func.DynamicInvoke(finalArgs)!;
                     await task.ConfigureAwait(false);
 
                     if (returnType.IsGenericType &&
                         returnType.GetGenericTypeDefinition() == typeof(Task<>))
                     {
-                        var resultProperty = returnType.GetProperty("Result")!;
-                        return resultProperty.GetValue(task);
+                        return returnType
+                            .GetProperty("Result")!
+                            .GetValue(task);
                     }
+
                     return null;
                 }
 
-                // synchronous call, CT still injected
                 return func.DynamicInvoke(finalArgs);
             }
             catch (OperationCanceledException)
@@ -64,43 +81,19 @@ namespace AgentCore.Tools
             catch (Exception ex)
             {
                 throw new ToolExecutionException(
-                       toolCall.Name,
-                       ex.Message,
-                       ex
-                   );
+                    toolCall.Name,
+                    ex.Message,
+                    ex);
             }
         }
 
-        private static object?[] InjectCancellationToken(object[] toolParams, MethodInfo method, CancellationToken ct)
-        {
-            var methodParams = method.GetParameters();
-            var finalArgs = new object?[methodParams.Length];
-
-            int srcIndex = 0; // index into toolParams[]
-
-            for (int i = 0; i < methodParams.Length; i++)
-            {
-                var mp = methodParams[i];
-
-                if (mp.ParameterType == typeof(CancellationToken))
-                {
-                    finalArgs[i] = ct;
-                }
-                else
-                {
-                    finalArgs[i] = toolParams[srcIndex];
-                    srcIndex++;
-                }
-            }
-
-            return finalArgs;
-        }
-
-        public async Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
+        public async Task<ToolCallResult> HandleToolCallAsync(
+            ToolCall call,
+            CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
 
-            // text-only assistant message, not a real tool call
+            // Text-only assistant message
             if (string.IsNullOrWhiteSpace(call.Name) &&
                 !string.IsNullOrWhiteSpace(call.Message))
             {
@@ -109,13 +102,71 @@ namespace AgentCore.Tools
 
             try
             {
-                var result = await InvokeAsync(call, ct).ConfigureAwait(false);
+                object? result;
+
+                if (_options.ExecutionTimeout.HasValue)
+                {
+                    using var timeoutCts =
+                        CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+                    timeoutCts.CancelAfter(_options.ExecutionTimeout.Value);
+
+                    result = await InvokeAsync(call, timeoutCts.Token)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    result = await InvokeAsync(call, ct)
+                        .ConfigureAwait(false);
+                }
+
                 return new ToolCallResult(call, result);
             }
-            catch (ToolExecutionException tex)
+            catch (OperationCanceledException) when (
+                _options.ExecutionTimeout.HasValue &&
+                !ct.IsCancellationRequested)
             {
-                return new ToolCallResult(call, tex);
+                // timeout cancellation (not user / agent cancellation)
+                var timeoutEx = new ToolExecutionException(
+                    call.Name,
+                    $"Tool execution timed out after {_options.ExecutionTimeout}",
+                    new TimeoutException());
+
+                return new ToolCallResult(call, timeoutEx);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var wrapped = ex is ToolExecutionException tex
+                    ? tex
+                    : new ToolExecutionException(call.Name, ex.Message, ex);
+
+                return new ToolCallResult(call, wrapped);
+            }
+        }
+
+        private static object?[] InjectCancellationToken(
+            object[] toolParams,
+            MethodInfo method,
+            CancellationToken ct)
+        {
+            var parameters = method.GetParameters();
+            var args = new object?[parameters.Length];
+
+            int src = 0;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                if (parameters[i].ParameterType == typeof(CancellationToken))
+                    args[i] = ct;
+                else
+                    args[i] = toolParams[src++];
+            }
+
+            return args;
         }
     }
 
@@ -123,7 +174,10 @@ namespace AgentCore.Tools
     {
         public string ToolName { get; }
 
-        public ToolExecutionException(string toolName, string message, Exception inner)
+        public ToolExecutionException(
+            string toolName,
+            string message,
+            Exception inner)
             : base(message, inner)
         {
             ToolName = toolName;

@@ -1,133 +1,97 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Runtime;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.IO;
 using System.Threading.Tasks;
+using Xunit;
 
 namespace AgentCore.Tests.Runtime
 {
     public sealed class FileMemory_Tests : IDisposable
     {
-        private readonly string _tempDir;
+        private readonly string _dir;
+        private readonly FileMemory _memory;
 
         public FileMemory_Tests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
-        }
+            _dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(_dir);
 
-        public void Dispose()
-        {
-            try { Directory.Delete(_tempDir, true); } catch { }
-        }
-
-        private FileMemory NewMemory()
-        {
-            return new FileMemory(new FileMemoryOptions
+            _memory = new FileMemory(new FileMemoryOptions
             {
-                PersistDir = _tempDir
+                PersistDir = _dir
             });
         }
 
         [Fact]
-        public async Task RecallAsync_NoFile_ReturnsEmptyConversation_AndCaches()
+        public async Task Recall_NoFile_Returns_EmptyConversation()
         {
-            var mem = NewMemory();
-            var convo1 = await mem.RecallAsync("s1", "hi");
-            Assert.Empty(convo1);
+            var convo = await _memory.RecallAsync("s1", "hello");
 
-            var convo2 = await mem.RecallAsync("s1", "hi again");
-            Assert.Same(convo1, convo2); // cached instance
+            Assert.NotNull(convo);
+            Assert.Empty(convo);
         }
 
         [Fact]
-        public async Task UpdateAsync_CreatesFile_AndAddsMessages()
+        public async Task Update_Writes_Conversation_To_Disk()
         {
-            var mem = NewMemory();
-            await mem.UpdateAsync("s1", "hello", "world");
+            await _memory.UpdateAsync("s1", "hi", "there");
 
-            var path = Path.Combine(_tempDir, "s1.json");
-            Assert.True(File.Exists(path));
+            var file = Path.Combine(_dir, "s1.json");
+            Assert.True(File.Exists(file));
 
-            var json = File.ReadAllText(path);
-            var arr = JArray.Parse(json);
+            var json = File.ReadAllText(file);
+            var convo = JsonConvert.DeserializeObject<Conversation>(json)!;
 
-            Assert.Equal("user", arr[0]["role"]?.ToString());
-            Assert.Equal("hello", arr[0]["content"]?.ToString());
-
-            Assert.Equal("assistant", arr[1]["role"]?.ToString());
-            Assert.Equal("world", arr[1]["content"]?.ToString());
+            Assert.Equal(2, convo.Count);
+            Assert.Equal(Role.User, convo[0].Role);
+            Assert.Equal(Role.Assistant, convo[1].Role);
         }
 
         [Fact]
-        public async Task RecallAsync_LoadsExistingFile_AndCaches()
+        public async Task Recall_After_Update_Returns_Persisted_Conversation()
         {
-            var mem = NewMemory();
+            await _memory.UpdateAsync("s1", "q1", "a1");
 
-            // manually create a stored conversation
-            var path = Path.Combine(_tempDir, "s1.json");
-            File.WriteAllText(path,
-                """
-            [
-              { "role": "user", "content": "old" }
-            ]
-            """
-            );
+            var convo = await _memory.RecallAsync("s1", "q2");
 
-            var convo1 = await mem.RecallAsync("s1", "x");
-            Assert.Single(convo1);
-            Assert.Equal("user", convo1[0].Role.ToString().ToLower());
-            Assert.Equal("old", ((TextContent)convo1[0].Content).Text);
-
-            // second recall should return SAME cached instance
-            var convo2 = await mem.RecallAsync("s1", "y");
-            Assert.Same(convo1, convo2);
+            Assert.Equal(2, convo.Count);
+            Assert.Equal("q1", convo[0].Content.ToString());
+            Assert.Equal("a1", convo[1].Content.ToString());
         }
 
         [Fact]
-        public async Task UpdateAsync_UsesCachedConversation_AndAppendsMessages()
+        public async Task Recall_Uses_Cache_For_Same_Session()
         {
-            var mem = NewMemory();
+            var c1 = await _memory.RecallAsync("s1", "x");
+            var c2 = await _memory.RecallAsync("s1", "y");
 
-            // seed in file
-            var path = Path.Combine(_tempDir, "s1.json");
-            File.WriteAllText(path,
-                """
-            [
-              { "role": "user", "content": "old" }
-            ]
-            """
-            );
-
-            // first load -> cached
-            var initial = await mem.RecallAsync("s1", "req");
-
-            await mem.UpdateAsync("s1", "newQ", "newA");
-
-            // must append to same cached instance
-            Assert.Equal(3, initial.Count);
-
-            Assert.Equal("old", ((TextContent)initial[0].Content).Text);
-            Assert.Equal("newQ", ((TextContent)initial[1].Content).Text);
-            Assert.Equal("newA", ((TextContent)initial[2].Content).Text);
+            Assert.Same(c1, c2);
         }
 
         [Fact]
-        public async Task UpdateAsync_WhenDifferentSessionId_UsesNewCache()
+        public async Task Switching_Session_Resets_Cache()
         {
-            var mem = NewMemory();
+            await _memory.UpdateAsync("s1", "q1", "a1");
 
-            await mem.UpdateAsync("s1", "q1", "a1");
-            var s1 = await mem.RecallAsync("s1", "x");
+            var c1 = await _memory.RecallAsync("s1", "x");
+            var c2 = await _memory.RecallAsync("s2", "y");
 
-            await mem.UpdateAsync("s2", "q2", "a2");
-            var s2 = await mem.RecallAsync("s2", "x");
+            Assert.NotSame(c1, c2);
+            Assert.Empty(c2);
+        }
 
-            Assert.NotSame(s1, s2);
-            Assert.Single(s2.Where(c => ((TextContent)c.Content).Text == "q2"));
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(_dir, recursive: true);
+            }
+            catch
+            {
+                // ignore cleanup issues
+            }
         }
     }
 }

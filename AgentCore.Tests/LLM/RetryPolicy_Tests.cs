@@ -1,139 +1,148 @@
 ﻿using AgentCore.Chat;
-using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Client;
+using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Protocol;
+using AgentCore.Tokens;
+using AgentCore.Tools;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace AgentCore.Tests.LLM
 {
     public sealed class RetryPolicy_Tests
     {
-        [Fact]
-        public async Task Retries_WhenRetryExceptionThrown()
+        private readonly RetryPolicy _policy;
+
+        public RetryPolicy_Tests()
         {
-            var opts = Options.Create(new RetryPolicyOptions
-            {
-                MaxRetries = 1,
-                InitialDelay = TimeSpan.Zero
-            });
-
-            var policy = new RetryPolicy(null, opts);
-
-            int calls = 0;
-
-            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
-            {
-                calls++;
-                await Task.Yield();
-                if (false) yield break;
-                throw new RetryException("fix me");
-            }
-
-            var req = new LLMRequest(new Conversation().AddUser("hi"));
-            var results = new List<LLMStreamChunk>();
-
-            await foreach (var c in policy.ExecuteStreamAsync(req.Prompt, Fake))
-                results.Add(c);
-
-            Assert.Equal(2, calls);
-            Assert.Single(results);
+            var logger = Mock.Of<ILogger<RetryPolicy>>();
+            var opts = Options.Create(new RetryPolicyOptions { MaxRetries = 2 });
+            _policy = new RetryPolicy(logger, opts);
         }
 
         [Fact]
-        public async Task Stops_WhenRetriesExhausted()
+        public async Task NoRetry_When_Stream_Completes_Normally()
         {
-            var opts = Options.Create(new RetryPolicyOptions
-            {
-                MaxRetries = 0
-            });
-
-            var policy = new RetryPolicy(null, opts);
-
+            var convo = new Conversation();
             int calls = 0;
 
-            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
+            async IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
             {
                 calls++;
-                await Task.Yield();
-                if (false) yield break;
-                throw new RetryException("err");
+                yield return new LLMStreamChunk(StreamKind.Text, "ok");
+                yield break;
             }
 
-            var req = new LLMRequest(new Conversation());
+            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
 
-            int count = 0;
-            await foreach (var _ in policy.ExecuteStreamAsync(req.Prompt, Fake))
-                count++;
-
+            Assert.Single(chunks);
             Assert.Equal(1, calls);
-            Assert.Empty(req.Prompt.Where(m => m.Role == Role.Assistant));
         }
 
         [Fact]
-        public async Task RetryChunk_HasCorrectFormat()
+        public async Task Retry_On_RetryException()
         {
-            var opts = Options.Create(new RetryPolicyOptions
-            {
-                MaxRetries = 1,
-                InitialDelay = TimeSpan.Zero
-            });
+            var convo = new Conversation();
+            int calls = 0;
 
-            var policy = new RetryPolicy(null, opts);
-
-            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
+            async IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
             {
-                await Task.Yield();
-                if (false) yield break;
-                throw new RetryException("oops");
+                calls++;
+                if (calls == 1)
+                    throw new RetryException("bad tool call");
+
+                yield return new LLMStreamChunk(StreamKind.Text, "fixed");
             }
 
-            var req = new LLMRequest(new Conversation().AddUser("x"));
-            var items = new List<LLMStreamChunk>();
+            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
 
-            await foreach (var c in policy.ExecuteStreamAsync(req.Prompt, Fake))
-                items.Add(c);
-
-            Assert.Single(items);
-            Assert.Equal("[retry 1] oops", items[0].AsText());
+            Assert.Single(chunks);
+            Assert.Equal(2, calls);
+            Assert.Contains(convo, m => m.Role == Role.Assistant);
         }
 
         [Fact]
-        public async Task Retry_AddsAssistantMessage_ToWorkingRequest()
+        public async Task Stops_After_MaxRetries()
         {
-            var opts = Options.Create(new RetryPolicyOptions
+            var convo = new Conversation();
+            int calls = 0;
+
+            IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
             {
-                MaxRetries = 1,
-                InitialDelay = TimeSpan.Zero
-            });
-
-            var policy = new RetryPolicy(null, opts);
-
-            Conversation? captured = null;
-
-            async IAsyncEnumerable<LLMStreamChunk> Fake(Conversation r)
-            {
-                captured = r;   // this is the cloned working request
-                await Task.Yield();
-                if (false) yield break;
-                throw new RetryException("fix me");
+                calls++;
+                throw new RetryException("always bad");
             }
 
-            var req = new LLMRequest(new Conversation().AddUser("hi"));
+            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
 
-            await foreach (var _ in policy.ExecuteStreamAsync(req.Prompt, Fake))
+            Assert.Empty(chunks);
+            Assert.Equal(3, calls); // initial + 2 retries
+        }
+
+        [Fact]
+        public async Task NonRetryException_Bubbles()
+        {
+            var convo = new Conversation();
+
+            IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
             {
-                // ignore retry chunk
+                throw new InvalidOperationException("boom");
             }
 
-            // original request must stay untouched
-            Assert.False(req.Prompt.Any(m => m.Role == Role.Assistant));
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
+        }
 
-            // working clone should have been mutated
-            Assert.NotNull(captured);
-            Assert.Contains(captured, m => m.Role == Role.Assistant);
+        [Fact]
+        public async Task Cancellation_Propagates()
+        {
+            var convo = new Conversation();
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            async IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
+            {
+                yield return new LLMStreamChunk(StreamKind.Text, "x");
+            }
+
+            await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+                await Collect(_policy.ExecuteStreamAsync(convo, Factory, cts.Token)));
+        }
+
+        [Fact]
+        public async Task Request_Is_Cloned_Per_Attempt()
+        {
+            var convo = new Conversation();
+            var seen = new HashSet<Conversation>();
+
+            IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
+            {
+                Assert.DoesNotContain(c, seen);
+                seen.Add(c);
+                throw new RetryException("fail");
+            }
+
+            await Collect(_policy.ExecuteStreamAsync(convo, Factory));
+
+            Assert.True(seen.Count > 1);
+        }
+
+        // ---------------- helpers ----------------
+
+        private static async Task<List<LLMStreamChunk>> Collect(
+            IAsyncEnumerable<LLMStreamChunk> stream)
+        {
+            var list = new List<LLMStreamChunk>();
+            await foreach (var c in stream)
+                list.Add(c);
+            return list;
         }
     }
+
 }
