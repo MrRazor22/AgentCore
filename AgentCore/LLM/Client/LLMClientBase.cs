@@ -183,16 +183,9 @@ namespace AgentCore.LLM.Client
 
                 try
                 {
-                    var parsed = _parser.ParseToolParams(tool.Name, tool.Arguments);
+                    var parsed = _parser.ValidateToolCall(tool);
 
-                    tool = new ToolCall(
-                        tool.Id,
-                        tool.Name,
-                        tool.Arguments,
-                        parsed
-                    );
-
-                    response.ToolCall = tool;
+                    response.ToolCall = parsed;
                 }
                 catch (Exception ex) when (
                     ex is ToolValidationException ||

@@ -5,28 +5,15 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 
 namespace AgentCore.Tools
 {
-    public sealed class InlineToolMatch
-    {
-        public int Start { get; }
-        public int End { get; }
-        public ToolCall Call { get; }
-
-        public InlineToolMatch(int start, int end, ToolCall call)
-        {
-            Start = start;
-            End = end;
-            Call = call;
-        }
-    }
-
     public interface IToolCallParser
     {
-        InlineToolMatch TryMatch(string content);
-        object[] ParseToolParams(string toolName, JObject arguments);
+        ToolCall? TryMatch(string content);
+        ToolCall ValidateToolCall(ToolCall toolCall);
     }
 
     public sealed class ToolCallParser : IToolCallParser
@@ -37,9 +24,9 @@ namespace AgentCore.Tools
             _toolCatalog = toolCatalog;
         }
 
-        public InlineToolMatch? TryMatch(string content)
+        public ToolCall? TryMatch(string content)
         {
-            foreach (var (start, end, obj) in content.FindAllJsonObjects())
+            foreach (var (start, _, obj) in content.FindAllJsonObjects())
             {
                 var name = obj["name"]?.ToString();
                 var args = obj["arguments"] as JObject;
@@ -48,36 +35,56 @@ namespace AgentCore.Tools
 
                 var id = obj["id"]?.ToString() ?? Guid.NewGuid().ToString();
 
+                var prefix = start > 0
+                    ? content.Substring(0, start)
+                    : null;
+
                 var call = new ToolCall(
                     id,
                     name,
-                    args
+                    args,
+                    message: string.IsNullOrWhiteSpace(prefix) ? null : prefix
                 );
 
-                return new InlineToolMatch(start, end, call);
+                return call;
             }
             return null;
         }
-
-        public object[] ParseToolParams(string toolName, JObject arguments)
+        public ToolCall ValidateToolCall(ToolCall toolCall)
         {
-            var tool = _toolCatalog.Get(toolName);
-            if (tool == null || tool.Function == null)
-                throw new InvalidOperationException($"Tool '{toolName}' not registered or has no function.");
+            var tool = _toolCatalog.Get(toolCall.Name)
+                ?? throw new ToolValidationException(toolCall.Name, "Tool not registered.");
 
-            var method = tool.Function.Method;
-            var methodParams = method.GetParameters();
-            var argsObj = arguments ?? throw new ArgumentException("Arguments null");
+            if (toolCall.Arguments == null)
+                throw new ToolValidationException(toolCall.Name, "Arguments missing.");
 
-            if (methodParams.Length == 1 &&
-                !methodParams[0].ParameterType.IsSimpleType() &&
-                !argsObj.ContainsKey(methodParams[0].Name))
+            var parsed = ParseToolParams(
+                tool.Function.Method,
+                toolCall.Arguments
+            );
+
+            return new ToolCall(
+                toolCall.Id,
+                toolCall.Name,
+                toolCall.Arguments,
+                parsed
+            );
+        }
+        private object[] ParseToolParams(MethodInfo method, JObject arguments)
+        {
+            var parameters = method.GetParameters();
+            var argsObj = arguments;
+
+            if (parameters.Length == 1 &&
+                !parameters[0].ParameterType.IsSimpleType() &&
+                !argsObj.ContainsKey(parameters[0].Name))
             {
-                argsObj = new JObject { [methodParams[0].Name] = argsObj };
+                argsObj = new JObject { [parameters[0].Name] = argsObj };
             }
 
-            var paramValues = new List<object?>();
-            foreach (var p in methodParams)
+            var values = new List<object?>();
+
+            foreach (var p in parameters)
             {
                 if (p.ParameterType == typeof(CancellationToken))
                     continue;
@@ -87,7 +94,7 @@ namespace AgentCore.Tools
                 if (node == null)
                 {
                     if (p.HasDefaultValue)
-                        paramValues.Add(p.DefaultValue);
+                        values.Add(p.DefaultValue);
                     else
                         throw new ToolValidationException(p.Name, "Missing required parameter.");
                     continue;
@@ -100,7 +107,7 @@ namespace AgentCore.Tools
 
                 try
                 {
-                    paramValues.Add(node.ToObject(p.ParameterType));
+                    values.Add(node.ToObject(p.ParameterType));
                 }
                 catch (Exception ex)
                 {
@@ -108,7 +115,7 @@ namespace AgentCore.Tools
                 }
             }
 
-            return paramValues.ToArray();
+            return values.ToArray();
         }
     }
 }

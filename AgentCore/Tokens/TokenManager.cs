@@ -79,6 +79,15 @@ namespace AgentCore.Tokens
                 inTok, outTok
             );
 
+            if (usageReported != null)
+                _logger.LogDebug(
+                    "Token Approx Accuracy In={InAcc:F0}% Out={OutAcc:F0}%",
+                    usageReported.InputTokens <= 0 ? 100 :
+                        100 * (1 - Math.Abs(inTok - usageReported.InputTokens) / (double)usageReported.InputTokens),
+                    usageReported.OutputTokens <= 0 ? 100 :
+                        100 * (1 - Math.Abs(outTok - usageReported.OutputTokens) / (double)usageReported.OutputTokens)
+                );
+
             var finalUsage = usageReported ?? new TokenUsage(inTok, outTok);
 
             Record(finalUsage);

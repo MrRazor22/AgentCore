@@ -51,8 +51,7 @@ namespace AgentCore.LLM.Handlers
             var match = _parser.TryMatch(_text.ToString());
             if (match == null) return;
 
-            _inlineTool = match.Call;   // RAW ToolCall only
-            _text.Length = match.Start; // strip tool JSON from visible text
+            _inlineTool = match;   // RAW ToolCall only
 
             throw new EarlyStopException("Inline tool call detected.");
         }
@@ -60,7 +59,7 @@ namespace AgentCore.LLM.Handlers
         public LLMResponse OnResponse(FinishReason finishReason)
         {
             return new LLMResponse(
-                _text.ToString().Trim(),
+                _inlineTool != null ? _inlineTool.Message : _text.ToString().Trim(),
                 _inlineTool,
                 finishReason
             );
