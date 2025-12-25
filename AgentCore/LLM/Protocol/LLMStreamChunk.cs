@@ -22,17 +22,14 @@ namespace AgentCore.LLM.Protocol
     public readonly struct LLMStreamChunk
     {
         public StreamKind Kind { get; }
-        public object? Payload { get; }     // unified extensible payload
-        public FinishReason? FinishReason { get; }
+        public object? Payload { get; }     // unified extensible payload 
 
         public LLMStreamChunk(
             StreamKind kind,
-            object? payload = null,
-            FinishReason? finish = null)
+            object? payload = null)
         {
             Kind = kind;
             Payload = payload;
-            FinishReason = finish;
         }
     }
     public static class LLMStreamChunkExtensions

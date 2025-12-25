@@ -142,7 +142,7 @@ namespace AgentCore.Providers.OpenAI
                 if (update.FinishReason is { } finish)
                     yield return new LLMStreamChunk(
                         StreamKind.Finish,
-                        finish: finish.ToChatFinishReason());
+                        finish.ToChatFinishReason());
             }
         }
     }
