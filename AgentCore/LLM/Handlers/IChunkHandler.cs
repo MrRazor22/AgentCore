@@ -7,8 +7,9 @@ namespace AgentCore.LLM.Handlers
 {
     public interface IChunkHandler
     {
+        StreamKind Kind { get; }
         void OnRequest(LLMRequest request);
         void OnChunk(LLMStreamChunk chunk);
-        LLMResponse OnResponse(FinishReason finishReason);
+        void OnResponse(LLMResponse response);
     }
 }

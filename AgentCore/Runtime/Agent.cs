@@ -85,20 +85,25 @@ namespace AgentCore.Runtime
                 )
             );
 
-            // Retry
-            Services.Configure<RetryPolicyOptions>(_ => { });
+            // Retry 
             Services.AddSingleton<IRetryPolicy, RetryPolicy>();
 
             // Handlers
+            // Handlers (stream processors)
             Services.AddTransient<TextHandler>();
+            Services.AddTransient<ToolCallHandler>();
             Services.AddTransient<StructuredHandler>();
-            Services.AddSingleton<HandlerResolver>(sp => request =>
-                request switch
-                {
-                    LLMStructuredRequest _ => sp.GetRequiredService<StructuredHandler>(),
-                    _ => sp.GetRequiredService<TextHandler>()
-                });
+            Services.AddTransient<FinishHandler>();
+            Services.AddTransient<TokenUsageHandler>();
 
+            Services.AddTransient<IEnumerable<IChunkHandler>>(sp => new IChunkHandler[]
+            {
+                sp.GetRequiredService<TextHandler>(),
+                sp.GetRequiredService<ToolCallHandler>(),
+                sp.GetRequiredService<StructuredHandler>(),
+                sp.GetRequiredService<FinishHandler>(),
+                sp.GetRequiredService<TokenUsageHandler>()
+            });
 
             //Logging
             Services.AddLogging(b => b.AddSimpleConsole(o =>

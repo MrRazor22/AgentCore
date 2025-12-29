@@ -8,19 +8,35 @@ using System.Linq;
 
 namespace AgentCore.LLM.Protocol
 {
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
+    public sealed class AcceptsStreamAttribute : Attribute
+    {
+        public StreamKind Kind { get; }
+
+        public AcceptsStreamAttribute(StreamKind kind)
+        {
+            Kind = kind;
+        }
+    }
+
     public enum FinishReason
     {
         Stop,
         ToolCall,
         Cancelled
     }
+
+    [AcceptsStream(StreamKind.Text)]
+    [AcceptsStream(StreamKind.ToolCallDelta)]
+    [AcceptsStream(StreamKind.Usage)]
+    [AcceptsStream(StreamKind.Finish)]
     public class LLMResponse
     {
         private TokenUsage? _tokenUsage;
 
-        public string? AssistantMessage { get; }
+        public string? AssistantMessage { internal set; get; }
         public ToolCall? ToolCall { internal set; get; }
-        public FinishReason FinishReason { get; }
+        public FinishReason FinishReason { internal set; get; }
 
         public TokenUsage? TokenUsage
         {
@@ -32,7 +48,9 @@ namespace AgentCore.LLM.Protocol
                 _tokenUsage = value;
             }
         }
-
+        public LLMResponse()
+        {
+        }
         public LLMResponse(
             string? assistantMessage,
             ToolCall? toolCall,
@@ -57,10 +75,12 @@ namespace AgentCore.LLM.Protocol
             .ToJoinedString("\n");
         }
     }
+
+    [AcceptsStream(StreamKind.Json)]
     public sealed class LLMStructuredResponse : LLMResponse
     {
-        public JToken RawJson { get; }
-        public object? Result { get; }
+        public JToken RawJson { internal set; get; }
+        public object? Result { internal set; get; }
 
         public LLMStructuredResponse(
             JToken rawJson,

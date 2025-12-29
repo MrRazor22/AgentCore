@@ -13,8 +13,6 @@ using System.Text;
 
 namespace AgentCore.LLM.Handlers
 {
-    public delegate StructuredHandler StructuredHandlerFactory();
-
     public sealed class StructuredHandler : IChunkHandler
     {
         private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new ConcurrentDictionary<Type, JObject>();
@@ -26,7 +24,7 @@ namespace AgentCore.LLM.Handlers
         {
             Logger = logger;
         }
-
+        public StreamKind Kind => StreamKind.Json;
         public void OnRequest(LLMRequest req)
         {
             _request = (LLMStructuredRequest)req;
@@ -52,15 +50,10 @@ namespace AgentCore.LLM.Handlers
             _jsonBuffer.Append(txt);
         }
 
-        public LLMResponse OnResponse(FinishReason finishReason)
+        public void OnResponse(LLMResponse response)
         {
-            if (finishReason == FinishReason.Cancelled)
-                return new LLMStructuredResponse(
-                    toolCall: null,
-                    rawJson: JValue.CreateNull(),
-                    result: null,
-                    finishReason: finishReason
-                );
+            var structured = response as LLMStructuredResponse
+            ?? throw new InvalidOperationException("Json stream without structured response");
 
             var raw = _jsonBuffer.ToString();
             if (string.IsNullOrWhiteSpace(raw))
@@ -85,11 +78,9 @@ namespace AgentCore.LLM.Handlers
 
             var result = json.ToObject(_request.ResultType);
 
-            return new LLMStructuredResponse(
-                rawJson: json,
-                result: result,
-                finishReason: finishReason
-            );
+            structured.AssistantMessage = raw;
+            structured.RawJson = json;
+            structured.Result = result;
         }
     }
 }

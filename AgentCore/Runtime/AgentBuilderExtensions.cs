@@ -23,11 +23,8 @@ namespace AgentCore.Runtime
                 new OpenAILLMClient(
                     opts,
                     sp.GetRequiredService<IContextManager>(),
-                    sp.GetRequiredService<ITokenManager>(),
+                    sp.GetServices<IChunkHandler>(),
                     sp.GetRequiredService<IRetryPolicy>(),
-                    sp.GetRequiredService<IToolCallParser>(),
-                    sp.GetRequiredService<IToolCatalog>(),
-                    sp.GetRequiredService<HandlerResolver>(),
                     sp.GetRequiredService<ILogger<LLMClientBase>>(),
                     sp.GetRequiredService<ILogger<OpenAILLMClient>>()
                 )

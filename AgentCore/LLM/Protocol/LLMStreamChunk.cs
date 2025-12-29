@@ -10,12 +10,12 @@ namespace AgentCore.LLM.Protocol
     {
         Text,
         ToolCallDelta,
+        Json,
         Usage,
         Finish,
         // future:
         // Image,
         // Audio,
-        // Json,
         // Reasoning
     }
 

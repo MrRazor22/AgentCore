@@ -1,12 +1,13 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Protocol;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,9 +16,10 @@ namespace AgentCore.LLM.Client
 {
     public sealed class LLMInitOptions
     {
-        public string? BaseUrl { get; set; } = null;
-        public string? ApiKey { get; set; } = null;
-        public string? Model { get; set; } = null;
+        public string? BaseUrl { get; set; }
+        public string? ApiKey { get; set; }
+        public string? Model { get; set; }
+        public int MaxRetries { get; set; } = 3;
     }
 
     public interface ILLMClient
@@ -26,7 +28,7 @@ namespace AgentCore.LLM.Client
             LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
-            where TResponse : LLMResponse;
+            where TResponse : LLMResponse, new();
     }
 
     public delegate IChunkHandler HandlerResolver(LLMRequest request);
@@ -34,39 +36,24 @@ namespace AgentCore.LLM.Client
     public abstract class LLMClientBase : ILLMClient
     {
         protected readonly LLMInitOptions _initOptions;
-        private readonly HandlerResolver _resolver;
+        private readonly IReadOnlyList<IChunkHandler> _handlers;
         private readonly IRetryPolicy _retryPolicy;
         private readonly IContextManager _ctxManager;
-        private readonly ITokenManager _tokenManager;
-        private readonly IToolCallParser _parser;
-        private readonly IToolCatalog _tools;
         private readonly ILogger<LLMClientBase> _logger;
-
-        private readonly StringBuilder _toolArgBuilder = new StringBuilder();
-        private ToolCall? _firstTool;
-        private string? _pendingToolId;
-        private string? _pendingToolName;
 
         public LLMClientBase(
             LLMInitOptions opts,
             IContextManager ctxManager,
-            ITokenManager tokenManager,
             IRetryPolicy retryPolicy,
-            IToolCallParser parser,
-            IToolCatalog tools,
-            HandlerResolver resolver,
+            IEnumerable<IChunkHandler> handlers,
             ILogger<LLMClientBase> logger)
         {
             _initOptions = opts;
             _retryPolicy = retryPolicy;
             _ctxManager = ctxManager;
-            _tokenManager = tokenManager;
-            _parser = parser;
-            _tools = tools;
-            _resolver = resolver;
+            _handlers = handlers.ToList(); // materialize once
             _logger = logger;
         }
-
 
         #region abstract methods providers must implement 
         protected abstract IAsyncEnumerable<LLMStreamChunk> StreamAsync(
@@ -74,38 +61,53 @@ namespace AgentCore.LLM.Client
             CancellationToken ct);
         #endregion
 
-        public async Task<TResponse> ExecuteAsync<TResponse>(
-            LLMRequest request,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? onStream = null)
+        private static readonly Dictionary<Type, HashSet<StreamKind>> _acceptCache
+            = new Dictionary<Type, HashSet<StreamKind>>();
+
+        private static HashSet<StreamKind> GetAcceptedStreams<TResponse>()
             where TResponse : LLMResponse
         {
-            var handler = _resolver(request);
-            var result = await RunAsync(request, handler, ct, onStream);
-            return (TResponse)result;
+            var type = typeof(TResponse);
+
+            if (_acceptCache.TryGetValue(type, out var cached))
+                return cached;
+
+            var set = new HashSet<StreamKind>();
+            foreach (AcceptsStreamAttribute a in
+                     type.GetCustomAttributes(typeof(AcceptsStreamAttribute), true))
+                set.Add(a.Kind);
+
+            _acceptCache[type] = set;
+            return set;
         }
 
-        private async Task<LLMResponse> RunAsync(
+        public async Task<TResponse> ExecuteAsync<TResponse>(
+             LLMRequest request,
+             CancellationToken ct = default,
+             Action<LLMStreamChunk>? onStream = null)
+             where TResponse : LLMResponse, new()
+        {
+            return await RunAsync<TResponse>(request, ct, onStream);
+        }
+
+        private async Task<TResponse> RunAsync<TResponse>(
             LLMRequest request,
-            IChunkHandler handler,
             CancellationToken ct,
             Action<LLMStreamChunk>? onStream)
+            where TResponse : LLMResponse, new()
         {
-            // RESET per-request tool state
-            _firstTool = null;
-            _pendingToolId = null;
-            _pendingToolName = null;
-            _toolArgBuilder.Clear();
+            var response = new TResponse();
 
-            request.AvailableTools = _tools.RegisteredTools;
-            ApplyTrim(request.Prompt, request);
-            handler.OnRequest(request);
-            _logger.LogInformation("► LLM Request: {Msg}", request.ToString());
+            var accepted = GetAcceptedStreams<TResponse>();
 
-            FinishReason finish = FinishReason.Stop;
-            TokenUsage? usageReported = null;
+            var handlers = _handlers
+                .Where(h => accepted.Contains(h.Kind))
+                .ToList();
 
-            async IAsyncEnumerable<LLMStreamChunk> IterateChunk(Conversation retryPrompt)
+            foreach (var h in handlers)
+                h.OnRequest(request);
+
+            async IAsyncEnumerable<LLMStreamChunk> Iterate(Conversation retryPrompt)
             {
                 ApplyTrim(retryPrompt, request);
                 request.Prompt = retryPrompt;
@@ -114,123 +116,40 @@ namespace AgentCore.LLM.Client
                 {
                     onStream?.Invoke(chunk);
 
-                    if (chunk.Kind == StreamKind.ToolCallDelta)
-                        HandleToolDelta(chunk.AsToolCallDelta());
-                    else
-                        handler.OnChunk(chunk);
+                    if (!accepted.Contains(chunk.Kind))
+                        continue;
+
+                    foreach (var h in handlers)
+                        if (h.Kind == chunk.Kind)
+                            h.OnChunk(chunk);
 
                     yield return chunk;
                 }
             }
 
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-
             try
             {
-                await foreach (var chunk in _retryPolicy.ExecuteStreamAsync(
+                await foreach (var _ in _retryPolicy.ExecuteStreamAsync(
                     request.Prompt,
-                    rp => IterateChunk(rp),
+                    rp => Iterate(rp),
                     ct))
-                {
-                    if (chunk.Kind == StreamKind.Usage)
-                        usageReported = chunk.AsTokenUsage();
-
-                    if (chunk.Kind == StreamKind.Finish)
-                        finish = chunk.AsFinishReason() ?? FinishReason.Stop;
-                }
+                { }
             }
-            catch (EarlyStopException ese)
+            catch (EarlyStopException e)
             {
-                _logger.LogWarning("► EarlyStopException: {Msg}", ese.Message);
+                _logger.LogWarning("► Early stop: {Msg}", e.Message);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                finish = FinishReason.Cancelled;
+                response.FinishReason = FinishReason.Cancelled;
             }
 
-            var response = handler.OnResponse(finish);
+            foreach (var h in handlers)
+                h.OnResponse(response);
 
-            ValidateToolCall(response);
-
-            response.TokenUsage = _tokenManager.ResolveAndRecord(
-                request.ToString(),
-                response.ToString(),
-                usageReported
-            );
-
-            sw.Stop();
-            _logger.LogInformation("► LLM Response: {Msg}", response.ToString());
-            _logger.LogInformation("► Call Duration: {ms} ms", sw.ElapsedMilliseconds);
 
             return response;
         }
-
-        private void ValidateToolCall(LLMResponse response)
-        {
-            var tool = _firstTool ?? response.ToolCall;
-
-            if (_firstTool != null && response.ToolCall != null)
-            {
-                _logger.LogWarning("Inline tool ignored because streamed tool call was present.");
-            }
-
-            response.ToolCall = tool;
-
-            if (tool != null && tool.Parameters == null)
-            {
-                if (!_tools.Contains(tool.Name))
-                    throw new RetryException($"{tool.Name}: invalid tool");
-
-                try
-                {
-                    var parsed = _parser.ValidateToolCall(tool);
-
-                    response.ToolCall = parsed;
-                }
-                catch (Exception ex) when (
-                    ex is ToolValidationException ||
-                    ex is ToolValidationAggregateException)
-                {
-                    throw new RetryException(ex.ToString());
-                }
-            }
-            if (response.FinishReason == FinishReason.ToolCall && tool == null)
-            {
-                throw new RetryException("FinishReason.ToolCall set but no tool call found.");
-            }
-        }
-
-        private void HandleToolDelta(ToolCallDelta? td)
-        {
-            if (td == null || string.IsNullOrEmpty(td.Delta))
-                return;
-
-            _pendingToolName ??= td.Name;
-            _pendingToolId ??= td.Id ?? Guid.NewGuid().ToString();
-            _toolArgBuilder.Append(td.Delta);
-
-            var raw = _toolArgBuilder.ToString();
-            if (!raw.TryParseCompleteJson(out var json))
-                return;
-
-            if (_firstTool != null)
-                throw new EarlyStopException("Second tool call detected.");
-
-            if (!_tools.Contains(_pendingToolName!))
-                throw new RetryException($"{_pendingToolName}: invalid tool");
-
-            // RAW tool only — NO validation here
-            _firstTool = new ToolCall(
-                _pendingToolId!,
-                _pendingToolName!,
-                json!
-            );
-
-            _toolArgBuilder.Clear();
-            _pendingToolId = null;
-            _pendingToolName = null;
-        }
-
         private void ApplyTrim(Conversation convo, LLMRequest request)
         {
             request.Prompt = _ctxManager.Trim(

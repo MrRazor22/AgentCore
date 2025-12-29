@@ -26,21 +26,15 @@ namespace AgentCore.Providers.OpenAI
         public OpenAILLMClient(
          LLMInitOptions opts,
          IContextManager ctxManager,
-         ITokenManager tokenManager,
+         IEnumerable<IChunkHandler> handlers,
          IRetryPolicy retryPolicy,
-         IToolCallParser parser,
-         IToolCatalog tools,
-         HandlerResolver resolver,
          ILogger<LLMClientBase> baseLogger,
          ILogger<OpenAILLMClient> logger)
          : base(
              opts,
              ctxManager,
-             tokenManager,
              retryPolicy,
-             parser,
-             tools,
-             resolver,
+             handlers,
              baseLogger)
         {
             _client = new OpenAIClient(

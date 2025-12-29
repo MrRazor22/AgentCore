@@ -13,7 +13,7 @@ namespace AgentCore.Tools
     public interface IToolCallParser
     {
         ToolCall? TryMatch(string content);
-        ToolCall ValidateToolCall(ToolCall toolCall);
+        ToolCall Validate(ToolCall toolCall);
     }
 
     public sealed class ToolCallParser : IToolCallParser
@@ -50,7 +50,7 @@ namespace AgentCore.Tools
             }
             return null;
         }
-        public ToolCall ValidateToolCall(ToolCall toolCall)
+        public ToolCall Validate(ToolCall toolCall)
         {
             var tool = _toolCatalog.Get(toolCall.Name)
                 ?? throw new ToolValidationException(toolCall.Name, "Tool not registered.");

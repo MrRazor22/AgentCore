@@ -27,10 +27,7 @@ namespace TestApp
                     opts.BaseUrl = "http://127.0.0.1:1234/v1";
                     opts.ApiKey = "lmstudio";
                     opts.Model = "model";
-                });
-                builder.AddRetryPolicy(o =>
-                {
-                    o.MaxRetries = 3;
+                    opts.MaxRetries = 2;
                 });
                 builder.AddFileMemory(o =>
                 {

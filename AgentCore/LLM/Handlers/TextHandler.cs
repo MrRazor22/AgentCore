@@ -13,8 +13,6 @@ using System.Text;
 
 namespace AgentCore.LLM.Handlers
 {
-    public delegate TextHandler TextHandlerFactory();
-
     public sealed class TextHandler : IChunkHandler
     {
         private readonly ILogger<TextHandler> _logger;
@@ -29,7 +27,7 @@ namespace AgentCore.LLM.Handlers
             _parser = parser;
             _logger = logger;
         }
-
+        public StreamKind Kind => StreamKind.Text;
         public void OnRequest(LLMRequest request)
         {
         }
@@ -56,13 +54,15 @@ namespace AgentCore.LLM.Handlers
             throw new EarlyStopException("Inline tool call detected.");
         }
 
-        public LLMResponse OnResponse(FinishReason finishReason)
+        public void OnResponse(LLMResponse response)
         {
-            return new LLMResponse(
-                _inlineTool != null ? _inlineTool.Message : _text.ToString().Trim(),
-                _inlineTool,
-                finishReason
-            );
+            if (_inlineTool != null)
+            {
+                response.AssistantMessage = _inlineTool.Message;
+                response.ToolCall = _parser.Validate(_inlineTool);
+            }
+            else
+                response.AssistantMessage = _text.ToString().Trim();
         }
     }
 }
