@@ -63,6 +63,10 @@ namespace AgentCore.LLM.Protocol
             .Select(x => x is string s ? s : x.AsPrettyJson())
             .ToJoinedString("\n");
         }
+        public LLMRequest Clone()
+        {
+            return (LLMRequest)this.MemberwiseClone();
+        }
     }
 
     public sealed class LLMStructuredRequest : LLMRequest
@@ -86,6 +90,10 @@ namespace AgentCore.LLM.Protocol
             return base.ToString()
                  + "\n"
                  + Schema.AsPrettyJson();
+        }
+        public LLMStructuredRequest Clone()
+        {
+            return (LLMStructuredRequest)this.MemberwiseClone();
         }
     }
 }

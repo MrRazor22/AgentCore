@@ -40,7 +40,7 @@ namespace AgentCore.LLM.Handlers
 
         public void OnChunk(LLMStreamChunk chunk)
         {
-            if (chunk.Kind != StreamKind.Text) return;
+            if (chunk.Kind != StreamKind.Json) return;
 
             var txt = chunk.AsText();
             if (string.IsNullOrEmpty(txt)) return;

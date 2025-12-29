@@ -107,12 +107,15 @@ namespace AgentCore.LLM.Client
             foreach (var h in handlers)
                 h.OnRequest(request);
 
+            var initialContext = _ctxManager.Trim(request.Prompt, request.Options?.MaxOutputTokens);
+
             async IAsyncEnumerable<LLMStreamChunk> Iterate(Conversation retryPrompt)
             {
-                ApplyTrim(retryPrompt, request);
-                request.Prompt = retryPrompt;
+                var readyPrompt = _ctxManager.Trim(retryPrompt, request.Options?.MaxOutputTokens);
+                var attemptRequest = request.Clone();
+                attemptRequest.Prompt = readyPrompt;
 
-                await foreach (var chunk in StreamAsync(request, ct))
+                await foreach (var chunk in StreamAsync(attemptRequest, ct))
                 {
                     onStream?.Invoke(chunk);
 
@@ -130,7 +133,7 @@ namespace AgentCore.LLM.Client
             try
             {
                 await foreach (var _ in _retryPolicy.ExecuteStreamAsync(
-                    request.Prompt,
+                    initialContext,
                     rp => Iterate(rp),
                     ct))
                 { }
@@ -149,13 +152,6 @@ namespace AgentCore.LLM.Client
 
 
             return response;
-        }
-        private void ApplyTrim(Conversation convo, LLMRequest request)
-        {
-            request.Prompt = _ctxManager.Trim(
-                convo,
-                request.Options?.MaxOutputTokens
-            );
         }
     }
 }

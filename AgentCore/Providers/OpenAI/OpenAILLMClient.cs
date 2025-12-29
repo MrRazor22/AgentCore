@@ -96,7 +96,7 @@ namespace AgentCore.Providers.OpenAI
                 options,
                 ct
             );
-
+            bool isStructured = request is LLMStructuredRequest;
             string? pendingToolName = null;
             string? pendingToolId = null;
 
@@ -106,7 +106,7 @@ namespace AgentCore.Providers.OpenAI
                 if (update.ContentUpdate is { } content)
                     foreach (var c in content)
                         if (c.Text is { } t)
-                            yield return new LLMStreamChunk(StreamKind.Text, t);
+                            yield return new LLMStreamChunk(isStructured ? StreamKind.Json : StreamKind.Text, t);
 
                 // TOOL CALL DELTA
                 if (update.ToolCallUpdates is { } tcuList)
