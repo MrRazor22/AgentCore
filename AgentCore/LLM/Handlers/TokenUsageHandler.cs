@@ -19,7 +19,7 @@ namespace AgentCore.LLM.Handlers
         public void OnRequest<T>(LLMRequest<T> request)
         {
             _usage = null;
-            _requestPayload = request.ToString();
+            _requestPayload = request.ToCountablePayload();
         }
 
         public void OnChunk(LLMStreamChunk chunk)
@@ -32,7 +32,7 @@ namespace AgentCore.LLM.Handlers
         {
             var resolved = _tokenManager.ResolveAndRecord(
                 _requestPayload,
-                response.ToString(),
+                response.ToCountablePayload(),
                 _usage
             );
 

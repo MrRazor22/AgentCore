@@ -19,7 +19,7 @@ namespace AgentCore.Tokens
 
     public interface ITokenManager
     {
-        int Count(string payload);
+        int AppromimateCount(string payload);
         void Record(TokenUsage usage);
         TokenUsage ResolveAndRecord(
             string requestPayload,
@@ -30,24 +30,19 @@ namespace AgentCore.Tokens
 
     public sealed class TokenManager : ITokenManager
     {
+        private readonly ITokenCounter _counter;
         private readonly ILogger<TokenManager> _logger;
 
         private TokenUsage _cumulativeTokens = new TokenUsage(0, 0);
         private readonly object _lock = new object();
 
-        public TokenManager(ILogger<TokenManager> logger)
+        public TokenManager(ITokenCounter counter, ILogger<TokenManager> logger)
         {
+            _counter = counter;
             _logger = logger;
         }
 
-        public int Count(string payload)
-        {
-            if (string.IsNullOrEmpty(payload))
-                return 0;
-
-            int approx = payload.Length / 4;
-            return approx > 0 ? approx : 1;
-        }
+        public int AppromimateCount(string payload) => _counter.Count(payload);
 
         public void Record(TokenUsage usage)
         {
@@ -71,8 +66,8 @@ namespace AgentCore.Tokens
             string responsePayload,
             TokenUsage? usageReported)
         {
-            int inTok = Count(requestPayload);
-            int outTok = Count(responsePayload);
+            int inTok = AppromimateCount(requestPayload);
+            int outTok = AppromimateCount(responsePayload);
 
             _logger.LogDebug(
                 "Approximated Token Usage In: {In} | Out: {Out}",

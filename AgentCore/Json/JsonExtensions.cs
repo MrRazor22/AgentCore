@@ -43,12 +43,17 @@ namespace AgentCore.Json
                     return node?.DeepClone() ?? JValue.CreateNull();
             }
         }
-
         public static string AsJsonString(this object? obj)
         {
-            if (obj == null) return "<null>";
-            return obj is string s ? s : JsonConvert.SerializeObject(obj);
+            if (obj == null)
+                return string.Empty;
+
+            if (obj is string s)
+                return s;
+
+            return JsonConvert.SerializeObject(obj, Formatting.None);
         }
+
         public static string AsPrettyJson(this object? content)
         {
             if (content == null)

@@ -61,18 +61,13 @@ namespace AgentCore.LLM.Protocol
             if (typeof(T) != typeof(string))
                 Schema = typeof(T).GetSchemaForType();
         }
-
-        public override string ToString()
+        public string ToCountablePayload()
         {
-            return new object?[]
-            {
-                AvailableTools,
-                Prompt.ToJson(),
-                Schema
-            }
-            .Where(x => x != null)
-            .Select(x => x.AsPrettyJson())
-            .ToJoinedString("\n");
+            return string.Concat(
+                Prompt.GetSerializableMessages(ChatFilter.All).AsJsonString(),
+                AvailableTools.AsJsonString(),
+                Schema.AsJsonString()
+            );
         }
 
         public LLMRequest<T> Clone()

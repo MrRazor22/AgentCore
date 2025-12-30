@@ -145,7 +145,7 @@ namespace AgentCore.Tests.Tokens
         private sealed class DeterministicTokenManager : ITokenManager
         {
             // One token per message object
-            public int Count(string payload)
+            public int AppromimateCount(string payload)
                 => payload.Count(ch => ch == '{');
 
             public void Record(TokenUsage usage) { }

@@ -72,8 +72,8 @@ namespace AgentCore.LLM.Execution
                     h.OnRequest(attempt);
 
                 _logger.LogTrace(
-                    "LLm request: {Request}",
-                    attempt.ToString());
+                    "LLM request: {Request}",
+                    attempt.ToCountablePayload());
 
                 await foreach (var chunk in _provider.StreamAsync(attempt, ct))
                 {
@@ -105,14 +105,13 @@ namespace AgentCore.LLM.Execution
             {
                 sw.Stop();
 
+                _logger.LogTrace(
+                    "LLM response: {Response}",
+                    response.ToCountablePayload()
+                );
                 _logger.LogDebug(
                     "LLM call Duration={Ms}ms",
                     sw.ElapsedMilliseconds
-                );
-
-                _logger.LogTrace(
-                    "LLM response: {Response}",
-                    response.ToString()
                 );
             }
             return response;

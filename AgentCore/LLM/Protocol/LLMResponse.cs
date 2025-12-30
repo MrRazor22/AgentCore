@@ -51,18 +51,18 @@ namespace AgentCore.LLM.Protocol
 
         public bool HasToolCall => ToolCall != null;
 
-        public override string ToString()
+        public string ToCountablePayload()
         {
-            return new object?[]
+            if (ToolCall != null)
             {
-                FinishReason,
-                Result,
-                ToolCall,
-                TokenUsage
+                return new
+                {
+                    name = ToolCall.Name,
+                    arguments = ToolCall.Arguments
+                }.AsJsonString();
             }
-            .Where(x => x != null)
-            .Select(x => x.AsPrettyJson())
-            .ToJoinedString("\n");
+
+            return Result.AsJsonString();
         }
     }
 

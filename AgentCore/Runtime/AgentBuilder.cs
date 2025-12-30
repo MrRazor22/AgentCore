@@ -100,11 +100,17 @@ namespace AgentCore.Runtime
     {
         //Open AI
         public static AgentBuilder AddOpenAI(
-            this AgentBuilder builder,
-            Action<LLMInitOptions> configure)
+    this AgentBuilder builder,
+    Action<LLMInitOptions> configure)
         {
             var opts = new LLMInitOptions();
             configure(opts);
+
+            builder.Services.AddSingleton<ITokenCounter>(
+                _ => new SharpTokenCounter(opts.Model)
+            );
+
+            builder.Services.AddSingleton<ITokenManager, TokenManager>();
 
             builder.Services.AddSingleton<ILLMStreamProvider>(sp =>
                 new OpenAILLMClient(
@@ -115,7 +121,6 @@ namespace AgentCore.Runtime
 
             return builder;
         }
-
         //context trimmer
         public static AgentBuilder AddContextTrimming(
            this AgentBuilder builder,

@@ -56,7 +56,7 @@ namespace AgentCore.Tokens
 
             var source = reqPrompt.Clone();
 
-            int originalCount = _tokenManager.Count(source.ToJson());
+            int originalCount = _tokenManager.AppromimateCount(source.ToJson());
 
             int limit = requiredGap.HasValue
                 ? Math.Max(0, _opts.MaxContextTokens - requiredGap.Value)
@@ -126,13 +126,13 @@ namespace AgentCore.Tokens
             }
 
             var rebuilt = Build(keepUA);
-            int finalCount = _tokenManager.Count(rebuilt.ToJson());
+            int finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
 
             while (finalCount > limit && keepUA.Count > 0)
             {
                 keepUA.RemoveAt(0);   // drop oldest UA, no exceptions
                 rebuilt = Build(keepUA);
-                finalCount = _tokenManager.Count(rebuilt.ToJson());
+                finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
             }
 
             _logger.LogDebug(

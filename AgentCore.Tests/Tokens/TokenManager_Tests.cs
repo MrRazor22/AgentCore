@@ -18,22 +18,22 @@ namespace AgentCore.Tests.Tokens
         [Fact]
         public void Count_NullOrEmpty_ReturnsZero()
         {
-            Assert.Equal(0, _manager.Count(null!));
-            Assert.Equal(0, _manager.Count(string.Empty));
+            Assert.Equal(0, _manager.AppromimateCount(null!));
+            Assert.Equal(0, _manager.AppromimateCount(string.Empty));
         }
 
         [Fact]
         public void Count_ShortString_ReturnsAtLeastOne()
         {
-            Assert.Equal(1, _manager.Count("a"));
-            Assert.Equal(1, _manager.Count("abc"));
+            Assert.Equal(1, _manager.AppromimateCount("a"));
+            Assert.Equal(1, _manager.AppromimateCount("abc"));
         }
 
         [Fact]
         public void Count_LongString_UsesApproximation()
         {
             var payload = new string('a', 400);
-            var tokens = _manager.Count(payload);
+            var tokens = _manager.AppromimateCount(payload);
             Assert.Equal(100, tokens);
         }
 
