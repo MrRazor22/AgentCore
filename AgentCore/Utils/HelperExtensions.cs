@@ -18,5 +18,16 @@ namespace AgentCore.Utils
                 ? string.Join(separator, list.Select(x => x?.ToString()))
                 : "<empty>";
         }
+        public static string ToSnake(this string s)
+        {
+            return string.Concat(
+                s.Select((c, i) =>
+                    i > 0 && char.IsUpper(c)
+                        ? "_" + char.ToLowerInvariant(c)
+                        : char.ToLowerInvariant(c).ToString()
+                )
+            );
+        }
+
     }
 }

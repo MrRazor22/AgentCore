@@ -8,12 +8,12 @@ namespace AgentCore.Tools
     [AttributeUsage(AttributeTargets.Method)]
     public sealed class ToolAttribute : Attribute
     {
+        public string? Name { get; }
         public string? Description { get; }
 
-        public ToolAttribute() { }
-
-        public ToolAttribute(string description)
+        public ToolAttribute(string? name = null, string? description = null)
         {
+            Name = name;
             Description = description;
         }
     }

@@ -1,4 +1,5 @@
 ﻿using AgentCore.Json;
+using AgentCore.Utils;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -150,7 +151,12 @@ namespace AgentCore.Tools
                 ?? throw new InvalidOperationException("Tool method has no declaring type.");
 
             // globally unique name
-            var toolName = $"{declaringType.Name}.{method.Name}";
+            var attr = method.GetCustomAttribute<ToolAttribute>();
+
+            var toolName =
+                !string.IsNullOrWhiteSpace(attr?.Name)
+                    ? attr!.Name
+                    : $"{declaringType.Name.ToSnake()}_{method.Name.ToSnake()}";
 
             var description =
                 method.GetCustomAttribute<ToolAttribute>()?.Description
