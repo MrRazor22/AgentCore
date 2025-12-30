@@ -1,6 +1,7 @@
 ﻿using AgentCore.BuiltInTools;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.LLM.Execution;
+using AgentCore.LLM.Protocol;
 using AgentCore.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,7 @@ using Serilog;
 
 namespace TestApp
 {
-    public static class ConsoleRunner
+    public static class ChatBotAgent
     {
         public static async Task RunAsync()
         {
@@ -32,7 +33,7 @@ namespace TestApp
 
                 builder.Services.Configure<RetryPolicyOptions>(o =>
                 {
-                    o.MaxRetries = 5;
+                    o.MaxRetries = 2;
                 });
 
                 builder.AddFileMemory(o =>
@@ -55,16 +56,6 @@ namespace TestApp
                     Log.Debug("Logger initialized");
 
                     logging.AddSerilog(dispose: true);
-                });
-
-                builder.Services.Configure<LoggerFilterOptions>(o =>
-                {
-                    o.MinLevel = LogLevel.Debug;
-                });
-
-                builder.Services.Configure<LoggerFilterOptions>(o =>
-                {
-                    o.MinLevel = LogLevel.Debug;
                 });
 
                 builder.WithInstructions(
@@ -111,7 +102,11 @@ namespace TestApp
                         var result = await app.InvokeAsync(
                             goal,
                             cts.Token,
-                            s => Console.Write(s)
+                            chunk =>
+                            {
+                                if (chunk.Kind == StreamKind.Text)
+                                    Console.Write(chunk.AsText());
+                            }
                         );
 
                         if (string.IsNullOrWhiteSpace(result))

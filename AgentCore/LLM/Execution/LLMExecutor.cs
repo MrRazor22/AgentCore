@@ -110,7 +110,7 @@ namespace AgentCore.LLM.Execution
                     response.ToCountablePayload()
                 );
                 _logger.LogDebug(
-                    "LLM call Duration={Ms}ms",
+                    "LLM call Duration={Ms}ms\n",
                     sw.ElapsedMilliseconds
                 );
             }

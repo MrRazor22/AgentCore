@@ -5,7 +5,8 @@ namespace TestApp
     {
         public static async Task Main(string[] args)
         {
-            await ConsoleRunner.RunAsync();
+            //await ChatBotAgent.RunAsync();
+            await StructredResponseAgent.RunAsync();
         }
     }
 }

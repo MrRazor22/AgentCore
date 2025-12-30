@@ -18,7 +18,7 @@ namespace AgentCore.Runtime
         Conversation ScratchPad { get; }
         string? UserRequest { get; }
         IServiceProvider Services { get; }
-        Action<object>? Stream { get; }
+        Action<LLMStreamChunk>? Stream { get; }
         CancellationToken CancellationToken { get; }
     }
     public sealed class AgentContext : IAgentContext
@@ -35,7 +35,7 @@ namespace AgentCore.Runtime
         public Conversation ScratchPad { get; }
         public string? UserRequest { get; set; }
         public IServiceProvider Services { get; }
-        public Action<object>? Stream { get; set; }
+        public Action<LLMStreamChunk>? Stream { get; set; }
         public CancellationToken CancellationToken { get; }
     }
 
@@ -46,12 +46,12 @@ namespace AgentCore.Runtime
         Task<string> InvokeAsync(
             string goal,
             CancellationToken ct = default,
-            Action<object>? stream = null);
+            Action<LLMStreamChunk>? stream = null);
 
         Task<T> InvokeAsync<T>(
             string goal,
             CancellationToken ct = default,
-            Action<object>? stream = null);
+            Action<LLMStreamChunk>? stream = null);
     }
 
     public sealed class Agent : IAgent
@@ -73,13 +73,13 @@ namespace AgentCore.Runtime
         public Task<string> InvokeAsync(
             string goal,
             CancellationToken ct = default,
-            Action<object>? stream = null)
+            Action<LLMStreamChunk>? stream = null)
             => InvokeAsync<string>(goal, ct, stream);
 
         public async Task<T> InvokeAsync<T>(
             string goal,
             CancellationToken ct = default,
-            Action<object>? stream = null)
+            Action<LLMStreamChunk>? stream = null)
         {
             using var scope = _services.CreateScope();
 
