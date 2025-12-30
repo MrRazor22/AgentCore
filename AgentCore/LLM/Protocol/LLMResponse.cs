@@ -2,11 +2,14 @@
 using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Utils;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using System;
 using System.Linq;
 
 namespace AgentCore.LLM.Protocol
 {
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum FinishReason
     {
         Stop,

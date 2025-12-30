@@ -1,6 +1,6 @@
 ﻿using AgentCore.LLM.Protocol;
 using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Execution;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;

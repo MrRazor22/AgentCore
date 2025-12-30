@@ -1,7 +1,7 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Execution;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;

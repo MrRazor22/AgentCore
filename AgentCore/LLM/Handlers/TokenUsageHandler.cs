@@ -7,25 +7,36 @@ namespace AgentCore.LLM.Handlers
     {
         public StreamKind Kind => StreamKind.Usage;
 
+        private readonly ITokenManager _tokenManager;
         private TokenUsage? _usage;
+        private string? _requestPayload;
+
+        public TokenUsageHandler(ITokenManager tokenManager)
+        {
+            _tokenManager = tokenManager;
+        }
 
         public void OnRequest<T>(LLMRequest<T> request)
         {
             _usage = null;
+            _requestPayload = request.ToString();
         }
 
         public void OnChunk(LLMStreamChunk chunk)
         {
-            if (chunk.Kind != StreamKind.Usage)
-                return;
-
-            _usage = chunk.AsTokenUsage();
+            if (chunk.Kind == StreamKind.Usage)
+                _usage = chunk.AsTokenUsage();
         }
 
         public void OnResponse<T>(LLMResponse<T> response)
         {
-            if (_usage != null)
-                response.TokenUsage = _usage;
+            var resolved = _tokenManager.ResolveAndRecord(
+                _requestPayload,
+                response.ToString(),
+                _usage
+            );
+
+            response.TokenUsage = resolved;
         }
     }
 }

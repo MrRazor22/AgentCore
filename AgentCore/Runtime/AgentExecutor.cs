@@ -1,6 +1,6 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Protocol;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Execution;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;

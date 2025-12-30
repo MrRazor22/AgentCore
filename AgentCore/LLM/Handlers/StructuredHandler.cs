@@ -1,5 +1,5 @@
 ﻿using AgentCore.Json;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
 using AgentCore.Utils;
@@ -42,6 +42,12 @@ public sealed class StructuredHandler : IChunkHandler
         _schema = schema;
         request.Schema = schema;
 
+        _logger.LogDebug(
+            "► Request [JsonSchema]: Type={Type}\n{Schema}",
+            _resultType.Name,
+            _schema.ToString(Newtonsoft.Json.Formatting.Indented)
+        );
+
         _jsonBuffer.Clear();
     }
 
@@ -64,27 +70,21 @@ public sealed class StructuredHandler : IChunkHandler
             return;
 
         var raw = _jsonBuffer.ToString();
-
         if (string.IsNullOrWhiteSpace(raw))
             throw new RetryException("Empty JSON response");
 
         JToken json;
-        try
-        {
-            json = JToken.Parse(raw);
-        }
-        catch
-        {
-            throw new RetryException("Invalid JSON");
-        }
+        try { json = JToken.Parse(raw); }
+        catch { throw new RetryException("Invalid JSON"); }
 
         var errors = _schema?.Validate(json, _resultType!.Name);
         if (errors?.Count > 0)
-        {
-            var msg = errors.Select(e => $"{e.Path}: {e.Message}").ToJoinedString("; ");
-            throw new RetryException("Schema validation failed: " + msg);
-        }
+            throw new RetryException("Schema validation failed");
 
         response.Result = json.ToObject<T>()!;
+
+        _logger.LogDebug(
+            "Result [Json]: {Type}", json.ToString(Newtonsoft.Json.Formatting.Indented)
+        );
     }
 }

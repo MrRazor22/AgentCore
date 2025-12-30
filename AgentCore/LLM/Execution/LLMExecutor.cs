@@ -8,13 +8,14 @@ using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLM.Client
+namespace AgentCore.LLM.Execution
 {
     public interface ILLMExecutor
     {
@@ -52,6 +53,8 @@ namespace AgentCore.LLM.Client
             Action<LLMStreamChunk>? onStream = null)
         {
             var response = new LLMResponse<T>();
+            var sw = Stopwatch.StartNew();
+
             var initialPrompt = _ctxManager.Trim(
                 request.Prompt,
                 request.Options?.MaxOutputTokens);
@@ -67,6 +70,10 @@ namespace AgentCore.LLM.Client
 
                 foreach (var h in _handlers)
                     h.OnRequest(attempt);
+
+                _logger.LogTrace(
+                    "LLm request: {Request}",
+                    attempt.ToString());
 
                 await foreach (var chunk in _provider.StreamAsync(attempt, ct))
                 {
@@ -94,7 +101,20 @@ namespace AgentCore.LLM.Client
             {
                 response.FinishReason = FinishReason.Cancelled;
             }
+            finally
+            {
+                sw.Stop();
 
+                _logger.LogDebug(
+                    "LLM call Duration={Ms}ms",
+                    sw.ElapsedMilliseconds
+                );
+
+                _logger.LogTrace(
+                    "LLM response: {Response}",
+                    response.ToString()
+                );
+            }
             return response;
         }
     }

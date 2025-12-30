@@ -6,7 +6,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLM.Client
+namespace AgentCore.LLM.Execution
 {
     public class RetryException : Exception
     {

@@ -1,10 +1,12 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 
 namespace AgentCore.Chat
 {
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum Role { System, Assistant, User, Tool }
 
     public class Chat

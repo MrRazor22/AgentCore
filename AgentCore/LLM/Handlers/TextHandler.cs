@@ -1,10 +1,11 @@
 ﻿using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Client;
+using AgentCore.LLM.Execution;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Text;
 
 namespace AgentCore.LLM.Handlers
@@ -31,6 +32,16 @@ namespace AgentCore.LLM.Handlers
         {
             _buffer.Clear();
             _inlineTool = null;
+
+            var last = request.Prompt.LastOrDefault();
+            if (last != null)
+            {
+                _logger.LogDebug(
+                    "► Request [Prompt]: Role={Role} Content={Content}",
+                    last.Role,
+                    last.Content.AsPrettyJson()
+                );
+            }
         }
 
         public void OnChunk(LLMStreamChunk chunk)
@@ -66,6 +77,11 @@ namespace AgentCore.LLM.Handlers
             if (_inlineTool != null)
             {
                 response.ToolCall = _parser.Validate(_inlineTool);
+                _logger.LogInformation(
+                    "Result [Inline ToolCall]: Name={Name}, Params={Params}",
+                    response.ToolCall.Name,
+                    response.ToolCall.Parameters.AsPrettyJson()
+                );
                 return;
             }
 
@@ -73,6 +89,10 @@ namespace AgentCore.LLM.Handlers
             if (typeof(T) == typeof(string))
             {
                 response.Result = (T)(object)_buffer.ToString().Trim();
+                _logger.LogDebug(
+                    "Result [Text]: {Result}",
+                    response.Result.ToString()
+                );
             }
         }
     }
