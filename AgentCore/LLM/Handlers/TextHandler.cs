@@ -77,7 +77,7 @@ namespace AgentCore.LLM.Handlers
             if (_inlineTool != null)
             {
                 response.ToolCall = _parser.Validate(_inlineTool);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Result [Inline ToolCall]: Name={Name}, Params={Params}",
                     response.ToolCall.Name,
                     response.ToolCall.Parameters.AsPrettyJson()
