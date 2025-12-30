@@ -10,46 +10,54 @@ namespace AgentCore.Runtime
     {
         Task<Conversation> RecallAsync(string sessionId, string userRequest);
         Task UpdateAsync(string sessionId, string userRequest, string response);
+        Task ClearAsync(string sessionId);
     }
-    public class FileMemoryOptions
+    public sealed class AgentMemoryOptions
     {
         public string? PersistDir { get; set; }
-            = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Agenty");
+            = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Agenty");
+
+        /// <summary>
+        /// 0 = unlimited, 1 = last response only, N = last N messages
+        /// </summary>
+        public int MaxHistorySize { get; set; } = 0;
     }
+
     public sealed class FileMemory : IAgentMemory
     {
-        private readonly FileMemoryOptions _memoryOptions;
+        private readonly AgentMemoryOptions _options;
         private string? _cachedSessionId;
         private Conversation? _cached;
-
-        public FileMemory(FileMemoryOptions memoryOptions = null)
+        public FileMemory(AgentMemoryOptions? options = null)
         {
-            _memoryOptions = memoryOptions ?? new FileMemoryOptions();
-            Directory.CreateDirectory(_memoryOptions.PersistDir);
-        }
+            _options = options ?? new AgentMemoryOptions();
 
-        private string GetFilePath(string sessionId) =>
-            Path.Combine(_memoryOptions.PersistDir, $"{sessionId}.json");
+            if (_options.PersistDir != null)
+                Directory.CreateDirectory(_options.PersistDir);
+        }
 
         public async Task<Conversation> RecallAsync(string sessionId, string userRequest)
         {
             if (_cachedSessionId == sessionId && _cached != null)
                 return _cached;
 
-            var file = GetFilePath(sessionId);
-            if (!File.Exists(file))
-            {
-                _cached = new Conversation();
-                _cachedSessionId = sessionId;
-                return _cached;
-            }
-
-            var json = await Task.Run(() => File.ReadAllText(file)).ConfigureAwait(false);
-            _cached = JsonConvert.DeserializeObject<Conversation>(json) ?? new Conversation();
             _cachedSessionId = sessionId;
+            _cached = new Conversation();
+
+            if (_options.PersistDir == null)
+                return _cached;
+
+            var file = Path.Combine(_options.PersistDir, $"{sessionId}.json");
+            if (!File.Exists(file))
+                return _cached;
+
+            var json = await Task.Run(() => File.ReadAllText(file))
+                     .ConfigureAwait(false);
+            _cached = JsonConvert.DeserializeObject<Conversation>(json) ?? new Conversation();
             return _cached;
         }
-
         public async Task UpdateAsync(string sessionId, string userRequest, string response)
         {
             if (_cachedSessionId != sessionId || _cached == null)
@@ -58,9 +66,42 @@ namespace AgentCore.Runtime
             _cached.AddUser(userRequest);
             _cached.AddAssistant(response);
 
-            var file = GetFilePath(sessionId);
+            TrimHistory(_cached);
+
+            if (_options.PersistDir == null)
+                return;
+
+            var file = Path.Combine(_options.PersistDir, $"{sessionId}.json");
             var json = _cached.ToJson();
-            await Task.Run(() => File.WriteAllText(file, json)).ConfigureAwait(false);
+            await Task.Run(() => File.WriteAllText(file, json))
+                .ConfigureAwait(false);
         }
+        public Task ClearAsync(string sessionId)
+        {
+            if (_cachedSessionId == sessionId)
+            {
+                _cached = new Conversation();
+                _cachedSessionId = sessionId;
+            }
+
+            if (_options.PersistDir == null)
+                return Task.CompletedTask;
+
+            var file = Path.Combine(_options.PersistDir, $"{sessionId}.json");
+            if (File.Exists(file))
+                File.Delete(file);
+
+            return Task.CompletedTask;
+        }
+
+        private void TrimHistory(Conversation convo)
+        {
+            if (_options.MaxHistorySize <= 0)
+                return;
+
+            while (convo.Count > _options.MaxHistorySize)
+                convo.RemoveAt(0);
+        }
+
     }
 }
