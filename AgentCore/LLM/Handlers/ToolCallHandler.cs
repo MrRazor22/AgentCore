@@ -12,6 +12,7 @@ namespace AgentCore.LLM.Handlers
     {
         private readonly IToolCatalog _tools;
         private readonly IToolCallParser _parser;
+
         private readonly StringBuilder _argBuilder = new StringBuilder();
         private ToolCall? _firstTool;
         private string? _pendingToolId;
@@ -22,15 +23,15 @@ namespace AgentCore.LLM.Handlers
             _tools = tools;
             _parser = parser;
         }
+
         public StreamKind Kind => StreamKind.ToolCallDelta;
-        public void OnRequest(LLMRequest request)
+
+        public void OnRequest<T>(LLMRequest<T> request)
         {
             _firstTool = null;
             _pendingToolId = null;
             _pendingToolName = null;
             _argBuilder.Clear();
-
-            request.AvailableTools = _tools.RegisteredTools;
         }
 
         public void OnChunk(LLMStreamChunk chunk)
@@ -67,12 +68,12 @@ namespace AgentCore.LLM.Handlers
             _pendingToolName = null;
         }
 
-        public void OnResponse(LLMResponse response)
+        public void OnResponse<T>(LLMResponse<T> response)
         {
-            if (_firstTool != null)
-            {
-                response.ToolCall = _parser.Validate(_firstTool);
-            }
+            if (_firstTool == null)
+                return;
+
+            response.ToolCall = _parser.Validate(_firstTool);
         }
     }
 }

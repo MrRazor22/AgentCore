@@ -2,21 +2,20 @@
 using AgentCore.Json;
 using AgentCore.Tools;
 using AgentCore.Utils;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace AgentCore.LLM.Protocol
 {
     public enum ToolCallMode
     {
-        None,     // expose tools but forbid calls
-        Auto,     // allow text or tool calls
-        Required  // force tool call 
+        None,
+        Auto,
+        Required
     }
+
     public sealed class LLMGenerationOptions
     {
         public float? Temperature { get; set; }
@@ -29,13 +28,23 @@ namespace AgentCore.LLM.Protocol
         public float? PresencePenalty { get; set; }
         public float? TopK { get; set; }
     }
-    public class LLMRequest
+
+    /// <summary>
+    /// Typed LLM request.
+    /// T = string by default, custom type enables structured output.
+    /// </summary>
+    public class LLMRequest<T>
     {
         public Conversation Prompt { get; internal set; }
         public ToolCallMode ToolCallMode { get; }
         public string? Model { get; }
         public LLMGenerationOptions? Options { get; }
-        public IEnumerable<Tool>? AvailableTools { get; internal set; }
+        public IEnumerable<Tool>? AvailableTools { get; set; }
+
+        /// <summary>
+        /// JSON schema derived from T (null for string).
+        /// </summary>
+        public JObject? Schema { get; internal set; }
 
         public LLMRequest(
             Conversation prompt,
@@ -47,53 +56,41 @@ namespace AgentCore.LLM.Protocol
             ToolCallMode = toolCallMode;
             Model = model;
             Options = options;
-        }
 
-        public virtual string ToString()
-        {
-            return new object?[]
-            {
-                //Model,
-                //ToolCallMode,
-                //Options,
-                AvailableTools,
-                Prompt.ToJson()
-            }
-            .Where(x => x != null)
-            .Select(x => x is string s ? s : x.AsPrettyJson())
-            .ToJoinedString("\n");
-        }
-        public LLMRequest Clone()
-        {
-            return (LLMRequest)this.MemberwiseClone();
-        }
-    }
-
-    public sealed class LLMStructuredRequest : LLMRequest
-    {
-        public Type ResultType { get; }
-        public JObject? Schema { get; set; }
-
-        public LLMStructuredRequest(
-            Conversation prompt,
-            Type resultType,
-            ToolCallMode mode = ToolCallMode.Auto,
-            string? model = null,
-            LLMGenerationOptions? options = null)
-            : base(prompt, mode, model, options)
-        {
-            ResultType = resultType;
+            // Only generate schema if T is not string
+            if (typeof(T) != typeof(string))
+                Schema = typeof(T).GetSchemaForType();
         }
 
         public override string ToString()
         {
-            return base.ToString()
-                 + "\n"
-                 + Schema.AsPrettyJson();
+            return new object?[]
+            {
+                AvailableTools,
+                Prompt.ToJson(),
+                Schema
+            }
+            .Where(x => x != null)
+            .Select(x => x.AsPrettyJson())
+            .ToJoinedString("\n");
         }
-        public LLMStructuredRequest Clone()
+
+        public LLMRequest<T> Clone()
+            => (LLMRequest<T>)MemberwiseClone();
+    }
+
+    /// <summary>
+    /// Convenience alias for text requests.
+    /// </summary>
+    public sealed class LLMRequest : LLMRequest<string>
+    {
+        public LLMRequest(
+            Conversation prompt,
+            ToolCallMode toolCallMode = ToolCallMode.Auto,
+            string? model = null,
+            LLMGenerationOptions? options = null)
+            : base(prompt, toolCallMode, model, options)
         {
-            return (LLMStructuredRequest)this.MemberwiseClone();
         }
     }
 }

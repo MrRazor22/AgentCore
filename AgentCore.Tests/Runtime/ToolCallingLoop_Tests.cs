@@ -18,7 +18,7 @@ namespace AgentCore.Tests.Runtime
         [Fact]
         public async Task Executes_Once_When_No_ToolCall()
         {
-            var llm = new Mock<ILLMClient>();
+            var llm = new Mock<ILLMExecutor>();
             var runtime = new Mock<IToolRuntime>();
 
             llm.Setup(x => x.ExecuteAsync<LLMResponse>(
@@ -49,7 +49,7 @@ namespace AgentCore.Tests.Runtime
         [Fact]
         public async Task ToolCall_Is_Executed_Then_Loop_Stops()
         {
-            var llm = new Mock<ILLMClient>();
+            var llm = new Mock<ILLMExecutor>();
             var runtime = new Mock<IToolRuntime>();
 
             var toolCall = new ToolCall("1", "Sum", null!);
@@ -82,7 +82,7 @@ namespace AgentCore.Tests.Runtime
         [Fact]
         public async Task Streaming_Text_Is_Forwarded_To_Context_Stream()
         {
-            var llm = new Mock<ILLMClient>();
+            var llm = new Mock<ILLMExecutor>();
             var runtime = new Mock<IToolRuntime>();
 
             llm.Setup(x => x.ExecuteAsync<LLMResponse>(
@@ -114,7 +114,7 @@ namespace AgentCore.Tests.Runtime
         [Fact]
         public async Task Respects_MaxIterations()
         {
-            var llm = new Mock<ILLMClient>();
+            var llm = new Mock<ILLMExecutor>();
             var runtime = new Mock<IToolRuntime>();
 
             var toolCall = new ToolCall("1", "Loop", null!);
@@ -148,7 +148,7 @@ namespace AgentCore.Tests.Runtime
         [Fact]
         public async Task Stops_When_Cancellation_Is_Requested()
         {
-            var llm = new Mock<ILLMClient>();
+            var llm = new Mock<ILLMExecutor>();
             var runtime = new Mock<IToolRuntime>();
 
             using var cts = new CancellationTokenSource();
@@ -169,7 +169,7 @@ namespace AgentCore.Tests.Runtime
         // -------- helpers --------
 
         private static IServiceProvider BuildServices(
-            Mock<ILLMClient> llm,
+            Mock<ILLMExecutor> llm,
             Mock<IToolRuntime> runtime)
         {
             return new ServiceCollection()

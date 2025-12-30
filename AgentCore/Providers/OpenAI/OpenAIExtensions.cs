@@ -92,9 +92,9 @@ namespace AgentCore.Providers.OpenAI
             }
         }
 
-        public static void ApplySamplingOptions(
+        public static void ApplySamplingOptions<T>(
             this ChatCompletionOptions opts,
-            LLMRequest? request)
+            LLMRequest<T>? request)
         {
             var s = request?.Options;
             if (s == null)

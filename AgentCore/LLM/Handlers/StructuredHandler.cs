@@ -1,9 +1,8 @@
-﻿using AgentCore.Chat;
-using AgentCore.Json;
-using AgentCore.LLM.Protocol;
+﻿using AgentCore.Json;
 using AgentCore.LLM.Client;
-using AgentCore.Tokens;
-using AgentCore.Tools;
+using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Protocol;
+using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using System;
@@ -11,76 +10,81 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLM.Handlers
+public sealed class StructuredHandler : IChunkHandler
 {
-    public sealed class StructuredHandler : IChunkHandler
+    private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new ConcurrentDictionary<Type, JObject>();
+    private readonly StringBuilder _jsonBuffer = new StringBuilder();
+
+    private JObject? _schema;
+    private Type? _resultType;
+
+    private readonly ILogger<StructuredHandler> _logger;
+
+    public StructuredHandler(ILogger<StructuredHandler> logger)
     {
-        private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new ConcurrentDictionary<Type, JObject>();
-        private readonly StringBuilder _jsonBuffer = new StringBuilder();
-        private LLMStructuredRequest _request;
-        private ILogger<StructuredHandler> Logger { get; }
+        _logger = logger;
+    }
 
-        public StructuredHandler(ILogger<StructuredHandler> logger)
+    public StreamKind Kind => StreamKind.Json;
+
+    public void OnRequest<T>(LLMRequest<T> request)
+    {
+        if (typeof(T) == typeof(string))
+            return;
+
+        _resultType = typeof(T);
+        if (!SchemaCache.TryGetValue(_resultType, out var schema))
         {
-            Logger = logger;
-        }
-        public StreamKind Kind => StreamKind.Json;
-        public void OnRequest(LLMRequest req)
-        {
-            _request = (LLMStructuredRequest)req;
-
-            if (!SchemaCache.TryGetValue(_request.ResultType, out var schema))
-            {
-                schema = _request.ResultType.GetSchemaForType();
-                SchemaCache[_request.ResultType] = schema;
-            }
-
-            _request.Schema = schema;
+            schema = _resultType.GetSchemaForType();
+            SchemaCache[_resultType] = schema;
         }
 
-        public void OnChunk(LLMStreamChunk chunk)
+        _schema = schema;
+        request.Schema = schema;
+
+        _jsonBuffer.Clear();
+    }
+
+    public void OnChunk(LLMStreamChunk chunk)
+    {
+        if (chunk.Kind != StreamKind.Json)
+            return;
+
+        var txt = chunk.AsText();
+        if (string.IsNullOrEmpty(txt))
+            return;
+
+        _logger.LogDebug("◄ Stream [Json]: {Text}", txt);
+        _jsonBuffer.Append(txt);
+    }
+
+    public void OnResponse<T>(LLMResponse<T> response)
+    {
+        if (typeof(T) == typeof(string))
+            return;
+
+        var raw = _jsonBuffer.ToString();
+
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new RetryException("Empty JSON response");
+
+        JToken json;
+        try
         {
-            if (chunk.Kind != StreamKind.Json) return;
-
-            var txt = chunk.AsText();
-            if (string.IsNullOrEmpty(txt)) return;
-
-            Logger.LogDebug("◄ Stream [Text]: {Text}", txt);
-
-            _jsonBuffer.Append(txt);
+            json = JToken.Parse(raw);
+        }
+        catch
+        {
+            throw new RetryException("Invalid JSON");
         }
 
-        public void OnResponse(LLMResponse response)
+        var errors = _schema?.Validate(json, _resultType!.Name);
+        if (errors?.Count > 0)
         {
-            var structured = response as LLMStructuredResponse
-            ?? throw new InvalidOperationException("Json stream without structured response");
-
-            var raw = _jsonBuffer.ToString();
-            if (string.IsNullOrWhiteSpace(raw))
-                throw new RetryException("Empty response. Return valid JSON.");
-
-            JToken json;
-            try
-            {
-                json = JToken.Parse(raw);
-            }
-            catch
-            {
-                throw new RetryException("Return valid JSON matching the schema.");
-            }
-
-            var errors = _request.Schema?.Validate(json, _request.ResultType.Name);
-            if (errors?.Count > 0)
-            {
-                var msg = string.Join("; ", errors.Select(e => $"{e.Path}: {e.Message}"));
-                throw new RetryException("Validation failed: " + msg);
-            }
-
-            var result = json.ToObject(_request.ResultType);
-
-            structured.AssistantMessage = raw;
-            structured.RawJson = json;
-            structured.Result = result;
+            var msg = errors.Select(e => $"{e.Path}: {e.Message}").ToJoinedString("; ");
+            throw new RetryException("Schema validation failed: " + msg);
         }
+
+        response.Result = json.ToObject<T>()!;
     }
 }

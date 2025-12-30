@@ -17,7 +17,7 @@ namespace AgentCore.Tools
         bool Contains(string toolName);
     }
 
-    internal interface IToolRegistry
+    public interface IToolRegistry
     {
         void Register(params Delegate[] funcs);
         void RegisterAll<T>();

@@ -1,0 +1,101 @@
+﻿using AgentCore.Chat;
+using AgentCore.Json;
+using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Protocol;
+using AgentCore.Providers;
+using AgentCore.Tokens;
+using AgentCore.Tools;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace AgentCore.LLM.Client
+{
+    public interface ILLMExecutor
+    {
+        Task<LLMResponse<T>> ExecuteAsync<T>(
+            LLMRequest<T> request,
+            CancellationToken ct = default,
+            Action<LLMStreamChunk>? onStream = null);
+    }
+
+    public class LLMExecutor : ILLMExecutor
+    {
+        private readonly ILLMStreamProvider _provider;
+        private readonly IRetryPolicy _retryPolicy;
+        private readonly IReadOnlyList<IChunkHandler> _handlers;
+        private readonly IContextManager _ctxManager;
+        private readonly ILogger<LLMExecutor> _logger;
+
+        public LLMExecutor(
+            ILLMStreamProvider provider,
+            IRetryPolicy retryPolicy,
+            IEnumerable<IChunkHandler> handlers,
+            IContextManager ctxManager,
+            ILogger<LLMExecutor> logger)
+        {
+            _provider = provider;
+            _retryPolicy = retryPolicy;
+            _handlers = handlers.ToList();
+            _ctxManager = ctxManager;
+            _logger = logger;
+        }
+
+        public async Task<LLMResponse<T>> ExecuteAsync<T>(
+            LLMRequest<T> request,
+            CancellationToken ct = default,
+            Action<LLMStreamChunk>? onStream = null)
+        {
+            var response = new LLMResponse<T>();
+            var initialPrompt = _ctxManager.Trim(
+                request.Prompt,
+                request.Options?.MaxOutputTokens);
+
+            async Task ExecuteAttempt(Conversation retryPrompt)
+            {
+                var trimmed = _ctxManager.Trim(
+                    retryPrompt,
+                    request.Options?.MaxOutputTokens);
+
+                var attempt = request.Clone();
+                attempt.Prompt = trimmed;
+
+                foreach (var h in _handlers)
+                    h.OnRequest(attempt);
+
+                await foreach (var chunk in _provider.StreamAsync(attempt, ct))
+                {
+                    onStream?.Invoke(chunk);
+
+                    foreach (var h in _handlers)
+                        if (h.Kind == chunk.Kind)
+                            h.OnChunk(chunk);
+                }
+
+                // Validate after streaming completes
+                foreach (var h in _handlers)
+                    h.OnResponse(response); // Throws RetryException if validation fails
+            }
+
+            try
+            {
+                await _retryPolicy.ExecuteAsync(initialPrompt, ExecuteAttempt, ct);
+            }
+            catch (EarlyStopException e)
+            {
+                _logger.LogWarning("► Early stop: {Msg}", e.Message);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                response.FinishReason = FinishReason.Cancelled;
+            }
+
+            return response;
+        }
+    }
+}

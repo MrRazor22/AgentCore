@@ -7,11 +7,11 @@ using System.Threading.Tasks;
 
 namespace AgentCore.Runtime
 {
-    public interface IAgentExecutor
+    public interface IAgentExecutor<T>
     {
-        Task ExecuteAsync(IAgentContext ctx);
+        Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx);
     }
-    public class ToolCallingLoop : IAgentExecutor
+    public sealed class ToolCallingLoop<T> : IAgentExecutor<T>
     {
         private readonly string? _model;
         private readonly ToolCallMode _toolMode;
@@ -30,50 +30,54 @@ namespace AgentCore.Runtime
             _opts = opts;
         }
 
-        public async Task ExecuteAsync(IAgentContext ctx)
+        public async Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx)
         {
             ctx.ScratchPad.AddUser(ctx.UserRequest ?? "No User input.");
 
-            var llm = ctx.Services.GetRequiredService<ILLMClient>();
+            var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
             var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
 
             int iteration = 0;
+            LLMResponse<T>? last = null;
 
             while (iteration < _maxIterations && !ctx.CancellationToken.IsCancellationRequested)
             {
-                // STREAM LIVE
-                var result = await llm.ExecuteAsync<LLMResponse>(
-                    new LLMRequest(
+                var result = await llm.ExecuteAsync(
+                    new LLMRequest<T>(
                         prompt: ctx.ScratchPad,
                         toolCallMode: _toolMode,
                         model: _model,
-                        options: _opts
-                    ),
+                        options: _opts)
+                    {
+                        AvailableTools = ctx.Services.GetRequiredService<IToolCatalog>().RegisteredTools
+                    },
                     ctx.CancellationToken,
                     chunk =>
                     {
-                        if (chunk.Kind == StreamKind.Text)
+                        if (typeof(T) == typeof(string) && chunk.Kind == StreamKind.Text)
                             ctx.Stream?.Invoke(chunk.AsText());
                     });
 
-                // text 
-                ctx.ScratchPad.AddAssistant(result.AssistantMessage);
+                last = result;
 
-                // toolcall?
-                var toolCall = result.ToolCall; // result.Payload is List<ToolCall>
-                if (toolCall == null)
-                {
-                    ctx.Response.Set(result.AssistantMessage);
-                    break;
-                }
+                // No tool → final answer
+                if (!result.HasToolCall)
+                    return result;
 
-                // RUN TOOL
-                var outputs = await runtime.HandleToolCallAsync(toolCall, ctx.CancellationToken);
+                // Run tool
+                var outputs = await runtime.HandleToolCallAsync(
+                    result.ToolCall!,
+                    ctx.CancellationToken);
 
                 ctx.ScratchPad.AppendToolCallResult(outputs);
-
                 iteration++;
             }
+
+            return last ?? new LLMResponse<T>
+            {
+                FinishReason = FinishReason.Cancelled
+            };
         }
     }
+
 }

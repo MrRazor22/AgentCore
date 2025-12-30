@@ -1,8 +1,5 @@
 ﻿using AgentCore.LLM.Protocol;
 using AgentCore.Tokens;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace AgentCore.LLM.Handlers
 {
@@ -12,21 +9,23 @@ namespace AgentCore.LLM.Handlers
 
         private TokenUsage? _usage;
 
-        public void OnRequest(LLMRequest request)
+        public void OnRequest<T>(LLMRequest<T> request)
         {
             _usage = null;
         }
 
         public void OnChunk(LLMStreamChunk chunk)
         {
+            if (chunk.Kind != StreamKind.Usage)
+                return;
+
             _usage = chunk.AsTokenUsage();
         }
 
-        public void OnResponse(LLMResponse response)
+        public void OnResponse<T>(LLMResponse<T> response)
         {
             if (_usage != null)
                 response.TokenUsage = _usage;
         }
     }
-
 }

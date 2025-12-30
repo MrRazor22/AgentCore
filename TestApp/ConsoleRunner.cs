@@ -1,5 +1,6 @@
 ﻿using AgentCore.BuiltInTools;
 using AgentCore.LLM.BuiltInTools;
+using AgentCore.LLM.Client;
 using AgentCore.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace TestApp
             Agent? app = null;
             try
             {
-                var builder = Agent.CreateBuilder();
+                var builder = new AgentBuilder();
 
                 builder.AddContextTrimming(o =>
                 {
@@ -27,11 +28,16 @@ namespace TestApp
                     opts.BaseUrl = "http://127.0.0.1:1234/v1";
                     opts.ApiKey = "lmstudio";
                     opts.Model = "model";
-                    opts.MaxRetries = 2;
                 });
+
+                builder.Services.Configure<RetryPolicyOptions>(o =>
+                {
+                    o.MaxRetries = 5;
+                });
+
                 builder.AddFileMemory(o =>
                 {
-                    o.PersistDir = "D:\\agenty\\memory";
+                    o.PersistDir = "D:\\AgentCore\\memory";
                 });
 
                 builder.Services.AddLogging(logging =>
@@ -39,39 +45,51 @@ namespace TestApp
                     logging.ClearProviders();
 
                     Log.Logger = new LoggerConfiguration()
-                    .MinimumLevel.Verbose()
-                    .WriteTo.File("D:\\agenty\\agent.log", rollingInterval: RollingInterval.Day)
-                    .CreateLogger();
-                    Log.Information("Logger initialized");
+                        .MinimumLevel.Verbose()
+                        .WriteTo.Console(Serilog.Events.LogEventLevel.Information) // console
+                        .WriteTo.File(
+                            "D:\\AgentCore\\AgentCore.log",
+                            Serilog.Events.LogEventLevel.Verbose,
+                            rollingInterval: RollingInterval.Day) // file
+                        .CreateLogger();
+                    Log.Debug("Logger initialized");
 
-                    logging.AddSerilog();
+                    logging.AddSerilog(dispose: true);
                 });
 
+                builder.Services.Configure<LoggerFilterOptions>(o =>
+                {
+                    o.MinLevel = LogLevel.Debug;
+                });
+
+                builder.Services.Configure<LoggerFilterOptions>(o =>
+                {
+                    o.MinLevel = LogLevel.Debug;
+                });
+
+                builder.WithInstructions(
+                    "You are an AI agent, execute all user requests faithfully."
+                );
+
+                builder.WithTools<GeoTools>();
+                builder.WithTools<WeatherTool>();
+                builder.WithTools<ConversionTools>();
+                builder.WithTools<MathTools>();
+                builder.WithTools<SearchTools>();
+
                 app = builder.Build();
-
-                app.WithInstructions(
-                     "You are an AI agent, execute all user requests faithfully."
-                 )
-                .WithTools<GeoTools>()
-                .WithTools<WeatherTool>()
-                .WithTools<ConversionTools>()
-                .WithTools<MathTools>()
-                .WithTools<SearchTools>()
-
-                .UseExecutor(() => new ToolCallingLoop());
 
                 while (true)
                 {
                     Console.Write("Enter your goal (Ctrl+Q to quit):\n");
 
-                    // normal input -> backspace works
                     string goal = Console.ReadLine();
                     if (string.IsNullOrWhiteSpace(goal))
                         continue;
 
                     using var cts = new CancellationTokenSource();
 
-                    // cancel watcher (does NOT touch input editing)
+                    // cancel watcher
                     _ = Task.Run(() =>
                     {
                         while (!cts.IsCancellationRequested)
@@ -90,17 +108,20 @@ namespace TestApp
 
                     try
                     {
-                        var result = await app.InvokeAsync(goal, cts.Token, s => Console.Write(s));
+                        var result = await app.InvokeAsync(
+                            goal,
+                            cts.Token,
+                            s => Console.Write(s)
+                        );
 
-                        var msg = result.Message?.Trim();
-                        if (string.IsNullOrWhiteSpace(msg))
+                        if (string.IsNullOrWhiteSpace(result))
                         {
                             Console.WriteLine("[no response]");
                             continue;
                         }
 
                         Console.WriteLine("\n\n\n───────── AGENT RESPONSE ─────────\n");
-                        Console.WriteLine(msg);
+                        Console.WriteLine(result);
                         Console.WriteLine("\n──────────────────────────\n");
                     }
                     catch (OperationCanceledException)

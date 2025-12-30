@@ -62,7 +62,7 @@ namespace AgentCore.Tests.LLM
                 _parser,
                 _tools,
                 _ => _handler.Object,
-                NullLogger<LLMClientBase>.Instance
+                NullLogger<LLMExecutor>.Instance
             );
         }
 
@@ -150,7 +150,7 @@ namespace AgentCore.Tests.LLM
         private static LLMStreamChunk Finish(FinishReason r)
             => new LLMStreamChunk(StreamKind.Finish, r);
 
-        private sealed class TestClient : LLMClientBase
+        private sealed class TestClient : LLMExecutor
         {
             private LLMStreamChunk[] _chunks = Array.Empty<LLMStreamChunk>();
 
@@ -162,7 +162,7 @@ namespace AgentCore.Tests.LLM
                 IToolCallParser parser,
                 IToolCatalog tools,
                 HandlerResolver resolver,
-                ILogger<LLMClientBase> logger)
+                ILogger<LLMExecutor> logger)
                 : base(opts, ctx, tokens, retry, parser, tools, resolver, logger) { }
 
             public void SetStream(LLMStreamChunk[] chunks)
