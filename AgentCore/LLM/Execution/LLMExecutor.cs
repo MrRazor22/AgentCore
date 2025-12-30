@@ -75,13 +75,20 @@ namespace AgentCore.LLM.Execution
                     "LLM request: {Request}",
                     attempt.ToCountablePayload());
 
-                await foreach (var chunk in _provider.StreamAsync(attempt, ct))
+                try
                 {
-                    onStream?.Invoke(chunk);
+                    await foreach (var chunk in _provider.StreamAsync(attempt, ct))
+                    {
+                        onStream?.Invoke(chunk);
 
-                    foreach (var h in _handlers)
-                        if (h.Kind == chunk.Kind)
-                            h.OnChunk(chunk);
+                        foreach (var h in _handlers)
+                            if (h.Kind == chunk.Kind)
+                                h.OnChunk(chunk);
+                    }
+                }
+                catch (EarlyStopException e)
+                {
+                    _logger.LogWarning("► Early stop: {Msg}", e.Message);
                 }
 
                 // Validate after streaming completes
@@ -92,11 +99,7 @@ namespace AgentCore.LLM.Execution
             try
             {
                 await _retryPolicy.ExecuteAsync(initialPrompt, ExecuteAttempt, ct);
-            }
-            catch (EarlyStopException e)
-            {
-                _logger.LogWarning("► Early stop: {Msg}", e.Message);
-            }
+            } 
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 response.FinishReason = FinishReason.Cancelled;
