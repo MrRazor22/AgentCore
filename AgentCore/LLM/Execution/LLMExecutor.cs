@@ -88,7 +88,7 @@ namespace AgentCore.LLM.Execution
                 }
                 catch (EarlyStopException e)
                 {
-                    _logger.LogWarning("► Early stop: {Msg}", e.Message);
+                    _logger.LogWarning("Early stop: {Msg}", e.Message);
                 }
 
                 // Validate after streaming completes
@@ -99,10 +99,11 @@ namespace AgentCore.LLM.Execution
             try
             {
                 await _retryPolicy.ExecuteAsync(initialPrompt, ExecuteAttempt, ct);
-            } 
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            }
+            catch (OperationCanceledException e) when (ct.IsCancellationRequested)
             {
                 response.FinishReason = FinishReason.Cancelled;
+                _logger.LogWarning("Cancellation Requested: {Msg}", e.Message);
             }
             finally
             {
@@ -113,9 +114,10 @@ namespace AgentCore.LLM.Execution
                     response.ToCountablePayload()
                 );
                 _logger.LogDebug(
-                    "LLM call Duration={Ms}ms\n",
-                    sw.ElapsedMilliseconds
-                );
+                     "LLM call Duration={Ms}ms FinishReason={FinishReason}",
+                     sw.ElapsedMilliseconds,
+                     response.FinishReason
+                 );
             }
             return response;
         }

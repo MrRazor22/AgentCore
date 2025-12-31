@@ -69,13 +69,13 @@ namespace AgentCore.Tokens
             int inTok = AppromimateCount(requestPayload);
             int outTok = AppromimateCount(responsePayload);
 
-            _logger.LogDebug(
+            _logger.LogTrace(
                 "Approximated Token Usage In: {In} | Out: {Out}",
                 inTok, outTok
             );
 
             if (usageReported != null)
-                _logger.LogDebug(
+                _logger.LogTrace(
                     "Token Approx Accuracy In={InAcc:F0}% Out={OutAcc:F0}%",
                     usageReported.InputTokens <= 0 ? 100 :
                         100 * (1 - Math.Abs(inTok - usageReported.InputTokens) / (double)usageReported.InputTokens),

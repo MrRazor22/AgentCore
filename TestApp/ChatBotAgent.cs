@@ -39,7 +39,7 @@ namespace TestApp
                 builder.AddFileMemory(o =>
                 {
                     o.PersistDir = "D:\\AgentCore\\memory";
-                    o.MaxHistorySize = 5;
+                    o.MaxChatHistory = 5;
                 });
 
                 builder.Services.AddLogging(logging =>

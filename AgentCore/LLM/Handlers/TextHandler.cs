@@ -78,7 +78,7 @@ namespace AgentCore.LLM.Handlers
             {
                 response.ToolCall = _parser.Validate(_inlineTool);
                 _logger.LogDebug(
-                    "Result [Inline ToolCall]: Name={Name}, Params={Params}",
+                    "◄ Result [Inline ToolCall]: Name={Name}, Params={Params}",
                     response.ToolCall.Name,
                     response.ToolCall.Parameters.AsPrettyJson()
                 );
@@ -90,7 +90,7 @@ namespace AgentCore.LLM.Handlers
             {
                 response.Result = (T)(object)_buffer.ToString().Trim();
                 _logger.LogDebug(
-                    "Result [Text]: {Result}",
+                    "◄ Result [Text]: {Result}",
                     response.Result.ToString()
                 );
             }

@@ -7,11 +7,11 @@ namespace AgentCore.Tokens
         int Count(string payload);
     }
 
-    public sealed class SharpTokenCounter : ITokenCounter
+    public sealed class TikTokenCounter : ITokenCounter
     {
         private readonly GptEncoding _encoding;
 
-        public SharpTokenCounter(string model)
+        public TikTokenCounter(string model)
         {
             _encoding = GptEncoding.GetEncoding(ResolveEncoding(model));
         }

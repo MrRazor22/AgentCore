@@ -86,7 +86,7 @@ namespace AgentCore.LLM.Handlers
             response.ToolCall = _parser.Validate(_firstTool);
 
             _logger.LogDebug(
-                "Result [ToolCall]: Name={Name} Params={Params}",
+                "◄ Result [ToolCall]: Name={Name} Params={Params}",
                 response.ToolCall.Name,
                 response.ToolCall.Parameters.AsPrettyJson()
             );

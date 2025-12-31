@@ -46,7 +46,6 @@ namespace AgentCore.Tokens
                     throw new ArgumentOutOfRangeException(nameof(requiredGap), "Required gap cannot be negative.");
 
                 int maxAllowedGap = (int)(_opts.MaxContextTokens * (1 - _opts.Margin));
-
                 if (requiredGap.Value > maxAllowedGap)
                     throw new ArgumentOutOfRangeException(
                         nameof(requiredGap),
@@ -55,15 +54,11 @@ namespace AgentCore.Tokens
             }
 
             var source = reqPrompt.Clone();
-
             int originalCount = _tokenManager.AppromimateCount(source.ToJson());
 
             int limit = requiredGap.HasValue
                 ? Math.Max(0, _opts.MaxContextTokens - requiredGap.Value)
                 : (int)(_opts.MaxContextTokens * _opts.Margin);
-
-            if (originalCount <= limit)
-                return source;
 
             var system = source.Where(m => m.Role == Role.System).ToList();
 
@@ -125,23 +120,42 @@ namespace AgentCore.Tokens
                 return c;
             }
 
-            var rebuilt = Build(keepUA);
-            int finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
+            Conversation result;
 
-            while (finalCount > limit && keepUA.Count > 0)
+            if (originalCount <= limit)
             {
-                keepUA.RemoveAt(0);   // drop oldest UA, no exceptions
-                rebuilt = Build(keepUA);
-                finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
+                result = source;
+            }
+            else
+            {
+                var rebuilt = Build(keepUA);
+                int finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
+
+                while (finalCount > limit && keepUA.Count > 0)
+                {
+                    keepUA.RemoveAt(0);   // drop oldest UA, no exceptions
+                    rebuilt = Build(keepUA);
+                    finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
+                }
+
+                result = rebuilt;
             }
 
-            _logger.LogDebug(
-                "Context trimmed. Original={Original}, Final={Final}, Removed={Removed}",
-                originalCount, finalCount, originalCount - finalCount
+            int finalTokens = _tokenManager.AppromimateCount(result.ToJson());
+            double usagePct = Math.Round(
+                (double)finalTokens / _opts.MaxContextTokens * 100,
+                1
             );
 
-            return rebuilt;
-        }
+            _logger.LogDebug(
+                "ContextBudget Original={Original}, Final={Final}, Removed={Removed}, UsagePct={UsagePct}",
+                originalCount,
+                finalTokens,
+                originalCount - finalTokens,
+                usagePct
+            );
 
+            return result;
+        }
     }
 }
