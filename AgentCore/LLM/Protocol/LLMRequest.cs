@@ -56,10 +56,6 @@ namespace AgentCore.LLM.Protocol
             ToolCallMode = toolCallMode;
             Model = model;
             Options = options;
-
-            // Only generate schema if T is not string
-            if (typeof(T) != typeof(string))
-                Schema = typeof(T).GetSchemaForType();
         }
         public string ToCountablePayload()
         {
