@@ -3,30 +3,33 @@ using AgentCore.LLM.Execution;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Threading.Tasks;
 
 namespace AgentCore.Runtime
 {
+    public sealed class AgentLoopOptions
+    {
+        public int MaxIterations { get; set; } = 50;
+    }
     public interface IAgentExecutor<T>
     {
-        Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx);
+        Task<LLMResponse<T>> ExecuteAsync(IAgentContext<T> ctx);
     }
-
     public sealed class ToolCallingLoop<T> : IAgentExecutor<T>
     {
-        private readonly int _maxIterations;
-        private readonly LLMGenerationOptions? _opts;
+        private readonly AgentLoopOptions _opts;
+        private readonly ILogger<ToolCallingLoop<T>> _logger;
 
         public ToolCallingLoop(
-            ToolCallMode toolMode = ToolCallMode.Auto,
-            int maxIterations = 50,
-            LLMGenerationOptions? opts = null)
+            AgentLoopOptions opts,
+            ILogger<ToolCallingLoop<T>> logger)
         {
-            _maxIterations = maxIterations;
             _opts = opts;
+            _logger = logger;
         }
 
-        public async Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx)
+        public async Task<LLMResponse<T>> ExecuteAsync(IAgentContext<T> ctx)
         {
             ctx.ScratchPad.AddUser(ctx.UserRequest ?? "No User input.");
 
@@ -36,14 +39,11 @@ namespace AgentCore.Runtime
 
             LLMResponse<T>? last = null;
 
-            for (int i = 0; i < _maxIterations && !ctx.CancellationToken.IsCancellationRequested; i++)
+            for (int i = 0; i < _opts.MaxIterations && !ctx.CancellationToken.IsCancellationRequested; i++)
             {
-                var request = new LLMRequest<T>(
-                    prompt: ctx.ScratchPad,
-                    options: _opts)
-                {
-                    AvailableTools = tools.RegisteredTools
-                };
+                var request = ctx.RequestTemplate;
+                request.Prompt = ctx.ScratchPad;
+                request.AvailableTools ??= tools.RegisteredTools;
 
                 var result = await llm.ExecuteAsync(
                     request,
@@ -60,6 +60,14 @@ namespace AgentCore.Runtime
                     ctx.CancellationToken);
 
                 ctx.ScratchPad.AppendToolCallResult(toolResult);
+            }
+
+            if (!ctx.CancellationToken.IsCancellationRequested)
+            {
+                _logger?.LogWarning(
+                    "Agent loop stopped: max iterations reached ({MaxIterations})",
+                    _opts.MaxIterations
+                );
             }
 
             return last ?? new LLMResponse<T>

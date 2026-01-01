@@ -14,15 +14,18 @@ namespace AgentCore.Runtime
     }
     public sealed class AgentMemoryOptions
     {
+        /// <summary>
+        /// Set null to disable memory presistance
+        /// </summary>
         public string? PersistDir { get; set; }
             = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Agenty");
+                "AgentCore");
 
         /// <summary>
         /// 0 = unlimited, 1 = last response only, N = last N messages
         /// </summary>
-        public int MaxHistorySize { get; set; } = 0;
+        public int MaxChatHistory { get; set; } = 0;
     }
 
     public sealed class FileMemory : IAgentMemory
@@ -96,10 +99,10 @@ namespace AgentCore.Runtime
 
         private void TrimHistory(Conversation convo)
         {
-            if (_options.MaxHistorySize <= 0)
+            if (_options.MaxChatHistory <= 0)
                 return;
 
-            while (convo.Count > _options.MaxHistorySize)
+            while (convo.Count > _options.MaxChatHistory)
                 convo.RemoveAt(0);
         }
 

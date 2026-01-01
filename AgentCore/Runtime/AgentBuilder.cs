@@ -107,7 +107,7 @@ namespace AgentCore.Runtime
             configure(opts);
 
             builder.Services.AddSingleton<ITokenCounter>(
-                _ => new SharpTokenCounter(opts.Model)
+                _ => new TikTokenCounter(opts.Model)
             );
 
             builder.Services.AddSingleton<ITokenManager, TokenManager>();
