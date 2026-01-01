@@ -1,5 +1,6 @@
 ﻿using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
+using AgentCore.LLM.Protocol;
 using AgentCore.Providers;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Tokens;
@@ -12,55 +13,74 @@ using System.Collections.Generic;
 namespace AgentCore.Runtime
 {
     // === 2. AgentBuilder ===
+    public sealed class AgentConfig
+    {
+        public string Name { get; set; } = "agent";
+        public string? SystemPrompt { get; set; }
+        public string? Model { get; set; }
+        public LLMGenerationOptions Generation { get; set; } = new LLMGenerationOptions();
+        public int MaxIterations { get; set; } = 50;
+    }
     public sealed class AgentBuilder
     {
-        private string? _defaultSystemPrompt;
-        public IServiceCollection Services { get; } = new ServiceCollection();
+        private readonly AgentConfig _config = new AgentConfig();
         private readonly List<Action<ToolRegistryCatalog>> _toolRegistrations = new List<Action<ToolRegistryCatalog>>();
+        public IServiceCollection Services { get; } = new ServiceCollection();
+
         public AgentBuilder()
         {
+            Services.AddLogging();
+
+            // === CORE INFRA (ALWAYS PRESENT) ===
+
+            // Memory (default impl, configurable)
             Services.AddSingleton<IAgentMemory, FileMemory>();
 
-            // Tool (SCOPED)
+            // Context trimming (default impl, configurable)
+            Services.AddSingleton<IContextManager, ContextManager>();
+
+            // Tokens
+            Services.AddSingleton<ITokenManager, TokenManager>();
+
+            // Retry
+            Services.AddSingleton<IRetryPolicy, RetryPolicy>();
+
+            // Tools
             Services.AddScoped<IToolRuntime, ToolRuntime>();
             Services.AddScoped<IToolCallParser, ToolCallParser>();
 
-            // Token + context
-            Services.AddSingleton<ITokenManager, TokenManager>();
-            Services.AddSingleton<IContextManager>(sp =>
-                new ContextManager(
-                    new ContextBudgetOptions(),
-                    sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<ILogger<ContextManager>>()
-                )
-            );
-
-            // Retry
-            Services.AddSingleton<RetryPolicyOptions>();
-            Services.AddSingleton<IRetryPolicy, RetryPolicy>();
-
-            // Handlers (SCOPED)
+            // Handlers
             Services.AddScoped<IChunkHandler, TextHandler>();
             Services.AddScoped<IChunkHandler, ToolCallHandler>();
             Services.AddScoped<IChunkHandler, StructuredHandler>();
             Services.AddScoped<IChunkHandler, FinishHandler>();
             Services.AddScoped<IChunkHandler, TokenUsageHandler>();
 
-            //Logging
-            Services.AddLogging();
-
-            //LLM Executor(SCOPED)
+            // LLM executor
             Services.AddScoped<ILLMExecutor, LLMExecutor>();
 
-            //Executor
+            // Agent executor
             Services.AddTransient(typeof(IAgentExecutor<>), typeof(ToolCallingLoop<>));
-
         }
-        public AgentBuilder WithInstructions(string prompt)
+
+        public AgentBuilder WithName(string name)
         {
-            _defaultSystemPrompt = prompt;
+            _config.Name = name;
             return this;
         }
+
+        public AgentBuilder WithInstructions(string prompt)
+        {
+            _config.SystemPrompt = prompt;
+            return this;
+        }
+
+        public AgentBuilder WithModel(string model)
+        {
+            _config.Model = model;
+            return this;
+        }
+
         public AgentBuilder WithTools<T>()
         {
             _toolRegistrations.Add(r => r.RegisterAll<T>());
@@ -72,9 +92,8 @@ namespace AgentCore.Runtime
             _toolRegistrations.Add(r => r.RegisterAll(instance));
             return this;
         }
-        public Agent Build() => Build("default");
 
-        public Agent Build(string sessionId)
+        public Agent Build()
         {
             Services.AddScoped<ToolRegistryCatalog>(sp =>
             {
@@ -91,63 +110,21 @@ namespace AgentCore.Runtime
 
             if (provider.GetService<ILLMStreamProvider>() == null)
                 throw new InvalidOperationException(
-                    "No LLM stream provider registered. Call AddOpenAI() or register an ILLMStreamProvider.");
+                    "No LLM provider registered. Call AddOpenAI() or equivalent.");
 
-            return new Agent(provider, sessionId, _defaultSystemPrompt);
+            return new Agent(provider, _config);
         }
     }
+
     public static class AgentBuilderExtensions
     {
         //Open AI
         public static AgentBuilder AddOpenAI(
-    this AgentBuilder builder,
-    Action<LLMInitOptions> configure)
+            this AgentBuilder builder,
+            Action<LLMInitOptions> configure)
         {
-            var opts = new LLMInitOptions();
-            configure(opts);
-
-            builder.Services.AddSingleton<ITokenCounter>(
-                _ => new TikTokenCounter(opts.Model)
-            );
-
-            builder.Services.AddSingleton<ITokenManager, TokenManager>();
-
-            builder.Services.AddSingleton<ILLMStreamProvider>(sp =>
-                new OpenAILLMClient(
-                    opts,
-                    sp.GetRequiredService<ILogger<OpenAILLMClient>>()
-                )
-            );
-
-            return builder;
-        }
-        //context trimmer
-        public static AgentBuilder AddContextTrimming(
-           this AgentBuilder builder,
-           Action<ContextBudgetOptions> configure)
-        {
-            var options = new ContextBudgetOptions();
-            configure(options);
-
-            builder.Services.AddSingleton<IContextManager>(sp =>
-            {
-                return new ContextManager(
-                    options,
-                    sp.GetRequiredService<ITokenManager>(),
-                    sp.GetRequiredService<ILogger<ContextManager>>()
-                    );
-            });
-
-            return builder;
-        }
-
-        // memory config
-        public static AgentBuilder AddFileMemory(this AgentBuilder builder, Action<AgentMemoryOptions>? configure = null)
-        {
-            var options = new AgentMemoryOptions();
-            configure?.Invoke(options);
-
-            builder.Services.AddSingleton<IAgentMemory>(sp => new FileMemory(options));
+            builder.Services.Configure(configure);
+            builder.Services.AddSingleton<ILLMStreamProvider, OpenAILLMClient>();
             return builder;
         }
     }

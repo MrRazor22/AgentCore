@@ -1,9 +1,10 @@
-﻿using AgentCore.LLM.Protocol;
+﻿using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Execution;
+using AgentCore.LLM.Protocol;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Chat;
 using System;
@@ -24,12 +25,14 @@ namespace AgentCore.Providers.OpenAI
             new ConcurrentDictionary<string, ChatClient>(StringComparer.OrdinalIgnoreCase);
         private string? _defaultModel;
         public OpenAILLMClient(
-         LLMInitOptions opts,
-         ILogger<OpenAILLMClient> logger)
+            IOptions<LLMInitOptions> options,
+            ILogger<OpenAILLMClient> logger)
         {
+            var opts = options.Value;
+
             _client = new OpenAIClient(
-                credential: new ApiKeyCredential(opts.ApiKey!),
-                options: new OpenAIClientOptions { Endpoint = new Uri(opts.BaseUrl) }
+                new ApiKeyCredential(opts.ApiKey!),
+                new OpenAIClientOptions { Endpoint = new Uri(opts.BaseUrl!) }
             );
 
             _defaultModel = opts.Model;

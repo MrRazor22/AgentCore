@@ -15,6 +15,7 @@ namespace AgentCore.Runtime
 {
     public interface IAgentContext
     {
+        AgentConfig Config { get; }
         Conversation ScratchPad { get; }
         string? UserRequest { get; }
         IServiceProvider Services { get; }
@@ -24,25 +25,30 @@ namespace AgentCore.Runtime
     public sealed class AgentContext : IAgentContext
     {
         public AgentContext(
+            AgentConfig config,
             IServiceProvider services,
-            CancellationToken ct)
+            string userRequest,
+            CancellationToken ct,
+            Action<LLMStreamChunk>? stream)
         {
+            Config = config;
             Services = services;
+            UserRequest = userRequest;
             CancellationToken = ct;
+            Stream = stream;
             ScratchPad = new Conversation();
         }
 
+        public AgentConfig Config { get; }
         public Conversation ScratchPad { get; }
-        public string? UserRequest { get; set; }
+        public string UserRequest { get; }
         public IServiceProvider Services { get; }
-        public Action<LLMStreamChunk>? Stream { get; set; }
         public CancellationToken CancellationToken { get; }
+        public Action<LLMStreamChunk>? Stream { get; }
     }
 
     public interface IAgent
     {
-        string SessionId { get; }
-
         Task<string> InvokeAsync(
             string goal,
             CancellationToken ct = default,
@@ -58,16 +64,20 @@ namespace AgentCore.Runtime
     {
         private readonly IServiceProvider _services;
         private readonly IAgentMemory _memory;
-        private string? _systemPrompt;
-
-        public string SessionId { get; }
-
-        internal Agent(IServiceProvider services, string sessionId, string? systemPrompt)
+        private readonly ILogger<Agent> _logger;
+        private readonly AgentConfig _config;
+        public static AgentBuilder Create(string name = "agent")
         {
+            return new AgentBuilder()
+                .WithName(name);
+        }
+
+        internal Agent(IServiceProvider services, AgentConfig config)
+        {
+            _config = config;
             _services = services;
-            SessionId = sessionId;
-            _systemPrompt = systemPrompt;
             _memory = services.GetRequiredService<IAgentMemory>();
+            _logger = services.GetRequiredService<ILogger<Agent>>();
         }
 
         public Task<string> InvokeAsync(
@@ -75,35 +85,39 @@ namespace AgentCore.Runtime
             CancellationToken ct = default,
             Action<LLMStreamChunk>? stream = null)
             => InvokeAsync<string>(goal, ct, stream);
-
         public async Task<T> InvokeAsync<T>(
             string goal,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? stream = null)
         {
             using var scope = _services.CreateScope();
-
-            var ctx = new AgentContext(scope.ServiceProvider, ct)
+            var sessionId = Guid.NewGuid().ToString("N");
+            using (_logger.BeginScope(new Dictionary<string, object>
             {
-                UserRequest = goal,
-                Stream = stream
-            };
+                ["Agent"] = _config.Name,
+                ["Session"] = sessionId
+            }))
+            {
+                var ctx = new AgentContext(
+                    _config,
+                    scope.ServiceProvider,
+                    goal,
+                    ct,
+                    stream
+                );
 
-            if (!string.IsNullOrEmpty(_systemPrompt))
-                ctx.ScratchPad.AddSystem(_systemPrompt);
+                if (!string.IsNullOrEmpty(_config.SystemPrompt))
+                    ctx.ScratchPad.AddSystem(_config.SystemPrompt);
 
-            var memory = await _memory.RecallAsync(SessionId, goal).ConfigureAwait(false);
-            if (memory != null)
-                ctx.ScratchPad.Append(memory);
+                await _memory.RecallAsync(sessionId, goal, ctx.ScratchPad);
 
-            var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor<T>>();
-            var response = await executor.ExecuteAsync(ctx).ConfigureAwait(false);
+                var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor<T>>();
+                var response = await executor.ExecuteAsync(ctx);
 
-            await _memory.UpdateAsync(SessionId, goal, response.Result?.ToString())
-                     .ConfigureAwait(false);
+                await _memory.UpdateAsync(sessionId, goal, response.Result?.ToString());
 
-            return response.Result;
+                return response.Result;
+            }
         }
     }
-
 }

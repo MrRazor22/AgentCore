@@ -1,6 +1,7 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,14 +25,13 @@ namespace AgentCore.Tokens
         private readonly ITokenManager _tokenManager;
         private readonly ContextBudgetOptions _opts;
         private readonly ILogger<ContextManager> _logger;
-
         public ContextManager(
-            ContextBudgetOptions opts,
+            IOptions<ContextBudgetOptions> options,
             ITokenManager tokenManager,
             ILogger<ContextManager> logger)
         {
-            _opts = opts ?? throw new ArgumentNullException(nameof(opts));
-            _tokenManager = tokenManager ?? throw new ArgumentNullException(nameof(tokenManager));
+            _opts = options.Value;
+            _tokenManager = tokenManager;
             _logger = logger;
         }
         public Conversation Trim(Conversation reqPrompt, int? requiredGap = null)
