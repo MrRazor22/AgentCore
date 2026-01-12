@@ -1,3 +1,4 @@
+﻿using AgentCore.Chat;
 ﻿using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
@@ -7,6 +8,7 @@ using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 
@@ -20,6 +22,7 @@ namespace AgentCore.Runtime
         public string? Model { get; set; }
         public LLMGenerationOptions Generation { get; set; } = new LLMGenerationOptions();
         public int MaxIterations { get; set; } = 50;
+        public Type? OutputType { get; set; }
     }
     public sealed class AgentBuilder
     {
@@ -60,7 +63,7 @@ namespace AgentCore.Runtime
             Services.AddScoped<ILLMExecutor, LLMExecutor>();
 
             // Agent executor
-            Services.AddTransient(typeof(IAgentExecutor<>), typeof(ToolCallingLoop<>));
+            Services.AddTransient(typeof(IAgentExecutor), typeof(ToolCallingLoop));
         }
 
         public AgentBuilder WithName(string name)
@@ -92,8 +95,18 @@ namespace AgentCore.Runtime
             _toolRegistrations.Add(r => r.RegisterAll(instance));
             return this;
         }
+        public AgentBuilder WithOutput<T>()
+        {
+            _config.OutputType = typeof(T);
+            return this;
+        }
+        public AgentBuilder ConfigureServices(Action<IServiceCollection> configure)
+        {
+            configure(Services);
+            return this;
+        }
 
-        public Agent Build()
+        public LLMAgent Build()
         {
             Services.AddScoped<ToolRegistryCatalog>(sp =>
             {
@@ -112,7 +125,7 @@ namespace AgentCore.Runtime
                 throw new InvalidOperationException(
                     "No LLM provider registered. Call AddOpenAI() or equivalent.");
 
-            return new Agent(provider, _config);
+            return new LLMAgent(provider, _config);
         }
     }
 
@@ -124,8 +137,24 @@ namespace AgentCore.Runtime
             Action<LLMInitOptions> configure)
         {
             builder.Services.Configure(configure);
+
             builder.Services.AddSingleton<ILLMStreamProvider, OpenAILLMClient>();
+
+            builder.Services.AddSingleton<ITokenCounter>(sp =>
+            {
+                var opts = sp.GetRequiredService<IOptions<LLMInitOptions>>().Value;
+
+                var encoding =
+                    opts.Model?.StartsWith("gpt-4o") == true ? "o200k_base" :
+                    "cl100k_base";
+
+                return new TikTokenCounter(encoding);
+            });
+
+            builder.Services.AddSingleton<ITokenManager, TokenManager>();
+
             return builder;
         }
     }
+
 }

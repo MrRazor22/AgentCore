@@ -10,7 +10,7 @@ namespace AgentCore.LLM.Protocol
     {
         Text,
         ToolCallDelta,
-        Json,
+        Structured,
         Usage,
         Finish,
         // future:

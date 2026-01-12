@@ -1,4 +1,5 @@
-﻿using AgentCore.LLM.Execution;
+﻿using AgentCore.Json;
+using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tokens;
@@ -46,19 +47,18 @@ namespace AgentCore.Providers.OpenAI
             var key = model ?? _defaultModel ?? throw new InvalidOperationException("Model not specified.");
             return _chatClients.GetOrAdd(key, m => _client.GetChatClient(m));
         }
-        private static ChatCompletionOptions ConfigureChatCompletionOptions<T>(LLMRequest<T> request)
+        private static ChatCompletionOptions ConfigureChatCompletionOptions(LLMRequest request)
         {
             var options = new ChatCompletionOptions();
             options.ApplySamplingOptions(request);
             options.AllowParallelToolCalls = false;
 
             // Structured output
-            if (request.Schema != null)
+            if (request.OutputType != null)
             {
                 options.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
                     "structured_response",
-                    BinaryData.FromString(
-                        request.Schema.ToString(Newtonsoft.Json.Formatting.None)),
+                    BinaryData.FromString(request.OutputType.GetSchemaForType().ToString(Newtonsoft.Json.Formatting.None)),
                     jsonSchemaIsStrict: true
                 );
             }
@@ -72,9 +72,9 @@ namespace AgentCore.Providers.OpenAI
             return options;
         }
 
-        public async IAsyncEnumerable<LLMStreamChunk> StreamAsync<T>(
-             LLMRequest<T> request,
-             [EnumeratorCancellation] CancellationToken ct = default)
+        public async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
+            LLMRequest request,
+            CancellationToken ct = default)
         {
             var chat = GetChatClient(request.Model);
             var options = ConfigureChatCompletionOptions(request);
@@ -98,8 +98,8 @@ namespace AgentCore.Providers.OpenAI
                         if (c.Text is { } t)
                         {
                             yield return new LLMStreamChunk(
-                                request.Schema != null
-                                    ? StreamKind.Json
+                                request.OutputType != null
+                                    ? StreamKind.Structured
                                     : StreamKind.Text,
                                 t);
                         }

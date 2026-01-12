@@ -15,8 +15,8 @@ namespace AgentCore.Providers
     }
     public interface ILLMStreamProvider
     {
-        IAsyncEnumerable<LLMStreamChunk> StreamAsync<T>(
-            LLMRequest<T> request,
+        IAsyncEnumerable<LLMStreamChunk> StreamAsync(
+            LLMRequest request,
             CancellationToken ct = default);
     }
 }

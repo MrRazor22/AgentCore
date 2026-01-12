@@ -1,4 +1,6 @@
-﻿using SharpToken;
+﻿using Microsoft.Extensions.Logging;
+using SharpToken;
+using System;
 
 namespace AgentCore.Tokens
 {
@@ -6,18 +8,14 @@ namespace AgentCore.Tokens
     {
         int Count(string payload);
     }
-
     public sealed class TikTokenCounter : ITokenCounter
     {
         private readonly GptEncoding _encoding;
 
-        public TikTokenCounter(string model)
+        public TikTokenCounter(string encodingName)
         {
-            _encoding = GptEncoding.GetEncoding(ResolveEncoding(model));
+            _encoding = GptEncoding.GetEncoding(encodingName);
         }
-
-        private static string ResolveEncoding(string model)
-            => "cl100k_base"; // OpenAI chat models
 
         public int Count(string payload)
         {

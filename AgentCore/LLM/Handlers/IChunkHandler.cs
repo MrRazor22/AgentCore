@@ -9,9 +9,9 @@ namespace AgentCore.LLM.Handlers
     {
         StreamKind Kind { get; }
 
-        void OnRequest<T>(LLMRequest<T> request);
+        void OnRequest(LLMRequest request);
         void OnChunk(LLMStreamChunk chunk);
-        void OnResponse<T>(LLMResponse<T> response);
+        void OnResponse(LLMResponse response);
     }
 
 }

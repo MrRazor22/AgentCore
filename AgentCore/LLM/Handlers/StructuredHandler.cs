@@ -16,7 +16,7 @@ public sealed class StructuredHandler : IChunkHandler
     private readonly StringBuilder _jsonBuffer = new StringBuilder();
 
     private JObject? _schema;
-    private Type? _resultType;
+    private Type? _outputType;
 
     private readonly ILogger<StructuredHandler> _logger;
 
@@ -25,26 +25,27 @@ public sealed class StructuredHandler : IChunkHandler
         _logger = logger;
     }
 
-    public StreamKind Kind => StreamKind.Json;
+    public StreamKind Kind => StreamKind.Structured;
 
-    public void OnRequest<T>(LLMRequest<T> request)
+    public void OnRequest(LLMRequest request)
     {
-        if (typeof(T) == typeof(string))
+        _jsonBuffer.Clear();
+
+        _outputType = request.OutputType;
+        if (_outputType == null)
             return;
 
-        _resultType = typeof(T);
-        if (!SchemaCache.TryGetValue(_resultType, out var schema))
+        if (!SchemaCache.TryGetValue(_outputType, out var schema))
         {
-            schema = _resultType.GetSchemaForType();
-            SchemaCache[_resultType] = schema;
+            schema = _outputType.GetSchemaForType();
+            SchemaCache[_outputType] = schema;
         }
 
         _schema = schema;
-        request.Schema = schema;
 
         _logger.LogDebug(
             "► Request [JsonSchema]: Type={Type}\n{Schema}",
-            _resultType.Name,
+            _outputType.Name,
             _schema.ToString(Newtonsoft.Json.Formatting.Indented)
         );
 
@@ -53,7 +54,7 @@ public sealed class StructuredHandler : IChunkHandler
 
     public void OnChunk(LLMStreamChunk chunk)
     {
-        if (chunk.Kind != StreamKind.Json)
+        if (chunk.Kind != StreamKind.Structured)
             return;
 
         var txt = chunk.AsText();
@@ -64,24 +65,30 @@ public sealed class StructuredHandler : IChunkHandler
         _jsonBuffer.Append(txt);
     }
 
-    public void OnResponse<T>(LLMResponse<T> response)
+    public void OnResponse(LLMResponse response)
     {
-        if (typeof(T) == typeof(string))
+        if (_outputType == null)
             return;
 
         var raw = _jsonBuffer.ToString();
         if (string.IsNullOrWhiteSpace(raw))
-            throw new RetryException("Empty JSON response");
+            throw new RetryException("Empty structured response");
 
         JToken json;
-        try { json = JToken.Parse(raw); }
-        catch { throw new RetryException("Invalid JSON"); }
+        try
+        {
+            json = JToken.Parse(raw);
+        }
+        catch
+        {
+            throw new RetryException("Invalid JSON returned by model");
+        }
 
-        var errors = _schema?.Validate(json, _resultType!.Name);
+        var errors = _schema?.Validate(json, _outputType.Name);
         if (errors?.Count > 0)
             throw new RetryException("Schema validation failed");
 
-        response.Result = json.ToObject<T>()!;
+        response.Output = json.ToObject(_outputType)!;
 
         _logger.LogDebug(
             "Result [Json]: {Type}", json.ToString(Newtonsoft.Json.Formatting.Indented)

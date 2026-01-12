@@ -4,8 +4,8 @@ using AgentCore.Tokens;
 using AgentCore.Utils;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json.Linq;
 using System;
-using System.Linq;
 
 namespace AgentCore.LLM.Protocol
 {
@@ -18,23 +18,25 @@ namespace AgentCore.LLM.Protocol
     }
 
     /// <summary>
-    /// Typed LLM response.
-    /// T = string for normal text, custom type for structured output.
+    /// Public, stable LLM response protocol.
+    /// No generics. No structured assumptions.
     /// </summary>
-    public class LLMResponse<T>
+    public sealed class LLMResponse
     {
         private TokenUsage? _tokenUsage;
 
         /// <summary>
-        /// Final model output.
-        /// For tool calls, this may be default(T).
+        /// Final textual output from the model.
+        /// Multimodal extensions can add more fields later.
         /// </summary>
-        public T Result { get; internal set; } = default!;
+        public string? Text { get; internal set; }
 
         /// <summary>
-        /// Optional tool call chosen by the model.
+        /// Tool call produced by the model (executor-level).
+        /// Usually null at agent boundary.
         /// </summary>
         public ToolCall? ToolCall { get; internal set; }
+        public object? Output { get; set; }
 
         public FinishReason FinishReason { get; internal set; }
 
@@ -53,23 +55,11 @@ namespace AgentCore.LLM.Protocol
 
         public string ToCountablePayload()
         {
-            if (ToolCall != null)
-            {
-                return new
-                {
-                    name = ToolCall.Name,
-                    arguments = ToolCall.Arguments
-                }.AsJsonString();
-            }
-
-            return Result.AsJsonString();
+            return string.Concat(
+                Text.AsJsonString(),
+                Output?.AsJsonString(),
+                ToolCall?.AsJsonString()
+                );
         }
-    }
-
-    /// <summary>
-    /// Convenience alias for text responses.
-    /// </summary>
-    public sealed class LLMResponse : LLMResponse<string>
-    {
     }
 }

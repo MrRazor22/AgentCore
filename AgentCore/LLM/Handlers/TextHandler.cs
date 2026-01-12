@@ -28,7 +28,7 @@ namespace AgentCore.LLM.Handlers
 
         public StreamKind Kind => StreamKind.Text;
 
-        public void OnRequest<T>(LLMRequest<T> request)
+        public void OnRequest(LLMRequest request)
         {
             _buffer.Clear();
             _inlineTool = null;
@@ -72,7 +72,7 @@ namespace AgentCore.LLM.Handlers
             throw new EarlyStopException("Inline tool call detected.");
         }
 
-        public void OnResponse<T>(LLMResponse<T> response)
+        public void OnResponse(LLMResponse response)
         {
             if (_inlineTool != null)
             {
@@ -85,15 +85,13 @@ namespace AgentCore.LLM.Handlers
                 return;
             }
 
-            // Text handler only sets Result when T == string
-            if (typeof(T) == typeof(string))
-            {
-                response.Result = (T)(object)_buffer.ToString().Trim();
-                _logger.LogDebug(
-                    "◄ Result [Text]: {Result}",
-                    response.Result.ToString()
-                );
-            }
+            var text = _buffer.ToString().Trim();
+            response.Text = text;
+
+            _logger.LogDebug(
+                "◄ Result [Text]: {Result}",
+                text
+            );
         }
     }
 }

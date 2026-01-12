@@ -28,7 +28,7 @@ namespace AgentCore.LLM.Handlers
 
         public StreamKind Kind => StreamKind.ToolCallDelta;
 
-        public void OnRequest<T>(LLMRequest<T> request)
+        public void OnRequest(LLMRequest request)
         {
             _firstTool = null;
             _pendingToolId = null;
@@ -78,7 +78,7 @@ namespace AgentCore.LLM.Handlers
             _pendingToolName = null;
         }
 
-        public void OnResponse<T>(LLMResponse<T> response)
+        public void OnResponse(LLMResponse response)
         {
             if (_firstTool == null)
                 return;

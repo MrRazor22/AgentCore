@@ -19,8 +19,8 @@ namespace AgentCore.LLM.Execution
 {
     public interface ILLMExecutor
     {
-        Task<LLMResponse<T>> ExecuteAsync<T>(
-            LLMRequest<T> request,
+        Task<LLMResponse> ExecuteAsync(
+            LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null);
     }
@@ -47,12 +47,12 @@ namespace AgentCore.LLM.Execution
             _logger = logger;
         }
 
-        public async Task<LLMResponse<T>> ExecuteAsync<T>(
-            LLMRequest<T> request,
+        public async Task<LLMResponse> ExecuteAsync(
+            LLMRequest request,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? onStream = null)
         {
-            var response = new LLMResponse<T>();
+            var response = new LLMResponse();
             var sw = Stopwatch.StartNew();
 
             var initialPrompt = _ctxManager.Trim(

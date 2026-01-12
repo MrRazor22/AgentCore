@@ -1,9 +1,5 @@
 ﻿using AgentCore.Chat;
 using AgentCore.LLM.Protocol;
-using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Execution;
-using AgentCore.Tokens;
-using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
@@ -13,11 +9,12 @@ using System.Threading.Tasks;
 
 namespace AgentCore.Runtime
 {
+
     public interface IAgentContext
     {
         AgentConfig Config { get; }
         Conversation ScratchPad { get; }
-        string? UserRequest { get; }
+        string UserInput { get; }
         IServiceProvider Services { get; }
         Action<LLMStreamChunk>? Stream { get; }
         CancellationToken CancellationToken { get; }
@@ -27,13 +24,13 @@ namespace AgentCore.Runtime
         public AgentContext(
             AgentConfig config,
             IServiceProvider services,
-            string userRequest,
+            string userInput,
             CancellationToken ct,
             Action<LLMStreamChunk>? stream)
         {
             Config = config;
             Services = services;
-            UserRequest = userRequest;
+            UserInput = userInput;
             CancellationToken = ct;
             Stream = stream;
             ScratchPad = new Conversation();
@@ -41,30 +38,31 @@ namespace AgentCore.Runtime
 
         public AgentConfig Config { get; }
         public Conversation ScratchPad { get; }
-        public string UserRequest { get; }
+        public string UserInput { get; }
         public IServiceProvider Services { get; }
         public CancellationToken CancellationToken { get; }
         public Action<LLMStreamChunk>? Stream { get; }
     }
 
+    public sealed class AgentResponse
+    {
+        public string? Text { get; set; }
+        public object? Output { get; set; }
+    }
+
     public interface IAgent
     {
-        Task<string> InvokeAsync(
-            string goal,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? stream = null);
-
-        Task<T> InvokeAsync<T>(
-            string goal,
+        Task<AgentResponse> InvokeAsync(
+            string userInput,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? stream = null);
     }
 
-    public sealed class Agent : IAgent
+    public sealed class LLMAgent : IAgent
     {
         private readonly IServiceProvider _services;
         private readonly IAgentMemory _memory;
-        private readonly ILogger<Agent> _logger;
+        private readonly ILogger<LLMAgent> _logger;
         private readonly AgentConfig _config;
         public static AgentBuilder Create(string name = "agent")
         {
@@ -72,26 +70,22 @@ namespace AgentCore.Runtime
                 .WithName(name);
         }
 
-        internal Agent(IServiceProvider services, AgentConfig config)
+        internal LLMAgent(IServiceProvider services, AgentConfig config)
         {
             _config = config;
             _services = services;
             _memory = services.GetRequiredService<IAgentMemory>();
-            _logger = services.GetRequiredService<ILogger<Agent>>();
+            _logger = services.GetRequiredService<ILogger<LLMAgent>>();
         }
 
-        public Task<string> InvokeAsync(
-            string goal,
-            CancellationToken ct = default,
-            Action<LLMStreamChunk>? stream = null)
-            => InvokeAsync<string>(goal, ct, stream);
-        public async Task<T> InvokeAsync<T>(
-            string goal,
+        public async Task<AgentResponse> InvokeAsync(
+            string userInput,
             CancellationToken ct = default,
             Action<LLMStreamChunk>? stream = null)
         {
             using var scope = _services.CreateScope();
             var sessionId = Guid.NewGuid().ToString("N");
+
             using (_logger.BeginScope(new Dictionary<string, object>
             {
                 ["Agent"] = _config.Name,
@@ -101,22 +95,29 @@ namespace AgentCore.Runtime
                 var ctx = new AgentContext(
                     _config,
                     scope.ServiceProvider,
-                    goal,
+                    userInput,
                     ct,
                     stream
                 );
 
-                if (!string.IsNullOrEmpty(_config.SystemPrompt))
-                    ctx.ScratchPad.AddSystem(_config.SystemPrompt);
+                ctx.ScratchPad.AddSystem(_config.SystemPrompt);
 
-                await _memory.RecallAsync(sessionId, goal, ctx.ScratchPad);
 
-                var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor<T>>();
-                var response = await executor.ExecuteAsync(ctx);
+                var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
+                var llmResponse = await executor.ExecuteAsync(ctx);
 
-                await _memory.UpdateAsync(sessionId, goal, response.Result?.ToString());
+                // memory update
+                await _memory.UpdateAsync(
+                    sessionId,
+                    userInput,
+                    llmResponse.Text ?? llmResponse.Output?.ToString() ?? string.Empty
+                );
 
-                return response.Result;
+                return new AgentResponse
+                {
+                    Text = llmResponse.Text,
+                    Output = llmResponse.Output,
+                };
             }
         }
     }

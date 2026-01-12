@@ -8,32 +8,32 @@ using System.Threading.Tasks;
 
 namespace AgentCore.Runtime
 {
-    public interface IAgentExecutor<T>
+    public interface IAgentExecutor
     {
-        Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx);
+        Task<LLMResponse> ExecuteAsync(IAgentContext ctx);
     }
-    public sealed class ToolCallingLoop<T> : IAgentExecutor<T>
+    public sealed class ToolCallingLoop : IAgentExecutor
     {
-        private readonly ILogger<ToolCallingLoop<T>> _logger;
+        private readonly ILogger<ToolCallingLoop> _logger;
 
-        public ToolCallingLoop(ILogger<ToolCallingLoop<T>> logger)
+        public ToolCallingLoop(ILogger<ToolCallingLoop> logger)
         {
             _logger = logger;
         }
 
-        public async Task<LLMResponse<T>> ExecuteAsync(IAgentContext ctx)
+        public async Task<LLMResponse> ExecuteAsync(IAgentContext ctx)
         {
-            ctx.ScratchPad.AddUser(ctx.UserRequest ?? "No User input.");
+            ctx.ScratchPad.AddUser(ctx.UserInput ?? "No User input.");
 
             var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
             var tools = ctx.Services.GetRequiredService<IToolCatalog>();
             var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
 
-            LLMResponse<T>? last = null;
+            LLMResponse? last = null;
 
             for (int i = 0; i < ctx.Config.MaxIterations; i++)
             {
-                var request = new LLMRequest<T>(
+                var request = new LLMRequest(
                     prompt: ctx.ScratchPad,
                     toolCallMode: ToolCallMode.Auto,
                     model: ctx.Config.Model,
@@ -68,7 +68,7 @@ namespace AgentCore.Runtime
                 );
             }
 
-            return last ?? new LLMResponse<T>
+            return last ?? new LLMResponse
             {
                 FinishReason = FinishReason.Cancelled
             };

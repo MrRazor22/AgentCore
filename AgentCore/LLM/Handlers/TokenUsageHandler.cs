@@ -16,7 +16,7 @@ namespace AgentCore.LLM.Handlers
             _tokenManager = tokenManager;
         }
 
-        public void OnRequest<T>(LLMRequest<T> request)
+        public void OnRequest(LLMRequest request)
         {
             _usage = null;
             _requestPayload = request.ToCountablePayload();
@@ -28,7 +28,7 @@ namespace AgentCore.LLM.Handlers
                 _usage = chunk.AsTokenUsage();
         }
 
-        public void OnResponse<T>(LLMResponse<T> response)
+        public void OnResponse(LLMResponse response)
         {
             var resolved = _tokenManager.ResolveAndRecord(
                 _requestPayload,

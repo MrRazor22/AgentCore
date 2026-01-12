@@ -8,7 +8,7 @@ namespace AgentCore.LLM.Handlers
 
         private FinishReason _finish;
 
-        public void OnRequest<T>(LLMRequest<T> request)
+        public void OnRequest(LLMRequest request)
         {
             _finish = FinishReason.Stop;
         }
@@ -21,7 +21,7 @@ namespace AgentCore.LLM.Handlers
             _finish = chunk.AsFinishReason() ?? FinishReason.Stop;
         }
 
-        public void OnResponse<T>(LLMResponse<T> response)
+        public void OnResponse(LLMResponse response)
         {
             response.FinishReason = _finish;
         }
