@@ -156,7 +156,7 @@ namespace AgentCore.Tools
             var toolName =
                 !string.IsNullOrWhiteSpace(attr?.Name)
                     ? attr!.Name
-                    : $"{declaringType.Name.ToSnake()}_{method.Name.ToSnake()}";
+                    : $"{declaringType.Name.ToSnake()}.{method.Name.ToSnake()}";
 
             var description =
                 method.GetCustomAttribute<ToolAttribute>()?.Description

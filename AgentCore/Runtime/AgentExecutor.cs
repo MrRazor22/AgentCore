@@ -53,8 +53,13 @@ namespace AgentCore.Runtime
                 if (!result.HasToolCall)
                     return result;
 
+                _logger.LogInformation(
+                       "Tool called: {ToolName}",
+                       result?.ToolCall?.Name
+                   );
+
                 var toolResult = await runtime.HandleToolCallAsync(
-                    result.ToolCall!,
+                    result?.ToolCall!,
                     ctx.CancellationToken);
 
                 ctx.ScratchPad.AppendToolCallResult(toolResult);

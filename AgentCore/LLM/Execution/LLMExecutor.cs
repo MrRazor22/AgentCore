@@ -88,7 +88,7 @@ namespace AgentCore.LLM.Execution
                 }
                 catch (EarlyStopException e)
                 {
-                    _logger.LogWarning("Early stop: {Msg}", e.Message);
+                    _logger.LogDebug("Early stop: {Msg}", e.Message);
                 }
 
                 // Validate after streaming completes

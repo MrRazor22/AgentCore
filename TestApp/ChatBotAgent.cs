@@ -42,10 +42,10 @@ namespace TestApp
                         o.MaxRetries = 2;
                     });
 
-                    services.Configure<AgentMemoryOptions>(o =>
+                    services.Configure<FileMemoryOptions>(o =>
                     {
-                        o.PersistDir = @"D:\AgentCore\memory";
-                        o.MaxChatHistory = 5;
+                        //o.PersistDir = @"D:\AgentCore\memory";
+                        //o.MaxChatHistory = 5;
                     });
 
                     services.AddLogging(logging =>

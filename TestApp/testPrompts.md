@@ -10,3 +10,4 @@ Search for "😊" (emoji) and test the error handling.
 "Get me the weather in Tokyo, then convert the current time there (assume now) to UTC."
 "Random number between 1 and 3. If 1, fetch Wikipedia summary for 'Artificial Intelligence'. If 2, get weather in London. If 3, convert 500 INR to USD."
 "Find weather in Mumbai, suggest activity, then evaluate '100 * (2 + 3)', and finally generate a random number between 10 and 20."
+Find the distance between Paris and Berlin, check tomorrow’s weather in Berlin, convert 100 miles to kilometers, calculate the square root of 256, and search for the latest news about Berlin.
