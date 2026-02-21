@@ -35,7 +35,7 @@ namespace AgentCore.Tests.LLM
                 yield return new LLMStreamChunk(StreamKind.Text, "ok");
             }
 
-            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
+            var chunks = await Collect(_policy.ExecuteStreamingAsync(convo, Factory));
 
             Assert.Single(chunks);
             Assert.Equal(1, calls);
@@ -56,11 +56,10 @@ namespace AgentCore.Tests.LLM
                 yield return new LLMStreamChunk(StreamKind.Text, "fixed");
             }
 
-            var chunks = await Collect(_policy.ExecuteStreamAsync(convo, Factory));
+            var chunks = await Collect(_policy.ExecuteStreamingAsync(convo, Factory));
 
             Assert.Single(chunks);
             Assert.Equal(2, calls);
-            Assert.Contains(convo, m => m.Role == Role.Assistant);
         }
 
         [Fact]
@@ -76,7 +75,7 @@ namespace AgentCore.Tests.LLM
             }
 
             var ex = await Assert.ThrowsAsync<RetryException>(async () =>
-                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
+                await Collect(_policy.ExecuteStreamingAsync(convo, Factory)));
 
             Assert.Equal("always bad", ex.Message);
             Assert.Equal(3, calls); // initial + 2 retries
@@ -93,7 +92,7 @@ namespace AgentCore.Tests.LLM
             }
 
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
+                await Collect(_policy.ExecuteStreamingAsync(convo, Factory)));
         }
 
         [Fact]
@@ -109,7 +108,7 @@ namespace AgentCore.Tests.LLM
             }
 
             await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-                await Collect(_policy.ExecuteStreamAsync(convo, Factory, cts.Token)));
+                await Collect(_policy.ExecuteStreamingAsync(convo, Factory, cts.Token)));
         }
 
         [Fact]
@@ -126,9 +125,78 @@ namespace AgentCore.Tests.LLM
             }
 
             await Assert.ThrowsAsync<RetryException>(async () =>
-                await Collect(_policy.ExecuteStreamAsync(convo, Factory)));
+                await Collect(_policy.ExecuteStreamingAsync(convo, Factory)));
 
             Assert.True(seen.Count > 1);
+        }
+
+        [Fact]
+        public async Task Immediate_Streaming_Chunks_Yielded_Before_Complete()
+        {
+            var convo = new Conversation();
+            var yielded = new List<string>();
+            var tcs = new TaskCompletionSource<bool>();
+
+            async IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
+            {
+                yield return new LLMStreamChunk(StreamKind.Text, "a");
+                yield return new LLMStreamChunk(StreamKind.Text, "b");
+                yield return new LLMStreamChunk(StreamKind.Text, "c");
+            }
+
+            await foreach (var chunk in _policy.ExecuteStreamingAsync(convo, Factory))
+            {
+                var text = chunk.AsText();
+                if (text != null)
+                    yielded.Add(text);
+            }
+
+            Assert.Equal(new[] { "a", "b", "c" }, yielded);
+        }
+
+        [Fact]
+        public async Task Mid_Stream_Retry_Yields_Partial_Output_Then_Retries()
+        {
+            var convo = new Conversation();
+            int calls = 0;
+            var yielded = new List<string>();
+
+            async IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
+            {
+                calls++;
+                yield return new LLMStreamChunk(StreamKind.Text, $"attempt{calls}_");
+                if (calls == 1)
+                    throw new RetryException("retry needed");
+                yield return new LLMStreamChunk(StreamKind.Text, "success");
+            }
+
+            await foreach (var chunk in _policy.ExecuteStreamingAsync(convo, Factory))
+            {
+                var text = chunk.AsText();
+                if (text != null)
+                    yielded.Add(text);
+            }
+
+            Assert.Equal(new[] { "attempt1_", "attempt2_success" }, yielded);
+            Assert.Equal(2, calls);
+        }
+
+        [Fact]
+        public async Task Original_Conversation_Not_Mutated_On_Retry()
+        {
+            var convo = new Conversation();
+            convo.AddSystem("system prompt");
+
+            IAsyncEnumerable<LLMStreamChunk> Factory(Conversation c)
+            {
+                throw new RetryException("fail");
+            }
+
+            await Assert.ThrowsAsync<RetryException>(async () =>
+                await Collect(_policy.ExecuteStreamingAsync(convo, Factory)));
+
+            Assert.Single(convo);
+            Assert.Equal(Role.System, convo[0].Role);
         }
 
         // ---------- helpers ----------

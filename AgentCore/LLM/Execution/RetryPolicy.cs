@@ -1,10 +1,8 @@
-﻿using AgentCore.Chat;
-using AgentCore.LLM.Protocol;
+using AgentCore.Chat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Execution
 {
@@ -25,15 +23,12 @@ namespace AgentCore.LLM.Execution
 
     public interface IRetryPolicy
     {
-        Task ExecuteAsync(
+        IAsyncEnumerable<T> ExecuteStreamingAsync<T>(
             Conversation originalRequest,
-            Func<Conversation, Task> operation,
+            Func<Conversation, IAsyncEnumerable<T>> operation,
             CancellationToken ct = default);
     }
 
-    /// <summary>
-    /// Retry policy for handling high-level LLM errors (tool validation, JSON parsing). 
-    /// </summary>
     public sealed class RetryPolicy : IRetryPolicy
     {
         private readonly ILogger<RetryPolicy> _logger;
@@ -45,10 +40,10 @@ namespace AgentCore.LLM.Execution
             _logger = logger;
         }
 
-        public async Task ExecuteAsync(
+        public async IAsyncEnumerable<T> ExecuteStreamingAsync<T>(
             Conversation originalRequest,
-            Func<Conversation, Task> operation,
-            CancellationToken ct = default)
+            Func<Conversation, IAsyncEnumerable<T>> operation,
+            [EnumeratorCancellation] CancellationToken ct = default)
         {
             var working = originalRequest.Clone();
 
@@ -57,25 +52,72 @@ namespace AgentCore.LLM.Execution
                 ct.ThrowIfCancellationRequested();
 
                 var cloned = working.Clone();
+                RetryException? retryEx = null;
 
+                await foreach (var result in CaptureRetryException(operation(cloned), ct))
+                {
+                    if (result.IsSuccess)
+                        yield return result.Value!;
+                    else
+                        retryEx = result.Error;
+                }
+
+                if (retryEx == null)
+                    yield break;
+
+                if (attempt == _options.MaxRetries)
+                    throw retryEx;
+
+                working.AddAssistant(retryEx.Message);
+                _logger.LogWarning("Retry {Attempt}: {Reason}", attempt + 1, retryEx.Message);
+            }
+        }
+
+        private static async IAsyncEnumerable<RetryResult<T>> CaptureRetryException<T>(
+            IAsyncEnumerable<T> source,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            await using var enumerator = source.GetAsyncEnumerator(ct);
+            RetryException? caughtException = null;
+
+            while (caughtException == null)
+            {
+                bool moved;
                 try
                 {
-                    await operation(cloned);
-                    return; // Success!
+                    moved = await enumerator.MoveNextAsync();
                 }
-                catch (RetryException rex)
+                catch (RetryException ex)
                 {
-                    if (attempt == _options.MaxRetries)
-                        throw;
-
-                    working.AddAssistant(rex.Message);
-                    _logger.LogWarning(
-                        "Retry {Attempt}: {Reason}",
-                        attempt + 1,
-                        rex.Message
-                    );
+                    caughtException = ex;
+                    break;
                 }
+
+                if (!moved)
+                    break;
+
+                yield return RetryResult<T>.FromValue(enumerator.Current);
             }
+
+            if (caughtException != null)
+                yield return RetryResult<T>.FromError(caughtException);
+        }
+
+        private readonly struct RetryResult<T>
+        {
+            public bool IsSuccess { get; }
+            public T? Value { get; }
+            public RetryException? Error { get; }
+
+            private RetryResult(bool isSuccess, T? value, RetryException? error)
+            {
+                IsSuccess = isSuccess;
+                Value = value;
+                Error = error;
+            }
+
+            public static RetryResult<T> FromValue(T value) => new(true, value, null);
+            public static RetryResult<T> FromError(RetryException error) => new(false, default, error);
         }
     }
 }

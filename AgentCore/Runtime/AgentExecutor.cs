@@ -4,14 +4,19 @@ using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace AgentCore.Runtime
 {
     public interface IAgentExecutor
     {
-        Task<LLMResponse> ExecuteAsync(IAgentContext ctx);
+        IAsyncEnumerable<string> ExecuteStreamingAsync(
+            IAgentContext ctx,
+            CancellationToken ct = default);
     }
+
     public sealed class ToolCallingLoop : IAgentExecutor
     {
         private readonly ILogger<ToolCallingLoop> _logger;
@@ -21,7 +26,9 @@ namespace AgentCore.Runtime
             _logger = logger;
         }
 
-        public async Task<LLMResponse> ExecuteAsync(IAgentContext ctx)
+        public async IAsyncEnumerable<string> ExecuteStreamingAsync(
+            IAgentContext ctx,
+            [EnumeratorCancellation] CancellationToken ct = default)
         {
             ctx.ScratchPad.AddUser(ctx.UserInput ?? "No User input.");
 
@@ -29,10 +36,10 @@ namespace AgentCore.Runtime
             var tools = ctx.Services.GetRequiredService<IToolCatalog>();
             var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
 
-            LLMResponse? last = null;
-
             for (int i = 0; i < ctx.Config.MaxIterations; i++)
             {
+                ct.ThrowIfCancellationRequested();
+
                 var request = new LLMRequest(
                     prompt: ctx.ScratchPad,
                     toolCallMode: ToolCallMode.Auto
@@ -41,40 +48,37 @@ namespace AgentCore.Runtime
                     AvailableTools = tools.RegisteredTools
                 };
 
-                var result = await llm.ExecuteAsync(
-                    request,
-                    ctx.CancellationToken,
-                    chunk => ctx.Stream?.Invoke(chunk));
+                await foreach (var chunk in llm.StreamAsync(request, ct))
+                {
+                    if (chunk.Kind == StreamKind.Text)
+                    {
+                        var text = chunk.AsText();
+                        if (text is not null)
+                            yield return text;
+                    }
+                }
 
-                last = result;
+                var response = llm.Response;
 
-                if (!result.HasToolCall)
-                    return result;
+                if (!response.HasToolCall)
+                    yield break;
 
                 _logger.LogInformation(
-                       "Tool called: {ToolName}",
-                       result?.ToolCall?.Name
-                   );
+                    "Tool called: {ToolName}",
+                    response.ToolCall!.Name
+                );
 
                 var toolResult = await runtime.HandleToolCallAsync(
-                    result?.ToolCall!,
-                    ctx.CancellationToken);
+                    response.ToolCall,
+                    ct);
 
                 ctx.ScratchPad.AppendToolCallResult(toolResult);
             }
 
-            if (!ctx.CancellationToken.IsCancellationRequested)
-            {
-                _logger?.LogWarning(
-                    "Agent loop stopped: max iterations reached ({MaxIterations})",
-                    ctx.Config.MaxIterations
-                );
-            }
-
-            return last ?? new LLMResponse
-            {
-                FinishReason = FinishReason.Cancelled
-            };
+            _logger.LogWarning(
+                "Agent loop stopped: max iterations reached ({MaxIterations})",
+                ctx.Config.MaxIterations
+            );
         }
     }
 }

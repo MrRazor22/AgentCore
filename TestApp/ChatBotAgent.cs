@@ -1,13 +1,13 @@
-﻿using AgentCore.BuiltInTools;
+using AgentCore.BuiltInTools;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.LLM.Execution;
-using AgentCore.LLM.Protocol;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using System.Text;
 
 namespace TestApp
 {
@@ -43,8 +43,6 @@ namespace TestApp
 
                     services.Configure<FileMemoryOptions>(o =>
                     {
-                        //o.PersistDir = @"D:\AgentCore\memory";
-                        //o.MaxChatHistory = 5;
                     });
 
                     services.AddLogging(logging =>
@@ -94,23 +92,24 @@ namespace TestApp
 
                 try
                 {
-                    var result = await agent.InvokeAsync(
-                        goal,
-                        cts.Token,
-                        chunk =>
-                        {
-                            if (chunk.Kind == StreamKind.Text)
-                                Console.Write(chunk.AsText());
-                        });
+                    var sb = new StringBuilder();
 
-                    if (string.IsNullOrWhiteSpace(result.Text))
+                    await foreach (var chunk in agent.InvokeStreamingAsync(goal, cts.Token))
+                    {
+                        Console.Write(chunk);
+                        sb.Append(chunk);
+                    }
+
+                    var result = sb.ToString();
+
+                    if (string.IsNullOrWhiteSpace(result))
                     {
                         Console.WriteLine("[no response]");
                         continue;
                     }
 
                     Console.WriteLine("\n\n\n───────── AGENT RESPONSE ─────────\n");
-                    Console.WriteLine(result.Text);
+                    Console.WriteLine(result);
                     Console.WriteLine("\n──────────────────────────\n");
                 }
                 catch (OperationCanceledException)
