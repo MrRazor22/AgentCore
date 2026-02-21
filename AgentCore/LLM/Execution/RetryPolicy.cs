@@ -54,70 +54,27 @@ namespace AgentCore.LLM.Execution
                 var cloned = working.Clone();
                 RetryException? retryEx = null;
 
-                await foreach (var result in CaptureRetryException(operation(cloned), ct))
+                await using var e = operation(cloned).GetAsyncEnumerator(ct);
+                while (retryEx == null)
                 {
-                    if (result.IsSuccess)
-                        yield return result.Value!;
-                    else
-                        retryEx = result.Error;
+                    try
+                    {
+                        if (!await e.MoveNextAsync()) break;
+                    }
+                    catch (RetryException ex)
+                    {
+                        retryEx = ex;
+                        break;
+                    }
+                    yield return e.Current;
                 }
 
-                if (retryEx == null)
-                    yield break;
-
-                if (attempt == _options.MaxRetries)
-                    throw retryEx;
+                if (retryEx == null) yield break;
+                if (attempt == _options.MaxRetries) throw retryEx;
 
                 working.AddAssistant(retryEx.Message);
                 _logger.LogWarning("Retry {Attempt}: {Reason}", attempt + 1, retryEx.Message);
             }
-        }
-
-        private static async IAsyncEnumerable<RetryResult<T>> CaptureRetryException<T>(
-            IAsyncEnumerable<T> source,
-            [EnumeratorCancellation] CancellationToken ct)
-        {
-            await using var enumerator = source.GetAsyncEnumerator(ct);
-            RetryException? caughtException = null;
-
-            while (caughtException == null)
-            {
-                bool moved;
-                try
-                {
-                    moved = await enumerator.MoveNextAsync();
-                }
-                catch (RetryException ex)
-                {
-                    caughtException = ex;
-                    break;
-                }
-
-                if (!moved)
-                    break;
-
-                yield return RetryResult<T>.FromValue(enumerator.Current);
-            }
-
-            if (caughtException != null)
-                yield return RetryResult<T>.FromError(caughtException);
-        }
-
-        private readonly struct RetryResult<T>
-        {
-            public bool IsSuccess { get; }
-            public T? Value { get; }
-            public RetryException? Error { get; }
-
-            private RetryResult(bool isSuccess, T? value, RetryException? error)
-            {
-                IsSuccess = isSuccess;
-                Value = value;
-                Error = error;
-            }
-
-            public static RetryResult<T> FromValue(T value) => new(true, value, null);
-            public static RetryResult<T> FromError(RetryException error) => new(false, default, error);
         }
     }
 }
