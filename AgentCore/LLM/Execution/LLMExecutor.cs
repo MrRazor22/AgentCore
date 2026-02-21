@@ -25,7 +25,7 @@ namespace AgentCore.LLM.Execution
     {
         private readonly ILLMStreamProvider _provider;
         private readonly IRetryPolicy _retryPolicy;
-        private readonly IReadOnlyList<IChunkHandler> _handlers;
+        private readonly IReadOnlyDictionary<StreamKind, IChunkHandler> _handlers;
         private readonly IContextManager _ctxManager;
         private readonly ILogger<LLMExecutor> _logger;
 
@@ -40,7 +40,7 @@ namespace AgentCore.LLM.Execution
         {
             _provider = provider;
             _retryPolicy = retryPolicy;
-            _handlers = handlers.ToList();
+            _handlers = handlers.ToDictionary(h => h.Kind);
             _ctxManager = ctxManager;
             _logger = logger;
         }
@@ -50,22 +50,17 @@ namespace AgentCore.LLM.Execution
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             var sw = Stopwatch.StartNew();
-
             Response = new LLMResponse();
 
-            var trimmed = _ctxManager.Trim(
-                request.Prompt,
-                request.Options?.MaxOutputTokens);
+            var trimmed = _ctxManager.Trim(request.Prompt, request.Options?.MaxOutputTokens);
 
             var attempt = request.Clone();
             attempt.Prompt = trimmed;
 
-            foreach (var h in _handlers)
+            foreach (var h in _handlers.Values)
                 h.OnRequest(attempt);
 
-            _logger.LogTrace(
-                "LLM request: {Request}",
-                attempt.ToCountablePayload());
+            _logger.LogTrace("LLM request: {Request}", attempt.ToCountablePayload());
 
             await foreach (var chunk in _retryPolicy.ExecuteStreamingAsync<LLMStreamChunk>(
                 attempt.Prompt,
@@ -83,39 +78,28 @@ namespace AgentCore.LLM.Execution
             LLMRequest requestTemplate,
             [EnumeratorCancellation] CancellationToken ct)
         {
-            var request = new LLMRequest(
-                prompt: conversation,
-                toolCallMode: requestTemplate.ToolCallMode)
+            var req = new LLMRequest(conversation, requestTemplate.ToolCallMode)
             {
                 AvailableTools = requestTemplate.AvailableTools
             };
 
-            await foreach (var chunk in _provider.StreamAsync(request, ct))
+            await foreach (var chunk in _provider.StreamAsync(req, ct))
             {
-                foreach (var h in _handlers)
-                    if (h.Kind == chunk.Kind)
-                        h.OnChunk(chunk);
-
+                if (_handlers.TryGetValue(chunk.Kind, out var handler))
+                    handler.OnChunk(chunk);
                 yield return chunk;
             }
         }
 
         private void CompleteResponse(Stopwatch sw)
         {
-            foreach (var h in _handlers)
+            foreach (var h in _handlers.Values)
                 h.OnResponse(Response);
 
             sw.Stop();
-
-            _logger.LogTrace(
-                "LLM response: {Response}",
-                Response.ToCountablePayload()
-            );
-            _logger.LogDebug(
-                 "LLM call Duration={Ms}ms FinishReason={FinishReason}",
-                 sw.ElapsedMilliseconds,
-                 Response.FinishReason
-             );
+            _logger.LogTrace("LLM response: {Response}", Response.ToCountablePayload());
+            _logger.LogDebug("LLM call Duration={Ms}ms FinishReason={FinishReason}",
+                sw.ElapsedMilliseconds, Response.FinishReason);
         }
     }
 }
