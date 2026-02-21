@@ -1,4 +1,4 @@
-﻿using AgentCore.Chat;
+using AgentCore.Chat;
 using AgentCore.LLM.Execution;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
@@ -35,9 +35,7 @@ namespace AgentCore.Runtime
             {
                 var request = new LLMRequest(
                     prompt: ctx.ScratchPad,
-                    toolCallMode: ToolCallMode.Auto,
-                    model: ctx.Config.Model,
-                    options: ctx.Config.Generation
+                    toolCallMode: ToolCallMode.Auto
                 )
                 {
                     AvailableTools = tools.RegisteredTools

@@ -17,7 +17,6 @@ namespace TestApp
         {
             var agent = LLMAgent.Create("chatbot")
                 .WithInstructions("You are an AI agent, execute all user requests faithfully.")
-                .WithModel("model")
                 .AddOpenAI(o =>
                 {
                     o.BaseUrl = "http://127.0.0.1:1234/v1";

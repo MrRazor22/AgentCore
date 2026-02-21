@@ -19,8 +19,6 @@ namespace AgentCore.Runtime
     {
         public string Name { get; set; } = "agent";
         public string? SystemPrompt { get; set; }
-        public string? Model { get; set; }
-        public LLMGenerationOptions Generation { get; set; } = new LLMGenerationOptions();
         public int MaxIterations { get; set; } = 50;
         public Type? OutputType { get; set; }
     }
@@ -75,12 +73,6 @@ namespace AgentCore.Runtime
         public AgentBuilder WithInstructions(string prompt)
         {
             _config.SystemPrompt = prompt;
-            return this;
-        }
-
-        public AgentBuilder WithModel(string model)
-        {
-            _config.Model = model;
             return this;
         }
 
