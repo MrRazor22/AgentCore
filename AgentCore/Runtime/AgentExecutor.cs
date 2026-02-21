@@ -4,81 +4,50 @@ using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Threading;
 
-namespace AgentCore.Runtime
+namespace AgentCore.Runtime;
+
+public interface IAgentExecutor
 {
-    public interface IAgentExecutor
+    IAsyncEnumerable<string> ExecuteStreamingAsync(IAgentContext ctx, CancellationToken ct = default);
+}
+
+public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentExecutor
+{
+    public async IAsyncEnumerable<string> ExecuteStreamingAsync(
+        IAgentContext ctx,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        IAsyncEnumerable<string> ExecuteStreamingAsync(
-            IAgentContext ctx,
-            CancellationToken ct = default);
-    }
+        ctx.ScratchPad.AddUser(ctx.UserInput ?? "No User input.");
 
-    public sealed class ToolCallingLoop : IAgentExecutor
-    {
-        private readonly ILogger<ToolCallingLoop> _logger;
+        var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
+        var tools = ctx.Services.GetRequiredService<IToolCatalog>();
+        var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
 
-        public ToolCallingLoop(ILogger<ToolCallingLoop> logger)
+        for (int i = 0; i < ctx.Config.MaxIterations; i++)
         {
-            _logger = logger;
-        }
+            ct.ThrowIfCancellationRequested();
 
-        public async IAsyncEnumerable<string> ExecuteStreamingAsync(
-            IAgentContext ctx,
-            [EnumeratorCancellation] CancellationToken ct = default)
-        {
-            ctx.ScratchPad.AddUser(ctx.UserInput ?? "No User input.");
-
-            var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
-            var tools = ctx.Services.GetRequiredService<IToolCatalog>();
-            var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
-
-            for (int i = 0; i < ctx.Config.MaxIterations; i++)
+            var request = new LLMRequest(ctx.ScratchPad, ToolCallMode.Auto)
             {
-                ct.ThrowIfCancellationRequested();
+                AvailableTools = tools.RegisteredTools
+            };
 
-                var request = new LLMRequest(
-                    prompt: ctx.ScratchPad,
-                    toolCallMode: ToolCallMode.Auto
-                )
-                {
-                    AvailableTools = tools.RegisteredTools
-                };
-
-                await foreach (var chunk in llm.StreamAsync(request, ct))
-                {
-                    if (chunk.Kind == StreamKind.Text)
-                    {
-                        var text = chunk.AsText();
-                        if (text is not null)
-                            yield return text;
-                    }
-                }
-
-                var response = llm.Response;
-
-                if (!response.HasToolCall)
-                    yield break;
-
-                _logger.LogInformation(
-                    "Tool called: {ToolName}",
-                    response.ToolCall!.Name
-                );
-
-                var toolResult = await runtime.HandleToolCallAsync(
-                    response.ToolCall,
-                    ct);
-
-                ctx.ScratchPad.AppendToolCallResult(toolResult);
+            await foreach (var chunk in llm.StreamAsync(request, ct))
+            {
+                if (chunk.Kind == StreamKind.Text && chunk.AsText() is { } text)
+                    yield return text;
             }
 
-            _logger.LogWarning(
-                "Agent loop stopped: max iterations reached ({MaxIterations})",
-                ctx.Config.MaxIterations
-            );
+            var response = llm.Response;
+            if (!response.HasToolCall) yield break;
+
+            _logger.LogInformation("Tool called: {ToolName}", response.ToolCall!.Name);
+            var toolResult = await runtime.HandleToolCallAsync(response.ToolCall, ct);
+            ctx.ScratchPad.AppendToolCallResult(toolResult);
         }
+
+        _logger.LogWarning("Agent loop stopped: max iterations reached ({MaxIterations})", ctx.Config.MaxIterations);
     }
 }

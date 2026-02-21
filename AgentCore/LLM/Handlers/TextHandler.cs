@@ -1,97 +1,64 @@
-﻿using AgentCore.Chat;
+using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.LLM.Execution;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
-using System.Linq;
 using System.Text;
 
-namespace AgentCore.LLM.Handlers
+namespace AgentCore.LLM.Handlers;
+
+public sealed class TextHandler(IToolCallParser _parser, ILogger<TextHandler> _logger) : IChunkHandler
 {
-    public sealed class TextHandler : IChunkHandler
+    private readonly StringBuilder _buffer = new();
+    private ToolCall? _inlineTool;
+
+    public StreamKind Kind => StreamKind.Text;
+
+    public void OnRequest(LLMRequest request)
     {
-        private readonly ILogger<TextHandler> _logger;
-        private readonly IToolCallParser _parser;
+        _buffer.Clear();
+        _inlineTool = null;
 
-        private readonly StringBuilder _buffer = new StringBuilder();
-        private ToolCall? _inlineTool;
+        var last = request.Prompt.LastOrDefault();
+        if (last != null)
+            _logger.LogDebug("► Request [Prompt]: Role={Role} Content={Content}", last.Role, last.Content.AsPrettyJson());
+    }
 
-        public TextHandler(
-            IToolCallParser parser,
-            ILogger<TextHandler> logger)
+    public void OnChunk(LLMStreamChunk chunk)
+    {
+        if (chunk.Kind != StreamKind.Text) return;
+
+        var text = chunk.AsText();
+        if (string.IsNullOrEmpty(text)) return;
+
+        _buffer.Append(text);
+
+        if (_logger.IsEnabled(LogLevel.Trace))
+            _logger.LogDebug("◄ Stream [Text]: {Text}", text);
+
+        if (_inlineTool != null) return;
+
+        var match = _parser.TryMatch(_buffer.ToString());
+        if (match == null) return;
+
+        _inlineTool = match;
+        throw new EarlyStopException("Inline tool call detected.");
+    }
+
+    public void OnResponse(LLMResponse response)
+    {
+        if (_inlineTool != null)
         {
-            _parser = parser;
-            _logger = logger;
+            response.ToolCall = _parser.Validate(_inlineTool);
+            _logger.LogDebug("◄ Result [Inline ToolCall]: Name={Name}, Params={Params}",
+                response.ToolCall.Name, response.ToolCall.Parameters.AsPrettyJson());
+            return;
         }
 
-        public StreamKind Kind => StreamKind.Text;
-
-        public void OnRequest(LLMRequest request)
-        {
-            _buffer.Clear();
-            _inlineTool = null;
-
-            var last = request.Prompt.LastOrDefault();
-            if (last != null)
-            {
-                _logger.LogDebug(
-                    "► Request [Prompt]: Role={Role} Content={Content}",
-                    last.Role,
-                    last.Content.AsPrettyJson()
-                );
-            }
-        }
-
-        public void OnChunk(LLMStreamChunk chunk)
-        {
-            if (chunk.Kind != StreamKind.Text)
-                return;
-
-            var text = chunk.AsText();
-            if (string.IsNullOrEmpty(text))
-                return;
-
-            _buffer.Append(text);
-
-            if (_logger.IsEnabled(LogLevel.Trace))
-                _logger.LogDebug("◄ Stream [Text]: {Text}", text);
-
-            // detect inline tool call from text
-            if (_inlineTool != null)
-                return;
-
-            var match = _parser.TryMatch(_buffer.ToString());
-            if (match == null)
-                return;
-
-            _inlineTool = match;
-
-            // stop streaming immediately
-            throw new EarlyStopException("Inline tool call detected.");
-        }
-
-        public void OnResponse(LLMResponse response)
-        {
-            if (_inlineTool != null)
-            {
-                response.ToolCall = _parser.Validate(_inlineTool);
-                _logger.LogDebug(
-                    "◄ Result [Inline ToolCall]: Name={Name}, Params={Params}",
-                    response.ToolCall.Name,
-                    response.ToolCall.Parameters.AsPrettyJson()
-                );
-                return;
-            }
-
-            var text = _buffer.ToString().Trim();
-            response.Text = text;
-
-            _logger.LogDebug(
-                "◄ Result [Text]: {Result}",
-                text
-            );
-        }
+        var text = _buffer.ToString().Trim();
+        response.Text = text;
+        _logger.LogDebug("◄ Result [Text]: {Result}", text);
     }
 }

@@ -1,29 +1,12 @@
-﻿using Microsoft.Extensions.Logging;
 using SharpToken;
-using System;
 
-namespace AgentCore.Tokens
+namespace AgentCore.Tokens;
+
+public interface ITokenCounter { int Count(string payload); }
+
+public sealed class TikTokenCounter(string encodingName) : ITokenCounter
 {
-    public interface ITokenCounter
-    {
-        int Count(string payload);
-    }
-    public sealed class TikTokenCounter : ITokenCounter
-    {
-        private readonly GptEncoding _encoding;
+    private readonly GptEncoding _encoding = GptEncoding.GetEncoding(encodingName);
 
-        public TikTokenCounter(string encodingName)
-        {
-            _encoding = GptEncoding.GetEncoding(encodingName);
-        }
-
-        public int Count(string payload)
-        {
-            if (string.IsNullOrEmpty(payload))
-                return 0;
-
-            return _encoding.Encode(payload).Count;
-        }
-    }
-
+    public int Count(string payload) => string.IsNullOrEmpty(payload) ? 0 : _encoding.Encode(payload).Count;
 }

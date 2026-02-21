@@ -1,221 +1,142 @@
-﻿using AgentCore.Json;
+using AgentCore.Json;
 using AgentCore.Utils;
 using Newtonsoft.Json.Linq;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Threading;
 
-namespace AgentCore.Tools
+namespace AgentCore.Tools;
+
+public interface IToolCatalog
 {
-    public interface IToolCatalog
+    IReadOnlyList<Tool> RegisteredTools { get; }
+    Tool? Get(string toolName);
+    bool Contains(string toolName);
+}
+
+public interface IToolRegistry
+{
+    void Register(params Delegate[] funcs);
+    void RegisterAll<T>();
+    void RegisterAll<T>(T instance);
+}
+
+internal sealed class ToolRegistryCatalog(IEnumerable<Tool>? tools = null) : IToolRegistry, IToolCatalog
+{
+    private readonly List<Tool> _registeredTools = tools != null ? [.. tools] : [];
+
+    public IReadOnlyList<Tool> RegisteredTools => _registeredTools;
+
+    public static implicit operator ToolRegistryCatalog(List<Tool> tools) => new(tools);
+
+    public void Register(params Delegate[] funcs)
     {
-        IReadOnlyList<Tool> RegisteredTools { get; }
-        Tool? Get(string toolName);
-        bool Contains(string toolName);
+        if (funcs == null) throw new ArgumentNullException(nameof(funcs));
+
+        foreach (var f in funcs)
+        {
+            if (f == null) throw new ArgumentNullException(nameof(funcs), "Delegate cannot be null.");
+            if (!IsMethodJsonCompatible(f.Method)) continue;
+
+            var tool = CreateToolFromDelegate(f);
+
+            if (_registeredTools.Any(t => t.Name.Equals(tool.Name, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Duplicate tool name exposed to LLM: '{tool.Name}'. Tool names must be globally unique.");
+
+            _registeredTools.Add(tool);
+        }
     }
 
-    public interface IToolRegistry
+    public void RegisterAll<T>()
     {
-        void Register(params Delegate[] funcs);
-        void RegisterAll<T>();
-        void RegisterAll<T>(T instance);
+        var methods = typeof(T)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
+
+        foreach (var method in methods)
+        {
+            if (!IsMethodJsonCompatible(method)) continue;
+
+            try
+            {
+                var paramTypes = method.GetParameters().Select(p => p.ParameterType).Concat([method.ReturnType]).ToArray();
+                var del = Delegate.CreateDelegate(Expression.GetDelegateType(paramTypes), method);
+                Register(del);
+            }
+            catch { /* skip incompatible methods */ }
+        }
     }
 
-    internal sealed class ToolRegistryCatalog : IToolRegistry, IToolCatalog
+    public void RegisterAll<T>(T instance)
     {
-        private readonly List<Tool> _registeredTools;
+        var methods = typeof(T)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
 
-        public ToolRegistryCatalog(IEnumerable<Tool>? tools = null)
+        foreach (var method in methods)
         {
-            _registeredTools = tools != null
-                ? new List<Tool>(tools)
-                : new List<Tool>();
-        }
+            if (!IsMethodJsonCompatible(method)) continue;
 
-        public IReadOnlyList<Tool> RegisteredTools => _registeredTools;
-
-        public static implicit operator ToolRegistryCatalog(List<Tool> tools)
-            => new ToolRegistryCatalog(tools);
-
-        public void Register(params Delegate[] funcs)
-        {
-            if (funcs == null)
-                throw new ArgumentNullException(nameof(funcs));
-
-            foreach (var f in funcs)
+            try
             {
-                if (f == null)
-                    throw new ArgumentNullException(nameof(funcs), "Delegate cannot be null.");
-
-                if (!IsMethodJsonCompatible(f.Method))
-                    continue;
-
-                var tool = CreateToolFromDelegate(f);
-
-                if (_registeredTools.Any(t =>
-                    t.Name.Equals(tool.Name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw new InvalidOperationException(
-                        $"Duplicate tool name exposed to LLM: '{tool.Name}'. " +
-                        $"Tool names must be globally unique.");
-                }
-
-                _registeredTools.Add(tool);
+                var paramTypes = method.GetParameters().Select(p => p.ParameterType).Concat([method.ReturnType]).ToArray();
+                var del = Delegate.CreateDelegate(Expression.GetDelegateType(paramTypes), instance, method, throwOnBindFailure: false);
+                if (del != null) Register(del);
             }
+            catch { /* skip incompatible methods */ }
         }
+    }
 
-        public void RegisterAll<T>()
+    public bool Contains(string toolName) => _registeredTools.Any(t => t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
+    public Tool? Get(string toolName) => _registeredTools.FirstOrDefault(t => t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
+
+    private static Tool CreateToolFromDelegate(Delegate func)
+    {
+        var method = func.Method;
+        var declaringType = method.DeclaringType ?? throw new InvalidOperationException("Tool method has no declaring type.");
+        var attr = method.GetCustomAttribute<ToolAttribute>();
+
+        var toolName = !string.IsNullOrWhiteSpace(attr?.Name)
+            ? attr!.Name
+            : $"{declaringType.Name.ToSnake()}.{method.Name.ToSnake()}";
+
+        var description = attr?.Description
+            ?? method.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description
+            ?? toolName;
+
+        var properties = new JObject();
+        var required = new JArray();
+
+        foreach (var param in method.GetParameters())
         {
-            var methods = typeof(T)
-                .GetMethods(BindingFlags.Public | BindingFlags.Static)
-                .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
+            if (param.ParameterType == typeof(CancellationToken)) continue;
 
-            foreach (var method in methods)
-            {
-                if (!IsMethodJsonCompatible(method))
-                    continue;
+            var name = param.Name!;
+            var schema = param.ParameterType.GetSchemaForType();
+            var desc = param.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description ?? name;
+            schema[JsonSchemaConstants.DescriptionKey] ??= desc;
 
-                try
-                {
-                    var paramTypes = method.GetParameters()
-                        .Select(p => p.ParameterType)
-                        .Concat(new[] { method.ReturnType })
-                        .ToArray();
-
-                    var del = Delegate.CreateDelegate(
-                        Expression.GetDelegateType(paramTypes),
-                        method
-                    );
-
-                    Register(del);
-                }
-                catch
-                {
-                    // skip incompatible methods
-                }
-            }
+            properties[name] = schema;
+            if (!param.IsOptional) required.Add(name);
         }
 
-        public void RegisterAll<T>(T instance)
+        var schemaObject = new JsonSchemaBuilder()
+            .Type<object>()
+            .Properties(properties)
+            .Required(required)
+            .Build();
+
+        return new Tool { Name = toolName, Description = description, ParametersSchema = schemaObject, Function = func };
+    }
+
+    private static bool IsMethodJsonCompatible(MethodInfo m)
+    {
+        if (m.ContainsGenericParameters || m.ReturnType.ContainsGenericParameters) return false;
+
+        foreach (var p in m.GetParameters())
         {
-            var methods = typeof(T)
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
-
-            foreach (var method in methods)
-            {
-                if (!IsMethodJsonCompatible(method))
-                    continue;
-
-                try
-                {
-                    var paramTypes = method.GetParameters()
-                        .Select(p => p.ParameterType)
-                        .Concat(new[] { method.ReturnType })
-                        .ToArray();
-
-                    var del = Delegate.CreateDelegate(
-                        Expression.GetDelegateType(paramTypes),
-                        instance,
-                        method,
-                        throwOnBindFailure: false
-                    );
-
-                    if (del != null)
-                        Register(del);
-                }
-                catch
-                {
-                    // skip incompatible methods
-                }
-            }
+            var t = p.ParameterType;
+            if (t.IsByRef || t.IsPointer || t.ContainsGenericParameters) return false;
         }
-
-        public bool Contains(string toolName)
-            => _registeredTools.Any(t =>
-                t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
-
-        public Tool? Get(string toolName)
-            => _registeredTools.FirstOrDefault(t =>
-                t.Name.Equals(toolName, StringComparison.OrdinalIgnoreCase));
-
-        private static Tool CreateToolFromDelegate(Delegate func)
-        {
-            var method = func.Method;
-
-            var declaringType = method.DeclaringType
-                ?? throw new InvalidOperationException("Tool method has no declaring type.");
-
-            // globally unique name
-            var attr = method.GetCustomAttribute<ToolAttribute>();
-
-            var toolName =
-                !string.IsNullOrWhiteSpace(attr?.Name)
-                    ? attr!.Name
-                    : $"{declaringType.Name.ToSnake()}.{method.Name.ToSnake()}";
-
-            var description =
-                method.GetCustomAttribute<ToolAttribute>()?.Description
-                ?? method.GetCustomAttribute<DescriptionAttribute>()?.Description
-                ?? toolName;
-
-            var properties = new JObject();
-            var required = new JArray();
-
-            foreach (var param in method.GetParameters())
-            {
-                if (param.ParameterType == typeof(CancellationToken))
-                    continue;
-
-                var name = param.Name!;
-                var schema = param.ParameterType.GetSchemaForType();
-
-                var desc = param.GetCustomAttribute<DescriptionAttribute>()?.Description ?? name;
-                schema[JsonSchemaConstants.DescriptionKey] ??= desc;
-
-                properties[name] = schema;
-
-                if (!param.IsOptional)
-                    required.Add(name);
-            }
-
-            var schemaObject = new JsonSchemaBuilder()
-                .Type<object>()
-                .Properties(properties)
-                .Required(required)
-                .Build();
-
-            return new Tool
-            {
-                Name = toolName,
-                Description = description,
-                ParametersSchema = schemaObject,
-                Function = func
-            };
-        }
-
-        private static bool IsMethodJsonCompatible(MethodInfo m)
-        {
-            if (m.ContainsGenericParameters)
-                return false;
-
-            if (m.ReturnType.ContainsGenericParameters)
-                return false;
-
-            foreach (var p in m.GetParameters())
-            {
-                var t = p.ParameterType;
-
-                if (t.IsByRef) return false;
-                if (t.IsPointer) return false;
-                if (t.ContainsGenericParameters) return false;
-            }
-
-            return true;
-        }
+        return true;
     }
 }
