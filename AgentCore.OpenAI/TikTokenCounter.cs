@@ -1,8 +1,7 @@
+using AgentCore.Tokens;
 using SharpToken;
 
-namespace AgentCore.Tokens;
-
-public interface ITokenCounter { int Count(string payload); }
+namespace AgentCore.Providers.OpenAI;
 
 public sealed class TikTokenCounter(string encodingName) : ITokenCounter
 {

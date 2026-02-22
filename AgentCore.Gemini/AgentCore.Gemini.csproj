@@ -13,9 +13,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="OpenAI" Version="2.8.0" />
+		<PackageReference Include="Google.GenAI" Version="1.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
-		<PackageReference Include="SharpToken" Version="2.0.4" />
 	</ItemGroup>
 
 </Project>

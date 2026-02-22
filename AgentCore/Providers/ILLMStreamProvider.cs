@@ -2,7 +2,7 @@ using AgentCore.LLM.Protocol;
 
 namespace AgentCore.Providers;
 
-public sealed class LLMInitOptions
+public class LLMInitOptions
 {
     public string? BaseUrl { get; set; }
     public string? ApiKey { get; set; }
