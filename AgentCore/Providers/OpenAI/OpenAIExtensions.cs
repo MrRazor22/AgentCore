@@ -3,6 +3,7 @@ using AgentCore.Json;
 using AgentCore.LLM.Protocol;
 using AgentCore.Tools;
 using OpenAI.Chat;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Providers.OpenAI;
 
@@ -26,7 +27,7 @@ public static class OpenAIExtensions
         => tools.Select(tool => ChatTool.CreateFunctionTool(
             tool.Name,
             tool.Description ?? "",
-            BinaryData.FromString(tool.ParametersSchema?.ToString(Newtonsoft.Json.Formatting.None) ?? "{\"type\":\"object\"}")
+            BinaryData.FromString(tool.ParametersSchema?.ToJsonString() ?? "{\"type\":\"object\"}")
         )).ToList();
 
     public static IEnumerable<ChatMessage> ToChatMessages(this Conversation history)
@@ -52,7 +53,7 @@ public static class OpenAIExtensions
                         toolCalls: [ChatToolCall.CreateFunctionToolCall(
                             id: call.Id,
                             functionName: call.Name,
-                            functionArguments: BinaryData.FromString(call.Arguments?.ToString() ?? "{}"))]);
+                            functionArguments: BinaryData.FromString(call.Arguments?.ToJsonString() ?? "{}"))]);
                     break;
 
                 case Role.Tool when msg.Content is ToolCallResult result:

@@ -1,5 +1,6 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Chat;
 
@@ -13,32 +14,32 @@ public sealed class TextContent(string Text) : IChatContent
 
 public class ToolCall : IChatContent
 {
-    [JsonProperty("id")] public string Id { get; set; }
-    [JsonProperty("name")] public string Name { get; private set; }
-    [JsonProperty("arguments")] public JObject Arguments { get; private set; }
+    [JsonPropertyName("id")] public string Id { get; set; }
+    [JsonPropertyName("name")] public string Name { get; private set; }
+    [JsonPropertyName("arguments")] public JsonObject Arguments { get; private set; }
     [JsonIgnore] public object[] Parameters { get; private set; } = [];
     [JsonIgnore] public string? Message { get; set; }
 
     [JsonConstructor]
-    public ToolCall(string id, string name, JObject arguments, object[]? parameters = null, string? message = null)
+    public ToolCall(string id, string name, JsonObject arguments, object[]? parameters = null, string? message = null)
     {
         Id = id;
         Name = name;
-        Arguments = arguments ?? new JObject();
+        Arguments = arguments ?? new JsonObject();
         Parameters = parameters ?? [];
         Message = message;
     }
 
-    public ToolCall(string message) : this(Guid.NewGuid().ToString(), "", new JObject()) => Message = message;
+    public ToolCall(string message) : this(Guid.NewGuid().ToString(), "", new JsonObject()) => Message = message;
 
-    public static ToolCall Empty { get; } = new(Guid.NewGuid().ToString(), "", new JObject());
+    public static ToolCall Empty { get; } = new(Guid.NewGuid().ToString(), "", new JsonObject());
 
     public bool IsEmpty => string.IsNullOrWhiteSpace(Name) && string.IsNullOrWhiteSpace(Message);
 
     public override string ToString()
     {
         var argsStr = Arguments?.Count > 0
-            ? string.Join(", ", Arguments.Properties().Select(p => $"{p.Name}: {p.Value}"))
+            ? string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"))
             : "none";
         return $"Name: '{Name}' (id: {Id}) with Arguments: [{argsStr}]";
     }

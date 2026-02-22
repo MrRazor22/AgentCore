@@ -1,8 +1,10 @@
-using Newtonsoft.Json.Linq;
 using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Json;
 
@@ -16,9 +18,9 @@ public sealed class SchemaValidationError(string param, string? path, string mes
 
 public static class JsonSchemaExtensions
 {
-    public static JObject GetSchemaFor<T>() => typeof(T).GetSchemaForType();
+    public static JsonObject GetSchemaFor<T>() => typeof(T).GetSchemaForType();
 
-    public static JObject GetSchemaForType(this Type type, HashSet<Type>? visited = null)
+    public static JsonObject GetSchemaForType(this Type type, HashSet<Type>? visited = null)
     {
         visited ??= [];
         type = Nullable.GetUnderlyingType(type) ?? type;
@@ -46,12 +48,12 @@ public static class JsonSchemaExtensions
 
         visited.Add(type);
 
-        var props = new JObject();
-        var required = new JArray();
+        var props = new JsonObject();
+        var required = new JsonArray();
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (prop.GetCustomAttribute<System.Text.Json.Serialization.JsonIgnoreAttribute>() != null) continue;
+            if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
 
             var propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
             var propSchema = propType.GetSchemaForType(visited);
@@ -75,7 +77,7 @@ public static class JsonSchemaExtensions
                 if (range.Maximum != null && double.TryParse(range.Maximum.ToString(), out var max)) propSchema[JsonSchemaConstants.MaximumKey] = max;
             }
 
-            if (prop.GetCustomAttribute<DefaultValueAttribute>() is { } dv) propSchema[JsonSchemaConstants.DefaultKey] = JToken.FromObject(dv.Value!);
+            if (prop.GetCustomAttribute<DefaultValueAttribute>() is { } dv) propSchema[JsonSchemaConstants.DefaultKey] = JsonSerializer.SerializeToNode(dv.Value!);
 
             props[prop.Name] = propSchema;
             if (!prop.IsOptional()) required.Add(prop.Name);
@@ -84,7 +86,7 @@ public static class JsonSchemaExtensions
         return new JsonSchemaBuilder().Type<object>().Properties(props).Required(required).AdditionalProperties(false).Build();
     }
 
-    private static JObject GetDictionarySchema(Type valueType, HashSet<Type> visited)
+    private static JsonObject GetDictionarySchema(Type valueType, HashSet<Type> visited)
         => new JsonSchemaBuilder().Type("object").AdditionalProperties(valueType.GetSchemaForType(visited)).Build();
 
     private static bool IsOptional(this PropertyInfo prop)
@@ -139,57 +141,59 @@ public static class JsonSchemaExtensions
         return "object";
     }
 
-    public static List<SchemaValidationError> Validate(this JObject schema, JToken? node, string path = "")
+    public static List<SchemaValidationError> Validate(this JsonObject schema, JsonNode? node, string path = "")
     {
         var errors = new List<SchemaValidationError>();
 
         if (node == null)
         {
-            if (schema["required"] is JArray arr && arr.Count > 0)
+            if (schema["required"] is JsonArray arr && arr.Count > 0)
                 errors.Add(new SchemaValidationError(path, path, "Value required but missing.", "missing"));
             return errors;
         }
 
         var type = schema["type"]?.ToString();
+        var kind = node.GetValueKind();
 
         switch (type)
         {
             case "string":
-                if (node.Type != JTokenType.String) errors.Add(new SchemaValidationError(path, path, "Expected string", "type_error"));
+                if (kind != JsonValueKind.String) errors.Add(new SchemaValidationError(path, path, "Expected string", "type_error"));
                 break;
             case "integer":
-                if (node.Type != JTokenType.Integer) errors.Add(new SchemaValidationError(path, path, "Expected integer", "type_error"));
+                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, "Expected integer", "type_error"));
                 break;
             case "number":
-                if (node.Type != JTokenType.Float && node.Type != JTokenType.Integer) errors.Add(new SchemaValidationError(path, path, "Expected number", "type_error"));
+                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, "Expected number", "type_error"));
                 break;
             case "boolean":
-                if (node.Type != JTokenType.Boolean) errors.Add(new SchemaValidationError(path, path, "Expected boolean", "type_error"));
+                if (kind != JsonValueKind.True && kind != JsonValueKind.False) errors.Add(new SchemaValidationError(path, path, "Expected boolean", "type_error"));
                 break;
             case "array":
-                if (node.Type != JTokenType.Array) errors.Add(new SchemaValidationError(path, path, "Expected array", "type_error"));
-                else if (schema["items"] is JObject itemSchema)
-                    for (int i = 0; i < ((JArray)node).Count; i++)
-                        errors.AddRange(itemSchema.Validate(((JArray)node)[i], $"{path}[{i}]"));
+                if (kind != JsonValueKind.Array) errors.Add(new SchemaValidationError(path, path, "Expected array", "type_error"));
+                else if (schema["items"] is JsonObject itemSchema)
+                    for (int i = 0; i < node.AsArray().Count; i++)
+                        errors.AddRange(itemSchema.Validate(node.AsArray()[i], $"{path}[{i}]"));
                 break;
             case "object":
-                if (node.Type != JTokenType.Object) errors.Add(new SchemaValidationError(path, path, "Expected object", "type_error"));
-                else if (schema["properties"] is JObject props)
+                if (kind != JsonValueKind.Object) errors.Add(new SchemaValidationError(path, path, "Expected object", "type_error"));
+                else if (schema["properties"] is JsonObject props)
                 {
-                    var objNode = (JObject)node;
+                    var objNode = node.AsObject();
                     foreach (var kvp in props)
                     {
                         var key = kvp.Key;
-                        var childSchema = (JObject)kvp.Value;
+                        var childSchema = kvp.Value as JsonObject;
 
                         if (!objNode.ContainsKey(key))
                         {
-                            if (schema["required"] is JArray reqArr && reqArr.Any(r => r?.ToString() == key))
+                            if (schema["required"] is JsonArray reqArr && reqArr.Any(r => r?.ToString() == key))
                                 errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), $"Missing required field '{key}'", "missing"));
                         }
                         else
                         {
-                            errors.AddRange(childSchema.Validate(objNode[key], $"{path}.{key}".Trim('.')));
+                            if (childSchema != null)
+                                errors.AddRange(childSchema.Validate(objNode[key], $"{path}.{key}".Trim('.')));
                         }
                     }
                 }

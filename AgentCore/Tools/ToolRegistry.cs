@@ -1,8 +1,8 @@
 using AgentCore.Json;
 using AgentCore.Utils;
-using Newtonsoft.Json.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
@@ -103,8 +103,8 @@ internal sealed class ToolRegistryCatalog(IEnumerable<Tool>? tools = null) : ITo
             ?? method.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description
             ?? toolName;
 
-        var properties = new JObject();
-        var required = new JArray();
+        var properties = new JsonObject();
+        var required = new JsonArray();
 
         foreach (var param in method.GetParameters())
         {

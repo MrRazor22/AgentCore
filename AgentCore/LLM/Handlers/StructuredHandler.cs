@@ -2,17 +2,19 @@ using AgentCore.Json;
 using AgentCore.LLM.Execution;
 using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.LLM.Handlers;
 
 public sealed class StructuredHandler(ILogger<StructuredHandler> _logger) : IChunkHandler
 {
-    private static readonly ConcurrentDictionary<Type, JObject> SchemaCache = new();
+    private static readonly ConcurrentDictionary<Type, JsonObject> SchemaCache = new();
+    private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
     private readonly StringBuilder _jsonBuffer = new();
-    private JObject? _schema;
+    private JsonObject? _schema;
     private Type? _outputType;
 
     public StreamKind Kind => StreamKind.Structured;
@@ -26,7 +28,7 @@ public sealed class StructuredHandler(ILogger<StructuredHandler> _logger) : IChu
         _schema = SchemaCache.GetOrAdd(_outputType, t => t.GetSchemaForType());
 
         _logger.LogDebug("► Request [JsonSchema]: Type={Type}\n{Schema}", _outputType.Name,
-            _schema!.ToString(Newtonsoft.Json.Formatting.Indented));
+            _schema!.ToJsonString(IndentedOptions));
     }
 
     public void OnChunk(LLMStreamChunk chunk)
@@ -45,14 +47,14 @@ public sealed class StructuredHandler(ILogger<StructuredHandler> _logger) : IChu
         var raw = _jsonBuffer.ToString();
         if (string.IsNullOrWhiteSpace(raw)) throw new RetryException("Empty structured response");
 
-        JToken json;
-        try { json = JToken.Parse(raw); }
+        JsonNode? json;
+        try { json = JsonNode.Parse(raw); }
         catch { throw new RetryException("Invalid JSON returned by model"); }
 
         var errors = _schema?.Validate(json, _outputType.Name);
         if (errors?.Count > 0) throw new RetryException("Schema validation failed");
 
-        response.Output = json.ToObject(_outputType)!;
-        _logger.LogDebug("Result [Json]: {Type}", json.ToString(Newtonsoft.Json.Formatting.Indented));
+        response.Output = JsonSerializer.Deserialize(json!, _outputType)!;
+        _logger.LogDebug("Result [Json]: {Type}", json!.ToJsonString(IndentedOptions));
     }
 }

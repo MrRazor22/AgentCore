@@ -1,8 +1,9 @@
 using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.Utils;
-using Newtonsoft.Json.Linq;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
@@ -19,7 +20,7 @@ public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
         foreach (var (start, _, obj) in content.FindAllJsonObjects())
         {
             var name = obj["name"]?.ToString();
-            var args = obj["arguments"] as JObject;
+            var args = obj["arguments"] as JsonObject;
             if (name == null || args == null || !_toolCatalog.Contains(name)) continue;
 
             var id = obj["id"]?.ToString() ?? Guid.NewGuid().ToString();
@@ -39,13 +40,13 @@ public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
         return new ToolCall(toolCall.Id, toolCall.Name, toolCall.Arguments, parsed);
     }
 
-    private object[] ParseToolParams(MethodInfo method, JObject arguments)
+    private object[] ParseToolParams(MethodInfo method, JsonObject arguments)
     {
         var parameters = method.GetParameters();
         var argsObj = arguments;
 
         if (parameters.Length == 1 && !parameters[0].ParameterType.IsSimpleType() && !argsObj.ContainsKey(parameters[0].Name!))
-            argsObj = new JObject { [parameters[0].Name!] = argsObj };
+            argsObj = new JsonObject { [parameters[0].Name!] = argsObj };
 
         var values = new List<object?>();
 
@@ -66,11 +67,16 @@ public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
             var errors = schema.Validate(node, p.Name!);
             if (errors.Any()) throw new ToolValidationAggregateException(errors);
 
-            try { values.Add(node.ToObject(p.ParameterType)); }
+            try { values.Add(DeserializeNode(node, p.ParameterType)); }
             catch (Exception ex) { throw new ToolValidationException(p.Name!, ex.Message); }
         }
 
         return values.ToArray();
+    }
+
+    private static object? DeserializeNode(JsonNode? node, Type type)
+    {
+        return JsonSerializer.Deserialize(node, type);
     }
 }
 

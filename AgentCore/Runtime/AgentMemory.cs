@@ -1,6 +1,6 @@
 using AgentCore.Chat;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace AgentCore.Runtime;
 
@@ -40,7 +40,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
         if (!File.Exists(file)) return Task.FromResult(_cached);
 
         var json = File.ReadAllText(file);
-        _cached = JsonConvert.DeserializeObject<Conversation>(json) ?? new Conversation();
+        _cached = JsonSerializer.Deserialize<Conversation>(json) ?? new Conversation();
         return Task.FromResult(_cached);
     }
 

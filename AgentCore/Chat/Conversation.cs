@@ -1,10 +1,10 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Chat;
 
-[JsonConverter(typeof(StringEnumConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
 
 public class Chat
@@ -13,13 +13,13 @@ public class Chat
     public IChatContent Content { get; }
 
     [JsonConstructor]
-    private Chat(Role role, JToken content)
+    private Chat(Role role, JsonNode content)
     {
         Role = role;
-        Content = content.Type == JTokenType.String
-            ? new TextContent(content.Value<string>()!)
-            : content is JObject obj && obj["Text"] != null
-                ? new TextContent((string)obj["Text"]!)
+        Content = content.GetValueKind() == JsonValueKind.String
+            ? new TextContent(content.GetValue<string>()!)
+            : content is JsonObject obj && obj["Text"] != null
+                ? new TextContent(obj["Text"]!.GetValue<string>())
                 : throw new Exception("Unknown content type.");
     }
 

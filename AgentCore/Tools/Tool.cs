@@ -1,5 +1,5 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Tools;
 
@@ -14,15 +14,15 @@ public class Tool
 {
     public required string Name { get; set; }
     public required string Description { get; set; }
-    public required JObject ParametersSchema { get; set; }
+    public required JsonObject ParametersSchema { get; set; }
 
     [JsonIgnore]
     public Delegate? Function { get; set; }
 
     public override string ToString()
     {
-        var props = ParametersSchema?["properties"] as JObject;
-        var args = props != null ? string.Join(", ", props.Properties().Select(p => p.Name)) : "";
+        var props = ParametersSchema?["properties"] as JsonObject;
+        var args = props != null ? string.Join(", ", props.Select(p => p.Key)) : "";
         var argPart = args.Length > 0 ? $"({args})" : "()";
         return !string.IsNullOrWhiteSpace(Description) ? $"{Name}{argPart} => {Description}" : $"{Name}{argPart}";
     }

@@ -46,7 +46,7 @@ internal sealed class OpenAILLMClient : ILLMStreamProvider
         {
             options.ResponseFormat = ChatResponseFormat.CreateJsonSchemaFormat(
                 "structured_response",
-                BinaryData.FromString(request.OutputType.GetSchemaForType().ToString(Newtonsoft.Json.Formatting.None)),
+                BinaryData.FromString(request.OutputType.GetSchemaForType().ToJsonString()),
                 jsonSchemaIsStrict: true
             );
         }

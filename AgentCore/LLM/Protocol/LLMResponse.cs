@@ -2,13 +2,11 @@ using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Utils;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.LLM.Protocol;
 
-[JsonConverter(typeof(StringEnumConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum FinishReason { Stop, ToolCall, Cancelled }
 
 public sealed class LLMResponse

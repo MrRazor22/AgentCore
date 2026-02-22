@@ -1,6 +1,6 @@
 using AgentCore.Json;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Chat;
 
@@ -18,6 +18,8 @@ public enum ChatFilter
 
 public static class ConversationExtensions
 {
+    private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
+
     public static Conversation AddUser(this Conversation convo, string? text)
         => string.IsNullOrWhiteSpace(text) ? convo : convo.Add(Role.User, new TextContent(text!));
 
@@ -45,7 +47,7 @@ public static class ConversationExtensions
     }
 
     public static string ToJson(this Conversation chat, ChatFilter filter = ChatFilter.All)
-        => JsonConvert.SerializeObject(chat.GetSerializableMessages(filter), Formatting.Indented);
+        => JsonSerializer.Serialize(chat.GetSerializableMessages(filter), IndentedOptions);
 
     public static bool IsLastAssistantMessageSame(this Conversation chat, string newMessage)
     {
@@ -128,7 +130,7 @@ public static class ConversationExtensions
                         ["function"] = new Dictionary<string, object>
                         {
                             ["name"] = call.Name,
-                            ["arguments"] = call.Arguments ?? new JObject()
+                            ["arguments"] = call.Arguments ?? new JsonObject()
                         }
                     }
                 };
