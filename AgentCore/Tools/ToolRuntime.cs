@@ -1,13 +1,7 @@
 using AgentCore.Chat;
-using Microsoft.Extensions.Options;
 using System.Reflection;
 
 namespace AgentCore.Tools;
-
-public sealed class ToolRuntimeOptions
-{
-    public TimeSpan? ExecutionTimeout { get; set; }
-}
 
 public interface IToolRuntime
 {
@@ -15,9 +9,8 @@ public interface IToolRuntime
     Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-public sealed class ToolRuntime(IToolCatalog _tools, IOptions<ToolRuntimeOptions>? options = null) : IToolRuntime
+public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
 {
-    private readonly ToolRuntimeOptions _options = options?.Value ?? new ToolRuntimeOptions();
 
     public async Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {
@@ -60,25 +53,8 @@ public sealed class ToolRuntime(IToolCatalog _tools, IOptions<ToolRuntimeOptions
 
         try
         {
-            object? result;
-
-            if (_options.ExecutionTimeout.HasValue)
-            {
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                timeoutCts.CancelAfter(_options.ExecutionTimeout.Value);
-                result = await InvokeAsync(call, timeoutCts.Token).ConfigureAwait(false);
-            }
-            else
-            {
-                result = await InvokeAsync(call, ct).ConfigureAwait(false);
-            }
-
+            var result = await InvokeAsync(call, ct).ConfigureAwait(false);
             return new ToolCallResult(call, result);
-        }
-        catch (OperationCanceledException) when (_options.ExecutionTimeout.HasValue && !ct.IsCancellationRequested)
-        {
-            var timeoutEx = new ToolExecutionException(call.Name, $"Tool execution timed out after {_options.ExecutionTimeout}", new TimeoutException());
-            return new ToolCallResult(call, timeoutEx);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
