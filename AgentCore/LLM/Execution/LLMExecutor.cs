@@ -1,9 +1,9 @@
 using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Handlers;
 using AgentCore.LLM.Protocol;
 using AgentCore.Providers;
 using AgentCore.Tokens;
+using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -19,13 +19,11 @@ public interface ILLMExecutor
 public class LLMExecutor(
     ILLMStreamProvider _provider,
     IRetryPolicy _retryPolicy,
-    IEnumerable<IChunkHandler> handlers,
+    StreamProcessor _processor,
     IContextManager _ctxManager,
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
 {
-    private readonly IReadOnlyDictionary<StreamKind, IChunkHandler> _handlers = handlers.ToDictionary(h => h.Kind);
-
     public LLMResponse Response { get; private set; } = new();
 
     public async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
@@ -39,12 +37,12 @@ public class LLMExecutor(
         var attempt = request.Clone();
         attempt.Prompt = trimmed;
 
-        foreach (var h in _handlers.Values) h.OnRequest(attempt);
+        _processor.OnRequest(attempt);
         _logger.LogTrace("LLM request: {Request}", attempt.ToCountablePayload());
 
         await foreach (var chunk in _retryPolicy.ExecuteStreamingAsync<LLMStreamChunk>(
             attempt.Prompt,
-            conversation => StreamWithHandlers(conversation, request, ct),
+            conversation => StreamWithProcessing(conversation, request, ct),
             ct))
         {
             yield return chunk;
@@ -53,7 +51,7 @@ public class LLMExecutor(
         CompleteResponse(sw);
     }
 
-    private async IAsyncEnumerable<LLMStreamChunk> StreamWithHandlers(
+    private async IAsyncEnumerable<LLMStreamChunk> StreamWithProcessing(
         Conversation conversation,
         LLMRequest requestTemplate,
         [EnumeratorCancellation] CancellationToken ct)
@@ -65,15 +63,14 @@ public class LLMExecutor(
 
         await foreach (var chunk in _provider.StreamAsync(req, ct))
         {
-            if (_handlers.TryGetValue(chunk.Kind, out var handler))
-                handler.OnChunk(chunk);
+            _processor.OnChunk(chunk);
             yield return chunk;
         }
     }
 
     private void CompleteResponse(Stopwatch sw)
     {
-        foreach (var h in _handlers.Values) h.OnResponse(Response);
+        _processor.OnResponse(Response);
         sw.Stop();
         _logger.LogTrace("LLM response: {Response}", Response.ToCountablePayload());
         _logger.LogDebug("LLM call Duration={Ms}ms FinishReason={FinishReason}", sw.ElapsedMilliseconds, Response.FinishReason);

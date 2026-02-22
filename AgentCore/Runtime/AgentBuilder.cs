@@ -1,10 +1,8 @@
 using AgentCore.LLM.Execution;
-using AgentCore.LLM.Handlers;
 using AgentCore.Providers;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Runtime;
 
@@ -32,11 +30,7 @@ public sealed class AgentBuilder
         Services.AddSingleton<IRetryPolicy, RetryPolicy>();
         Services.AddScoped<IToolRuntime, ToolRuntime>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
-        Services.AddScoped<IChunkHandler, TextHandler>();
-        Services.AddScoped<IChunkHandler, ToolCallHandler>();
-        Services.AddScoped<IChunkHandler, StructuredHandler>();
-        Services.AddScoped<IChunkHandler, FinishHandler>();
-        Services.AddScoped<IChunkHandler, TokenUsageHandler>();
+        Services.AddScoped<StreamProcessor>();
         Services.AddScoped<ILLMExecutor, LLMExecutor>();
         Services.AddTransient(typeof(IAgentExecutor), typeof(ToolCallingLoop));
     }

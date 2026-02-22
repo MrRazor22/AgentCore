@@ -11,22 +11,11 @@ public enum FinishReason { Stop, ToolCall, Cancelled }
 
 public sealed class LLMResponse
 {
-    private TokenUsage? _tokenUsage;
-
     public string? Text { get; internal set; }
     public ToolCall? ToolCall { get; internal set; }
     public object? Output { get; set; }
     public FinishReason FinishReason { get; internal set; }
-
-    public TokenUsage? TokenUsage
-    {
-        get => _tokenUsage;
-        internal set
-        {
-            if (_tokenUsage != null) throw new InvalidOperationException("TokenUsage already set");
-            _tokenUsage = value;
-        }
-    }
+    public TokenUsage? TokenUsage { get; internal set; }
 
     public bool HasToolCall => ToolCall != null;
 
