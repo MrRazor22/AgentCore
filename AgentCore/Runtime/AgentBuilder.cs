@@ -1,13 +1,10 @@
 using AgentCore.LLM.Execution;
 using AgentCore.LLM.Handlers;
-using AgentCore.LLM.Protocol;
 using AgentCore.Providers;
-using AgentCore.Providers.OpenAI;
 using AgentCore.Tokens;
 using AgentCore.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AgentCore.Runtime;
 
@@ -65,27 +62,8 @@ public sealed class AgentBuilder
         var provider = Services.BuildServiceProvider(validateScopes: true);
 
         if (provider.GetService<ILLMStreamProvider>() == null)
-            throw new InvalidOperationException("No LLM provider registered. Call AddOpenAI() or equivalent.");
+            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
         return new LLMAgent(provider, _config);
-    }
-}
-
-public static class AgentBuilderExtensions
-{
-    public static AgentBuilder AddOpenAI(this AgentBuilder builder, Action<LLMInitOptions> configure)
-    {
-        builder.Services.Configure(configure);
-        builder.Services.AddSingleton<ILLMStreamProvider, OpenAILLMClient>();
-
-        builder.Services.AddSingleton<ITokenCounter>(sp =>
-        {
-            var opts = sp.GetRequiredService<IOptions<LLMInitOptions>>().Value;
-            var encoding = opts.Model?.StartsWith("gpt-4o") == true ? "o200k_base" : "cl100k_base";
-            return new TikTokenCounter(encoding);
-        });
-
-        builder.Services.AddSingleton<ITokenManager, TokenManager>();
-        return builder;
     }
 }

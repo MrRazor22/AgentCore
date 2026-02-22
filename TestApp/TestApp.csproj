@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
+    <ProjectReference Include="..\AgentCore.OpenAI\AgentCore.OpenAI.csproj" />
   </ItemGroup>
 
   <ItemGroup>
