@@ -22,6 +22,7 @@ public class LLMExecutor(
     ILLMProvider _provider,
     IToolRegistry _toolRegistry,
     IContextManager _ctxManager,
+    ITokenManager _tokenManager,
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
 {
@@ -32,14 +33,14 @@ public class LLMExecutor(
     {
         var sw = Stopwatch.StartNew();
 
-        var trimmed = _ctxManager.Trim([.. messages], options.MaxOutputTokens);
-        IReadOnlyList<Message> trimmedList = [.. trimmed];
+        var reduced = _ctxManager.Reduce([.. messages], options);
+        IReadOnlyList<Message> reducedList = [.. reduced];
 
         var tools = _toolRegistry.Tools;
 
         _logger.LogTrace("LLM request: {Model} {Options}", options.Model, options);
 
-        var content = _provider.StreamAsync(trimmedList, options, tools, ct);
+        var content = _provider.StreamAsync(reducedList, options, tools, ct);
 
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         TokenUsage? tokenUsage = null;
@@ -78,6 +79,10 @@ public class LLMExecutor(
 
             yield return new ToolCallEvent(new ToolCall(id, name, parsedArgs));
         }
+
+        // Record token usage for per-session tracking
+        if (tokenUsage != null)
+            _tokenManager.Record(tokenUsage);
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);

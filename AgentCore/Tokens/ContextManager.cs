@@ -1,49 +1,52 @@
 using AgentCore.Chat;
+using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AgentCore.Tokens;
 
-public sealed class ContextBudgetOptions
-{
-    public int MaxContextTokens { get; set; } = 8000;
-    public double Margin { get; set; } = 0.6;
-    public int KeepLastMessages { get; set; } = 4;
-}
-
 public interface IContextManager
 {
-    IList<Message> Trim(IList<Message> reqPrompt, int? requiredGap = null);
+    IList<Message> Reduce(IList<Message> messages, LLMOptions options);
 }
 
-public sealed class ContextManager(IOptions<ContextBudgetOptions> options, ITokenManager _tokenManager, ILogger<ContextManager> _logger) : IContextManager
+public sealed class ContextManager(
+    ITokenCounter _counter,
+    ILogger<ContextManager> _logger,
+    int keepLastMessages = 4
+) : IContextManager
 {
-    private readonly ContextBudgetOptions _opts = options.Value;
-
-    public IList<Message> Trim(IList<Message> reqPrompt, int? requiredGap = null)
+    public IList<Message> Reduce(IList<Message> messages, LLMOptions options)
     {
-        if (reqPrompt == null) throw new ArgumentNullException(nameof(reqPrompt));
+        if (messages == null) throw new ArgumentNullException(nameof(messages));
 
-        if (requiredGap.HasValue)
-        {
-            if (requiredGap.Value < 0) throw new ArgumentOutOfRangeException(nameof(requiredGap), "Required gap cannot be negative.");
-            int maxAllowedGap = (int)(_opts.MaxContextTokens * (1 - _opts.Margin));
-            if (requiredGap.Value > maxAllowedGap)
-                throw new ArgumentOutOfRangeException(nameof(requiredGap), $"Required gap {requiredGap.Value} exceeds allowed maximum {maxAllowedGap} tokens based on margin.");
-        }
+        int contextLength = options.ContextLength
+            ?? throw new InvalidOperationException(
+                "ContextLength is required for context management. Set it in LLMOptions or via provider registration.");
 
-        var source = reqPrompt.Clone();
-        int originalCount = _tokenManager.AppromimateCount(source.ToJson());
+        int reserveForOutput = options.MaxOutputTokens ?? 4096;
+        int available = contextLength - reserveForOutput;
 
-        int limit = requiredGap.HasValue
-            ? Math.Max(0, _opts.MaxContextTokens - requiredGap.Value)
-            : (int)(_opts.MaxContextTokens * _opts.Margin);
+        if (available <= 0)
+            throw new InvalidOperationException(
+                $"No available context budget: ContextLength={contextLength}, MaxOutputTokens={reserveForOutput}.");
 
+        int current = _counter.Count(messages.ToJson());
+
+        if (current <= available)
+            return messages;
+
+        // --- Tail-trim: keep system messages + last N user/assistant, drop oldest ---
+
+        var source = messages.Clone();
         var system = source.Where(m => m.Role == Role.System).ToList();
-        Message? lastToolMsg = source.LastOrDefault(m => m.Role == Role.Tool);
-        ToolCall? lastToolCall = null;
 
-        var ua = source.Where(m => (m.Role == Role.User || m.Role == Role.Assistant) && m.Content is Text).ToList();
+        var ua = source
+            .Where(m => (m.Role == Role.User || m.Role == Role.Assistant) && m.Content is Text)
+            .ToList();
+
+        Message? lastToolMsg = source.LastOrDefault(m => m.Role == Role.Tool);
+
+        var keepUA = ua.Skip(Math.Max(0, ua.Count - keepLastMessages)).ToList();
 
         Message? lastUser = null, lastAssistant = null;
         for (int i = ua.Count - 1; i >= 0; i--)
@@ -52,7 +55,6 @@ public sealed class ContextManager(IOptions<ContextBudgetOptions> options, IToke
             else if (lastUser != null && ua[i].Role == Role.Assistant) { lastAssistant = ua[i]; break; }
         }
 
-        var keepUA = ua.Skip(Math.Max(0, ua.Count - _opts.KeepLastMessages)).ToList();
         if (lastUser != null && !keepUA.Contains(lastUser)) keepUA.Add(lastUser);
         if (lastAssistant != null && !keepUA.Contains(lastAssistant)) keepUA.Add(lastAssistant);
 
@@ -60,39 +62,29 @@ public sealed class ContextManager(IOptions<ContextBudgetOptions> options, IToke
 
         IList<Message> Build(IReadOnlyList<Message> uaSlice)
         {
-            var c = new List<Message>();
-            foreach (var s in system) c.Add(new Message(s.Role, s.Content));
-            if (lastToolCall != null) c.AddAssistantToolCall(lastToolCall);
-            if (lastToolMsg != null) c.Add(new Message(lastToolMsg.Role, lastToolMsg.Content));
-            foreach (var m in uaSlice) c.Add(new Message(m.Role, m.Content));
-            return c;
+            var result = new List<Message>();
+            foreach (var s in system)
+                result.Add(new Message(s.Role, s.Content));
+            if (lastToolMsg != null)
+                result.Add(new Message(lastToolMsg.Role, lastToolMsg.Content));
+            foreach (var m in uaSlice)
+                result.Add(new Message(m.Role, m.Content));
+            return result;
         }
 
-        IList<Message> result;
-        if (originalCount <= limit)
+        var rebuilt = Build(keepUA);
+        int tokens = _counter.Count(rebuilt.ToJson());
+
+        while (tokens > available && keepUA.Count > 0)
         {
-            result = source;
-        }
-        else
-        {
-            var rebuilt = Build(keepUA);
-            int finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
-
-            while (finalCount > limit && keepUA.Count > 0)
-            {
-                keepUA.RemoveAt(0);
-                rebuilt = Build(keepUA);
-                finalCount = _tokenManager.AppromimateCount(rebuilt.ToJson());
-            }
-            result = rebuilt;
+            keepUA.RemoveAt(0);
+            rebuilt = Build(keepUA);
+            tokens = _counter.Count(rebuilt.ToJson());
         }
 
-        int finalTokens = _tokenManager.AppromimateCount(result.ToJson());
-        double usagePct = Math.Round((double)finalTokens / _opts.MaxContextTokens * 100, 1);
+        _logger.LogDebug("Context reduced: {Before}→{After} tokens (limit {Limit})",
+            current, tokens, available);
 
-        _logger.LogDebug("ContextBudget Original={Original}, Final={Final}, Removed={Removed}, UsagePct={UsagePct}",
-            originalCount, finalTokens, originalCount - finalTokens, usagePct);
-
-        return result;
+        return rebuilt;
     }
 }

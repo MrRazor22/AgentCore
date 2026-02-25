@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AgentCore.Tooling;
 
 namespace AgentCore.LLM;
@@ -16,5 +17,5 @@ public sealed record LLMOptions(
     float? FrequencyPenalty = null,
     float? PresencePenalty = null,
     float? TopK = null,
-    Type? OutputType = null
+    JsonObject? ResponseSchema = null
 );

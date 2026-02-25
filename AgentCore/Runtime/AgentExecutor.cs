@@ -1,4 +1,5 @@
 using AgentCore.Chat;
+using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +25,10 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
         var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
         var runtime = ctx.Services.GetRequiredService<IToolExecutor>();
 
-        var options = new LLMOptions(ToolCallMode: AgentCore.LLM.ToolCallMode.Auto);
+        var options = new LLMOptions(
+            ToolCallMode: ToolCallMode.Auto,
+            ResponseSchema: ctx.Config.OutputType?.GetSchemaForType()
+        );
 
         while (true)
         {
@@ -33,7 +37,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
             var textBuffer = new StringBuilder();
             var toolCalls = new List<ToolCall>();
 
-            await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options with { OutputType = ctx.Config.OutputType }, ct))
+            await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options, ct))
             {
                 switch (evt)
                 {

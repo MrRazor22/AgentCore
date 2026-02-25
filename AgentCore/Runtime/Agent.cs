@@ -1,4 +1,5 @@
 using AgentCore.Chat;
+using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -9,7 +10,7 @@ namespace AgentCore.Runtime;
 public interface IAgentContext
 {
     AgentConfig Config { get; }
-IList<Message> ScratchPad { get; }
+    IList<Message> ScratchPad { get; }
     string UserInput { get; }
     IServiceProvider Services { get; }
     CancellationToken CancellationToken { get; }
@@ -64,6 +65,8 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
             ["Session"] = sessionId
         }))
         {
+            // Tools are already registered in the scoped ToolRegistry via AgentBuilder
+
             var ctx = new AgentContext(_config, scope.ServiceProvider, input, ct);
             ctx.ScratchPad.AddSystem(_config.SystemPrompt);
 

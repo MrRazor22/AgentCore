@@ -24,8 +24,8 @@ public sealed class AgentBuilder
         Services.AddLogging();
         Services.AddSingleton<IAgentMemory, FileMemory>();
         Services.AddSingleton<IContextManager, ContextManager>();
-        Services.AddSingleton<ITokenManager, TokenManager>();
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
+        Services.AddSingleton<ITokenManager, TokenManager>();
         Services.AddScoped<IToolExecutor, ToolExecutor>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
         Services.AddScoped<ILLMExecutor, LLMExecutor>();
