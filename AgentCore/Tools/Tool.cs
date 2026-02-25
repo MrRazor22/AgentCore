@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tooling;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class ToolAttribute(string? name = null, string? description = null) : Attribute

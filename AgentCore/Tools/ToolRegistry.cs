@@ -4,7 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tooling;
 
 public interface IToolCatalog
 {

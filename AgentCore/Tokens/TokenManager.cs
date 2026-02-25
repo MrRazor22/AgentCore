@@ -1,4 +1,4 @@
-using AgentCore.LLM.Protocol;
+using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

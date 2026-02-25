@@ -1,7 +1,7 @@
-using AgentCore.LLM.Execution;
+using AgentCore.LLM;
 using AgentCore.Providers;
 using AgentCore.Tokens;
-using AgentCore.Tools;
+using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Runtime;
@@ -29,7 +29,6 @@ public sealed class AgentBuilder
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
         Services.AddScoped<IToolExecutor, ToolExecutor>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
-        Services.AddScoped<StreamProcessor>();
         Services.AddScoped<ILLMExecutor, LLMExecutor>();
         Services.AddTransient(typeof(IAgentExecutor), typeof(ToolCallingLoop));
     }
@@ -55,7 +54,7 @@ public sealed class AgentBuilder
 
         var provider = Services.BuildServiceProvider(validateScopes: true);
 
-        if (provider.GetService<ILLMStreamProvider>() == null)
+        if (provider.GetService<ILLMProvider>() == null)
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
         return new LLMAgent(provider, _config);

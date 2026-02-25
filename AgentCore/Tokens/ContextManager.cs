@@ -1,5 +1,4 @@
 using AgentCore.Chat;
-using AgentCore.LLM.Protocol;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

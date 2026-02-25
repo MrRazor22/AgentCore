@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tooling;
 
 public interface IToolExecutor
 {

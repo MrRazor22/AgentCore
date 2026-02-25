@@ -2,7 +2,7 @@ using AgentCore.Chat;
 using AgentCore.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tooling;
 
 public interface IToolCallParser
 {
