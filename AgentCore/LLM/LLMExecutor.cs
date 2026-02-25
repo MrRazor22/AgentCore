@@ -5,6 +5,7 @@ using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.LLM;
@@ -40,9 +41,7 @@ public class LLMExecutor(
 
         var content = _provider.StreamAsync(trimmedList, options, tools, ct);
 
-        string toolId = "";
-        string toolName = "";
-        string toolArgs = "";
+        var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
 
@@ -55,9 +54,12 @@ public class LLMExecutor(
                     break;
 
                 case ToolCallDelta tc:
-                    if (!string.IsNullOrEmpty(tc.Id)) toolId = tc.Id;
-                    if (!string.IsNullOrEmpty(tc.Name)) toolName = tc.Name;
-                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) toolArgs += tc.ArgumentsDelta;
+                    if (!toolCalls.TryGetValue(tc.Index, out var entry))
+                        entry = ("", "", new StringBuilder());
+                    if (!string.IsNullOrEmpty(tc.Id)) entry.id = tc.Id;
+                    if (!string.IsNullOrEmpty(tc.Name)) entry.name = tc.Name;
+                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
+                    toolCalls[tc.Index] = entry;
                     break;
 
                 case MetaDelta m:
@@ -67,16 +69,15 @@ public class LLMExecutor(
             }
         }
 
-        if (!string.IsNullOrEmpty(toolName))
+        foreach (var (_, (id, name, args)) in toolCalls.OrderBy(kv => kv.Key))
         {
-            JsonObject args = toolArgs.TryParseCompleteJson(out var parsed)
+            var argsStr = args.ToString();
+            JsonObject parsedArgs = argsStr.TryParseCompleteJson(out var parsed)
                 ? parsed ?? new JsonObject()
                 : new JsonObject();
 
-            yield return new ToolCallEvent(new ToolCall(toolId, toolName, args));
+            yield return new ToolCallEvent(new ToolCall(id, name, parsedArgs));
         }
-
-        yield return new CompletedEvent();
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);

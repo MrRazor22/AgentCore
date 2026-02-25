@@ -25,45 +25,47 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
 
         var options = new LLMOptions(ToolCallMode: AgentCore.LLM.ToolCallMode.Auto);
 
-    nextIteration:
-        ct.ThrowIfCancellationRequested();
-
-        var textBuffer = "";
-        IContent? assistantContent = null;
-
-        await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options with { OutputType = ctx.Config.OutputType }, ct))
+        while (true)
         {
-            switch (evt)
+            ct.ThrowIfCancellationRequested();
+
+            var textBuffer = "";
+            var toolCalls = new List<ToolCall>();
+
+            await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options with { OutputType = ctx.Config.OutputType }, ct))
             {
-                case TextEvent t:
-                    textBuffer += t.Delta;
-                    yield return t.Delta;
-                    break;
+                switch (evt)
+                {
+                    case TextEvent t:
+                        textBuffer += t.Delta;
+                        yield return t.Delta;
+                        break;
 
-                case ToolCallEvent tc:
-                    assistantContent = tc.Call;
-                    break;
-
-                case CompletedEvent:
-                    break;
+                    case ToolCallEvent tc:
+                        toolCalls.Add(tc.Call);
+                        break;
+                }
             }
-        }
 
-        if (assistantContent == null)
-        {
-            assistantContent = new Text(textBuffer.Trim());
-        }
+            if (toolCalls.Count == 0)
+            {
+                ctx.ScratchPad.AddAssistant(textBuffer.Trim());
+                break;
+            }
 
-        var assistantMsg = new Message(Role.Assistant, assistantContent);
-        ctx.ScratchPad.Add(assistantMsg);
+            foreach (var tc in toolCalls)
+                ctx.ScratchPad.AddAssistantToolCall(tc);
 
-        if (assistantContent is ToolCall tc2)
-        {
-            _logger.LogInformation("Tool called: {ToolName}", tc2.Name);
-            var toolResult = await runtime.HandleToolCallAsync(tc2, ct);
-            ctx.ScratchPad.AppendToolResult(toolResult);
+            var results = await Task.WhenAll(
+                toolCalls.Select(tc =>
+                {
+                    _logger.LogInformation("Tool called: {ToolName}", tc.Name);
+                    return runtime.HandleToolCallAsync(tc, ct);
+                })
+            );
 
-            goto nextIteration;
+            foreach (var result in results)
+                ctx.ScratchPad.AppendToolResult(result);
         }
     }
 }
