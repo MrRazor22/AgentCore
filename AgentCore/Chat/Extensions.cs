@@ -156,7 +156,7 @@ public static class Extensions
             else if (c.Content is ToolResult result && (filter & MessageKinds.ToolResults) != 0)
             {
                 msg["tool_call_id"] = result.CallId;
-                msg["content"] = result.Result ?? "";
+                msg["content"] = result.Result?.ForLlm() ?? "";
             }
 
             items.Add(msg);

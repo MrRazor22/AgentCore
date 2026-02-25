@@ -23,7 +23,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
 
         var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
         var tools = ctx.Services.GetRequiredService<IToolCatalog>();
-        var runtime = ctx.Services.GetRequiredService<IToolRuntime>();
+        var runtime = ctx.Services.GetRequiredService<IToolExecutor>();
 
         for (int i = 0; i < ctx.Config.MaxIterations; i++)
         {

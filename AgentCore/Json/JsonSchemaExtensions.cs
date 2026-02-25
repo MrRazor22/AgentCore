@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -18,6 +19,8 @@ public sealed class SchemaValidationError(string param, string? path, string mes
 
 public static class JsonSchemaExtensions
 {
+    private static readonly ConcurrentDictionary<Type, JsonObject> _schemaCache = new();
+
     public static JsonObject GetSchemaFor<T>() => typeof(T).GetSchemaForType();
 
     public static JsonObject GetSchemaForType(this Type type, HashSet<Type>? visited = null)
@@ -25,15 +28,32 @@ public static class JsonSchemaExtensions
         visited ??= [];
         type = Nullable.GetUnderlyingType(type) ?? type;
 
+        if (visited.Count == 0 && _schemaCache.TryGetValue(type, out var cached))
+            return cached;
+
+        var result = BuildSchema(type, visited);
+
+        if (visited.Count == 0)
+            _schemaCache.TryAdd(type, result);
+
+        return result;
+    }
+
+    private static JsonObject BuildSchema(Type type, HashSet<Type> visited)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+
         if (type.IsEnum)
-        {
-            var typeDesc = type.GetCustomAttribute<DescriptionAttribute>()?.Description;
-            return new JsonSchemaBuilder()
-                .Type<string>()
-                .Enum(Enum.GetNames(type))
-                .Description(typeDesc ?? $"One of: {string.Join(", ", Enum.GetNames(type))}")
-                .Build();
-        }
+
+            if (type.IsEnum)
+            {
+                var typeDesc = type.GetCustomAttribute<DescriptionAttribute>()?.Description;
+                return new JsonSchemaBuilder()
+                    .Type<string>()
+                    .Enum(Enum.GetNames(type))
+                    .Description(typeDesc ?? $"One of: {string.Join(", ", Enum.GetNames(type))}")
+                    .Build();
+            }
 
         if (type.IsSimpleType()) return new JsonSchemaBuilder().Type(type.MapClrTypeToJsonType()).Build();
         if (type.IsArray) return new JsonSchemaBuilder().Type<Array>().Items(type.GetElementType()!.GetSchemaForType(visited)).Build();

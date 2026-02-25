@@ -37,9 +37,9 @@ public sealed record ToolCall(
 
 public sealed record ToolResult(
     [property: JsonPropertyName("call_id")] string CallId,
-    [property: JsonPropertyName("result")] object? Result
+    [property: JsonPropertyName("result")] IContent? Result
 ) : IContent
 {
     public string ForLlm()
-        => Result?.ToString() ?? "";
+        => Result?.ForLlm() ?? "";
 }

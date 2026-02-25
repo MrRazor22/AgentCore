@@ -7,15 +7,15 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
-public interface IToolRuntime
+public interface IToolExecutor
 {
-    Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
+    Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
+public sealed class ToolExecutor(IToolCatalog _tools) : IToolExecutor
 {
-    public async Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
+    public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {
         if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
         ct.ThrowIfCancellationRequested();
@@ -28,7 +28,7 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
             var method = func.Method;
             var returnType = method.ReturnType;
 
-            var toolParams = ParseToolParams(method, toolCall.Arguments);
+            var toolParams = ParseToolParams(tool.Name, method, toolCall.Arguments);
             var finalArgs = InjectCancellationToken(toolParams, method, ct);
 
             if (typeof(Task).IsAssignableFrom(returnType))
@@ -37,12 +37,16 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
                 await task.ConfigureAwait(false);
 
                 if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
-                    return returnType.GetProperty("Result")!.GetValue(task);
+                {
+                    var taskResult = returnType.GetProperty("Result")!.GetValue(task);
+                    return (IContent?)(taskResult is IContent ? taskResult : new Text(taskResult.AsJsonString()));
+                }
 
                 return null;
             }
 
-            return func.DynamicInvoke(finalArgs);
+            var rawResult = func.DynamicInvoke(finalArgs);
+            return (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is not ToolExecutionException) { throw new ToolExecutionException(toolCall.Name, ex.Message, ex); }
@@ -68,7 +72,7 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
         }
     }
 
-    private static object[] ParseToolParams(MethodInfo method, JsonObject arguments)
+    private static object[] ParseToolParams(string toolName, MethodInfo method, JsonObject arguments)
     {
         var parameters = method.GetParameters();
         var argsObj = arguments;
@@ -87,16 +91,16 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
             if (node == null)
             {
                 if (p.HasDefaultValue) values.Add(p.DefaultValue);
-                else throw new ToolValidationException(p.Name!, "Missing required parameter.");
+                else throw new ToolValidationException(toolName, p.Name!, "Missing required parameter.");
                 continue;
             }
 
             var schema = p.ParameterType.GetSchemaForType();
             var errors = schema.Validate(node, p.Name!);
-            if (errors.Any()) throw new ToolValidationAggregateException(errors);
+            if (errors.Any()) throw new ToolValidationAggregateException(toolName, errors);
 
             try { values.Add(DeserializeNode(node, p.ParameterType)); }
-            catch (Exception ex) { throw new ToolValidationException(p.Name!, ex.Message); }
+            catch (Exception ex) { throw new ToolValidationException(toolName, p.Name!, ex.Message); }
         }
 
         return values.ToArray();
@@ -125,20 +129,38 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
     }
 }
 
-public sealed class ToolExecutionException(string toolName, string message, Exception inner) : Exception(message, inner)
+public abstract class ToolException : Exception, IContent
 {
-    public string ToolName { get; } = toolName;
-    public override string ToString() => $"{ToolName}: {Message}";
+    public string ToolName { get; }
+    protected ToolException(string toolName, string message, Exception? inner = null)
+        : base(message, inner)
+    {
+        ToolName = toolName;
+    }
+    public virtual string ForLlm()
+        => $"{ToolName}: {Message}";
 }
-
-public sealed class ToolValidationAggregateException(IEnumerable<SchemaValidationError> errors) : Exception("Tool validation failed")
+public sealed class ToolExecutionException : ToolException
 {
-    public IReadOnlyList<SchemaValidationError> Errors { get; } = errors.ToList();
-    public override string ToString() => Errors.Select(e => e.ToString()).ToJoinedString("; ");
+    public ToolExecutionException(string toolName, string message, Exception? inner = null)
+        : base(toolName, message, inner) { }
 }
-
-public sealed class ToolValidationException(string param, string msg) : Exception(msg)
+public sealed class ToolValidationAggregateException : ToolException
 {
-    public string ParamName { get; } = param;
-    public override string ToString() => $"{ParamName}: {Message}";
+    public IReadOnlyList<SchemaValidationError> Errors { get; }
+    public ToolValidationAggregateException(string toolName, IEnumerable<SchemaValidationError> errors)
+        : base(toolName, "Tool validation failed", new ArgumentException(errors.Select(e => e.Message).ToJoinedString("; ")))
+    {
+        Errors = errors.ToList();
+    }
+    public override string ForLlm() => $"{ToolName}: {Message}";
+}
+public sealed class ToolValidationException : ToolException
+{
+    public string ParamName { get; }
+    public ToolValidationException(string toolName, string paramName, string message)
+        : base(toolName, $"{paramName}: {message}") 
+    {
+        ParamName = paramName;
+    }
 }
