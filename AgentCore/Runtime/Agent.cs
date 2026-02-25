@@ -32,8 +32,8 @@ public sealed class AgentContext(
 
 public interface IAgent
 {
-    Task<string> InvokeAsync(string input, CancellationToken ct = default);
-    IAsyncEnumerable<string> InvokeStreamingAsync(string input, CancellationToken ct = default);
+    Task<string> InvokeAsync(string input, string? sessionId = null, CancellationToken ct = default);
+    IAsyncEnumerable<string> InvokeStreamingAsync(string input, string? sessionId = null, CancellationToken ct = default);
 }
 
 public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : IAgent
@@ -44,20 +44,21 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
 
-    public async Task<string> InvokeAsync(string input, CancellationToken ct = default)
+    public async Task<string> InvokeAsync(string input, string? sessionId = null, CancellationToken ct = default)
     {
         var sb = new StringBuilder();
-        await foreach (var chunk in InvokeStreamingAsync(input, ct))
+        await foreach (var chunk in InvokeStreamingAsync(input, sessionId, ct))
             sb.Append(chunk);
         return sb.ToString();
     }
 
     public async IAsyncEnumerable<string> InvokeStreamingAsync(
         string input,
+        string? sessionId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         using var scope = _services.CreateScope();
-        var sessionId = Guid.NewGuid().ToString("N");
+        sessionId ??= Guid.NewGuid().ToString("N");
 
         using (_logger.BeginScope(new Dictionary<string, object>
         {
@@ -69,6 +70,12 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
 
             var ctx = new AgentContext(_config, scope.ServiceProvider, input, ct);
             ctx.ScratchPad.AddSystem(_config.SystemPrompt);
+
+            var pastMessages = await _memory.RecallAsync(sessionId, input);
+            foreach (var msg in pastMessages)
+            {
+                ctx.ScratchPad.Add(msg);
+            }
 
             var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
             var sb = new StringBuilder();
