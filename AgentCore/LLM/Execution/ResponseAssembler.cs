@@ -11,11 +11,11 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.LLM.Execution;
 
-public sealed class StreamProcessor(
+public sealed class ResponseAssembler(
     IToolCatalog _tools,
     IToolCallParser _parser,
     ITokenManager _tokenManager,
-    ILogger<StreamProcessor> _logger)
+    ILogger<ResponseAssembler> _logger)
 {
     private static readonly ConcurrentDictionary<Type, JsonObject> SchemaCache = new();
     private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
@@ -31,11 +31,10 @@ public sealed class StreamProcessor(
     private string? _pendingToolId;
     private string? _pendingToolName;
     private TokenUsage? _usage;
-    private FinishReason _finish = FinishReason.Stop;
-    private string? _requestPayload;
+    private Protocol.FinishReason _finish = Protocol.FinishReason.Stop;
     private bool _hasValidToolCall;
 
-    public void OnRequest(LLMRequest request)
+    public void Reset(Type? outputType)
     {
         _textBuffer.Clear();
         _toolBuffer.Clear();
@@ -45,45 +44,44 @@ public sealed class StreamProcessor(
         _pendingToolId = null;
         _pendingToolName = null;
         _usage = null;
-        _finish = FinishReason.Stop;
+        _finish = Protocol.FinishReason.Stop;
         _hasValidToolCall = false;
-        _requestPayload = request.ToCountablePayload();
-        _outputType = request.OutputType;
+        _outputType = outputType;
         _schema = _outputType != null ? SchemaCache.GetOrAdd(_outputType, t => t.GetSchemaForType()) : null;
 
         if (_outputType != null)
             _logger.LogDebug("► Request [JsonSchema]: Type={Type}\n{Schema}", _outputType.Name, _schema!.ToJsonString(IndentedOptions));
-
-        var last = request.Prompt.LastOrDefault();
-        if (last != null)
-            _logger.LogDebug("► Request [Prompt]: Role={Role} Content={Content}", last.Role, last.Content.AsPrettyJson());
     }
 
-    public void OnChunk(LLMStreamChunk chunk)
+    public void OnDelta(AgentCore.Chat.IContentDelta delta)
     {
         if (_hasValidToolCall) return;
 
-        switch (chunk.Kind)
+        switch (delta)
         {
-            case StreamKind.Text:
-            case StreamKind.Structured:
-                ProcessTextOrStructured(chunk);
+            case AgentCore.Chat.TextDelta t:
+                ProcessText(t.Value);
                 break;
-            case StreamKind.ToolCallDelta:
-                ProcessToolCallDelta(chunk);
-                break;
-            case StreamKind.Usage:
-                _usage = chunk.AsTokenUsage();
-                break;
-            case StreamKind.Finish:
-                _finish = chunk.AsFinishReason() ?? FinishReason.Stop;
+
+            case AgentCore.Chat.ToolCallDelta tc:
+                ProcessToolCall(tc);
                 break;
         }
     }
 
-    public void OnResponse(LLMResponse response)
+    public void SetFinishReason(Protocol.FinishReason finish)
     {
-        response.FinishReason = _finish;
+        _finish = finish;
+    }
+
+    public void SetUsage(TokenUsage usage)
+    {
+        _usage = usage;
+    }
+
+    public Protocol.LLMResponse Build()
+    {
+        var response = new Protocol.LLMResponse();
 
         if (_inlineTool != null)
         {
@@ -108,12 +106,14 @@ public sealed class StreamProcessor(
             _logger.LogDebug("◄ Result [Text]: {Result}", text);
         }
 
-        response.TokenUsage = _tokenManager.ResolveAndRecord(_requestPayload!, response.ToCountablePayload(), _usage);
+        response.FinishReason = _finish;
+        response.TokenUsage = _usage;
+
+        return response;
     }
 
-    private void ProcessTextOrStructured(LLMStreamChunk chunk)
+    private void ProcessText(string text)
     {
-        var text = chunk.AsText();
         if (string.IsNullOrEmpty(text)) return;
 
         if (_outputType != null)
@@ -139,16 +139,15 @@ public sealed class StreamProcessor(
         }
     }
 
-    private void ProcessToolCallDelta(LLMStreamChunk chunk)
+    private void ProcessToolCall(AgentCore.Chat.ToolCallDelta tc)
     {
-        var td = chunk.AsToolCallDelta();
-        if (td == null || string.IsNullOrEmpty(td.Delta)) return;
+        if (string.IsNullOrEmpty(tc.ArgumentsDelta)) return;
 
-        _logger.LogDebug("◄ Stream [ToolDelta]: Name={Name} Id={Id} Delta={Delta}", td.Name, td.Id, td.Delta);
+        _logger.LogDebug("◄ Stream [ToolDelta]: Name={Name} Id={Id} Delta={Delta}", tc.Name, tc.Id, tc.ArgumentsDelta);
 
-        _pendingToolName ??= td.Name;
-        _pendingToolId ??= td.Id ?? Guid.NewGuid().ToString();
-        _toolBuffer.Append(td.Delta);
+        _pendingToolName ??= tc.Name;
+        _pendingToolId ??= tc.Id ?? Guid.NewGuid().ToString();
+        _toolBuffer.Append(tc.ArgumentsDelta);
 
         var raw = _toolBuffer.ToString();
         if (!raw.TryParseCompleteJson(out var json)) return;
@@ -172,7 +171,7 @@ public sealed class StreamProcessor(
         _hasValidToolCall = true;
     }
 
-    private void ProcessStructuredOutput(LLMResponse response)
+    private void ProcessStructuredOutput(Protocol.LLMResponse response)
     {
         var raw = _jsonBuffer.ToString();
         if (string.IsNullOrWhiteSpace(raw))

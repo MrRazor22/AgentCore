@@ -34,10 +34,10 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
                 AvailableTools = tools.RegisteredTools
             };
 
-            await foreach (var chunk in llm.StreamAsync(request, ct))
+            await foreach (var delta in llm.StreamAsync(request, ct))
             {
-                if (chunk.Kind == StreamKind.Text && chunk.AsText() is { } text)
-                    yield return text;
+                if (delta is TextDelta textDelta)
+                    yield return textDelta.Value;
             }
 
             var response = llm.Response;

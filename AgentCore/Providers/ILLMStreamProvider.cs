@@ -1,4 +1,6 @@
+using AgentCore.Chat;
 using AgentCore.LLM.Protocol;
+using AgentCore.Tokens;
 
 namespace AgentCore.Providers;
 
@@ -11,5 +13,9 @@ public class LLMInitOptions
 
 public interface ILLMStreamProvider
 {
-    IAsyncEnumerable<LLMStreamChunk> StreamAsync(LLMRequest request, CancellationToken ct = default);
+    IAsyncEnumerable<IContentDelta> StreamAsync(LLMRequest request, CancellationToken ct = default);
+
+    FinishReason FinishReason { get; }
+
+    TokenUsage? Usage { get; }
 }

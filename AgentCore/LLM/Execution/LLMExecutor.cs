@@ -12,37 +12,37 @@ namespace AgentCore.LLM.Execution;
 
 public interface ILLMExecutor
 {
-    LLMResponse Response { get; }
-    IAsyncEnumerable<LLMStreamChunk> StreamAsync(LLMRequest request, CancellationToken ct = default);
+    Protocol.LLMResponse Response { get; }
+    IAsyncEnumerable<IContentDelta> StreamAsync(LLMRequest request, CancellationToken ct = default);
 }
 
 public class LLMExecutor(
     ILLMStreamProvider _provider,
-    StreamProcessor _processor,
+    ResponseAssembler _assembler,
     IContextManager _ctxManager,
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
 {
-    public LLMResponse Response { get; private set; } = new();
+    public Protocol.LLMResponse Response { get; private set; } = new();
 
-    public async IAsyncEnumerable<LLMStreamChunk> StreamAsync(
+    public async IAsyncEnumerable<IContentDelta> StreamAsync(
         LLMRequest request,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
-        Response = new LLMResponse();
+        Response = new Protocol.LLMResponse();
 
         var trimmed = _ctxManager.Trim(request.Prompt, request.Options?.MaxOutputTokens);
         var attempt = request.Clone();
         attempt.Prompt = trimmed;
 
-        _processor.OnRequest(attempt);
+        _assembler.Reset(request.OutputType);
         _logger.LogTrace("LLM request: {Request}", attempt.ToCountablePayload());
 
-        await foreach (var chunk in _provider.StreamAsync(attempt, ct))
+        await foreach (var delta in _provider.StreamAsync(attempt, ct))
         {
-            _processor.OnChunk(chunk);
-            yield return chunk;
+            _assembler.OnDelta(delta);
+            yield return delta;
         }
 
         CompleteResponse(sw);
@@ -50,7 +50,13 @@ public class LLMExecutor(
 
     private void CompleteResponse(Stopwatch sw)
     {
-        _processor.OnResponse(Response);
+        _assembler.SetFinishReason(_provider.FinishReason);
+
+        if (_provider.Usage != null)
+            _assembler.SetUsage(_provider.Usage);
+
+        Response = _assembler.Build();
+
         sw.Stop();
         _logger.LogTrace("LLM response: {Response}", Response.ToCountablePayload());
         _logger.LogDebug("LLM call Duration={Ms}ms FinishReason={FinishReason}", sw.ElapsedMilliseconds, Response.FinishReason);
