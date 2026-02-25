@@ -9,7 +9,7 @@ namespace AgentCore.Runtime;
 public interface IAgentContext
 {
     AgentConfig Config { get; }
-    Conversation ScratchPad { get; }
+IList<Message> ScratchPad { get; }
     string UserInput { get; }
     IServiceProvider Services { get; }
     CancellationToken CancellationToken { get; }
@@ -26,7 +26,7 @@ public sealed class AgentContext(
     public IServiceProvider Services => services;
     public string UserInput => userInput;
     public CancellationToken CancellationToken => cancellationToken;
-    public Conversation ScratchPad { get; } = new();
+    public IList<Message> ScratchPad { get; } = new List<Message>();
 }
 
 public interface IAgent

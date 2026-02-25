@@ -14,14 +14,14 @@ public sealed class ContextBudgetOptions
 
 public interface IContextManager
 {
-    Conversation Trim(Conversation reqPrompt, int? requiredGap = null);
+    IList<Message> Trim(IList<Message> reqPrompt, int? requiredGap = null);
 }
 
 public sealed class ContextManager(IOptions<ContextBudgetOptions> options, ITokenManager _tokenManager, ILogger<ContextManager> _logger) : IContextManager
 {
     private readonly ContextBudgetOptions _opts = options.Value;
 
-    public Conversation Trim(Conversation reqPrompt, int? requiredGap = null)
+    public IList<Message> Trim(IList<Message> reqPrompt, int? requiredGap = null)
     {
         if (reqPrompt == null) throw new ArgumentNullException(nameof(reqPrompt));
 
@@ -41,12 +41,12 @@ public sealed class ContextManager(IOptions<ContextBudgetOptions> options, IToke
             : (int)(_opts.MaxContextTokens * _opts.Margin);
 
         var system = source.Where(m => m.Role == Role.System).ToList();
-        Chat.Chat? lastToolMsg = source.LastOrDefault(m => m.Role == Role.Tool);
+        Message? lastToolMsg = source.LastOrDefault(m => m.Role == Role.Tool);
         ToolCall? lastToolCall = (lastToolMsg?.Content as ToolCallResult)?.Call;
 
         var ua = source.Where(m => (m.Role == Role.User || m.Role == Role.Assistant) && m.Content is TextContent).ToList();
 
-        Chat.Chat? lastUser = null, lastAssistant = null;
+        Message? lastUser = null, lastAssistant = null;
         for (int i = ua.Count - 1; i >= 0; i--)
         {
             if (lastUser == null && ua[i].Role == Role.User) lastUser = ua[i];
@@ -59,17 +59,17 @@ public sealed class ContextManager(IOptions<ContextBudgetOptions> options, IToke
 
         keepUA = keepUA.Distinct().OrderBy(m => source.IndexOf(m)).ToList();
 
-        Conversation Build(IReadOnlyList<Chat.Chat> uaSlice)
+        IList<Message> Build(IReadOnlyList<Message> uaSlice)
         {
-            var c = new Conversation();
-            foreach (var s in system) c.Add(s.Role, s.Content);
+            var c = new List<Message>();
+            foreach (var s in system) c.Add(new Message(s.Role, s.Content));
             if (lastToolCall != null) c.AddAssistantToolCall(lastToolCall);
-            if (lastToolMsg != null) c.Add(lastToolMsg.Role, lastToolMsg.Content);
-            foreach (var m in uaSlice) c.Add(m.Role, m.Content);
+            if (lastToolMsg != null) c.Add(new Message(lastToolMsg.Role, lastToolMsg.Content));
+            foreach (var m in uaSlice) c.Add(new Message(m.Role, m.Content));
             return c;
         }
 
-        Conversation result;
+        IList<Message> result;
         if (originalCount <= limit)
         {
             result = source;

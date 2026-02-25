@@ -21,13 +21,13 @@ public sealed class LLMGenerationOptions
 }
 
 public sealed class LLMRequest(
-    Conversation Prompt,
+    IList<Message> Prompt,
     ToolCallMode ToolCallMode = ToolCallMode.Auto,
     string? Model = null,
     LLMGenerationOptions? Options = null
 )
 {
-    public Conversation Prompt { get; internal set; } = Prompt;
+    public IList<Message> Prompt { get; internal set; } = Prompt;
     public ToolCallMode ToolCallMode { get; } = ToolCallMode;
     public string? Model { get; } = Model;
     public LLMGenerationOptions? Options { get; } = Options;
@@ -36,7 +36,7 @@ public sealed class LLMRequest(
 
     public string ToCountablePayload()
         => string.Concat(
-            Prompt.GetSerializableMessages(ChatFilter.All).AsJsonString(),
+            Prompt.GetSerializableMessages(MessageKinds.All).AsJsonString(),
             AvailableTools.AsJsonString(),
             OutputType?.GetSchemaForType().AsJsonString()
         );

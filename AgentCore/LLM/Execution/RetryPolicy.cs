@@ -13,9 +13,9 @@ public sealed class RetryPolicyOptions { public int MaxRetries { get; set; } = 3
 
 public interface IRetryPolicy
 {
-    IAsyncEnumerable<T> ExecuteStreamingAsync<T>(
-        Conversation originalRequest,
-        Func<Conversation, IAsyncEnumerable<T>> operation,
+IAsyncEnumerable<T> ExecuteStreamingAsync<T>(
+        IList<Message> originalRequest,
+        Func<IList<Message>, IAsyncEnumerable<T>> operation,
         CancellationToken ct = default);
 }
 
@@ -24,8 +24,8 @@ public sealed class RetryPolicy(ILogger<RetryPolicy> logger, IOptions<RetryPolic
     private readonly RetryPolicyOptions _options = options?.Value ?? new RetryPolicyOptions();
 
     public async IAsyncEnumerable<T> ExecuteStreamingAsync<T>(
-        Conversation originalRequest,
-        Func<Conversation, IAsyncEnumerable<T>> operation,
+        IList<Message> originalRequest,
+        Func<IList<Message>, IAsyncEnumerable<T>> operation,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var working = originalRequest.Clone();

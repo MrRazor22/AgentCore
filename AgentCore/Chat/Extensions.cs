@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace AgentCore.Chat;
 
 [Flags]
-public enum ChatFilter
+public enum MessageKinds
 {
     None = 0,
     System = 1 << 0,
@@ -16,40 +16,60 @@ public enum ChatFilter
     All = System | User | Assistant | ToolCalls | ToolResults
 }
 
-public static class ConversationExtensions
+public static class Extensions
 {
     private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
 
-    public static Conversation AddUser(this Conversation convo, string? text)
-        => string.IsNullOrWhiteSpace(text) ? convo : convo.Add(Role.User, new TextContent(text!));
-
-    public static Conversation AddSystem(this Conversation convo, string? text)
-        => string.IsNullOrWhiteSpace(text) ? convo : convo.Add(Role.System, new TextContent(text!));
-
-    public static Conversation AddAssistant(this Conversation convo, string? text)
-        => string.IsNullOrWhiteSpace(text) ? convo : convo.Add(Role.Assistant, new TextContent(text!));
-
-    public static Conversation AddAssistantToolCall(this Conversation convo, ToolCall? call)
-        => call == null ? convo : convo.Add(Role.Assistant, call);
-
-    public static Conversation AddToolResult(this Conversation convo, ToolCallResult? result)
-        => result == null ? convo : convo.Add(Role.Tool, result);
-
-    public static Conversation Clone(this Conversation source, ChatFilter filter = ChatFilter.All)
+    public static IList<Message> AddUser(this IList<Message> convo, string? text)
     {
-        var copy = new Conversation();
+        if (string.IsNullOrWhiteSpace(text)) return convo;
+        convo.Add(new Message(Role.User, new TextContent(text!)));
+        return convo;
+    }
+
+    public static IList<Message> AddSystem(this IList<Message> convo, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return convo;
+        convo.Add(new Message(Role.System, new TextContent(text!)));
+        return convo;
+    }
+
+    public static IList<Message> AddAssistant(this IList<Message> convo, string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return convo;
+        convo.Add(new Message(Role.Assistant, new TextContent(text!)));
+        return convo;
+    }
+
+    public static IList<Message> AddAssistantToolCall(this IList<Message> convo, ToolCall? call)
+    {
+        if (call == null) return convo;
+        convo.Add(new Message(Role.Assistant, call));
+        return convo;
+    }
+
+    public static IList<Message> AddToolResult(this IList<Message> convo, ToolCallResult? result)
+    {
+        if (result == null) return convo;
+        convo.Add(new Message(Role.Tool, result));
+        return convo;
+    }
+
+    public static IList<Message> Clone(this IList<Message> source, MessageKinds filter = MessageKinds.All)
+    {
+        var copy = new List<Message>();
         foreach (var message in source)
         {
             if (!ShouldInclude(message, filter)) continue;
-            copy.Add(message.Role, message.Content);
+            copy.Add(new Message(message.Role, message.Content));
         }
         return copy;
     }
 
-    public static string ToJson(this Conversation chat, ChatFilter filter = ChatFilter.All)
+    public static string ToJson(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
         => JsonSerializer.Serialize(chat.GetSerializableMessages(filter), IndentedOptions);
 
-    public static bool IsLastAssistantMessageSame(this Conversation chat, string newMessage)
+    public static bool IsLastAssistantMessageSame(this IList<Message> chat, string newMessage)
     {
         if (string.IsNullOrWhiteSpace(newMessage)) return false;
 
@@ -60,14 +80,14 @@ public static class ConversationExtensions
                string.Equals(lastText.Text.Trim(), newMessage.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool ExistsIn(this ToolCall call, Conversation chat, IEnumerable<ToolCall>? also = null)
+    public static bool ExistsIn(this ToolCall call, IList<Message> chat, IEnumerable<ToolCall>? also = null)
     {
         var key = call.Arguments?.NormalizeArgs() ?? "";
         return (also?.Any(c => c.Name == call.Name && (c.Arguments?.NormalizeArgs() ?? "") == key) ?? false)
             || chat.Any(m => m.Content is ToolCall t && t.Name == call.Name && (t.Arguments?.NormalizeArgs() ?? "") == key);
     }
 
-    public static object? GetLastToolCallResult(this Conversation chat, ToolCall toolCall)
+    public static object? GetLastToolCallResult(this IList<Message> chat, ToolCall toolCall)
     {
         var argKey = toolCall.Arguments?.NormalizeArgs() ?? "";
         var lastResult = chat.LastOrDefault(m =>
@@ -77,34 +97,34 @@ public static class ConversationExtensions
         return (lastResult?.Content as ToolCallResult)?.Result;
     }
 
-    public static Conversation AppendToolCallResult(this Conversation chat, ToolCallResult result)
+    public static IList<Message> AppendToolCallResult(this IList<Message> chat, ToolCallResult result)
     {
         chat.AddAssistantToolCall(result.Call);
         chat.AddToolResult(result);
         return chat;
     }
 
-    public static IEnumerable<Chat> Filter(this Conversation convo, ChatFilter filter)
+    public static IEnumerable<Message> Filter(this IList<Message> convo, MessageKinds filter)
     {
         foreach (var msg in convo)
             if (ShouldInclude(msg, filter)) yield return msg;
     }
 
-    private static bool ShouldInclude(Chat chat, ChatFilter filter) => chat.Role switch
+    private static bool ShouldInclude(Message chat, MessageKinds filter) => chat.Role switch
     {
-        Role.System => (filter & ChatFilter.System) != 0,
-        Role.User => (filter & ChatFilter.User) != 0,
-        Role.Tool => (filter & ChatFilter.ToolResults) != 0,
+        Role.System => (filter & MessageKinds.System) != 0,
+        Role.User => (filter & MessageKinds.User) != 0,
+        Role.Tool => (filter & MessageKinds.ToolResults) != 0,
         Role.Assistant => chat.Content switch
         {
-            ToolCall => (filter & ChatFilter.ToolCalls) != 0,
-            TextContent => (filter & ChatFilter.Assistant) != 0,
+            ToolCall => (filter & MessageKinds.ToolCalls) != 0,
+            TextContent => (filter & MessageKinds.Assistant) != 0,
             _ => false
         },
         _ => false
     };
 
-    public static List<Dictionary<string, object>> GetSerializableMessages(this Conversation chat, ChatFilter filter = ChatFilter.All)
+    public static List<Dictionary<string, object>> GetSerializableMessages(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
     {
         var items = new List<Dictionary<string, object>>();
 
@@ -118,7 +138,7 @@ public static class ConversationExtensions
             {
                 msg["content"] = text.Text;
             }
-            else if (c.Content is ToolCall call && (filter & ChatFilter.ToolCalls) != 0)
+            else if (c.Content is ToolCall call && (filter & MessageKinds.ToolCalls) != 0)
             {
                 msg["content"] = call.Message ?? "";
                 msg["tool_calls"] = new List<object>
@@ -135,7 +155,7 @@ public static class ConversationExtensions
                     }
                 };
             }
-            else if (c.Content is ToolCallResult result && (filter & ChatFilter.ToolResults) != 0)
+            else if (c.Content is ToolCallResult result && (filter & MessageKinds.ToolResults) != 0)
             {
                 msg["tool_call_id"] = result.Call.Id;
                 msg["content"] = result.Result ?? "";
@@ -147,7 +167,7 @@ public static class ConversationExtensions
         return items;
     }
 
-    public static void RemoveToolCallBlock(this Conversation convo, Chat toolMsg)
+    public static void RemoveToolCallBlock(this IList<Message> convo, Message toolMsg)
     {
         int idx = convo.IndexOf(toolMsg);
         if (idx <= 0) return;

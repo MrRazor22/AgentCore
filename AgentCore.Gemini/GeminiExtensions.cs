@@ -3,7 +3,6 @@ using AgentCore.Json;
 using AgentCore.LLM.Protocol;
 using Google.GenAI.Types;
 using Tool = AgentCore.Tools.Tool;
-using ChatMessage = AgentCore.Chat.Chat;
 using CoreFinishReason = AgentCore.LLM.Protocol.FinishReason;
 
 namespace AgentCore.Providers.Gemini;
@@ -17,7 +16,7 @@ public static class GeminiExtensions
         _ => CoreFinishReason.Stop
     };
 
-    public static List<Content> ToGeminiContents(this Conversation history)
+    public static List<Content> ToGeminiContents(this IList<Message> history)
     {
         var contents = new List<Content>();
 
@@ -31,7 +30,7 @@ public static class GeminiExtensions
         return contents;
     }
 
-    private static Content? ToGeminiContent(this ChatMessage msg)
+    private static Content? ToGeminiContent(this Message msg)
     {
         return msg switch
         {

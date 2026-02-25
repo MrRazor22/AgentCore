@@ -30,7 +30,7 @@ public static class OpenAIExtensions
             BinaryData.FromString(tool.ParametersSchema?.ToJsonString() ?? "{\"type\":\"object\"}")
         )).ToList();
 
-    public static IEnumerable<ChatMessage> ToChatMessages(this Conversation history)
+    public static IEnumerable<ChatMessage> ToChatMessages(this IList<Message> history)
     {
         foreach (var msg in history)
         {

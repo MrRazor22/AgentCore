@@ -4,15 +4,15 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Chat;
 
-public interface IChatContent { }
+public interface IContent { }
 
-public sealed class TextContent(string Text) : IChatContent
+public sealed class TextContent(string Text) : IContent
 {
     public string Text { get; } = Text;
     public static implicit operator TextContent(string text) => new(text);
 }
 
-public class ToolCall : IChatContent
+public class ToolCall : IContent
 {
     [JsonPropertyName("id")] public string Id { get; set; }
     [JsonPropertyName("name")] public string Name { get; private set; }
@@ -45,7 +45,7 @@ public class ToolCall : IChatContent
     }
 }
 
-public sealed class ToolCallResult(ToolCall Call, object? Result) : IChatContent
+public sealed class ToolCallResult(ToolCall Call, object? Result) : IContent
 {
     public ToolCall Call { get; } = Call;
     public object? Result { get; } = Result;

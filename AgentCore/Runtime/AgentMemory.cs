@@ -6,7 +6,7 @@ namespace AgentCore.Runtime;
 
 public interface IAgentMemory
 {
-    Task<Conversation> RecallAsync(string sessionId, string userRequest);
+    Task<IList<Message>> RecallAsync(string sessionId, string userRequest);
     Task UpdateAsync(string sessionId, string userRequest, string response);
     Task ClearAsync(string sessionId);
 }
@@ -22,25 +22,25 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
 {
     private readonly FileMemoryOptions _options = options?.Value ?? new FileMemoryOptions();
     private string? _cachedSessionId;
-    private Conversation? _cached;
+    private IList<Message>? _cached;
 
     public FileMemory() : this(null) { }
 
-    public Task<Conversation> RecallAsync(string sessionId, string userRequest)
+    public Task<IList<Message>> RecallAsync(string sessionId, string userRequest)
     {
-        if (_options.PersistDir == null) return Task.FromResult(new Conversation());
+        if (_options.PersistDir == null) return Task.FromResult<IList<Message>>(new List<Message>());
 
         if (_cachedSessionId == sessionId && _cached != null)
             return Task.FromResult(_cached);
 
         _cachedSessionId = sessionId;
-        _cached = new Conversation();
+        _cached = new List<Message>();
 
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
         if (!File.Exists(file)) return Task.FromResult(_cached);
 
         var json = File.ReadAllText(file);
-        _cached = JsonSerializer.Deserialize<Conversation>(json) ?? new Conversation();
+        _cached = JsonSerializer.Deserialize<List<Message>>(json) ?? new List<Message>();
         return Task.FromResult(_cached);
     }
 
@@ -73,7 +73,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
         return Task.CompletedTask;
     }
 
-    private void TrimHistory(Conversation convo)
+    private void TrimHistory(IList<Message> convo)
     {
         if (_options.MaxChatHistory <= 0) return;
         while (convo.Count > _options.MaxChatHistory)

@@ -52,7 +52,7 @@ public class LLMExecutor(
     }
 
     private async IAsyncEnumerable<LLMStreamChunk> StreamWithProcessing(
-        Conversation conversation,
+        IList<Message> conversation,
         LLMRequest requestTemplate,
         [EnumeratorCancellation] CancellationToken ct)
     {
