@@ -4,6 +4,7 @@ using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace AgentCore.Runtime;
 
@@ -29,7 +30,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
         {
             ct.ThrowIfCancellationRequested();
 
-            var textBuffer = "";
+            var textBuffer = new StringBuilder();
             var toolCalls = new List<ToolCall>();
 
             await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options with { OutputType = ctx.Config.OutputType }, ct))
@@ -37,7 +38,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
                 switch (evt)
                 {
                     case TextEvent t:
-                        textBuffer += t.Delta;
+                        textBuffer.Append(t.Delta);
                         yield return t.Delta;
                         break;
 
@@ -49,7 +50,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
 
             if (toolCalls.Count == 0)
             {
-                ctx.ScratchPad.AddAssistant(textBuffer.Trim());
+                ctx.ScratchPad.AddAssistant(textBuffer.ToString().Trim());
                 break;
             }
 
