@@ -19,7 +19,7 @@ public interface ILLMExecutor
 
 public class LLMExecutor(
     ILLMProvider _provider,
-    IToolCatalog _toolCatalog,
+    IToolRegistry _toolRegistry,
     IContextManager _ctxManager,
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
@@ -34,7 +34,7 @@ public class LLMExecutor(
         var trimmed = _ctxManager.Trim([.. messages], options.MaxOutputTokens);
         IReadOnlyList<Message> trimmedList = [.. trimmed];
 
-        var tools = _toolCatalog.RegisteredTools;
+        var tools = _toolRegistry.Tools;
 
         _logger.LogTrace("LLM request: {Model} {Options}", options.Model, options);
 

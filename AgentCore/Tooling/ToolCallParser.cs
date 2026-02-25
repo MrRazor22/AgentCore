@@ -9,7 +9,7 @@ public interface IToolCallParser
     ToolCall? TryMatch(string content);
 }
 
-public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
+public sealed class ToolCallParser(IToolRegistry _toolCatalog) : IToolCallParser
 {
     public ToolCall? TryMatch(string content)
     {
@@ -17,7 +17,7 @@ public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
         {
             var name = obj["name"]?.ToString();
             var args = obj["arguments"] as JsonObject;
-            if (name == null || args == null || !_toolCatalog.Contains(name)) continue;
+            if (name == null || args == null || _toolCatalog.TryGet(name) == null) continue;
 
             var id = obj["id"]?.ToString() ?? Guid.NewGuid().ToString();
             var prefix = start > 0 ? content.Substring(0, start) : null;

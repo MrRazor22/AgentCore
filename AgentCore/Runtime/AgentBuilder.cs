@@ -16,7 +16,7 @@ public sealed class AgentConfig
 public sealed class AgentBuilder
 {
     private readonly AgentConfig _config = new();
-    private readonly List<Action<ToolRegistryCatalog>> _toolRegistrations = [];
+    private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
     public IServiceCollection Services { get; } = new ServiceCollection();
 
     public AgentBuilder()
@@ -41,15 +41,14 @@ public sealed class AgentBuilder
 
     public LLMAgent Build()
     {
-        Services.AddScoped<ToolRegistryCatalog>(sp =>
+        Services.AddScoped<ToolRegistry>(sp =>
         {
-            var reg = new ToolRegistryCatalog();
+            var reg = new ToolRegistry();
             foreach (var init in _toolRegistrations) init(reg);
             return reg;
         });
 
-        Services.AddScoped<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
-        Services.AddScoped<IToolCatalog>(sp => sp.GetRequiredService<ToolRegistryCatalog>());
+        Services.AddScoped<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistry>());
 
         var provider = Services.BuildServiceProvider(validateScopes: true);
 

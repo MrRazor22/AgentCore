@@ -13,14 +13,14 @@ public interface IToolExecutor
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-public sealed class ToolExecutor(IToolCatalog _tools) : IToolExecutor
+public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
 {
     public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {
         if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
         ct.ThrowIfCancellationRequested();
 
-        var tool = _tools.Get(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
+        var tool = _tools.TryGet(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
 
         try
         {
