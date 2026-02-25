@@ -14,12 +14,11 @@ public class Message
     {
         Role = role;
         Content = content.GetValueKind() == JsonValueKind.String
-            ? new TextContent(content.GetValue<string>()!)
+            ? new Text(content.GetValue<string>()!)
             : content is JsonObject obj && obj["Text"] != null
-                ? new TextContent(obj["Text"]!.GetValue<string>())
+                ? new Text(obj["Text"]!.GetValue<string>())
                 : throw new Exception("Unknown content type.");
     }
 
     public Message(Role role, IContent content) { Role = role; Content = content; }
-    public Message(Role role, string content) { Role = role; Content = new TextContent(content); }
 }

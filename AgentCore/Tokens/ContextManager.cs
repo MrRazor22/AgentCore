@@ -42,9 +42,9 @@ public sealed class ContextManager(IOptions<ContextBudgetOptions> options, IToke
 
         var system = source.Where(m => m.Role == Role.System).ToList();
         Message? lastToolMsg = source.LastOrDefault(m => m.Role == Role.Tool);
-        ToolCall? lastToolCall = (lastToolMsg?.Content as ToolCallResult)?.Call;
+        ToolCall? lastToolCall = (lastToolMsg?.Content as ToolResult)?.Call;
 
-        var ua = source.Where(m => (m.Role == Role.User || m.Role == Role.Assistant) && m.Content is TextContent).ToList();
+        var ua = source.Where(m => (m.Role == Role.User || m.Role == Role.Assistant) && m.Content is Text).ToList();
 
         Message? lastUser = null, lastAssistant = null;
         for (int i = ua.Count - 1; i >= 0; i--)

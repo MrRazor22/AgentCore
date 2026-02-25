@@ -36,16 +36,16 @@ public static class OpenAIExtensions
         {
             switch (msg.Role)
             {
-                case Role.System when msg.Content is TextContent sysText:
-                    yield return ChatMessage.CreateSystemMessage(sysText.Text);
+                case Role.System when msg.Content is Text sysText:
+                    yield return ChatMessage.CreateSystemMessage(sysText.Value);
                     break;
 
-                case Role.User when msg.Content is TextContent userText:
-                    yield return ChatMessage.CreateUserMessage(userText.Text);
+                case Role.User when msg.Content is Text userText:
+                    yield return ChatMessage.CreateUserMessage(userText.Value);
                     break;
 
-                case Role.Assistant when msg.Content is TextContent assistantText:
-                    yield return ChatMessage.CreateAssistantMessage(assistantText.Text);
+                case Role.Assistant when msg.Content is Text assistantText:
+                    yield return ChatMessage.CreateAssistantMessage(assistantText.Value);
                     break;
 
                 case Role.Assistant when msg.Content is ToolCall call:
@@ -56,7 +56,7 @@ public static class OpenAIExtensions
                             functionArguments: BinaryData.FromString(call.Arguments?.ToJsonString() ?? "{}"))]);
                     break;
 
-                case Role.Tool when msg.Content is ToolCallResult result:
+                case Role.Tool when msg.Content is ToolResult result:
                     var payload = result.Result == null ? "{}" : result.Result.AsJsonString();
                     yield return ChatMessage.CreateToolMessage(result.Call.Id, payload);
                     break;

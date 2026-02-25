@@ -34,20 +34,20 @@ public static class GeminiExtensions
     {
         return msg switch
         {
-            { Role: Role.System, Content: TextContent text } => new Content
+            { Role: Role.System, Content: Text text } => new Content
             {
                 Role = "user",
-                Parts = [new Part { Text = text.Text }]
+                Parts = [new Part { Text = text.Value }]
             },
-            { Role: Role.User, Content: TextContent text } => new Content
+            { Role: Role.User, Content: Text text } => new Content
             {
                 Role = "user",
-                Parts = [new Part { Text = text.Text }]
+                Parts = [new Part { Text = text.Value }]
             },
-            { Role: Role.Assistant, Content: TextContent text } => new Content
+            { Role: Role.Assistant, Content: Text text } => new Content
             {
                 Role = "model",
-                Parts = [new Part { Text = text.Text }]
+                Parts = [new Part { Text = text.Value }]
             },
             { Role: Role.Assistant, Content: ToolCall call } => new Content
             {
@@ -63,7 +63,7 @@ public static class GeminiExtensions
                     }
                 }]
             },
-            { Role: Role.Tool, Content: ToolCallResult result } => new Content
+            { Role: Role.Tool, Content: ToolResult result } => new Content
             {
                 Role = "user",
                 Parts = [new Part

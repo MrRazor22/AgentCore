@@ -6,7 +6,7 @@ namespace AgentCore.Tools;
 public interface IToolRuntime
 {
     Task<object?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
-    Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
+    Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
 public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
@@ -44,7 +44,7 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
         catch (Exception ex) { throw new ToolExecutionException(toolCall.Name, ex.Message, ex); }
     }
 
-    public async Task<ToolCallResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
+    public async Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 

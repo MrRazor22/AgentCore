@@ -23,21 +23,21 @@ public static class Extensions
     public static IList<Message> AddUser(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
-        convo.Add(new Message(Role.User, new TextContent(text!)));
+        convo.Add(new Message(Role.User, new Text(text!)));
         return convo;
     }
 
     public static IList<Message> AddSystem(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
-        convo.Add(new Message(Role.System, new TextContent(text!)));
+        convo.Add(new Message(Role.System, new Text(text!)));
         return convo;
     }
 
     public static IList<Message> AddAssistant(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
-        convo.Add(new Message(Role.Assistant, new TextContent(text!)));
+        convo.Add(new Message(Role.Assistant, new Text(text!)));
         return convo;
     }
 
@@ -48,7 +48,7 @@ public static class Extensions
         return convo;
     }
 
-    public static IList<Message> AddToolResult(this IList<Message> convo, ToolCallResult? result)
+    public static IList<Message> AddToolResult(this IList<Message> convo, ToolResult? result)
     {
         if (result == null) return convo;
         convo.Add(new Message(Role.Tool, result));
@@ -74,10 +74,10 @@ public static class Extensions
         if (string.IsNullOrWhiteSpace(newMessage)) return false;
 
         var last = chat.LastOrDefault(m =>
-            m.Role == Role.Assistant && m.Content is TextContent t && !string.IsNullOrWhiteSpace(t.Text));
+            m.Role == Role.Assistant && m.Content is Text t && !string.IsNullOrWhiteSpace(t.Value));
 
-        return last?.Content is TextContent lastText &&
-               string.Equals(lastText.Text.Trim(), newMessage.Trim(), StringComparison.OrdinalIgnoreCase);
+        return last?.Content is Text lastText &&
+               string.Equals(lastText.Value.Trim(), newMessage.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool ExistsIn(this ToolCall call, IList<Message> chat, IEnumerable<ToolCall>? also = null)
@@ -91,13 +91,13 @@ public static class Extensions
     {
         var argKey = toolCall.Arguments?.NormalizeArgs() ?? "";
         var lastResult = chat.LastOrDefault(m =>
-            m.Role == Role.Tool && m.Content is ToolCallResult r &&
+            m.Role == Role.Tool && m.Content is ToolResult r &&
             r.Call.Name == toolCall.Name && r.Call.Arguments.NormalizeArgs() == argKey);
 
-        return (lastResult?.Content as ToolCallResult)?.Result;
+        return (lastResult?.Content as ToolResult)?.Result;
     }
 
-    public static IList<Message> AppendToolCallResult(this IList<Message> chat, ToolCallResult result)
+    public static IList<Message> AppendToolCallResult(this IList<Message> chat, ToolResult result)
     {
         chat.AddAssistantToolCall(result.Call);
         chat.AddToolResult(result);
@@ -118,7 +118,7 @@ public static class Extensions
         Role.Assistant => chat.Content switch
         {
             ToolCall => (filter & MessageKinds.ToolCalls) != 0,
-            TextContent => (filter & MessageKinds.Assistant) != 0,
+            Text => (filter & MessageKinds.Assistant) != 0,
             _ => false
         },
         _ => false
@@ -134,9 +134,9 @@ public static class Extensions
 
             var msg = new Dictionary<string, object> { ["role"] = c.Role.ToString().ToLowerInvariant() };
 
-            if (c.Content is TextContent text)
+            if (c.Content is Text text)
             {
-                msg["content"] = text.Text;
+                msg["content"] = text.Value;
             }
             else if (c.Content is ToolCall call && (filter & MessageKinds.ToolCalls) != 0)
             {
@@ -155,7 +155,7 @@ public static class Extensions
                     }
                 };
             }
-            else if (c.Content is ToolCallResult result && (filter & MessageKinds.ToolResults) != 0)
+            else if (c.Content is ToolResult result && (filter & MessageKinds.ToolResults) != 0)
             {
                 msg["tool_call_id"] = result.Call.Id;
                 msg["content"] = result.Result ?? "";
