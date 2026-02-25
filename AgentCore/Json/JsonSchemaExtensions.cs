@@ -81,22 +81,6 @@ public static class JsonSchemaExtensions
             if (prop.GetCustomAttribute<DescriptionAttribute>() is { } descAttr && !string.IsNullOrEmpty(descAttr.Description))
                 propSchema[JsonSchemaConstants.DescriptionKey] = descAttr.Description;
 
-            if (prop.GetCustomAttribute<EmailAddressAttribute>() != null) propSchema[JsonSchemaConstants.FormatKey] = "email";
-
-            if (prop.GetCustomAttribute<StringLengthAttribute>() is { } len)
-            {
-                propSchema[JsonSchemaConstants.MinLengthKey] = len.MinimumLength;
-                propSchema[JsonSchemaConstants.MaxLengthKey] = len.MaximumLength;
-            }
-
-            if (prop.GetCustomAttribute<RegularExpressionAttribute>() is { } regex) propSchema[JsonSchemaConstants.PatternKey] = regex.Pattern;
-
-            if (prop.GetCustomAttribute<RangeAttribute>() is { } range)
-            {
-                if (range.Minimum != null && double.TryParse(range.Minimum.ToString(), out var min)) propSchema[JsonSchemaConstants.MinimumKey] = min;
-                if (range.Maximum != null && double.TryParse(range.Maximum.ToString(), out var max)) propSchema[JsonSchemaConstants.MaximumKey] = max;
-            }
-
             if (prop.GetCustomAttribute<DefaultValueAttribute>() is { } dv) propSchema[JsonSchemaConstants.DefaultKey] = JsonSerializer.SerializeToNode(dv.Value!);
 
             props[prop.Name] = propSchema;
