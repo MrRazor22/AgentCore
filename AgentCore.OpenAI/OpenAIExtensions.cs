@@ -84,9 +84,5 @@ public static class OpenAIExtensions
         if (s.StopSequences is { Count: > 0 })
             foreach (var stop in s.StopSequences)
                 opts.StopSequences.Add(stop);
-
-        if (s.LogitBias is { Count: > 0 })
-            foreach (var kvp in s.LogitBias)
-                opts.LogitBiases[kvp.Key] = kvp.Value;
     }
 }

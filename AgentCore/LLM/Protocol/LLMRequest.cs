@@ -14,7 +14,6 @@ public sealed class LLMGenerationOptions
     public int? MaxOutputTokens { get; set; }
     public int? Seed { get; set; }
     public IReadOnlyList<string>? StopSequences { get; set; }
-    public IDictionary<int, int>? LogitBias { get; set; }
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
     public float? TopK { get; set; }
