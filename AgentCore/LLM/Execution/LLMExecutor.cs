@@ -18,7 +18,6 @@ public interface ILLMExecutor
 
 public class LLMExecutor(
     ILLMStreamProvider _provider,
-    IRetryPolicy _retryPolicy,
     StreamProcessor _processor,
     IContextManager _ctxManager,
     ILogger<LLMExecutor> _logger
@@ -40,32 +39,13 @@ public class LLMExecutor(
         _processor.OnRequest(attempt);
         _logger.LogTrace("LLM request: {Request}", attempt.ToCountablePayload());
 
-        await foreach (var chunk in _retryPolicy.ExecuteStreamingAsync<LLMStreamChunk>(
-            attempt.Prompt,
-            conversation => StreamWithProcessing(conversation, request, ct),
-            ct))
-        {
-            yield return chunk;
-        }
-
-        CompleteResponse(sw);
-    }
-
-    private async IAsyncEnumerable<LLMStreamChunk> StreamWithProcessing(
-        IList<Message> conversation,
-        LLMRequest requestTemplate,
-        [EnumeratorCancellation] CancellationToken ct)
-    {
-        var req = new LLMRequest(conversation, requestTemplate.ToolCallMode)
-        {
-            AvailableTools = requestTemplate.AvailableTools
-        };
-
-        await foreach (var chunk in _provider.StreamAsync(req, ct))
+        await foreach (var chunk in _provider.StreamAsync(attempt, ct))
         {
             _processor.OnChunk(chunk);
             yield return chunk;
         }
+
+        CompleteResponse(sw);
     }
 
     private void CompleteResponse(Stopwatch sw)

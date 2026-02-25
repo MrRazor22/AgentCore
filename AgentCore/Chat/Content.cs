@@ -16,8 +16,7 @@ public sealed record Text(string Value) : IContent
 public sealed record ToolCall(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("arguments")] JsonObject Arguments,
-    object[]? Parameters = null
+    [property: JsonPropertyName("arguments")] JsonObject Arguments
 ) : IContent
 {
     public static ToolCall Create(

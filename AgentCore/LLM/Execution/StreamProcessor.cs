@@ -33,6 +33,7 @@ public sealed class StreamProcessor(
     private TokenUsage? _usage;
     private FinishReason _finish = FinishReason.Stop;
     private string? _requestPayload;
+    private bool _hasValidToolCall;
 
     public void OnRequest(LLMRequest request)
     {
@@ -45,6 +46,7 @@ public sealed class StreamProcessor(
         _pendingToolName = null;
         _usage = null;
         _finish = FinishReason.Stop;
+        _hasValidToolCall = false;
         _requestPayload = request.ToCountablePayload();
         _outputType = request.OutputType;
         _schema = _outputType != null ? SchemaCache.GetOrAdd(_outputType, t => t.GetSchemaForType()) : null;
@@ -59,6 +61,8 @@ public sealed class StreamProcessor(
 
     public void OnChunk(LLMStreamChunk chunk)
     {
+        if (_hasValidToolCall) return;
+
         switch (chunk.Kind)
         {
             case StreamKind.Text:
@@ -83,13 +87,13 @@ public sealed class StreamProcessor(
 
         if (_inlineTool != null)
         {
-            response.ToolCall = _parser.Validate(_inlineTool);
+            response.ToolCall = _inlineTool;
             _logger.LogDebug("◄ Result [Inline ToolCall]: Name={Name}, Params={Params}",
                 response.ToolCall.Name, response.ToolCall.Arguments.AsPrettyJson());
         }
         else if (_toolCall != null)
         {
-            response.ToolCall = _parser.Validate(_toolCall);
+            response.ToolCall = _toolCall;
             _logger.LogDebug("◄ Result [ToolCall]: Name={Name} Params={Params}",
                 response.ToolCall.Name, response.ToolCall.Arguments.AsPrettyJson());
         }
@@ -129,7 +133,7 @@ public sealed class StreamProcessor(
                 if (match != null)
                 {
                     _inlineTool = match;
-                    throw new EarlyStopException("Inline tool call detected.");
+                    _hasValidToolCall = true;
                 }
             }
         }
@@ -149,26 +153,48 @@ public sealed class StreamProcessor(
         var raw = _toolBuffer.ToString();
         if (!raw.TryParseCompleteJson(out var json)) return;
 
-        if (_toolCall != null) throw new EarlyStopException("Second tool call detected.");
-        if (!_tools.Contains(_pendingToolName!)) throw new RetryException($"{_pendingToolName}: invalid tool");
+        if (_toolCall != null)
+        {
+            _hasValidToolCall = true;
+            return;
+        }
+
+        if (!_tools.Contains(_pendingToolName!))
+        {
+            _hasValidToolCall = true;
+            return;
+        }
 
         _toolCall = new ToolCall(_pendingToolId!, _pendingToolName!, json!);
         _toolBuffer.Clear();
         _pendingToolId = null;
         _pendingToolName = null;
+        _hasValidToolCall = true;
     }
 
     private void ProcessStructuredOutput(LLMResponse response)
     {
         var raw = _jsonBuffer.ToString();
-        if (string.IsNullOrWhiteSpace(raw)) throw new RetryException("Empty structured response");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            response.Error = "Empty structured response";
+            return;
+        }
 
         JsonNode? json;
         try { json = JsonNode.Parse(raw); }
-        catch { throw new RetryException("Invalid JSON returned by model"); }
+        catch
+        {
+            response.Error = "Invalid JSON returned by model";
+            return;
+        }
 
         var errors = _schema?.Validate(json, _outputType!.Name);
-        if (errors?.Count > 0) throw new RetryException("Schema validation failed");
+        if (errors?.Count > 0)
+        {
+            response.Error = $"Schema validation failed: {string.Join("; ", errors.Select(e => e.ToString()))}";
+            return;
+        }
 
         response.Output = JsonSerializer.Deserialize(json!, _outputType!);
         _logger.LogDebug("Result [Json]: {Type}", json!.ToJsonString(IndentedOptions));

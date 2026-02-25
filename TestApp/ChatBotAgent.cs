@@ -36,11 +36,6 @@ namespace TestApp
                         o.Margin = 0.8;
                     });
 
-                    services.Configure<RetryPolicyOptions>(o =>
-                    {
-                        o.MaxRetries = 2;
-                    });
-
                     services.Configure<FileMemoryOptions>(o =>
                     {
                     });

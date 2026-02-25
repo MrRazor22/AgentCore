@@ -16,6 +16,7 @@ public sealed class LLMResponse
     public object? Output { get; set; }
     public FinishReason FinishReason { get; internal set; }
     public TokenUsage? TokenUsage { get; internal set; }
+    public string? Error { get; internal set; }
 
     public bool HasToolCall => ToolCall != null;
 

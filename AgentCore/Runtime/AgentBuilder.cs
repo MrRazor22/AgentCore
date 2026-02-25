@@ -27,7 +27,6 @@ public sealed class AgentBuilder
         Services.AddSingleton<IContextManager, ContextManager>();
         Services.AddSingleton<ITokenManager, TokenManager>();
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
-        Services.AddSingleton<IRetryPolicy, RetryPolicy>();
         Services.AddScoped<IToolRuntime, ToolRuntime>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
         Services.AddScoped<StreamProcessor>();
