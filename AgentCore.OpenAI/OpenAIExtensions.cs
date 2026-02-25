@@ -58,7 +58,7 @@ public static class OpenAIExtensions
 
                 case Role.Tool when msg.Content is ToolResult result:
                     var payload = result.Result == null ? "{}" : result.Result.AsJsonString();
-                    yield return ChatMessage.CreateToolMessage(result.Call.Id, payload);
+                    yield return ChatMessage.CreateToolMessage(result.CallId, payload);
                     break;
 
                 default:

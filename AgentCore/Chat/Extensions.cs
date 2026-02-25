@@ -87,19 +87,17 @@ public static class Extensions
             || chat.Any(m => m.Content is ToolCall t && t.Name == call.Name && (t.Arguments?.NormalizeArgs() ?? "") == key);
     }
 
-    public static object? GetLastToolCallResult(this IList<Message> chat, ToolCall toolCall)
+    public static object? GetLastToolResult(this IList<Message> chat, ToolCall toolCall)
     {
-        var argKey = toolCall.Arguments?.NormalizeArgs() ?? "";
         var lastResult = chat.LastOrDefault(m =>
             m.Role == Role.Tool && m.Content is ToolResult r &&
-            r.Call.Name == toolCall.Name && r.Call.Arguments.NormalizeArgs() == argKey);
+            r.CallId == toolCall.Id);
 
         return (lastResult?.Content as ToolResult)?.Result;
     }
 
-    public static IList<Message> AppendToolCallResult(this IList<Message> chat, ToolResult result)
+    public static IList<Message> AppendToolResult(this IList<Message> chat, ToolResult result)
     {
-        chat.AddAssistantToolCall(result.Call);
         chat.AddToolResult(result);
         return chat;
     }
@@ -140,7 +138,7 @@ public static class Extensions
             }
             else if (c.Content is ToolCall call && (filter & MessageKinds.ToolCalls) != 0)
             {
-                msg["content"] = call.Message ?? "";
+                msg["content"] = call.Name;
                 msg["tool_calls"] = new List<object>
                 {
                     new Dictionary<string, object>
@@ -157,7 +155,7 @@ public static class Extensions
             }
             else if (c.Content is ToolResult result && (filter & MessageKinds.ToolResults) != 0)
             {
-                msg["tool_call_id"] = result.Call.Id;
+                msg["tool_call_id"] = result.CallId;
                 msg["content"] = result.Result ?? "";
             }
 

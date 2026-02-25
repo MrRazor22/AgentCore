@@ -48,19 +48,19 @@ public sealed class ToolRuntime(IToolCatalog _tools) : IToolRuntime
     {
         ct.ThrowIfCancellationRequested();
 
-        if (string.IsNullOrWhiteSpace(call.Name) && !string.IsNullOrWhiteSpace(call.Message))
-            return new ToolCallResult(call, null);
+        if (string.IsNullOrWhiteSpace(call.Name))
+            return new ToolResult(call.Id, null);
 
         try
         {
             var result = await InvokeAsync(call, ct).ConfigureAwait(false);
-            return new ToolCallResult(call, result);
+            return new ToolResult(call.Id, result);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
-            return new ToolCallResult(call, wrapped);
+            return new ToolResult(call.Id, wrapped);
         }
     }
 

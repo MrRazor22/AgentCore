@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 namespace AgentCore.Chat;
 
 public interface IContent
@@ -13,9 +14,10 @@ public sealed record Text(string Value) : IContent
 }
 
 public sealed record ToolCall(
-    string Id,
-    string Name,
-    JsonObject Arguments
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("arguments")] JsonObject Arguments,
+    object[]? Parameters = null
 ) : IContent
 {
     public static ToolCall Create(
@@ -35,8 +37,8 @@ public sealed record ToolCall(
 }
 
 public sealed record ToolResult(
-    string CallId,
-    object? Result
+    [property: JsonPropertyName("call_id")] string CallId,
+    [property: JsonPropertyName("result")] object? Result
 ) : IContent
 {
     public string ForLlm()

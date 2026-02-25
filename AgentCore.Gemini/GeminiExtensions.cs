@@ -19,10 +19,13 @@ public static class GeminiExtensions
     public static List<Content> ToGeminiContents(this IList<Message> history)
     {
         var contents = new List<Content>();
+        var toolCallLookup = history
+            .Where(m => m.Role == Role.Assistant && m.Content is ToolCall tc)
+            .ToDictionary(m => ((ToolCall)m.Content!).Id, m => (ToolCall)m.Content!);
 
         foreach (var msg in history)
         {
-            var content = msg.ToGeminiContent();
+            var content = msg.ToGeminiContent(toolCallLookup);
             if (content != null)
                 contents.Add(content);
         }
@@ -30,7 +33,7 @@ public static class GeminiExtensions
         return contents;
     }
 
-    private static Content? ToGeminiContent(this Message msg)
+    private static Content? ToGeminiContent(this Message msg, Dictionary<string, ToolCall>? toolCallLookup = null)
     {
         return msg switch
         {
@@ -70,7 +73,7 @@ public static class GeminiExtensions
                 {
                     FunctionResponse = new FunctionResponse
                     {
-                        Name = result.Call.Name,
+                        Name = toolCallLookup?.GetValueOrDefault(result.CallId)?.Name ?? "",
                         Response = new Dictionary<string, object?> { { "result", result.Result?.AsJsonString() ?? "{}" } }
                     }
                 }]

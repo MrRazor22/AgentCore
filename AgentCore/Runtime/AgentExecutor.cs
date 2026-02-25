@@ -45,7 +45,7 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
 
             _logger.LogInformation("Tool called: {ToolName}", response.ToolCall!.Name);
             var toolResult = await runtime.HandleToolCallAsync(response.ToolCall, ct);
-            ctx.ScratchPad.AppendToolCallResult(toolResult);
+            ctx.ScratchPad.AppendToolResult(toolResult);
         }
 
         _logger.LogWarning("Agent loop stopped: max iterations reached ({MaxIterations})", ctx.Config.MaxIterations);

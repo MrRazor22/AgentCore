@@ -449,7 +449,7 @@ for (iteration = 0; iteration < MaxIterations; iteration++)
        a. For each tool call:
           - Parse and validate
           - Execute via IToolRuntime
-          - Add ToolCallResult to ScratchPad
+           - Add ToolResult to ScratchPad
        b. Continue to next iteration
     8. If no tool call:
        a. Add assistant message to ScratchPad
@@ -1110,7 +1110,10 @@ public class ToolCall : IChatContent
 - `Arguments` - Arguments as JSON string
 
 ```csharp
-public class ToolCallResult : IChatContent
+public sealed record ToolResult(
+    string CallId,
+    object? Result
+) : IContent
 ```
 
 - `ToolCallId` - Correlates to the tool call
@@ -1506,7 +1509,7 @@ ToolRuntime.InvokeAsync(toolCall)
     └─ Return result (await Task if async)
     │
     ▼
-ToolCallResult created and appended to conversation
+ToolResult created and appended to conversation
 ```
 
 ---

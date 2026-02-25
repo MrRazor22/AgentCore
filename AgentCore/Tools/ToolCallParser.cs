@@ -26,7 +26,7 @@ public sealed class ToolCallParser(IToolCatalog _toolCatalog) : IToolCallParser
             var id = obj["id"]?.ToString() ?? Guid.NewGuid().ToString();
             var prefix = start > 0 ? content.Substring(0, start) : null;
 
-            return new ToolCall(id, name, args, message: string.IsNullOrWhiteSpace(prefix) ? null : prefix);
+            return new ToolCall(id, name, args);
         }
         return null;
     }

@@ -85,13 +85,13 @@ public sealed class StreamProcessor(
         {
             response.ToolCall = _parser.Validate(_inlineTool);
             _logger.LogDebug("◄ Result [Inline ToolCall]: Name={Name}, Params={Params}",
-                response.ToolCall.Name, response.ToolCall.Parameters.AsPrettyJson());
+                response.ToolCall.Name, response.ToolCall.Arguments.AsPrettyJson());
         }
         else if (_toolCall != null)
         {
             response.ToolCall = _parser.Validate(_toolCall);
             _logger.LogDebug("◄ Result [ToolCall]: Name={Name} Params={Params}",
-                response.ToolCall.Name, response.ToolCall.Parameters.AsPrettyJson());
+                response.ToolCall.Name, response.ToolCall.Arguments.AsPrettyJson());
         }
         else if (_outputType != null)
         {
