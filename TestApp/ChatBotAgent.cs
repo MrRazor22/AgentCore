@@ -1,4 +1,5 @@
 using AgentCore.BuiltInTools;
+using AgentCore.Json;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Runtime;
@@ -27,6 +28,22 @@ namespace TestApp
                 .WithTools<ConversionTools>()
                 .WithTools<MathTools>()
                 .WithTools<SearchTools>()
+                .BeforeToolCall(async (call, ct) =>
+                {
+                    var originalColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"\n  [Tool Executing] -> {call.Name}({call.Arguments.ToJsonString()})");
+                    Console.ForegroundColor = originalColor;
+                    return null;
+                })
+                .AfterToolCall(async (call, result, ct) =>
+                {
+                    var originalColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"  [Tool Result] <- {result?.AsJsonString()}");
+                    Console.ForegroundColor = originalColor;
+                    return null;
+                })
                 .ConfigureServices(services =>
                 {
                     services.Configure<FileMemoryOptions>(o =>

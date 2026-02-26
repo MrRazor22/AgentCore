@@ -1,3 +1,4 @@
+using AgentCore.Chat;
 using AgentCore.LLM;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
@@ -19,6 +20,12 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
     public IServiceCollection Services { get; } = new ServiceCollection();
 
+    // Callback storage
+    private Func<ToolCall, CancellationToken, Task<IContent?>>? _beforeToolCall;
+    private Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? _afterToolCall;
+    private Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? _beforeModelCall;
+    private Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? _afterModelCall;
+
     public AgentBuilder()
     {
         Services.AddLogging();
@@ -26,9 +33,7 @@ public sealed class AgentBuilder
         Services.AddSingleton<IContextManager, ContextManager>();
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
         Services.AddSingleton<ITokenManager, TokenManager>();
-        Services.AddScoped<IToolExecutor, ToolExecutor>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
-        Services.AddScoped<ILLMExecutor, LLMExecutor>();
         Services.AddTransient(typeof(IAgentExecutor), typeof(ToolCallingLoop));
     }
 
@@ -38,6 +43,12 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithOutput<T>() { _config.OutputType = typeof(T); return this; }
     public AgentBuilder ConfigureServices(Action<IServiceCollection> configure) { configure(Services); return this; }
+
+    // Executor callbacks
+    public AgentBuilder BeforeToolCall(Func<ToolCall, CancellationToken, Task<IContent?>> callback) { _beforeToolCall = callback; return this; }
+    public AgentBuilder AfterToolCall(Func<ToolCall, IContent?, CancellationToken, Task<IContent?>> callback) { _afterToolCall = callback; return this; }
+    public AgentBuilder BeforeModelCall(Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>> callback) { _beforeModelCall = callback; return this; }
+    public AgentBuilder AfterModelCall(Func<IReadOnlyList<LLMEvent>, CancellationToken, Task> callback) { _afterModelCall = callback; return this; }
 
     public LLMAgent Build()
     {
@@ -49,6 +60,24 @@ public sealed class AgentBuilder
         });
 
         Services.AddScoped<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistry>());
+
+        // Wire executor callbacks via DI factories
+        Services.AddScoped<IToolExecutor>(sp => new ToolExecutor(sp.GetRequiredService<IToolRegistry>())
+        {
+            BeforeCall = _beforeToolCall,
+            AfterCall = _afterToolCall
+        });
+
+        Services.AddScoped<ILLMExecutor>(sp => new LLMExecutor(
+            sp.GetRequiredService<ILLMProvider>(),
+            sp.GetRequiredService<IToolRegistry>(),
+            sp.GetRequiredService<IContextManager>(),
+            sp.GetRequiredService<ITokenManager>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LLMExecutor>>())
+        {
+            BeforeCall = _beforeModelCall,
+            AfterCall = _afterModelCall
+        });
 
         var provider = Services.BuildServiceProvider(validateScopes: true);
 

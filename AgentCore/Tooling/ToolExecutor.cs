@@ -15,6 +15,9 @@ public interface IToolExecutor
 
 public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
 {
+    public Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; init; }
+    public Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; init; }
+
     public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {
         if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
@@ -22,6 +25,13 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
 
         var tool = _tools.TryGet(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
 
+        if (BeforeCall != null)
+        {
+            var bypass = await BeforeCall(toolCall, ct).ConfigureAwait(false);
+            if (bypass != null) return bypass;
+        }
+
+        IContent? result;
         try
         {
             var func = tool.Function;
@@ -39,17 +49,29 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
                 if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
                 {
                     var taskResult = returnType.GetProperty("Result")!.GetValue(task);
-                    return (IContent?)(taskResult is IContent ? taskResult : new Text(taskResult.AsJsonString()));
+                    result = (IContent?)(taskResult is IContent ? taskResult : new Text(taskResult.AsJsonString()));
                 }
-
-                return null;
+                else
+                {
+                    result = null;
+                }
             }
-
-            var rawResult = func.DynamicInvoke(finalArgs);
-            return (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
+            else
+            {
+                var rawResult = func.DynamicInvoke(finalArgs);
+                result = (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
+            }
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is not ToolExecutionException) { throw new ToolExecutionException(toolCall.Name, ex.Message, ex); }
+
+        if (AfterCall != null)
+        {
+            var replacement = await AfterCall(toolCall, result, ct).ConfigureAwait(false);
+            if (replacement != null) return replacement;
+        }
+
+        return result;
     }
 
     public async Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)

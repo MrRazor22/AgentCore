@@ -26,6 +26,9 @@ public class LLMExecutor(
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
 {
+    public Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? BeforeCall { get; init; }
+    public Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? AfterCall { get; init; }
+
     public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
@@ -36,6 +39,22 @@ public class LLMExecutor(
         var reduced = _ctxManager.Reduce([.. messages], options);
         IReadOnlyList<Message> reducedList = [.. reduced];
 
+        // Before hook — non-null return short-circuits (e.g. cached response)
+        if (BeforeCall != null)
+        {
+            var cached = await BeforeCall(reducedList, options, ct).ConfigureAwait(false);
+            if (cached != null)
+            {
+                foreach (var evt in cached)
+                    yield return evt;
+
+                if (AfterCall != null)
+                    await AfterCall(cached, ct).ConfigureAwait(false);
+
+                yield break;
+            }
+        }
+
         var tools = _toolRegistry.Tools;
 
         _logger.LogTrace("LLM request: {Model} {Options}", options.Model, options);
@@ -45,13 +64,16 @@ public class LLMExecutor(
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
+        var collectedEvents = new List<LLMEvent>();
 
         await foreach (var delta in content.WithCancellation(ct))
         {
             switch (delta)
             {
                 case TextDelta t:
-                    yield return new TextEvent(t.Value);
+                    var textEvt = new TextEvent(t.Value);
+                    collectedEvents.Add(textEvt);
+                    yield return textEvt;
                     break;
 
                 case ToolCallDelta tc:
@@ -77,12 +99,18 @@ public class LLMExecutor(
                 ? parsed ?? new JsonObject()
                 : new JsonObject();
 
-            yield return new ToolCallEvent(new ToolCall(id, name, parsedArgs));
+            var tcEvt = new ToolCallEvent(new ToolCall(id, name, parsedArgs));
+            collectedEvents.Add(tcEvt);
+            yield return tcEvt;
         }
 
         // Record token usage for per-session tracking
         if (tokenUsage != null)
             _tokenManager.Record(tokenUsage);
+
+        // After hook — observe-only
+        if (AfterCall != null)
+            await AfterCall(collectedEvents, ct).ConfigureAwait(false);
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
