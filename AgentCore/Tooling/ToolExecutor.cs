@@ -9,14 +9,16 @@ namespace AgentCore.Tooling;
 
 public interface IToolExecutor
 {
+    Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; set; }
+    Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; set; }
     Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
 public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
 {
-    public Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; init; }
-    public Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; init; }
+    public Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; set; }
+    public Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; set; }
 
     public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {

@@ -1,5 +1,6 @@
 using AgentCore.BuiltInTools;
 using AgentCore.Json;
+using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Runtime;
@@ -43,6 +44,16 @@ namespace TestApp
                     Console.WriteLine($"  [Tool Result] <- {result?.AsJsonString()}");
                     Console.ForegroundColor = originalColor;
                     return null;
+                })
+                .AfterModelCall(async (events, ct) =>
+                {
+                    var toolCalls = events.OfType<ToolCallEvent>().Count();
+                    var originalColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine(toolCalls > 0
+                        ? $"\n  [Model] {events.Count} events, {toolCalls} tool call(s) requested"
+                        : $"\n  [Model] {events.Count} events (final response)");
+                    Console.ForegroundColor = originalColor;
                 })
                 .ConfigureServices(services =>
                 {

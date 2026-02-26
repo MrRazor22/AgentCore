@@ -12,6 +12,8 @@ namespace AgentCore.LLM;
 
 public interface ILLMExecutor
 {
+    Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? BeforeCall { get; set; }
+    Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? AfterCall { get; set; }
     IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
@@ -26,8 +28,8 @@ public class LLMExecutor(
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
 {
-    public Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? BeforeCall { get; init; }
-    public Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? AfterCall { get; init; }
+    public Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? BeforeCall { get; set; }
+    public Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? AfterCall { get; set; }
 
     public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
