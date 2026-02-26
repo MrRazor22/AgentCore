@@ -1,1759 +1,541 @@
-# AgentCore Codebase Complete Reference
+# AgentCore
 
-This document provides a comprehensive, line-by-line understanding of the entire AgentCore framework. Reading this gives you insight into every significant piece of code in the codebase.
+A minimal, un-opinionated agent framework for .NET.
 
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Module Map](#module-map)
-3. [Core Components](#core-components)
-4. [Tools Module](#agentcoretools)
-5. [Runtime Module](#agentcoreruntime)
-6. [LLM Module](#agentcorellm)
-7. [Tokens Module](#agentcoretokens)
-8. [Chat Module](#agentcorechat)
-9. [JSON Module](#agentcorejson)
-10. [Providers Module](#agentcoreproviders)
-11. [Utils Module](#agentcoreutils)
-12. [Component Interactions](#component-interactions)
-13. [Execution Flows](#execution-flows)
-14. [TestApp Reference](#testapp-reference)
+Build any agent product you want — from a simple chatbot to a complex autonomous system — without digging through layers of abstraction. Inspired by [smolagents](https://github.com/huggingface/smolagents): the entire core is ~1,400 lines of code, zero opinions, zero magic.
 
 ---
 
-## Architecture Overview
+## Design Philosophy
 
-AgentCore is a **modular LLM Agent Framework** built on .NET that enables building AI agents with tool-calling capabilities. The architecture follows several key design patterns:
+### Agent is a Layer, Not a Wrapper
 
-### Design Patterns Used
+Most agent frameworks (Semantic Kernel, AutoGen, LangChain, Google ADK) expose LLM-level primitives — chat messages, roles, model options — directly at the agent level. The agent becomes a thin wrapper around the LLM API. 
 
-1. **Builder Pattern** (`AgentBuilder`) - Fluent API for constructing agents with configuration
-2. **Dependency Injection** - Full Microsoft.Extensions.DependencyInjection integration
-3. **Pipeline/Chain of Responsibility** - Handler chain for processing LLM stream chunks
-4. **Template Method** - Extensible protocol classes for LLM requests/responses
-5. **Strategy Pattern** - Pluggable LLM providers (OpenAI, extensible to others)
-6. **Registry Pattern** - Tool registration and catalog management
+AgentCore disagrees. **An agent is a higher-level abstraction than an LLM call.** At the agent surface:
 
-### Architecture Layers
+- **Input:** a task, as a `string`
+- **Output:** a final response, as a `string`
 
+That's it. How the agent talks to the model, manages context, calls tools, retries — these are _internal concerns_, not things the caller should worry about.
+
+```csharp
+// This is the entire public contract of an agent.
+string response = await agent.InvokeAsync("What's the weather in Tokyo?");
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Agent (Runtime Layer)                   │
-│         LLMAgent → AgentExecutor → ToolCallingLoop         │
-├─────────────────────────────────────────────────────────────┤
-│                   LLM Execution Layer                       │
-│     LLMExecutor → Handlers → ILLMStreamProvider           │
-├─────────────────────────────────────────────────────────────┤
-│                      Protocol Layer                          │
-│          LLMRequest / LLMResponse / LLMStreamChunk          │
-├─────────────────────────────────────────────────────────────┤
-│                   Supporting Services                       │
-│     Tools │ Tokens │ Chat │ Json │ Providers │ Utils       │
-└─────────────────────────────────────────────────────────────┘
+
+### Executor = Sandbox for Your Agent Logic
+
+The `AgentExecutor` is where the agent loop lives. The default `ToolCallingLoop` is the standard tool-calling agent loop in ~60 lines. But you can replace it with anything — ReAct, plan-and-execute, chain-of-thought, multi-agent delegation. Think of it as a sandbox: you get the full power of the framework's services (LLM, tools, memory, tokens) and you write whatever control flow you want.
+
+### Sensible Defaults, Total Replaceability
+
+Every component has a default that works out of the box:
+
+| Concern | Default | Interface |
+|---|---|---|
+| Agent loop | `ToolCallingLoop` | `IAgentExecutor` |
+| Memory | `FileMemory` (JSON persistence) | `IAgentMemory` |
+| Context strategy | `ContextManager` (tail-trim) | `IContextManager` |
+| Token counting | `ApproximateTokenCounter` (len/4) | `ITokenCounter` |
+| Token tracking | `TokenManager` | `ITokenManager` |
+
+Don't like any of them? Implement the interface, register it via DI. No base classes to inherit, no policies to configure.
+
+### No Middleware, No Filters — Hooks
+
+Instead of middleware pipelines or filter chains, AgentCore gives you **four hooks**:
+
+- `BeforeToolCall` / `AfterToolCall` — intercept tool execution
+- `BeforeModelCall` / `AfterModelCall` — intercept LLM calls
+
+Each hook can observe, short-circuit (return a cached result), or replace the result. That's the entire controllability surface. If you need more, write your own executor.
+
+---
+
+## Quick Start
+
+```csharp
+var agent = LLMAgent.Create("my-agent")
+    .WithInstructions("You are a helpful assistant.")
+    .AddOpenAI(o =>
+    {
+        o.Model = "gpt-4o";
+        o.ApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+    })
+    .WithTools<WeatherTools>()
+    .WithTools<MathTools>()
+    .Build();
+
+// String in, string out.
+var answer = await agent.InvokeAsync("What's 42°F in Celsius?");
+
+// Or stream it.
+await foreach (var chunk in agent.InvokeStreamingAsync("Tell me about Tokyo"))
+    Console.Write(chunk);
+```
+
+### Tool Definition
+
+Mark any method with `[Tool]`:
+
+```csharp
+public class WeatherTools
+{
+    [Tool(description: "Get the current weather for a location")]
+    public static string GetWeather(
+        [Description("City name")] string location)
+    {
+        return $"Weather in {location}: 22°C, sunny";
+    }
+}
+```
+
+AgentCore auto-generates JSON schemas from method signatures. Parameters, types, descriptions, required/optional — all inferred. Async methods and `CancellationToken` injection just work.
+
+### Typed Output
+
+```csharp
+var agent = LLMAgent.Create("extractor")
+    .WithInstructions("Extract structured data from the user's input.")
+    .AddOpenAI(o => { o.Model = "gpt-4o"; o.ApiKey = "..."; })
+    .WithOutput<PersonInfo>()
+    .Build();
+
+// The model response is constrained to the schema of PersonInfo.
+var result = await agent.InvokeAsync("John Doe, 30 years old, lives in NYC.");
+```
+
+### Session Persistence & Crash Recovery
+
+Every invocation can have a `sessionId`. The memory system persists every conversation turn to disk, so if your agent crashes mid-session, you can resume exactly where it left off:
+
+```csharp
+// First run:
+await agent.InvokeAsync("Search for flights to Tokyo", sessionId: "session-abc");
+
+// After crash/restart — resumes from saved state:
+await agent.InvokeAsync("Now book the cheapest one", sessionId: "session-abc");
+```
+
+### Hooks for Observability & Control
+
+```csharp
+var agent = LLMAgent.Create("agent")
+    .AddOpenAI(o => { ... })
+    .WithTools<MyTools>()
+    .BeforeToolCall(async (call, ct) =>
+    {
+        Console.WriteLine($"Calling: {call.Name}({call.Arguments})");
+        return null; // null = proceed normally; return IContent to short-circuit
+    })
+    .AfterToolCall(async (call, result, ct) =>
+    {
+        Console.WriteLine($"Result: {result?.ForLlm()}");
+        return null; // null = use original result; return IContent to replace
+    })
+    .AfterModelCall(async (events, ct) =>
+    {
+        var toolCalls = events.OfType<ToolCallEvent>().Count();
+        Console.WriteLine($"Model returned {events.Count} events, {toolCalls} tool calls");
+    })
+    .Build();
 ```
 
 ---
 
-## Module Map
+## Architecture
 
 ```
-AgentCore/
-├── Tools/
-│   ├── Tool.cs                 # Tool attribute and class definition
-│   ├── ToolRegistry.cs         # Tool registration and catalog interfaces
-│   ├── ToolRuntime.cs          # Tool execution engine
-│   └── ToolCallParser.cs       # Tool call parsing and validation
-├── Runtime/
-│   ├── Agent.cs                # Main agent abstraction
-│   ├── AgentBuilder.cs         # Fluent builder for agents
-│   ├── AgentExecutor.cs        # Agent loop execution
-│   └── AgentMemory.cs          # Persistent conversation memory
-├── LLM/
-│   ├── Protocol/
-│   │   ├── LLMRequest.cs       # Request protocol
-│   │   ├── LLMResponse.cs      # Response protocol
-│   │   └── LLMStreamChunk.cs   # Streaming protocol
-│   ├── Handlers/
-│   │   ├── IChunkHandler.cs    # Handler interface
-│   │   ├── TextHandler.cs      # Text accumulation
-│   │   ├── ToolCallHandler.cs  # Tool call parsing
-│   │   ├── StructuredHandler.cs# JSON structured output
-│   │   ├── TokenUsageHandler.cs# Token usage tracking
-│   │   └── FinishHandler.cs    # Finish reason capture
-│   └── Execution/
-│       ├── LLMExecutor.cs      # LLM call orchestration
-│       └── RetryPolicy.cs      # Retry logic
-├── Tokens/
-│   ├── TokenManager.cs         # Token tracking
-│   ├── TikTokenCounter.cs      # Token counting with SharpToken
-│   └── ContextManager.cs       # Context window management
-├── Chat/
-│   ├── Conversation.cs        # Message list container
-│   ├── ChatContent.cs         # Content types (text, tool call, result)
-│   └── ConversationExtensions.cs# Helper methods
-├── Json/
-│   ├── JsonSchemaBuilder.cs   # Fluent schema builder
-│   ├── JsonSchemaExtensions.cs# Schema generation and validation
-│   └── JsonExtensions.cs      # JSON utilities
-├── Providers/
-│   └── ILLMStreamProvider.cs  # Provider interface
-│   └── OpenAI/
-│       ├── OpenAILLMClient.cs # OpenAI implementation
-│       └── OpenAIExtensions.cs# OpenAI helpers
-└── Utils/
-    └── HelperExtensions.cs    # String helpers
-
-TestApp/
-├── Program.cs                  # Entry point
-├── ChatBotAgent.cs             # Sample agent implementation
-└── BuiltInTools/
-    ├── MathTools.cs           # Math operations
-    ├── WeatherTools.cs        # Weather API simulation
-    ├── SearchTools.cs         # Search operations
-    ├── RAGTools.cs            # RAG operations
-    ├── GeoTools.cs            # Geographic operations
-    └── ConversionTools.cs     # Unit conversions
+┌────────────────────────────────────────────────────────────────┐
+│                     Agent Layer (Public API)                    │
+│    IAgent: InvokeAsync(string) → string                        │
+│            InvokeStreamingAsync(string) → IAsyncEnumerable     │
+│                                                                │
+│    LLMAgent orchestrates: Memory → Executor → Memory           │
+├────────────────────────────────────────────────────────────────┤
+│                   Agent Executor Layer (Sandbox)                │
+│    IAgentExecutor: your agent logic lives here                 │
+│                                                                │
+│    Default: ToolCallingLoop                                    │
+│      while (true) {                                            │
+│        stream LLM → yield text, collect tool calls             │
+│        if no tool calls → break                                │
+│        execute tools in parallel → append results → loop       │
+│      }                                                         │
+├────────────────────────────────────────────────────────────────┤
+│                    LLM Executor Layer (Events)                  │
+│    ILLMExecutor: StreamAsync(messages, options) → LLMEvent     │
+│                                                                │
+│    - Applies context strategy (reduce messages to fit window)  │
+│    - Calls provider, reassembles streaming deltas              │
+│    - Text → streamed as TextEvent immediately                  │
+│    - Tool calls → buffered, emitted as ToolCallEvent at end   │
+│    - Records token usage                                       │
+│    - Fires Before/After hooks                                  │
+├────────────────────────────────────────────────────────────────┤
+│                    LLM Provider Layer (Raw I/O)                 │
+│    ILLMProvider: StreamAsync(messages, options, tools)          │
+│                  → IAsyncEnumerable<IContentDelta>             │
+│                                                                │
+│    Raw provider implementation. Yields:                        │
+│      TextDelta | ToolCallDelta | MetaDelta                     │
+│                                                                │
+│    Providers: AgentCore.OpenAI, AgentCore.Gemini               │
+└────────────────────────────────────────────────────────────────┘
 ```
+
+### Layer Separation
+
+| Layer | Knows About | Doesn't Know About |
+|---|---|---|
+| **Agent** | strings, session IDs, memory | messages, roles, models, tokens |
+| **AgentExecutor** | messages, tools, LLM events | providers, context windows, raw deltas |
+| **LLMExecutor** | messages, options, context strategy, token tracking | provider HTTP, SDK details |
+| **LLMProvider** | HTTP, SDK, raw streaming | context management, token tracking, tools registry |
 
 ---
 
 ## Core Components
 
-### AgentCore/Tools/Tool.cs
+### Runtime
 
-This file defines the tool abstraction using attributes.
+| File | Lines | Purpose |
+|---|---|---|
+| `Agent.cs` | ~93 | `IAgent` interface + `LLMAgent` implementation. String-in, string-out. Orchestrates memory recall → executor → memory update. |
+| `AgentBuilder.cs` | ~90 | Fluent builder. Registers DI services, wires hooks, builds `LLMAgent`. |
+| `AgentExecutor.cs` | ~78 | `IAgentExecutor` interface + `ToolCallingLoop` default. The agent loop sandbox. |
+| `AgentMemory.cs` | ~83 | `IAgentMemory` interface + `FileMemory` default. Recall/update/clear with JSON file persistence. |
 
-**Key Elements:**
+### LLM
 
-```csharp
-[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
-public class ToolAttribute : Attribute
-```
+| File | Lines | Purpose |
+|---|---|---|
+| `LLMExecutor.cs` | ~123 | Consumes raw deltas from provider, emits `TextEvent`/`ToolCallEvent`. Handles context reduction, token tracking, before/after hooks. |
+| `ILLMProvider.cs` | ~15 | Single-method interface: `StreamAsync → IAsyncEnumerable<IContentDelta>`. |
+| `LLMEvent.cs` | ~10 | Two events: `TextEvent(string Delta)`, `ToolCallEvent(ToolCall Call)`. |
+| `LLMOptions.cs` | ~23 | Flat config class: model, API key, base URL, sampling parameters, response schema. |
+| `LLMMeta.cs` | ~10 | `FinishReason` enum, `ToolCallMode` enum. |
 
-- `ToolAttribute` is applied to methods to mark them as callable tools
-- Parameters: `Name` (optional tool name), `Description` (what the tool does)
-- When a method is decorated with `[Tool]`, the framework automatically generates a JSON schema
+### Tooling
 
-```csharp
-public class Tool
-```
+| File | Lines | Purpose |
+|---|---|---|
+| `Tool.cs` | ~30 | `[Tool]` attribute + `Tool` class (name, description, JSON schema, delegate). |
+| `ToolRegistry.cs` | ~117 | Registration, lookup, auto-schema generation from method signatures. |
+| `ToolExecutor.cs` | ~191 | Invocation engine: parameter parsing, validation, CancellationToken injection, before/after hooks. |
+| `ToolCallParser.cs` | ~30 | Fallback: extracts tool calls from text responses when model doesn't use structured tool calling. |
+| `ToolRegistryExtensions.cs` | ~86 | `RegisterAll<T>()` — discovers `[Tool]` methods from a type via reflection. |
 
-- Represents a callable tool with:
-  - `Name` - Unique identifier
-  - `Description` - Human-readable description
-  - `Parameters` - JSON Schema for arguments
-  - `Delegate` - The actual method to invoke
-  - `IsAsync` - Whether the method is async
+### Tokens
 
-**Location:** `AgentCore/Tools/Tool.cs`
+| File | Lines | Purpose |
+|---|---|---|
+| `ContextManager.cs` | ~91 | Tail-trim strategy: keeps system prompt + most recent N user/assistant messages that fit the context window. |
+| `TokenManager.cs` | ~40 | Cumulative token usage tracking across LLM calls. |
+| `ITokenCounter.cs` | ~7 | Interface: `Count(string) → int`. |
+| `ApproximateTokenCounter.cs` | ~11 | Default fallback: `length / 4`. Provider packages can register accurate counters (e.g., TikToken for OpenAI). |
 
----
+### Chat (Internal Primitives)
 
-### AgentCore/Tools/ToolRegistry.cs
+| File | Lines | Purpose |
+|---|---|---|
+| `Content.cs` | ~46 | `IContent` interface + `Text`, `ToolCall`, `ToolResult` records. |
+| `ContentDelta.cs` | ~18 | `IContentDelta` interface + `TextDelta`, `ToolCallDelta`, `MetaDelta` — raw provider streaming types. |
+| `Message.cs` | ~25 | `Message(Role, IContent)` — the internal message representation. |
+| `Role.cs` | ~7 | `enum Role { System, Assistant, User, Tool }` |
+| `Extensions.cs` | ~180 | Helpers: `AddUser()`, `AddAssistant()`, `Clone()`, `ToJson()`, serialization for providers. |
 
-Manages tool registration and lookup.
+### JSON
 
-**Key Interfaces:**
-
-```csharp
-public interface IToolRegistry
-```
-
-- `RegisterTool(Tool tool)` - Register a single tool
-- `RegisterTools(IEnumerable<Tool> tools)` - Register multiple tools
-- `RegisterFromType(Type type)` - Register all `[Tool]` decorated methods from a type
-- `RegisterFromInstance(object instance)` - Register instance methods
-
-```csharp
-public interface IToolCatalog
-```
-
-- `GetTool(string name)` - Retrieve a tool by name
-- `GetAllTools()` - Get all registered tools
-- `ToolExists(string name)` - Check if tool exists
-
-**Implementation:**
-
-```csharp
-public class ToolRegistryCatalog : IToolRegistry, IToolCatalog
-```
-
-- Implements both interfaces (registry + catalog)
-- Uses `Dictionary<string, Tool>` for storage
-- `ToolSchemaBuilder` generates JSON schemas from method signatures
-- Handles parameter parsing, nullable types, and default values
-
-**Location:** `AgentCore/Tools/ToolRegistry.cs`
+| File | Purpose |
+|---|---|
+| `JsonSchemaBuilder.cs` | Fluent JSON Schema construction. |
+| `JsonSchemaExtensions.cs` | Auto-generates JSON Schema from .NET types + validation. |
+| `JsonExtensions.cs` | JSON parsing utilities. |
 
 ---
 
-### AgentCore/Tools/ToolRuntime.cs
+## Providers
 
-Executes tools with timeout support and cancellation token injection.
+Provider packages are thin adapters that implement `ILLMProvider`:
 
-**Key Interface:**
-
-```csharp
-public interface IToolRuntime
-```
-
-- `HandleToolCallAsync(ToolCall toolCall, CancellationToken cancellationToken)` - Execute a tool call
-
-**Implementation:**
+### AgentCore.OpenAI
 
 ```csharp
-public class ToolRuntime : IToolRuntime
-```
-
-**Execution Process:**
-
-1. **Lookup** - Finds tool in catalog by name
-2. **Parse Arguments** - Converts JSON arguments to method parameters using `JsonSerializer.Deserialize`
-3. **CancellationToken Injection** - Automatically injects `CancellationToken` as last parameter if present
-4. **Invocation** - Calls `tool.Delegate.DynamicInvoke(args)`
-5. **Await Task** - If result is `Task`, awaits it to get actual result
-6. **Error Handling** - Wraps errors in `ToolExecutionException` with tool name
-
-**Exception:**
-
-```csharp
-public class ToolExecutionException : Exception
-```
-
-- Contains `ToolName` property
-- Wraps any exception that occurs during tool execution
-
-**Location:** `AgentCore/Tools/ToolRuntime.cs`
-
----
-
-### AgentCore/Tools/ToolCallParser.cs
-
-Parses and validates tool calls from LLM responses.
-
-**Key Interface:**
-
-```csharp
-public interface IToolCallParser
-```
-
-- `ParseToolCalls(string text)` - Extract tool calls from text response
-- `ParseToolCalls(JObject? structured)` - Extract from structured JSON
-- `Validate(ToolCall toolCall)` - Validate tool call against schema
-
-**Implementation:**
-
-```csharp
-public class ToolCallParser : IToolCallParser
-```
-
-**Parsing Strategies:**
-
-1. **Text Parsing** - Uses regex to find patterns like `tool_name(arg1=value1)`
-2. **Structured Parsing** - Directly deserializes from JSON
-
-**Validation:**
-
-1. Checks tool exists in catalog
-2. Validates arguments against JSON schema
-3. Returns `ToolValidationException` with detailed errors
-
-**Exception:**
-
-```csharp
-public class ToolValidationException : Exception
-```
-
-- `Errors` property - List of validation failure messages
-
-**Location:** `AgentCore/Tools/ToolCallParser.cs`
-
----
-
-## AgentCore/Runtime
-
-### AgentCore/Runtime/Agent.cs
-
-The main agent abstraction - this is where everything comes together.
-
-**Key Interfaces:**
-
-```csharp
-public interface IAgent
-```
-
-- `InvokeAsync(string input, ...)` - Main entry point for agent invocation
-- Returns `Task<AgentResponse>`
-
-```csharp
-public interface IAgentContext
-```
-
-- `Input` - User input
-- `Services` - IServiceProvider for DI
-- `ScratchPad` - Conversation for this invocation
-- `CancellationToken` - Cancellation signal
-- `StreamCallback` - Optional streaming callback
-- `SessionId` - Session identifier
-
-```csharp
-public class AgentResponse
-```
-
-- `Message` - Text response
-- `Payload` - Optional structured output
-- `ToolCalls` - Any tool calls made
-- `TokenUsage` - Token consumption data
-
-**Implementation:**
-
-```csharp
-public class LLMAgent : IAgent
-```
-
-**Construction (via AgentBuilder):**
-
-1. Receives `AgentConfig` with instructions, model, tools
-2. Gets `IServiceProvider` from AgentBuilder
-3. On `InvokeAsync`:
-   - Creates new DI scope
-   - Generates session ID (GUID)
-   - Creates `AgentContext` with services and fresh `ScratchPad`
-   - Adds system prompt to scratch pad
-   - Gets `IAgentExecutor` from DI
-   - Executes the executor
-   - Returns `AgentResponse`
-
-**System Prompt Handling:**
-
-- If instructions provided, wraps as system message
-- Appends tool definitions to system prompt
-
-**Location:** `AgentCore/Runtime/Agent.cs`
-
----
-
-### AgentCore/Runtime/AgentBuilder.cs
-
-Fluent builder for constructing agents with dependency injection.
-
-**Key Class:**
-
-```csharp
-public class AgentBuilder
-```
-
-**Configuration Properties:**
-
-- `Instruction` - System prompt/instructions
-- `Model` - LLM model identifier
-- `MaxIterations` - Maximum tool call iterations (default: 10)
-- `Tools` - List of types to register
-- `OutputType` - Optional structured output type
-- `Services` - IServiceCollection for custom services
-
-**Builder Methods:**
-
-```csharp
-public AgentBuilder WithInstructions(string instructions)
-public AgentBuilder WithModel(string model)
-public AgentBuilder WithMaxIterations(int max)
-public AgentBuilder WithTools<T>()
-public AgentBuilder WithTools(object instance)
-public AgentBuilder WithOutput<T>()
-public AgentBuilder ConfigureServices(Action<IServiceCollection> configure)
-```
-
-**Build Process:**
-
-```csharp
-public LLMAgent Build(string? sessionId = null)
-```
-
-1. Creates new `ServiceCollection`
-2. Adds core services:
-   - `IToolRegistry` → `ToolRegistryCatalog`
-   - `IToolRuntime` → `ToolRuntime`
-   - `IToolCallParser` → `ToolCallParser`
-   - `ITokenManager` → `TokenManager`
-   - `IContextManager` → `ContextManager`
-   - `ILLMExecutor` → `LLMExecutor`
-   - `IAgentMemory` → `FileMemory` (if added)
-   - All registered chunk handlers
-   - LLM provider (OpenAI by default)
-3. Adds user-configured services
-4. Builds `IServiceProvider`
-5. Creates `AgentConfig`
-6. Returns `LLMAgent`
-
-**Extension Methods:**
-
-```csharp
-public static class AgentBuilderExtensions
-```
-
-- `AddOpenAI(Action<OpenAIOptions> configure)` - Configure OpenAI provider
-- `AddRetryPolicy(Action<RetryPolicyOptions> configure)` - Configure retry behavior
-- `AddContextTrimming(Action<ContextTrimmingOptions> configure)` - Configure token limits
-- `AddFileMemory(string? basePath)` - Add file-based memory
-
-**Location:** `AgentCore/Runtime/AgentBuilder.cs`
-
----
-
-### AgentCore/Runtime/AgentExecutor.cs
-
-Implements the agent loop execution pattern.
-
-**Key Interface:**
-
-```csharp
-public interface IAgentExecutor
-```
-
-- `ExecuteAsync(IAgentContext context)` - Execute the agent loop
-
-**Implementation:**
-
-```csharp
-public class ToolCallingLoop : IAgentExecutor
-```
-
-**Properties:**
-
-- `ReasoningMode` - `Deterministic` or `Creative` (affects temperature)
-- `MaxIterations` - Maximum loop iterations
-- `MaxTokens` - Maximum tokens in response
-
-**Execution Loop:**
-
-```csharp
-public async Task ExecuteAsync(IAgentContext context)
-```
-
-```
-for (iteration = 0; iteration < MaxIterations; iteration++)
+.AddOpenAI(o =>
 {
-    1. Add user message to ScratchPad
-    2. Get ILLMExecutor from context.Services
-    3. Get IToolCatalog from context.Services
-    4. Build LLMRequest:
-       - Messages from ScratchPad
-       - Tools from catalog
-       - Generation options (temperature, etc.)
-    5. Call executor.ExecuteAsync(request, handlers, cancellationToken)
-    6. Get response
-    7. If response has ToolCalls:
-       a. For each tool call:
-          - Parse and validate
-          - Execute via IToolRuntime
-           - Add ToolResult to ScratchPad
-       b. Continue to next iteration
-    8. If no tool call:
-       a. Add assistant message to ScratchPad
-       b. Return AgentResponse
-}
-9. If max iterations reached, throw or return partial
+    o.Model = "gpt-4o";
+    o.ApiKey = "sk-...";
+    o.BaseUrl = "https://api.openai.com/v1"; // or any OpenAI-compatible endpoint
+})
 ```
 
-**Finish Conditions:**
+- Uses the official `OpenAI` .NET SDK
+- Auto-registers `TikTokenCounter` for accurate token counting
+- Supports any OpenAI-compatible API (LM Studio, Ollama, Azure, etc.)
 
-- Text response received (no tool call)
-- Structured output received
-- Error/exception
-- Max iterations exhausted
+### AgentCore.Gemini
 
-**Location:** `AgentCore/Runtime/AgentExecutor.cs`
+```csharp
+.AddGemini(o =>
+{
+    o.Model = "gemini-2.0-flash";
+    o.ApiKey = "...";
+}, project: "my-project", location: "us-central1")
+```
+
+- Uses `Google.Cloud.AIPlatform.V1` SDK
+- Supports Vertex AI project/location
+
+### Writing Your Own Provider
+
+Implement `ILLMProvider`:
+
+```csharp
+public class MyProvider : ILLMProvider
+{
+    public async IAsyncEnumerable<IContentDelta> StreamAsync(
+        IReadOnlyList<Message> messages,
+        LLMOptions options,
+        IReadOnlyList<Tool>? tools = null,
+        CancellationToken ct = default)
+    {
+        // Call your LLM API, yield deltas:
+        yield return new TextDelta("Hello ");
+        yield return new TextDelta("world!");
+        yield return new MetaDelta(FinishReason.Stop, new TokenUsage(10, 5));
+    }
+}
+
+// Register it:
+builder.Services.AddSingleton<ILLMProvider, MyProvider>();
+```
 
 ---
 
-### AgentCore/Runtime/AgentMemory.cs
+## Memory System
 
-Provides persistent conversation storage.
-
-**Key Interface:**
+The memory design follows a simple principle: **a session is just the list of messages you feed to the agent.**
 
 ```csharp
 public interface IAgentMemory
-```
-
-- `LoadAsync(string sessionId)` - Load conversation from storage
-- `SaveAsync(string sessionId, Conversation conversation)` - Save conversation
-
-**Implementation:**
-
-```csharp
-public class FileMemory : IAgentMemory
-```
-
-**Storage Format:**
-
-- JSON files in `sessions/` directory (configurable)
-- Filename: `{sessionId}.json`
-
-**Features:**
-
-- Async file I/O
-- JSON serialization/deserialization of `Conversation`
-- Caching: keeps loaded conversations in memory dictionary
-- Thread-safe with `ConcurrentDictionary`
-
-**Usage:**
-
-```csharp
-builder.AddFileMemory("./data/sessions");
-var agent = builder.Build("session-1"); // Loads or creates
-```
-
-**Location:** `AgentCore/Runtime/AgentMemory.cs`
-
----
-
-## AgentCore/LLM
-
-### Protocol Layer
-
-#### AgentCore/LLM/Protocol/LLMRequest.cs
-
-Represents a stable request model for LLM calls.
-
-**Key Classes:**
-
-```csharp
-public class LLMRequest
-```
-
-- `Messages` - List of chat messages
-- `Tools` - Optional tool definitions (JSON schema array)
-- `ToolChoice` - `none`, `auto`, or specific tool
-- `Temperature` - Sampling temperature (0.0-2.0)
-- `TopP` - Nucleus sampling
-- `MaxTokens` - Maximum tokens to generate
-- `Stream` - Whether to stream response
-- `ResponseFormat` - `text` or `json_object`
-- `Seed` - For deterministic sampling
-- `Stop` - Stop sequences
-
-```csharp
-public class LLMGenerationOptions
-```
-
-- Fluent builder for LLM options
-- Methods: `WithTemperature()`, `WithMaxTokens()`, etc.
-
-```csharp
-public enum ToolCallMode
-```
-
-- `None` - Disable tool calls
-- `Auto` - Let model decide
-- `Required` - Force tool call
-
-**Location:** `AgentCore/LLM/Protocol/LLMRequest.cs`
-
----
-
-#### AgentCore/LLM/Protocol/LLMResponse.cs
-
-Represents the LLM response.
-
-**Key Classes:**
-
-```csharp
-public class LLMResponse
-```
-
-- `Text` - Text content
-- `ToolCalls` - List of tool call requests
-- `Output` - Structured output (if using JSON mode)
-- `FinishReason` - Why generation stopped
-- `TokenUsage` - Input/output token counts
-
-```csharp
-public class TokenUsage
-```
-
-- `PromptTokens` - Tokens in request
-- `CompletionTokens` - Tokens in response
-- `TotalTokens` - Sum of both
-- `CachedTokens` - Cached tokens (if supported)
-
-**Finish Reasons:**
-
-- `stop` - Natural stop
-- `length` - Max tokens reached
-- `tool_calls` - Tool invocation triggered
-- `content_filter` - Content filtered
-- `error` - Error occurred
-
-**Location:** `AgentCore/LLM/Protocol/LLMResponse.cs`
-
----
-
-#### AgentCore/LLM/Protocol/LLMStreamChunk.cs
-
-Unified streaming unit for real-time LLM responses.
-
-**Key Class:**
-
-```csharp
-public class LLMStreamChunk
-```
-
-**Properties:**
-
-- `Kind` - Type of chunk
-- `Content` - The actual content
-- `Index` - Chunk sequence number
-
-```csharp
-public enum StreamKind
-```
-
-- `Text` - Text delta
-- `ToolCallDelta` - Tool call argument delta
-- `Structured` - JSON object chunk
-- `Usage` - Token usage update
-- `Finish` - Final chunk with finish reason
-
-**Streaming Flow:**
-
-1. LLM sends chunks in real-time
-2. Each chunk has a `Kind` indicating what type of content
-3. Handlers process chunks based on `Kind`
-
-**Location:** `AgentCore/LLM/Protocol/LLMStreamChunk.cs`
-
----
-
-### Handlers Layer
-
-#### AgentCore/LLM/Handlers/IChunkHandler.cs
-
-Base interface for all stream chunk handlers.
-
-**Key Interface:**
-
-```csharp
-public interface IChunkHandler
-```
-
-- `OnRequest(LLMRequest request)` - Called before sending request
-- `OnChunk(LLMStreamChunk chunk)` - Called for each streaming chunk
-- `OnResponse(LLMResponse response)` - Called after all chunks received
-
-**Handler Order (Pipeline):**
-
-1. TextHandler - Accumulates text
-2. ToolCallHandler - Parses tool calls
-3. StructuredHandler - Parses JSON
-4. TokenUsageHandler - Tracks usage
-5. FinishHandler - Captures finish reason
-
-**Location:** `AgentCore/LLM/Handlers/IChunkHandler.cs`
-
----
-
-#### AgentCore/LLM/Handlers/TextHandler.cs
-
-Accumulates text deltas and detects inline tool calls.
-
-**Key Class:**
-
-```csharp
-public class TextHandler : IChunkHandler
-```
-
-**Behavior:**
-
-1. In `OnChunk`: Appends `chunk.Content` to `currentText`
-2. In `OnResponse`: 
-   - Checks if response has tool calls (from other handlers)
-   - Sets `response.Text` to accumulated text
-   - Detects inline tool calls via regex if no structured tool calls
-
-**Inline Tool Call Detection:**
-
-```csharp
-// Pattern: tool_name(arg1=value1, arg2=value2)
-var match = Regex.Match(text, @"(\w+)\(([\w\W]*?)\)"");
-```
-
-**Location:** `AgentCore/LLM/Handlers/TextHandler.cs`
-
----
-
-#### AgentCore/LLM/Handlers/ToolCallHandler.cs
-
-Parses streaming tool call deltas into complete tool calls.
-
-**Key Class:**
-
-```csharp
-public class ToolCallHandler : IChunkHandler
-```
-
-**Behavior:**
-
-1. In `OnChunk` with `StreamKind.ToolCallDelta`:
-   - Extracts tool call index and function name
-   - Appends arguments to `ToolCall.Arguments` string builder
-2. In `OnResponse`:
-   - Parses accumulated arguments as JSON
-   - Creates `ToolCall` objects
-   - Adds to `response.ToolCalls`
-
-**Streaming Tool Call Format (OpenAI):**
-
-```json
 {
-  "index": 0,
-  "id": "call_abc123",
-  "type": "function",
-  "function": {
-    "name": "get_weather",
-    "arguments": "{\"location\": \"Tokyo\"}"
-  }
+    Task<IList<Message>> RecallAsync(string sessionId, string userRequest);
+    Task UpdateAsync(string sessionId, string userRequest, string response);
+    Task ClearAsync(string sessionId);
 }
 ```
 
-**Location:** `AgentCore/LLM/Handlers/ToolCallHandler.cs`
+- `RecallAsync` is called **before** execution — loads past conversation
+- `UpdateAsync` is called **after** execution — persists the new turn
+- That's the entire contract
+
+The default `FileMemory` writes JSON files to `%APPDATA%/AgentCore/{sessionId}.json`. Need RAG? Vector search? Redis? Just implement `IAgentMemory`.
 
 ---
 
-#### AgentCore/LLM/Handlers/StructuredHandler.cs
+## Context Management
 
-Handles JSON structured output mode.
+The `ContextManager` uses a **tail-trim strategy** — when the conversation exceeds the model's context window:
 
-**Key Class:**
+1. Keep all system messages
+2. Keep the last N user/assistant message pairs
+3. Drop oldest messages until it fits
 
-```csharp
-public class StructuredHandler : IChunkHandler
-```
-
-**Behavior:**
-
-1. In `OnRequest`: Sets `response_format: { type: "json_object" }`
-2. In `OnChunk` with `StreamKind.Structured`:
-   - Accumulates JSON content
-   - Optionally validates against schema
-3. In `OnResponse`:
-   - Parses accumulated JSON
-   - Deserializes to `response.Output` (of type T)
-
-**Schema Validation:**
-
-```csharp
-public class StructuredHandler<T> : IChunkHandler
-```
-
-- Uses `JsonSchemaExtensions.Validate()` for validation
-- Throws if JSON doesn't match schema
-
-**Location:** `AgentCore/LLM/Handlers/StructuredHandler.cs`
+This is correct for the vast majority of use cases. If you need something different, implement `IContextManager`.
 
 ---
 
-#### AgentCore/LLM/Handlers/TokenUsageHandler.cs
+## Custom Executor
 
-Records and resolves token usage from streaming chunks.
-
-**Key Class:**
+The `IAgentExecutor` interface is intentionally minimal:
 
 ```csharp
-public class TokenUsageHandler : IChunkHandler
+public interface IAgentExecutor
+{
+    IAsyncEnumerable<string> ExecuteStreamingAsync(IAgentContext ctx, CancellationToken ct = default);
+}
 ```
 
-**Behavior:**
-
-1. In `OnChunk` with `StreamKind.Usage`:
-   - Updates `currentUsage` from chunk content
-2. In `OnResponse`:
-   - Sets `response.TokenUsage`
-   - If no usage from stream, approximates using `ITokenCounter`
-
-**Approximation Logic:**
-
-- Counts tokens in prompt text
-- Counts tokens in completion text
-- Falls back to character-based estimate if counter unavailable
-
-**Location:** `AgentCore/LLM/Handlers/TokenUsageHandler.cs`
-
----
-
-#### AgentCore/LLM/Handlers/FinishHandler.cs
-
-Captures the finish reason from the final chunk.
-
-**Key Class:**
+The context gives you everything:
 
 ```csharp
-public class FinishHandler : IChunkHandler
-```
-
-**Behavior:**
-
-1. In `OnChunk` with `StreamKind.Finish`:
-   - Stores `finishReason` and `logprobs` if present
-2. In `OnResponse`:
-   - Sets `response.FinishReason`
-
-**Location:** `AgentCore/LLM/Handlers/FinishHandler.cs`
-
----
-
-### Execution Layer
-
-#### AgentCore/LLM/Execution/LLMExecutor.cs
-
-Orchestrates LLM calls with context trimming, handlers, and retry logic.
-
-**Key Interface:**
-
-```csharp
-public interface ILLMExecutor
-```
-
-- `ExecuteAsync(LLMRequest request, IEnumerable<IChunkHandler> handlers, CancellationToken ct)`
-- Returns `Task<LLMResponse>`
-
-**Implementation:**
-
-```csharp
-public class LLMExecutor : ILLMExecutor
-```
-
-**Execution Flow:**
-
-```
-1. Get ILLMStreamProvider from DI
-2. Get IContextManager from DI
-3. Get ITokenManager from DI
-4. 
-5. Prepare Request:
-   a. contextManager.Trim(messages, options)  // Fit in context window
-   b. request.Messages = trimmedMessages
-   c. Calculate estimated tokens
-   d. Call handlers.OnRequest(request)
-6. 
-7. Execute Request:
-   a. Call provider.StreamAsync(request, onChunk, ct)
-   b. For each chunk:
-      - Determine chunk.Kind
-      - Call matching handler.OnChunk(chunk)
-      - Or call all handlers if Kind is unknown
-8. 
-9. Finalize:
-   a. Call handlers.OnResponse(response)
-   b. tokenManager.Record(response.TokenUsage)
-10. Return response
-```
-
-**Error Handling:**
-
-- Wraps provider errors
-- Handles timeout exceptions
-
-**Location:** `AgentCore/LLM/Execution/LLMExecutor.cs`
-
----
-
-#### AgentCore/LLM/Execution/RetryPolicy.cs
-
-Implements retry logic with backoff and jitter.
-
-**Key Interfaces:**
-
-```csharp
-public interface IRetryPolicy
-```
-
-- `ShouldRetry(Exception ex, int attempt)` - Determine if should retry
-- `GetRetryDelay(int attempt)` - Calculate delay before next retry
-
-**Implementation:**
-
-```csharp
-public class RetryPolicy : IRetryPolicy
-```
-
-**Configuration:**
-
-```csharp
-public class RetryPolicyOptions
-```
-
-- `MaxRetries` - Maximum retry attempts (default: 3)
-- `InitialDelayMs` - Starting delay (default: 1000ms)
-- `MaxDelayMs` - Maximum delay cap (default: 30000ms)
-- `Multiplier` - Exponential backoff (default: 2.0)
-- `Jitter` - Random jitter factor (default: 0.1)
-- `RetryOn` - Exception types to retry on
-
-**Retry Strategy:**
-
-```
-delay = min(InitialDelay * (Multiplier ^ attempt), MaxDelayMs)
-delay += random(-Jitter * delay, Jitter * delay)
-```
-
-**Exceptions:**
-
-```csharp
-public class RetryException : Exception
-```
-
-- Contains `Attempt` count
-- Wraps underlying exception
-
-```csharp
-public class EarlyStopException : Exception
-```
-
-- Used to stop retry loop (e.g., after max attempts)
-
-**Location:** `AgentCore/LLM/Execution/RetryPolicy.cs`
-
----
-
-## AgentCore/Tokens
-
-### AgentCore/Tokens/TokenManager.cs
-
-Tracks cumulative token usage across calls.
-
-**Key Interface:**
-
-```csharp
-public interface ITokenManager
-```
-
-- `CurrentUsage` - Cumulative tokens used
-- `Record(TokenUsage usage)` - Add to cumulative count
-- `Reset()` - Clear accumulated usage
-- `GetCostEstimate()` - Estimate cost based on model pricing
-
-**Implementation:**
-
-```csharp
-public class TokenManager : ITokenManager
-```
-
-**Features:**
-
-- Thread-safe with `Interlocked`
-- Maintains running totals:
-  - `TotalPromptTokens`
-  - `TotalCompletionTokens`
-  - `TotalTokens`
-- If provider doesn't report usage, approximates using `ITokenCounter`
-
-**Location:** `AgentCore/Tokens/TokenManager.cs`
-
----
-
-### AgentCore/Tokens/TikTokenCounter.cs
-
-Token counting using SharpToken library.
-
-**Key Interface:**
-
-```csharp
-public interface ITokenCounter
-```
-
-- `Count(string text)` - Count tokens in text
-- `Count(Messages messages)` - Count tokens in messages
-
-**Implementation:**
-
-```csharp
-public class TikTokenCounter : ITokenCounter
-```
-
-**Encoding Support:**
-
-- `cl100k_base` - OpenAI's encoding (GPT-4, GPT-3.5)
-- `o200k_base` - OpenAI's newer encoding (GPT-4o)
-
-**Tokenization:**
-
-1. Encodes text using SharpToken
-2. Splits by encoding type (chat vs. raw text)
-3. Adds overhead tokens for message format
-
-**Message Token Formula (OpenAI):**
-
-```
-per-message: 4 tokens (always)
-per-message: +content tokens
-+ "name" field: +1 token
-+ "role" field: +1 token
-+ "tool" role: +3 tokens
-```
-
-**Location:** `AgentCore/Tokens/TikTokenCounter.cs`
-
----
-
-### AgentCore/Tokens/ContextManager.cs
-
-Manages context window by trimming messages to fit token limits.
-
-**Key Interface:**
-
-```csharp
-public interface IContextManager
-```
-
-- `Trim(List<ChatMessage> messages, LLMGenerationOptions options)` - Trim messages to fit
-
-**Implementation:**
-
-```csharp
-public class ContextManager : IContextManager
-```
-
-**Configuration:**
-
-```csharp
-public class ContextTrimmingOptions
-```
-
-- `MaxContextTokens` - Maximum tokens in context (default: 4096)
-- `ReservedTokens` - Tokens reserved for completion (default: 512)
-- `Strategy` - `SlidingWindow` or `Summarize`
-
-**Trimming Strategy (SlidingWindow):**
-
-```
-1. Calculate available tokens = MaxContextTokens - ReservedTokens
-2. If current tokens <= available: return as-is
-3. Preserve:
-   a. System message (always keep)
-   b. Last tool call (if any)
-   c. Last N user messages
-4. From oldest messages, remove until fit
-5. Add "[Previous conversation trimmed]" marker
-```
-
-**Smart Preservation:**
-
-- System message is always kept
-- Last tool call is preserved (important for continuity)
-- Recent messages prioritized over older ones
-
-**Location:** `AgentCore/Tokens/ContextManager.cs`
-
----
-
-## AgentCore/Chat
-
-### AgentCore/Chat/Conversation.cs
-
-Message list container with role-based messages.
-
-**Key Class:**
-
-```csharp
-public class Conversation
-```
-
-**Properties:**
-
-- `Messages` - `List<ChatMessage>`
-- `SystemPrompt` - Optional persistent system message
-- `SessionId` - Session identifier
-- `CreatedAt` / `UpdatedAt` - Timestamps
-
-**Message Structure:**
-
-```csharp
-public record ChatMessage
-```
-
-- `Role` - `system`, `user`, `assistant`, `tool`
-- `Content` - Message content (string or nested content)
-- `Name` - Optional name for user messages
-- `ToolCallId` - For tool results (correlates to assistant tool call)
-- `ToolCall` - For assistant tool call requests
-
-**Location:** `AgentCore/Chat/Conversation.cs`
-
----
-
-### AgentCore/Chat/ChatContent.cs
-
-Defines different content types in conversations.
-
-**Key Interfaces and Classes:**
-
-```csharp
-public interface IChatContent
-```
-
-```csharp
-public class TextContent : IChatContent
-```
-
-- Simple text content
-
-```csharp
-public class ToolCall : IChatContent
-```
-
-- `Id` - Unique tool call identifier
-- `Name` - Tool name being called
-- `Arguments` - Arguments as JSON string
-
-```csharp
-public sealed record ToolResult(
-    string CallId,
-    object? Result
-) : IContent
-```
-
-- `ToolCallId` - Correlates to the tool call
-- `Content` - Result content (string or error)
-- `IsError` - Whether the tool execution failed
-
-**Role Enum:**
-
-```csharp
-public enum Role
-```
-
-- `System` - System instructions
-- `User` - User input
-- `Assistant` - LLM responses
-- `Tool` - Tool execution results
-
-**Location:** `AgentCore/Chat/ChatContent.cs`
-
----
-
-### AgentCore/Chat/ConversationExtensions.cs
-
-Helper methods for working with conversations.
-
-**Key Extension Methods:**
-
-```csharp
-public static class ConversationExtensions
-```
-
-- `AddSystemMessage(this Conversation, string content)` - Add system message
-- `AddUserMessage(this Conversation, string content)` - Add user message
-- `AddAssistantMessage(this Conversation, string content, ...)` - Add assistant message
-- `AddToolResult(this Conversation, string toolCallId, string result)` - Add tool result
-- `GetLastUserMessage(this Conversation)` - Get most recent user message
-- `GetAllToolCalls(this Conversation)` - Extract all tool calls
-- `Clone(this Conversation)` - Deep clone conversation
-- `ToJson(this Conversation)` - Serialize to JSON
-- `FromJson(string json)` - Deserialize from JSON
-- `ToOpenAIMessages(this Conversation)` - Convert to OpenAI format
-
-**Location:** `AgentCore/Chat/ConversationExtensions.cs`
-
----
-
-## AgentCore/Json
-
-### AgentCore/Json/JsonSchemaBuilder.cs
-
-Fluent builder for creating JSON schemas from .NET types.
-
-**Key Class:**
-
-```csharp
-public class JsonSchemaBuilder
-```
-
-**Builder Methods:**
-
-```csharp
-public JsonSchemaBuilder AddProperty(string name, JsonSchema schema)
-public JsonSchemaBuilder SetType(string type)
-public JsonSchemaBuilder SetRequired(bool required)
-public JsonSchemaBuilder SetEnum(IEnumerable<object> values)
-public JsonSchemaBuilder SetMinimum(double value)
-public JsonSchemaBuilder SetMaximum(double value)
-public JsonSchemaBuilder SetMinLength(int length)
-public JsonSchemaBuilder SetMaxLength(int length)
-public JsonSchemaBuilder SetPattern(string regex)
-public JsonSchemaBuilder SetItems(JsonSchema items)
-public JsonSchemaBuilder SetAdditionalProperties(bool allowed)
-```
-
-**Output:**
-
-```csharp
-public class JsonSchema
-```
-
-- `Type` - "object", "string", "number", "array", "boolean", "null"
-- `Properties` - Child properties
-- `Required` - Required property names
-- `Enum` - Allowed values
-- `Items` - For arrays
-- `Minimum`, `Maximum` - Numeric bounds
-- `AdditionalProperties` - Whether extra properties allowed
-
-**Usage:**
-
-```csharp
-var schema = new JsonSchemaBuilder()
-    .SetType("object")
-    .AddProperty("name", new JsonSchema { Type = "string" })
-    .AddProperty("age", new JsonSchema { Type = "integer" })
-    .SetRequired(["name"])
-    .Build();
-```
-
-**Location:** `AgentCore/Json/JsonSchemaBuilder.cs`
-
----
-
-### AgentCore/Json/JsonSchemaExtensions.cs
-
-Generates JSON schemas from CLR types and validates JSON.
-
-**Key Methods:**
-
-```csharp
-public static class JsonSchemaExtensions
-```
-
-**Schema Generation:**
-
-```csharp
-public static JsonSchema GetSchemaForType(Type type)
-```
-
-Generates schema from .NET type:
-
-1. **Primitives** (int, string, bool) → Basic JSON types
-2. **Arrays** → `type: "array"`, `items: GetSchemaForType(elementType)`
-3. **Objects** → `type: "object"`, properties from public properties
-4. **Nullable** → Union of base type and null
-5. **Enums** → `type: "string"`, `enum: [values]`
-6. **Dictionaries** → `type: "object"`, additionalProperties
-
-**Attributes Recognized:**
-
-- `[Required]` → Required property
-- `[Description]` → Property description
-- `[JsonPropertyName]` → Property name
-- `[JsonIgnore]` → Skip property
-
-**Validation:**
-
-```csharp
-public static ValidationResult Validate(string json, JsonSchema schema)
-```
-
-- Parses JSON
-- Validates against schema
-- Returns `ValidationResult` with errors
-
-```csharp
-public class ValidationResult
-```
-
-- `IsValid` - Whether validation passed
-- `Errors` - List of validation errors
-
-**Location:** `AgentCore/Json/JsonSchemaExtensions.cs`
-
----
-
-### AgentCore/Json/JsonExtensions.cs
-
-General JSON utilities.
-
-**Key Methods:**
-
-```csharp
-public static class JsonExtensions
-```
-
-**FindAllJsonObjects:**
-
-```csharp
-public static IEnumerable<JsonElement> FindAllJsonObjects(string text)
-```
-
-Extracts all JSON objects from text without regex:
-
-1. Uses `JsonDocument.TryParseValue` with lenient settings
-2. Yields all root-level objects
-3. Skips invalid JSON
-
-**NormalizeArgs:**
-
-```csharp
-public static string NormalizeArgs(string args)
-```
-
-Canonicalizes JSON arguments:
-
-1. Parses JSON
-2. Re-serializes with sorted keys and formatting
-3. Returns consistent string representation
-
-**Location:** `AgentCore/Json/JsonExtensions.cs`
-
----
-
-## AgentCore/Providers
-
-### AgentCore/Providers/ILLMStreamProvider.cs
-
-Abstract interface for LLM providers.
-
-**Key Interface:**
-
-```csharp
-public interface ILLMStreamProvider
-```
-
-- `StreamAsync(LLMRequest request, Action<LLMStreamChunk> onChunk, CancellationToken ct)`
-- Returns `Task`
-
-**Configuration:**
-
-```csharp
-public class LLMInitOptions
-```
-
-- `BaseUrl` - API endpoint
-- `ApiKey` - Authentication key
-- `Model` - Model identifier
-- `Timeout` - Request timeout
-- `Headers` - Custom HTTP headers
-
-**Location:** `AgentCore/Providers/ILLMStreamProvider.cs`
-
----
-
-### AgentCore/Providers/OpenAI/OpenAILLMClient.cs
-
-OpenAI-compatible LLM provider implementation.
-
-**Key Class:**
-
-```csharp
-public class OpenAILLMClient : ILLMStreamProvider
-```
-
-**Implementation Details:**
-
-1. Uses OpenAI .NET SDK (`OpenAI.ClientCore`)
-2. Creates `OpenAIClient` with API key and base URL
-3. Calls `GetChatCompletionsStreamingAsync`
-
-**Streaming:**
-
-```csharp
-public async Task StreamAsync(LLMRequest request, Action<LLMStreamChunk> onChunk, CancellationToken ct)
-```
-
-1. Converts `LLMRequest` to OpenAI format:
-   - `ChatCompletionsOptions`
-   - Maps messages to `ChatRequestMessage`
-   - Includes tools as `ChatFunctionToolDefinition`
-2. Streams from OpenAI API
-3. Converts each streaming chunk to `LLMStreamChunk`:
-   - `ChatCompletionsChunk` → `LLMStreamChunk`
-   - Delta content → Text/ToolCall
-   - Usage → Usage
-   - Finish → Finish
-
-**Error Handling:**
-
-- Converts OpenAI exceptions to framework exceptions
-- Handles rate limits, timeouts, auth failures
-
-**Location:** `AgentCore/Providers/OpenAI/OpenAILLMClient.cs`
-
----
-
-### AgentCore/Providers/OpenAI/OpenAIExtensions.cs
-
-Helpers for converting between AgentCore and OpenAI types.
-
-**Key Methods:**
-
-```csharp
-public static class OpenAIExtensions
-```
-
-- `ToOpenAI(ChatMessage)` - Convert to OpenAI message
-- `ToOpenAI(Tool)` - Convert to function definition
-- `ToOpenAI(LLMGenerationOptions)` - Convert options
-- `ToAgentCore(ChatResponseMessage)` - Convert response
-- `ToAgentCore(ChatTokenUsage)` - Convert usage
-
-**Location:** `AgentCore/Providers/OpenAI/OpenAIExtensions.cs`
-
----
-
-## AgentCore/Utils
-
-### AgentCore/Utils/HelperExtensions.cs
-
-String helper extensions.
-
-**Key Methods:**
-
-```csharp
-public static class HelperExtensions
-```
-
-**ToSnake:**
-
-```csharp
-public static string ToSnake(this string text)
-```
-
-Converts to snake_case:
-
-```csharp
-"GetUserName" → "get_user_name"
-"HTTPRequest" → "http_request"
-```
-
-**ToJoinedString:**
-
-```csharp
-public static string ToJoinedString<T>(this IEnumerable<T> items, string separator)
-```
-
-Joins collection elements with separator.
-
-**Location:** `AgentCore/Utils/HelperExtensions.cs`
-
----
-
-## Component Interactions
-
-### Request Flow Diagram
-
-```
-User Input
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      LLMAgent.InvokeAsync                    │
-├─────────────────────────────────────────────────────────────┤
-│  1. Create AgentContext                                     │
-│  2. Add system prompt to ScratchPad                        │
-│  3. Get IAgentExecutor from DI                             │
-│  4. Execute executor                                        │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    ToolCallingLoop.ExecuteAsync              │
-├─────────────────────────────────────────────────────────────┤
-│  for (i = 0; i < MaxIterations; i++)                       │
-│    ├─ Build LLMRequest (prompt, tools, options)            │
-│    ├─ Get ILLMExecutor from DI                             │
-│    ├─ Call executor.ExecuteAsync()                          │
-│    │   ├─ ContextManager.Trim() - fit in context window    │
-│    │   ├─ Handler.OnRequest() - prepare handlers           │
-│    │   ├─ Provider.StreamAsync() - call LLM               │
-│    │   │   └─ Stream chunks through handlers              │
-│    │   │       ├─ TextHandler - accumulate text            │
-│    │   │       ├─ ToolCallHandler - parse tool calls       │
-│    │   │       ├─ StructuredHandler - parse JSON output    │
-│    │   │       ├─ TokenUsageHandler - track tokens         │
-│    │   │       └─ FinishHandler - capture finish reason    │
-│    │   └─ Handler.OnResponse() - build final response      │
-│    │                                                               │
-│    ├─ If no tool call → return response                           │
-│    ├─ Else → ToolRuntime.HandleToolCallAsync()                   │
-│    │   └─ Invoke tool, handle timeout/errors                      │
-│    ├─ Append tool result to ScratchPad                            │
-│    └─ Continue loop                                               │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   AgentResponse returned                      │
-│  { Text: "...", Output: structured_object }                  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Tool Execution Flow
-
-```
-LLM Response contains ToolCall
-    │
-    ▼
-ToolCallParser.Validate(toolCall)
-    │
-    ├─ Lookup tool in ToolRegistryCatalog
-    ├─ Parse arguments from JObject to method parameters
-    └─ Validate against schema
-    │
-    ▼
-ToolRuntime.InvokeAsync(toolCall)
-    │
-    ├─ Get Tool from catalog
-    ├─ Inject CancellationToken if needed
-    ├─ DynamicInvoke the delegate
-    └─ Return result (await Task if async)
-    │
-    ▼
-ToolResult created and appended to conversation
+public class MyExecutor : IAgentExecutor
+{
+    public async IAsyncEnumerable<string> ExecuteStreamingAsync(
+        IAgentContext ctx, CancellationToken ct = default)
+    {
+        // Access all framework services
+        var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
+        var tools = ctx.Services.GetRequiredService<IToolExecutor>();
+
+        // Access the config, user input, scratchpad
+        var input = ctx.UserInput;
+        var messages = ctx.ScratchPad;
+
+        // Build any agent loop you want.
+        // ReAct, plan-and-execute, multi-step reasoning, whatever.
+    }
+}
+
+// Register it:
+builder.ConfigureServices(s =>
+    s.AddTransient<IAgentExecutor, MyExecutor>());
 ```
 
 ---
 
-## Execution Flows
+## Dependencies
 
-### Building an Agent
+The core `AgentCore` package has exactly **3 dependencies**:
+
+- `Microsoft.Extensions.DependencyInjection`
+- `Microsoft.Extensions.Logging`
+- `System.ComponentModel.Annotations`
+
+That's it. No HTTP clients, no LLM SDKs, no serialization libraries beyond `System.Text.Json`.
+
+---
+
+## Project Structure
+
+```
+AgentCore/                          # Core framework (~1,400 lines)
+├── Runtime/
+│   ├── Agent.cs                    # IAgent, LLMAgent — string in, string out
+│   ├── AgentBuilder.cs             # Fluent builder + DI wiring
+│   ├── AgentExecutor.cs            # IAgentExecutor, ToolCallingLoop
+│   └── AgentMemory.cs              # IAgentMemory, FileMemory
+├── LLM/
+│   ├── LLMExecutor.cs              # Event-level streaming orchestrator
+│   ├── ILLMProvider.cs             # Raw provider interface
+│   ├── LLMEvent.cs                 # TextEvent, ToolCallEvent
+│   ├── LLMOptions.cs               # Model config
+│   └── LLMMeta.cs                  # FinishReason, ToolCallMode
+├── Tooling/
+│   ├── Tool.cs                     # [Tool] attribute + Tool class
+│   ├── ToolRegistry.cs             # Registration + auto-schema
+│   ├── ToolExecutor.cs             # Invocation + validation
+│   ├── ToolCallParser.cs           # Text-based tool call extraction
+│   └── ToolRegistryExtensions.cs   # RegisterAll<T>() reflection
+├── Tokens/
+│   ├── ContextManager.cs           # Tail-trim context strategy
+│   ├── TokenManager.cs             # Cumulative token tracking
+│   ├── ITokenCounter.cs            # Counter interface
+│   └── ApproximateTokenCounter.cs  # len/4 fallback
+├── Chat/
+│   ├── Content.cs                  # IContent, Text, ToolCall, ToolResult
+│   ├── ContentDelta.cs             # Raw streaming delta types
+│   ├── Message.cs                  # Message(Role, IContent)
+│   ├── Role.cs                     # System, Assistant, User, Tool
+│   └── Extensions.cs               # Conversation helpers + serialization
+├── Json/
+│   ├── JsonSchemaBuilder.cs        # Schema construction
+│   ├── JsonSchemaExtensions.cs     # Type → schema + validation
+│   └── JsonExtensions.cs           # Parse utilities
+└── Utils/
+    └── HelperExtensions.cs         # String helpers
+
+AgentCore.OpenAI/                   # OpenAI provider package
+├── OpenAILLMClient.cs              # ILLMProvider implementation
+├── OpenAIExtensions.cs             # Message/tool conversion helpers
+├── OpenAIServiceExtensions.cs      # .AddOpenAI() builder extension
+└── TikTokenCounter.cs              # Accurate token counting
+
+AgentCore.Gemini/                   # Gemini provider package
+├── GeminiLLMClient.cs              # ILLMProvider implementation
+├── GeminiExtensions.cs             # Message/tool conversion helpers
+└── GeminiServiceExtensions.cs      # .AddGemini() builder extension
+```
+
+---
+
+## Execution Flow
+
+```
+User calls agent.InvokeAsync("task") or agent.InvokeStreamingAsync("task")
+  │
+  ├── Create DI scope
+  ├── Generate session ID (if not provided)
+  ├── memory.RecallAsync(sessionId) → load past messages
+  ├── Build AgentContext (config, services, input, scratchpad)
+  ├── Add system prompt to scratchpad
+  │
+  ├── executor.ExecuteStreamingAsync(ctx)    ← your agent logic
+  │     │
+  │     ├── Add user message to scratchpad
+  │     │
+  │     └── LOOP:
+  │           ├── llmExecutor.StreamAsync(messages, options)
+  │           │     ├── contextManager.Reduce(messages)    ← tail-trim
+  │           │     ├── [BeforeModelCall hook]
+  │           │     ├── provider.StreamAsync(...)           ← raw API call
+  │           │     ├── Reassemble deltas → TextEvent / ToolCallEvent
+  │           │     ├── tokenManager.Record(usage)
+  │           │     └── [AfterModelCall hook]
+  │           │
+  │           ├── yield TextEvent deltas to caller (streaming)
+  │           │
+  │           ├── if tool calls:
+  │           │     ├── [BeforeToolCall hook]
+  │           │     ├── toolExecutor.HandleToolCallAsync(call)
+  │           │     ├── [AfterToolCall hook]
+  │           │     ├── append results to scratchpad
+  │           │     └── continue loop
+  │           │
+  │           └── if no tool calls → break (final response)
+  │
+  └── memory.UpdateAsync(sessionId, input, response) → persist
+```
+
+---
+
+## Full Example
 
 ```csharp
-var agent = Agent.Create("assistant")
-    .WithInstructions("You are a helpful coding assistant")
-    .WithModel("gpt-4o")
-    .WithMaxIterations(50)
-    .WithTools<CodeTools>()           // Register static methods
-    .WithTools(new FileSystem())      // Register instance methods
-    .WithOutput<CodeAnalysis>()       // Optional structured output
-    .AddOpenAI(options => {
-        options.ApiKey = Environment.GetEnvironmentVariable("OPENAI_KEY");
-        options.Model = "gpt-4o";
+using AgentCore.Runtime;
+using AgentCore.Providers.OpenAI;
+
+var agent = LLMAgent.Create("chatbot")
+    .WithInstructions("You are an AI agent. Execute all user requests faithfully.")
+    .AddOpenAI(o =>
+    {
+        o.BaseUrl = "http://127.0.0.1:1234/v1";
+        o.ApiKey = "lmstudio";
+        o.Model = "model";
     })
-    .ConfigureServices(services => {
-        // Add custom services
+    .WithTools<WeatherTools>()
+    .WithTools<MathTools>()
+    .BeforeToolCall(async (call, ct) =>
+    {
+        Console.WriteLine($"  [Tool] → {call.Name}({call.Arguments})");
+        return null;
+    })
+    .AfterToolCall(async (call, result, ct) =>
+    {
+        Console.WriteLine($"  [Tool] ← {result?.ForLlm()}");
+        return null;
     })
     .Build();
-```
 
-**What happens during Build():**
-
-1. Creates `ServiceCollection` with default implementations
-2. Registers core services (Memory, TokenManager, ContextManager, etc.)
-3. Registers tool handlers (TextHandler, ToolCallHandler, etc.)
-4. Registers the ToolRegistryCatalog with all tools
-5. Builds the `IServiceProvider`
-6. Creates `LLMAgent` with config
-
-### Invoking the Agent
-
-```csharp
-var response = await agent.InvokeAsync(
-    "Write a function to calculate fibonacci",
-    cancellationToken
-);
-```
-
-**What happens during InvokeAsync():**
-
-1. Creates a new DI scope
-2. Generates a unique session ID
-3. Creates `AgentContext` with:
-   - User input
-   - Services (scoped)
-   - Cancellation token
-   - Stream callback
-   - Fresh `ScratchPad` conversation
-4. Adds system prompt to scratch pad
-5. Gets `IAgentExecutor` (ToolCallingLoop) from DI
-6. Executes the loop
-
-### The Agent Loop (ToolCallingLoop)
-
-1. Adds user message to scratch pad
-2. Gets `ILLMExecutor` and `IToolCatalog` from DI
-3. For each iteration:
-   - Builds `LLMRequest` with current conversation
-   - Includes available tools
-   - Calls `executor.ExecuteAsync()`
-   - If no tool call → returns response
-   - If tool call → executes tool, appends result, continues
-
-### LLM Execution (LLMExecutor)
-
-1. **Trim Context**: Uses `ContextManager` to fit within token limit
-2. **Prepare Handlers**: Calls `OnRequest()` on all handlers
-3. **Stream**: Calls provider's `StreamAsync()`
-4. **Process Chunks**: Routes chunks to matching handler by `Kind`
-5. **Finalize**: Calls `OnResponse()` on all handlers
-6. **Retry**: Uses `RetryPolicy` for validation failures
-
----
-
-## TestApp Reference
-
-The TestApp demonstrates how to use AgentCore in practice.
-
-### TestApp/Program.cs
-
-Entry point that demonstrates various AgentCore features.
-
-**Demonstrates:**
-
-1. Basic agent creation and invocation
-2. Streaming responses
-3. Custom tool registration
-4. File memory for session persistence
-5. Structured output types
-
-**Key Examples:**
-
-- Creating an `AgentBuilder`
-- Configuring OpenAI
-- Adding tools
-- Building and invoking agents
-
-**Location:** `TestApp/Program.cs`
-
----
-
-### TestApp/ChatBotAgent.cs
-
-Sample agent implementation showing how to structure an agent.
-
-**Demonstrates:**
-
-1. Custom agent configuration
-2. Pre-configured tools
-3. System prompt design
-4. Session management
-
-**Location:** `TestApp/ChatBotAgent.cs`
-
----
-
-### TestApp/BuiltInTools/
-
-Sample tool implementations showing the `[Tool]` attribute pattern.
-
-#### MathTools.cs
-
-```csharp
-public class MathTools
+// Interactive chat loop with session persistence
+var sessionId = "my-session";
+while (true)
 {
-    [Tool("add", "Add two numbers")]
-    public double Add(double a, double b) => a + b;
+    Console.Write("> ");
+    var input = Console.ReadLine();
+    if (string.IsNullOrWhiteSpace(input)) continue;
 
-    [Tool("multiply", "Multiply two numbers")]
-    public double Multiply(double a, double b) => a * b;
+    await foreach (var chunk in agent.InvokeStreamingAsync(input, sessionId))
+        Console.Write(chunk);
 
-    [Tool("calculate", "Perform calculation")]
-    public async Task<string> Calculate(string expression)
-    {
-        // Evaluates mathematical expression
-    }
-}
-```
-
-#### WeatherTools.cs
-
-```csharp
-public class WeatherTools
-{
-    [Tool("get_weather", "Get weather for a location")]
-    public async Task<WeatherData> GetWeather(string location)
-    {
-        // Returns simulated weather data
-    }
-}
-```
-
-#### SearchTools.cs
-
-```csharp
-public class SearchTools
-{
-    [Tool("search", "Search the web")]
-    public async Task<List<SearchResult>> Search(string query)
-    {
-        // Returns simulated search results
-    }
-}
-```
-
-#### RAGTools.cs
-
-```csharp
-public class RAGTools
-{
-    [Tool("search_knowledge", "Search knowledge base")]
-    public async Task<List<string>> SearchKnowledge(string query)
-    {
-        // Simulated RAG retrieval
-    }
-}
-```
-
-#### GeoTools.cs
-
-```csharp
-public class GeoTools
-{
-    [Tool("geocode", "Convert address to coordinates")]
-    public async Task<GeoLocation> Geocode(string address) { }
-
-    [Tool("distance", "Calculate distance between points")]
-    public async Task<double> Distance(string from, string to) { }
-}
-```
-
-#### ConversionTools.cs
-
-```csharp
-public class ConversionTools
-{
-    [Tool("convert_unit", "Convert between units")]
-    public async Task<double> ConvertUnit(double value, string from, string to) { }
-
-    [Tool("convert_currency", "Convert between currencies")]
-    public async Task<double> ConvertCurrency(double amount, string from, string to) { }
+    Console.WriteLine();
 }
 ```
 
 ---
 
-## Summary
+## License
 
-AgentCore provides a **production-ready framework** for building LLM-powered agents with:
-
-- **Tool-calling agents** with automatic function registration and schema generation
-- **Streaming support** with extensible handler pipeline
-- **Context management** with intelligent trimming
-- **Token tracking** with approximation fallback
-- **Persistent memory** via file-based storage
-- **Structured output** with JSON schema validation
-- **Retry logic** for transient failures
-- **Full DI integration** for testability and extensibility
-
-The architecture is clean, modular, and follows SOLID principles, making it easy to extend with new LLM providers, handlers, or custom functionality.
-
----
-
-## Quick Reference
-
-| Component | File | Interface | Implementation |
-|-----------|------|-----------|----------------|
-| Agent | `Runtime/Agent.cs` | `IAgent` | `LLMAgent` |
-| Builder | `Runtime/AgentBuilder.cs` | - | `AgentBuilder` |
-| Executor | `Runtime/AgentExecutor.cs` | `IAgentExecutor` | `ToolCallingLoop` |
-| Memory | `Runtime/AgentMemory.cs` | `IAgentMemory` | `FileMemory` |
-| Tool Runtime | `Tools/ToolRuntime.cs` | `IToolRuntime` | `ToolRuntime` |
-| Tool Registry | `Tools/ToolRegistry.cs` | `IToolRegistry`, `IToolCatalog` | `ToolRegistryCatalog` |
-| Tool Parser | `Tools/ToolCallParser.cs` | `IToolCallParser` | `ToolCallParser` |
-| LLM Executor | `LLM/Execution/LLMExecutor.cs` | `ILLMExecutor` | `LLMExecutor` |
-| LLM Provider | `Providers/` | `ILLMStreamProvider` | `OpenAILLMClient` |
-| Token Manager | `Tokens/TokenManager.cs` | `ITokenManager` | `TokenManager` |
-| Token Counter | `Tokens/TikTokenCounter.cs` | `ITokenCounter` | `TikTokenCounter` |
-| Context Manager | `Tokens/ContextManager.cs` | `IContextManager` | `ContextManager` |
-| Conversation | `Chat/Conversation.cs` | - | `Conversation` |
-| Retry Policy | `LLM/Execution/RetryPolicy.cs` | `IRetryPolicy` | `RetryPolicy` |
+MIT
