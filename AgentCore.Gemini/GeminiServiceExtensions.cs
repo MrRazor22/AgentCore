@@ -1,21 +1,23 @@
-using AgentCore.Providers;
+using AgentCore.LLM;
 using AgentCore.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Providers.Gemini;
 
-public sealed class GeminiInitOptions : LLMInitOptions
-{
-    public string? Project { get; set; }
-    public string? Location { get; set; }
-}
-
 public static class GeminiServiceExtensions
 {
-    public static AgentBuilder AddGemini(this AgentBuilder builder, Action<GeminiInitOptions> configure)
+    public static AgentBuilder AddGemini(
+        this AgentBuilder builder,
+        Action<LLMOptions> configure,
+        string? project = null,
+        string? location = null)
     {
         builder.Services.Configure(configure);
-        builder.Services.AddSingleton<ILLMStreamProvider, GeminiLLMClient>();
+        builder.Services.AddSingleton<ILLMProvider>(sp =>
+        {
+            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LLMOptions>>().Value;
+            return new GeminiLLMClient(opts, project, location);
+        });
         return builder;
     }
 }

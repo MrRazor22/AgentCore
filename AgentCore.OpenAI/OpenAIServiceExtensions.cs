@@ -1,4 +1,4 @@
-using AgentCore.Providers;
+using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,14 +8,14 @@ namespace AgentCore.Providers.OpenAI;
 
 public static class OpenAIServiceExtensions
 {
-    public static AgentBuilder AddOpenAI(this AgentBuilder builder, Action<LLMInitOptions> configure)
+    public static AgentBuilder AddOpenAI(this AgentBuilder builder, Action<LLMOptions> configure)
     {
         builder.Services.Configure(configure);
-        builder.Services.AddSingleton<ILLMStreamProvider, OpenAILLMClient>();
+        builder.Services.AddSingleton<ILLMProvider, OpenAILLMClient>();
 
         builder.Services.AddSingleton<ITokenCounter>(sp =>
         {
-            var opts = sp.GetRequiredService<IOptions<LLMInitOptions>>().Value;
+            var opts = sp.GetRequiredService<IOptions<LLMOptions>>().Value;
             var encoding = opts.Model?.StartsWith("gpt-4o") == true ? "o200k_base" : "cl100k_base";
             return new TikTokenCounter(encoding);
         });

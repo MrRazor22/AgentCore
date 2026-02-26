@@ -1,9 +1,9 @@
 using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Protocol;
+using AgentCore.LLM;
 using Google.GenAI.Types;
-using Tool = AgentCore.Tools.Tool;
-using CoreFinishReason = AgentCore.LLM.Protocol.FinishReason;
+using Tool = AgentCore.Tooling.Tool;
+using CoreFinishReason = AgentCore.LLM.FinishReason;
 
 namespace AgentCore.Providers.Gemini;
 
@@ -16,7 +16,7 @@ public static class GeminiExtensions
         _ => CoreFinishReason.Stop
     };
 
-    public static List<Content> ToGeminiContents(this IList<Message> history)
+    public static List<Content> ToGeminiContents(this IReadOnlyList<Message> history)
     {
         var contents = new List<Content>();
         var toolCallLookup = history
@@ -61,8 +61,8 @@ public static class GeminiExtensions
                     {
                         Name = call.Name,
                         Args = call.Arguments?.ToJsonString() != "{}"
-                            ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(call.Arguments?.ToJsonString() ?? "{}")
-                            : new Dictionary<string, object?>()
+                            ? System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(call.Arguments?.ToJsonString() ?? "{}")
+                            : new Dictionary<string, object>()
                     }
                 }]
             },
@@ -74,7 +74,7 @@ public static class GeminiExtensions
                     FunctionResponse = new FunctionResponse
                     {
                         Name = toolCallLookup?.GetValueOrDefault(result.CallId)?.Name ?? "",
-                        Response = new Dictionary<string, object?> { { "result", result.Result?.AsJsonString() ?? "{}" } }
+                        Response = new Dictionary<string, object> { { "result", result.Result?.AsJsonString() ?? "{}" } }
                     }
                 }]
             },
@@ -149,35 +149,34 @@ public static class GeminiExtensions
         return schema;
     }
 
-    public static GenerateContentConfig ToGeminiConfig(this LLMRequest request)
+    public static GenerateContentConfig ToGeminiConfig(this LLMOptions options, IReadOnlyList<Tool>? tools)
     {
         var config = new GenerateContentConfig();
 
-        if (request.Options != null)
+        if (options != null)
         {
-            var opts = request.Options;
-            if (opts.Temperature.HasValue) config.Temperature = opts.Temperature.Value;
-            if (opts.TopP.HasValue) config.TopP = opts.TopP.Value;
-            if (opts.TopK.HasValue) config.TopK = opts.TopK.Value;
-            if (opts.MaxOutputTokens.HasValue) config.MaxOutputTokens = opts.MaxOutputTokens.Value;
-            if (opts.StopSequences is { Count: > 0 }) config.StopSequences = opts.StopSequences.ToList();
+            if (options.Temperature.HasValue) config.Temperature = options.Temperature.Value;
+            if (options.TopP.HasValue) config.TopP = options.TopP.Value;
+            if (options.TopK.HasValue) config.TopK = options.TopK.Value;
+            if (options.MaxOutputTokens.HasValue) config.MaxOutputTokens = options.MaxOutputTokens.Value;
+            if (options.StopSequences is { Count: > 0 }) config.StopSequences = options.StopSequences.ToList();
         }
 
-        if (request.OutputType != null)
+        if (options?.ResponseSchema != null)
         {
             config.ResponseMimeType = "application/json";
-            config.ResponseSchema = request.OutputType.GetSchemaForType().ToJsonSchema();
+            config.ResponseSchema = options.ResponseSchema.ToJsonSchema();
         }
 
-        if (request.AvailableTools != null)
+        if (tools != null)
         {
             config.Tools = [new Google.GenAI.Types.Tool
             {
-                FunctionDeclarations = request.AvailableTools.ToGeminiTools()
+                FunctionDeclarations = tools.ToGeminiTools()
             }];
         }
 
-        config.ToolConfig = request.ToolCallMode switch
+        config.ToolConfig = (options?.ToolCallMode ?? ToolCallMode.Auto) switch
         {
             ToolCallMode.None => new ToolConfig { FunctionCallingConfig = new FunctionCallingConfig { Mode = "NONE" } },
             ToolCallMode.Required => new ToolConfig { FunctionCallingConfig = new FunctionCallingConfig { Mode = "ANY" } },

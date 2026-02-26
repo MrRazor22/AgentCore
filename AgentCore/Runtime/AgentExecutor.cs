@@ -25,10 +25,11 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
         var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
         var runtime = ctx.Services.GetRequiredService<IToolExecutor>();
 
-        var options = new LLMOptions(
-            ToolCallMode: ToolCallMode.Auto,
-            ResponseSchema: ctx.Config.OutputType?.GetSchemaForType()
-        );
+        var options = new LLMOptions
+        {
+            ToolCallMode = ToolCallMode.Auto,
+            ResponseSchema = ctx.Config.OutputType?.GetSchemaForType()
+        };
 
         while (true)
         {

@@ -1,7 +1,7 @@
 using AgentCore.Chat;
 using AgentCore.Json;
-using AgentCore.LLM.Protocol;
-using AgentCore.Tools;
+using AgentCore.LLM;
+using AgentCore.Tooling;
 using OpenAI.Chat;
 using System.Text.Json.Nodes;
 
@@ -30,7 +30,7 @@ public static class OpenAIExtensions
             BinaryData.FromString(tool.ParametersSchema?.ToJsonString() ?? "{\"type\":\"object\"}")
         )).ToList();
 
-    public static IEnumerable<ChatMessage> ToChatMessages(this IList<Message> history)
+    public static IEnumerable<ChatMessage> ToChatMessages(this IReadOnlyList<Message> history)
     {
         foreach (var msg in history)
         {
@@ -67,9 +67,9 @@ public static class OpenAIExtensions
         }
     }
 
-    public static void ApplySamplingOptions(this ChatCompletionOptions opts, LLMRequest? request)
+    public static void ApplySamplingOptions(this ChatCompletionOptions opts, LLMOptions? options)
     {
-        var s = request?.Options;
+        var s = options;
         if (s == null) return;
 
         if (s.Temperature.HasValue) opts.Temperature = s.Temperature.Value;

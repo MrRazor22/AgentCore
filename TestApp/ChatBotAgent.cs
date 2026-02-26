@@ -1,6 +1,5 @@
 using AgentCore.BuiltInTools;
 using AgentCore.LLM.BuiltInTools;
-using AgentCore.LLM.Execution;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
@@ -30,12 +29,6 @@ namespace TestApp
                 .WithTools<SearchTools>()
                 .ConfigureServices(services =>
                 {
-                    services.Configure<ContextBudgetOptions>(o =>
-                    {
-                        o.MaxContextTokens = 8000;
-                        o.Margin = 0.8;
-                    });
-
                     services.Configure<FileMemoryOptions>(o =>
                     {
                     });
@@ -89,7 +82,7 @@ namespace TestApp
                 {
                     var sb = new StringBuilder();
 
-                    await foreach (var chunk in agent.InvokeStreamingAsync(goal, cts.Token))
+                    await foreach (var chunk in agent.InvokeStreamingAsync(goal, ct: cts.Token))
                     {
                         Console.Write(chunk);
                         sb.Append(chunk);
