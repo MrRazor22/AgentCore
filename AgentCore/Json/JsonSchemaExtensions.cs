@@ -44,16 +44,14 @@ public static class JsonSchemaExtensions
         type = Nullable.GetUnderlyingType(type) ?? type;
 
         if (type.IsEnum)
-
-            if (type.IsEnum)
-            {
-                var typeDesc = type.GetCustomAttribute<DescriptionAttribute>()?.Description;
-                return new JsonSchemaBuilder()
-                    .Type<string>()
-                    .Enum(Enum.GetNames(type))
-                    .Description(typeDesc ?? $"One of: {string.Join(", ", Enum.GetNames(type))}")
-                    .Build();
-            }
+        {
+            var typeDesc = type.GetCustomAttribute<DescriptionAttribute>()?.Description;
+            return new JsonSchemaBuilder()
+                .Type<string>()
+                .Enum(Enum.GetNames(type))
+                .Description(typeDesc ?? $"One of: {string.Join(", ", Enum.GetNames(type))}")
+                .Build();
+        }
 
         if (type.IsSimpleType()) return new JsonSchemaBuilder().Type(type.MapClrTypeToJsonType()).Build();
         if (type.IsArray) return new JsonSchemaBuilder().Type<Array>().Items(type.GetElementType()!.GetSchemaForType(visited)).Build();
@@ -100,29 +98,7 @@ public static class JsonSchemaExtensions
 
     private static bool IsNullableReference(PropertyInfo prop)
     {
-        var nullAttr = prop.GetCustomAttributes().FirstOrDefault(a => a.GetType().Name == "NullableAttribute");
-        if (nullAttr != null)
-        {
-            var flags = nullAttr.GetType().GetField("NullableFlags", BindingFlags.Public | BindingFlags.Instance);
-            if (flags?.GetValue(nullAttr) is byte b) return b == 2;
-            if (flags?.GetValue(nullAttr) is byte[] arr && arr.Length > 0) return arr[0] == 2;
-        }
-
-        var ctxAttr = prop.DeclaringType?.GetCustomAttributes().FirstOrDefault(a => a.GetType().Name == "NullableContextAttribute");
-        if (ctxAttr != null)
-        {
-            var flagField = ctxAttr.GetType().GetField("Flag", BindingFlags.Public | BindingFlags.Instance);
-            if (flagField?.GetValue(ctxAttr) is byte fb) return fb == 2;
-        }
-
-        var asmCtx = prop.Module.Assembly.GetCustomAttributes().FirstOrDefault(a => a.GetType().Name == "NullableContextAttribute");
-        if (asmCtx != null)
-        {
-            var flagField = asmCtx.GetType().GetField("Flag", BindingFlags.Public | BindingFlags.Instance);
-            if (flagField?.GetValue(asmCtx) is byte fb) return fb == 2;
-        }
-
-        return false;
+        return new NullabilityInfoContext().Create(prop).WriteState == NullabilityState.Nullable;
     }
 
     public static bool IsSimpleType(this Type type) =>
