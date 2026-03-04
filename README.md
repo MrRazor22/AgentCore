@@ -1,55 +1,62 @@
 # AgentCore
 
-A minimal, un-opinionated agent framework for .NET.
+An agent primitive for .NET — not a framework, a foundation.
 
-Build any agent product you want — from a simple chatbot to a complex autonomous system — without digging through layers of abstraction. Inspired by [smolagents](https://github.com/huggingface/smolagents): the entire core is ~1,400 lines of code, zero opinions, zero magic.
+An agent is a loop over a conversation. The industry wraps this in state graphs, session objects, memory abstractions, and middleware pipelines. AgentCore strips it down to what actually matters: a conversation, a loop, and tools. ~1,400 lines. 2 dependencies. Zero containers.
 
 ---
 
 ## Design Philosophy
 
-### Agent is a Layer, Not a Wrapper
+### This is All You Need
 
-Most agent frameworks (Semantic Kernel, AutoGen, LangChain, Google ADK) expose LLM-level primitives — chat messages, roles, model options — directly at the agent level. The agent becomes a thin wrapper around the LLM API. 
+Most agent frameworks solve problems they created. They introduce session state dictionaries, then need state management. They add memory abstractions, then need memory lifecycle hooks. They build middleware pipelines, then need filter chains to control them.
 
-AgentCore disagrees. **An agent is a higher-level abstraction than an LLM call.** At the agent surface:
+An LLM is stateless. You give it messages, it responds. AgentCore aligns with that reality instead of fighting it. The entire agent runtime is: load conversation → run the loop → save conversation. Everything else — context management, tool execution, crash recovery — falls out naturally from this design.
+
+### Agent as a Boundary
+
+Semantic Kernel exposes `ChatMessageContent`, `KernelArguments`, `FunctionResult` at the agent surface. Google ADK exposes `session.state` and `session.events`. LangChain exposes `AIMessage` and `HumanMessage`. In every case, the agent leaks LLM internals to the caller because the "agent" is really just a thin wrapper around the model API.
+
+AgentCore draws a hard boundary. **The agent is a service, not a wrapper.** At the surface:
 
 - **Input:** a task, as a `string`
-- **Output:** a final response, as a `string`
+- **Output:** a result, as a `string`
 
-That's it. How the agent talks to the model, manages context, calls tools, retries — these are _internal concerns_, not things the caller should worry about.
+Messages, roles, tool calls, context windows — these are internal implementation details. Your application code has zero coupling to LLM concepts. If you swap the agent implementation tomorrow, nothing else changes.
 
 ```csharp
-// This is the entire public contract of an agent.
+// This is the entire public contract.
 string response = await agent.InvokeAsync("What's the weather in Tokyo?");
 ```
 
-### Executor = Sandbox for Your Agent Logic
+### Conversation is the Only State
 
-The `AgentExecutor` is where the agent loop lives. The default `ToolCallingLoop` is the standard tool-calling agent loop in ~60 lines. But you can replace it with anything — ReAct, plan-and-execute, chain-of-thought, multi-agent delegation. Think of it as a sandbox: you get the full power of the framework's services (LLM, tools, memory, tokens) and you write whatever control flow you want.
+SK manages `ChatHistory` inside `AgentThread` with `ChatMessageStore` options. ADK maintains `session.state` (a key-value scratchpad), `session.events` (an event timeline), and magic key prefixes (`user:`, `app:`) for cross-session persistence. LangGraph uses typed state graphs with channel-based state management.
 
-### Sensible Defaults, Total Replaceability
+AgentCore asks: **why?**
 
-Every component has a default that works out of the box:
+The LLM doesn't read your session state dictionary. It reads messages. The conversation IS the session. The message list IS the memory. There is no separate "state" because there's nothing to track outside the conversation.
 
-| Concern | Default | Interface |
-|---|---|---|
-| Agent loop | `ToolCallingLoop` | `IAgentExecutor` |
-| Memory | `FileMemory` (JSON persistence) | `IAgentMemory` |
-| Context strategy | `ContextManager` (tail-trim) | `IContextManager` |
-| Token counting | `ApproximateTokenCounter` (len/4) | `ITokenCounter` |
-| Token tracking | `TokenManager` | `ITokenManager` |
+This has consequences that matter:
 
-Don't like any of them? Implement the interface, register it via DI. No base classes to inherit, no policies to configure.
+- **The agent is stateless.** `LLMAgent` holds zero mutable state. One instance safely serves thousands of concurrent sessions — no locks, no per-session copies, no state synchronization.
+- **Crash recovery is automatic.** The `ToolCallingLoop` saves the conversation after every tool turn. Crash mid-execution? Resume with the same `sessionId` — the agent picks up from the last completed turn. No checkpointer system, no state graph snapshots, no external runtime. Saving a JSON file costs milliseconds; an LLM call costs seconds. The bottleneck makes this trivially cheap.
+- **Cross-session knowledge is a tool, not a framework concern.** Need the agent to remember something from 3 months ago? Give it a search tool. That's RAG — it belongs in a tool, not baked into the agent's memory model.
 
-### No Middleware, No Filters — Hooks
+### Everything is Content
 
-Instead of middleware pipelines or filter chains, AgentCore gives you **four hooks**:
+`IContent` is the universal primitive. Text, tool calls, tool results, tool errors — everything implements `IContent` with a single method: `ForLlm()`. There is one pipeline, one flow.
 
-- `BeforeToolCall` / `AfterToolCall` — intercept tool execution
-- `BeforeModelCall` / `AfterModelCall` — intercept LLM calls
+When a tool throws an exception, it becomes a `ToolResult` containing the error — just another message the LLM can read and self-correct from. No special error channels, no retry plugins, no `FunctionInvocationFilter`. Errors flow through the same conversation pipeline as everything else.
 
-Each hook can observe, short-circuit (return a cached result), or replace the result. That's the entire controllability surface. If you need more, write your own executor.
+Fewer code paths means fewer bugs. The LLM doesn't distinguish between a tool result and an error message — why should the framework?
+
+### An Agent Primitive, Not a Framework
+
+~1,400 lines is not a limitation. It's a statement about how much code a correct agent primitive actually requires. Tool calling, context management, session persistence, crash recovery, typed output, streaming, hooks — all present, all working, all in 1,400 lines.
+
+What's missing isn't missing by accident. Multi-agent orchestration is an application-level concern — you compose it on top. RAG is a tool. Multi-modal is a provider concern. The framework doesn't own these because they don't belong in the primitive.
 
 ---
 
@@ -154,7 +161,7 @@ var agent = LLMAgent.Create("agent")
 │                                                                │
 │    LLMAgent orchestrates: Memory → Executor → Memory           │
 ├────────────────────────────────────────────────────────────────┤
-│                   Agent Executor Layer (Sandbox)                │
+│                   Agent Executor Layer (Control Flow)           │
 │    IAgentExecutor: your agent logic lives here                 │
 │                                                                │
 │    Default: ToolCallingLoop                                    │
@@ -203,8 +210,8 @@ var agent = LLMAgent.Create("agent")
 | File | Lines | Purpose |
 |---|---|---|
 | `Agent.cs` | ~93 | `IAgent` interface + `LLMAgent` implementation. String-in, string-out. Orchestrates memory recall → executor → memory update. |
-| `AgentBuilder.cs` | ~90 | Fluent builder. Registers DI services, wires hooks, builds `LLMAgent`. |
-| `AgentExecutor.cs` | ~78 | `IAgentExecutor` interface + `ToolCallingLoop` default. The agent loop sandbox. |
+| `AgentBuilder.cs` | ~90 | Fluent builder. Wires components, hooks, and options via explicit composition. Builds `LLMAgent`. |
+| `AgentExecutor.cs` | ~78 | `IAgentExecutor` interface + `ToolCallingLoop` default. The agent loop. |
 | `AgentMemory.cs` | ~83 | `IAgentMemory` interface + `FileMemory` default. Recall/update/clear with JSON file persistence. |
 
 ### LLM
@@ -309,7 +316,7 @@ public class MyProvider : ILLMProvider
 }
 
 // Register it:
-builder.Services.AddSingleton<ILLMProvider, MyProvider>();
+builder.WithProvider(new MyProvider());
 ```
 
 ---
@@ -361,18 +368,14 @@ public interface IAgentExecutor
 The context gives you everything:
 
 ```csharp
-public class MyExecutor : IAgentExecutor
+public class MyExecutor(ILLMExecutor llm, IToolExecutor tools) : IAgentExecutor
 {
     public async IAsyncEnumerable<string> ExecuteStreamingAsync(
         IAgentContext ctx, CancellationToken ct = default)
     {
-        // Access all framework services
-        var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
-        var tools = ctx.Services.GetRequiredService<IToolExecutor>();
-
-        // Access the config, user input, scratchpad
+        // Access the config, user input, messages
         var input = ctx.UserInput;
-        var messages = ctx.ScratchPad;
+        var messages = ctx.Messages;
 
         // Build any agent loop you want.
         // ReAct, plan-and-execute, multi-step reasoning, whatever.
@@ -380,21 +383,19 @@ public class MyExecutor : IAgentExecutor
 }
 
 // Register it:
-builder.ConfigureServices(s =>
-    s.AddTransient<IAgentExecutor, MyExecutor>());
+builder.WithExecutor(new MyExecutor(llmExecutor, toolExecutor));
 ```
 
 ---
 
 ## Dependencies
 
-The core `AgentCore` package has exactly **3 dependencies**:
+The core `AgentCore` package has exactly **2 dependencies**:
 
-- `Microsoft.Extensions.DependencyInjection`
 - `Microsoft.Extensions.Logging`
 - `System.ComponentModel.Annotations`
 
-That's it. No HTTP clients, no LLM SDKs, no serialization libraries beyond `System.Text.Json`.
+That's it. No DI containers (`Microsoft.Extensions.DependencyInjection` was intentionally removed for maximum portability), no HTTP clients, no LLM SDKs, no serialization libraries beyond `System.Text.Json`.
 
 ---
 
@@ -404,7 +405,7 @@ That's it. No HTTP clients, no LLM SDKs, no serialization libraries beyond `Syst
 AgentCore/                          # Core framework (~1,400 lines)
 ├── Runtime/
 │   ├── Agent.cs                    # IAgent, LLMAgent — string in, string out
-│   ├── AgentBuilder.cs             # Fluent builder + DI wiring
+│   ├── AgentBuilder.cs             # Fluent builder + explicit composition
 │   ├── AgentExecutor.cs            # IAgentExecutor, ToolCallingLoop
 │   └── AgentMemory.cs              # IAgentMemory, FileMemory
 ├── LLM/
@@ -456,15 +457,14 @@ AgentCore.Gemini/                   # Gemini provider package
 ```
 User calls agent.InvokeAsync("task") or agent.InvokeStreamingAsync("task")
   │
-  ├── Create DI scope
   ├── Generate session ID (if not provided)
   ├── memory.RecallAsync(sessionId) → load past messages
-  ├── Build AgentContext (config, services, input, scratchpad)
-  ├── Add system prompt to scratchpad
+  ├── Build AgentContext (config, input)
+  ├── Add system prompt to messages
   │
   ├── executor.ExecuteStreamingAsync(ctx)    ← your agent logic
   │     │
-  │     ├── Add user message to scratchpad
+  │     ├── Add user message to messages
   │     │
   │     └── LOOP:
   │           ├── llmExecutor.StreamAsync(messages, options)
@@ -481,7 +481,7 @@ User calls agent.InvokeAsync("task") or agent.InvokeStreamingAsync("task")
   │           │     ├── [BeforeToolCall hook]
   │           │     ├── toolExecutor.HandleToolCallAsync(call)
   │           │     ├── [AfterToolCall hook]
-  │           │     ├── append results to scratchpad
+  │           │     ├── append results to messages
   │           │     └── continue loop
   │           │
   │           └── if no tool calls → break (final response)
