@@ -28,7 +28,7 @@ public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoo
         var options = new LLMOptions
         {
             ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = ctx.Config.OutputType?.GetSchemaForType()
+            ResponseSchema = ctx.OutputType?.GetSchemaForType()
         };
 
         while (true)

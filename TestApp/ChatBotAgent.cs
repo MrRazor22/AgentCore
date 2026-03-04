@@ -1,3 +1,4 @@
+using AgentCore;
 using AgentCore.BuiltInTools;
 using AgentCore.Json;
 using AgentCore.LLM;

@@ -1,18 +1,18 @@
 using AgentCore.Chat;
 using AgentCore.LLM;
+using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Runtime;
+namespace AgentCore;
 
 public sealed class AgentConfig
 {
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
     public int MaxIterations { get; set; } = 50;
-    public Type? OutputType { get; set; }
 }
 
 public sealed class AgentBuilder
@@ -44,7 +44,6 @@ public sealed class AgentBuilder
     public AgentBuilder WithInstructions(string prompt) { _config.SystemPrompt = prompt; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
-    public AgentBuilder WithOutput<T>() { _config.OutputType = typeof(T); return this; }
     public AgentBuilder ConfigureServices(Action<IServiceCollection> configure) { configure(Services); return this; }
 
     // Executor callbacks

@@ -1,38 +1,12 @@
 using AgentCore.Chat;
-using AgentCore.Tooling;
+using AgentCore.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace AgentCore.Runtime;
-
-public interface IAgentContext
-{
-    string SessionId { get; }
-    AgentConfig Config { get; }
-    IList<Message> Messages { get; }
-    string UserInput { get; }
-    IServiceProvider Services { get; }
-    CancellationToken CancellationToken { get; }
-}
-
-public sealed class AgentContext(
-    string sessionId,
-    AgentConfig config,
-    IServiceProvider services,
-    string userInput,
-    CancellationToken cancellationToken
-) : IAgentContext
-{
-    public string SessionId => sessionId;
-    public AgentConfig Config => config;
-    public IServiceProvider Services => services;
-    public string UserInput => userInput;
-    public CancellationToken CancellationToken => cancellationToken;
-    public IList<Message> Messages { get; } = new List<Message>();
-}
-
+namespace AgentCore;
+ 
 public interface IAgent
 {
     Task<string> InvokeAsync(string input, string? sessionId = null, CancellationToken ct = default);
@@ -51,31 +25,35 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
     public async Task<string> InvokeAsync(string input, string? sessionId = null, CancellationToken ct = default)
     {
         var sb = new StringBuilder();
-        await foreach (var chunk in InvokeStreamingAsync(input, sessionId, ct))
+        await foreach (var chunk in CoreInvokeStreamingAsync(input, sessionId, null, ct))
             sb.Append(chunk);
         return sb.ToString();
     }
 
     public async Task<T?> InvokeAsync<T>(string input, string? sessionId = null, CancellationToken ct = default)
     {
-        var originalOutput = _config.OutputType;
-        _config.OutputType = typeof(T);
-        try
-        {
-            var json = await InvokeAsync(input, sessionId, ct);
-            if (string.IsNullOrWhiteSpace(json)) return default;
-            return System.Text.Json.JsonSerializer.Deserialize<T>(json);
-        }
-        finally
-        {
-            _config.OutputType = originalOutput;
-        }
+        var sb = new StringBuilder();
+        await foreach (var chunk in CoreInvokeStreamingAsync(input, sessionId, typeof(T), ct))
+            sb.Append(chunk);
+            
+        var json = sb.ToString();
+        if (string.IsNullOrWhiteSpace(json)) return default;
+        return System.Text.Json.JsonSerializer.Deserialize<T>(json);
     }
 
-    public async IAsyncEnumerable<string> InvokeStreamingAsync(
+    public IAsyncEnumerable<string> InvokeStreamingAsync(
         string input,
         string? sessionId = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        CancellationToken ct = default)
+    {
+        return CoreInvokeStreamingAsync(input, sessionId, null, ct);
+    }
+
+    private async IAsyncEnumerable<string> CoreInvokeStreamingAsync(
+        string input,
+        string? sessionId,
+        Type? outputType,
+        [EnumeratorCancellation] CancellationToken ct)
     {
         using var scope = _services.CreateScope();
         sessionId ??= Guid.NewGuid().ToString("N");
@@ -88,7 +66,7 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
         {
             // Tools are already registered in the scoped ToolRegistry via AgentBuilder
 
-            var ctx = new AgentContext(sessionId, _config, scope.ServiceProvider, input, ct);
+            var ctx = new AgentContext(sessionId, _config, scope.ServiceProvider, input, outputType, ct);
             
             var pastMessages = await _memory.RecallAsync(sessionId);
             if (pastMessages.Count > 0)
