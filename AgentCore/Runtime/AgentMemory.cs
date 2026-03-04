@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AgentCore.Chat;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -6,8 +7,8 @@ namespace AgentCore.Runtime;
 
 public interface IAgentMemory
 {
-    Task<IList<Message>> RecallAsync(string sessionId, string userRequest);
-    Task UpdateAsync(string sessionId, string userRequest, string response);
+    Task<IList<Message>> RecallAsync(string sessionId);
+    Task UpdateAsync(string sessionId, IList<Message> messages);
     Task ClearAsync(string sessionId);
 }
 
@@ -21,62 +22,63 @@ public sealed class FileMemoryOptions
 public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemory
 {
     private readonly FileMemoryOptions _options = options?.Value ?? new FileMemoryOptions();
-    private string? _cachedSessionId;
-    private IList<Message>? _cached;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
     public FileMemory() : this(null) { }
 
-    public Task<IList<Message>> RecallAsync(string sessionId, string userRequest)
+    private SemaphoreSlim GetLock(string sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+
+    public async Task<IList<Message>> RecallAsync(string sessionId)
     {
-        if (_options.PersistDir == null) return Task.FromResult<IList<Message>>(new List<Message>());
-
-        if (_cachedSessionId == sessionId && _cached != null)
-            return Task.FromResult(_cached);
-
-        _cachedSessionId = sessionId;
-        _cached = new List<Message>();
+        if (_options.PersistDir == null) return new List<Message>();
 
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
-        if (!File.Exists(file)) return Task.FromResult(_cached);
+        if (!File.Exists(file)) return new List<Message>();
 
-        var json = File.ReadAllText(file);
-        _cached = JsonSerializer.Deserialize<List<Message>>(json) ?? new List<Message>();
-        return Task.FromResult(_cached);
+        var semaphore = GetLock(sessionId);
+        await semaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var json = await File.ReadAllTextAsync(file).ConfigureAwait(false);
+            return Extensions.FromJson(json);
+        }
+        catch
+        {
+            return new List<Message>();
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
-    public Task UpdateAsync(string sessionId, string userRequest, string response)
+    public async Task UpdateAsync(string sessionId, IList<Message> messages)
     {
-        if (_options.PersistDir == null) return Task.CompletedTask;
+        if (_options.PersistDir == null) return;
 
-        if (_cachedSessionId != sessionId || _cached == null)
-            _cached = RecallAsync(sessionId, userRequest).Result;
-
-        _cached.AddUser(userRequest);
-        _cached.AddAssistant(response);
-        TrimHistory(_cached);
-
+        Directory.CreateDirectory(_options.PersistDir);
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
-        File.WriteAllText(file, _cached.ToJson());
-
-        return Task.CompletedTask;
+        
+        var semaphore = GetLock(sessionId);
+        await semaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var json = messages.ToJson();
+            await File.WriteAllTextAsync(file, json).ConfigureAwait(false);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     public Task ClearAsync(string sessionId)
     {
-        if (_cachedSessionId == sessionId) { _cached = null; _cachedSessionId = null; }
-
         if (_options.PersistDir == null) return Task.CompletedTask;
 
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
         if (File.Exists(file)) File.Delete(file);
 
         return Task.CompletedTask;
-    }
-
-    private void TrimHistory(IList<Message> convo)
-    {
-        if (_options.MaxChatHistory <= 0) return;
-        while (convo.Count > _options.MaxChatHistory)
-            convo.RemoveAt(0);
     }
 }

@@ -69,6 +69,53 @@ public static class Extensions
     public static string ToJson(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
         => JsonSerializer.Serialize(chat.GetSerializableMessages(filter), IndentedOptions);
 
+    public static IList<Message> FromJson(string json)
+    {
+        var items = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json);
+        if (items == null) return new List<Message>();
+
+        var messages = new List<Message>();
+        foreach (var item in items)
+        {
+            var roleStr = item.TryGetValue("role", out var r) ? r.GetString() ?? "user" : "user";
+            var role = Enum.TryParse<Role>(roleStr, true, out var parsed) ? parsed : Role.User;
+
+            IContent content;
+
+            if (item.TryGetValue("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
+            {
+                var tc = toolCallsEl.EnumerateArray().FirstOrDefault();
+                var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
+                var name = "";
+                var args = new JsonObject();
+
+                if (tc.TryGetProperty("function", out var fn))
+                {
+                    name = fn.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                    if (fn.TryGetProperty("arguments", out var a))
+                        args = JsonNode.Parse(a.GetRawText())?.AsObject() ?? new JsonObject();
+                }
+
+                content = new ToolCall(id, name, args);
+            }
+            else if (item.TryGetValue("tool_call_id", out var callIdEl))
+            {
+                var callId = callIdEl.GetString() ?? "";
+                var resultText = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
+                content = new ToolResult(callId, new Text(resultText));
+            }
+            else
+            {
+                var text = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
+                content = new Text(text);
+            }
+
+            messages.Add(new Message(role, content));
+        }
+
+        return messages;
+    }
+
     public static bool IsLastAssistantMessageSame(this IList<Message> chat, string newMessage)
     {
         if (string.IsNullOrWhiteSpace(newMessage)) return false;

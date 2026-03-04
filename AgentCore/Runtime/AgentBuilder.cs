@@ -3,6 +3,7 @@ using AgentCore.LLM;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Runtime;
 
@@ -34,7 +35,10 @@ public sealed class AgentBuilder
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
         Services.AddSingleton<ITokenManager, TokenManager>();
         Services.AddScoped<IToolCallParser, ToolCallParser>();
-        Services.AddTransient(typeof(IAgentExecutor), typeof(ToolCallingLoop));
+        Services.AddTransient<IAgentExecutor>(sp => new ToolCallingLoop(
+            sp.GetRequiredService<IAgentMemory>(),
+            sp.GetRequiredService<ILogger<ToolCallingLoop>>()
+        ));
     }
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }

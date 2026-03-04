@@ -9,30 +9,34 @@ namespace AgentCore.Runtime;
 
 public interface IAgentContext
 {
+    string SessionId { get; }
     AgentConfig Config { get; }
-    IList<Message> ScratchPad { get; }
+    IList<Message> Messages { get; }
     string UserInput { get; }
     IServiceProvider Services { get; }
     CancellationToken CancellationToken { get; }
 }
 
 public sealed class AgentContext(
+    string sessionId,
     AgentConfig config,
     IServiceProvider services,
     string userInput,
     CancellationToken cancellationToken
 ) : IAgentContext
 {
+    public string SessionId => sessionId;
     public AgentConfig Config => config;
     public IServiceProvider Services => services;
     public string UserInput => userInput;
     public CancellationToken CancellationToken => cancellationToken;
-    public IList<Message> ScratchPad { get; } = new List<Message>();
+    public IList<Message> Messages { get; } = new List<Message>();
 }
 
 public interface IAgent
 {
     Task<string> InvokeAsync(string input, string? sessionId = null, CancellationToken ct = default);
+    Task<T?> InvokeAsync<T>(string input, string? sessionId = null, CancellationToken ct = default);
     IAsyncEnumerable<string> InvokeStreamingAsync(string input, string? sessionId = null, CancellationToken ct = default);
 }
 
@@ -52,6 +56,22 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
         return sb.ToString();
     }
 
+    public async Task<T?> InvokeAsync<T>(string input, string? sessionId = null, CancellationToken ct = default)
+    {
+        var originalOutput = _config.OutputType;
+        _config.OutputType = typeof(T);
+        try
+        {
+            var json = await InvokeAsync(input, sessionId, ct);
+            if (string.IsNullOrWhiteSpace(json)) return default;
+            return System.Text.Json.JsonSerializer.Deserialize<T>(json);
+        }
+        finally
+        {
+            _config.OutputType = originalOutput;
+        }
+    }
+
     public async IAsyncEnumerable<string> InvokeStreamingAsync(
         string input,
         string? sessionId = null,
@@ -68,25 +88,29 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
         {
             // Tools are already registered in the scoped ToolRegistry via AgentBuilder
 
-            var ctx = new AgentContext(_config, scope.ServiceProvider, input, ct);
-            ctx.ScratchPad.AddSystem(_config.SystemPrompt);
-
-            var pastMessages = await _memory.RecallAsync(sessionId, input);
-            foreach (var msg in pastMessages)
+            var ctx = new AgentContext(sessionId, _config, scope.ServiceProvider, input, ct);
+            
+            var pastMessages = await _memory.RecallAsync(sessionId);
+            if (pastMessages.Count > 0)
             {
-                ctx.ScratchPad.Add(msg);
+                // Resume from existing state
+                foreach (var msg in pastMessages)
+                {
+                    ctx.Messages.Add(msg);
+                }
+            }
+            else
+            {
+                // New session
+                ctx.Messages.AddSystem(_config.SystemPrompt);
             }
 
             var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
-            var sb = new StringBuilder();
 
             await foreach (var chunk in executor.ExecuteStreamingAsync(ctx, ct))
             {
-                sb.Append(chunk);
                 yield return chunk;
             }
-
-            await _memory.UpdateAsync(sessionId, input, sb.ToString());
         }
     }
 }

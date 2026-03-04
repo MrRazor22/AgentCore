@@ -14,13 +14,13 @@ public interface IAgentExecutor
     IAsyncEnumerable<string> ExecuteStreamingAsync(IAgentContext ctx, CancellationToken ct = default);
 }
 
-public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentExecutor
+public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoop> _logger) : IAgentExecutor
 {
     public async IAsyncEnumerable<string> ExecuteStreamingAsync(
         IAgentContext ctx,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        ctx.ScratchPad.AddUser(ctx.UserInput ?? "No User input.");
+        ctx.Messages.AddUser(ctx.UserInput ?? "No User input.");
 
         var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
         var runtime = ctx.Services.GetRequiredService<IToolExecutor>();
@@ -36,9 +36,9 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
             ct.ThrowIfCancellationRequested();
 
             var textBuffer = new StringBuilder();
-            var toolCalls = new List<ToolCall>();
+            var runningTools = new List<Task<ToolResult>>();
 
-            await foreach (var evt in llm.StreamAsync([.. ctx.ScratchPad], options, ct))
+            await foreach (var evt in llm.StreamAsync([.. ctx.Messages], options, ct))
             {
                 switch (evt)
                 {
@@ -48,30 +48,27 @@ public sealed class ToolCallingLoop(ILogger<ToolCallingLoop> _logger) : IAgentEx
                         break;
 
                     case ToolCallEvent tc:
-                        toolCalls.Add(tc.Call);
+                        ctx.Messages.AddAssistantToolCall(tc.Call);
+                        _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
+                        runningTools.Add(runtime.HandleToolCallAsync(tc.Call, ct));
                         break;
                 }
             }
 
-            if (toolCalls.Count == 0)
+            if (runningTools.Count == 0)
             {
-                ctx.ScratchPad.AddAssistant(textBuffer.ToString().Trim());
+                ctx.Messages.AddAssistant(textBuffer.ToString().Trim());
+                await _memory.UpdateAsync(ctx.SessionId, ctx.Messages);
                 break;
             }
 
-            foreach (var tc in toolCalls)
-                ctx.ScratchPad.AddAssistantToolCall(tc);
-
-            var results = await Task.WhenAll(
-                toolCalls.Select(tc =>
-                {
-                    _logger.LogInformation("Tool called: {ToolName}", tc.Name);
-                    return runtime.HandleToolCallAsync(tc, ct);
-                })
-            );
+            var results = await Task.WhenAll(runningTools);
 
             foreach (var result in results)
-                ctx.ScratchPad.AppendToolResult(result);
+                ctx.Messages.AppendToolResult(result);
+
+            // Checkpoint after the turn completes
+            await _memory.UpdateAsync(ctx.SessionId, ctx.Messages);
         }
     }
 }
