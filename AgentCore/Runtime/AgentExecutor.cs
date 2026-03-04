@@ -2,7 +2,6 @@ using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.Tooling;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -14,7 +13,12 @@ public interface IAgentExecutor
     IAsyncEnumerable<string> ExecuteStreamingAsync(IAgentContext ctx, CancellationToken ct = default);
 }
 
-public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoop> _logger) : IAgentExecutor
+public sealed class ToolCallingLoop(
+    IAgentMemory _memory,
+    ILLMExecutor _llm,
+    IToolExecutor _runtime,
+    ILogger<ToolCallingLoop> _logger
+) : IAgentExecutor
 {
     public async IAsyncEnumerable<string> ExecuteStreamingAsync(
         IAgentContext ctx,
@@ -22,8 +26,7 @@ public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoo
     {
         ctx.Messages.AddUser(ctx.UserInput ?? "No User input.");
 
-        var llm = ctx.Services.GetRequiredService<ILLMExecutor>();
-        var runtime = ctx.Services.GetRequiredService<IToolExecutor>();
+
 
         var options = new LLMOptions
         {
@@ -38,7 +41,7 @@ public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoo
             var textBuffer = new StringBuilder();
             var runningTools = new List<Task<ToolResult>>();
 
-            await foreach (var evt in llm.StreamAsync([.. ctx.Messages], options, ct))
+            await foreach (var evt in _llm.StreamAsync([.. ctx.Messages], options, ct))
             {
                 switch (evt)
                 {
@@ -50,7 +53,7 @@ public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoo
                     case ToolCallEvent tc:
                         ctx.Messages.AddAssistantToolCall(tc.Call);
                         _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
-                        runningTools.Add(runtime.HandleToolCallAsync(tc.Call, ct));
+                        runningTools.Add(_runtime.HandleToolCallAsync(tc.Call, ct));
                         break;
                 }
             }

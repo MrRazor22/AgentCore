@@ -1,5 +1,4 @@
 using AgentCore.LLM;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace AgentCore.Providers.Gemini;
 
@@ -11,12 +10,12 @@ public static class GeminiServiceExtensions
         string? project = null,
         string? location = null)
     {
-        builder.Services.Configure(configure);
-        builder.Services.AddSingleton<ILLMProvider>(sp =>
-        {
-            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LLMOptions>>().Value;
-            return new GeminiLLMClient(opts, project, location);
-        });
+        var options = new LLMOptions();
+        configure(options);
+
+        var provider = new GeminiLLMClient(options, project, location);
+        builder.WithProvider(provider);
+
         return builder;
     }
 }

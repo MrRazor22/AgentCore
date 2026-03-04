@@ -3,8 +3,8 @@ using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore;
 
@@ -19,7 +19,13 @@ public sealed class AgentBuilder
 {
     private readonly AgentConfig _config = new();
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
-    public IServiceCollection Services { get; } = new ServiceCollection();
+
+    public IAgentMemory? Memory { get; set; }
+    public IContextManager? ContextManager { get; set; }
+    public ITokenCounter? TokenCounter { get; set; }
+    public ITokenManager? TokenManager { get; set; }
+    public ILoggerFactory? LoggerFactory { get; set; }
+    public ILLMProvider? Provider { get; set; }
 
     // Callback storage
     private Func<ToolCall, CancellationToken, Task<IContent?>>? _beforeToolCall;
@@ -27,24 +33,19 @@ public sealed class AgentBuilder
     private Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? _beforeModelCall;
     private Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? _afterModelCall;
 
-    public AgentBuilder()
-    {
-        Services.AddLogging();
-        Services.AddSingleton<IAgentMemory, FileMemory>();
-        Services.AddSingleton<IContextManager, ContextManager>();
-        Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
-        Services.AddSingleton<ITokenManager, TokenManager>();
-        Services.AddTransient<IAgentExecutor>(sp => new ToolCallingLoop(
-            sp.GetRequiredService<IAgentMemory>(),
-            sp.GetRequiredService<ILogger<ToolCallingLoop>>()
-        ));
-    }
+    public AgentBuilder() { }
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithInstructions(string prompt) { _config.SystemPrompt = prompt; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
-    public AgentBuilder ConfigureServices(Action<IServiceCollection> configure) { configure(Services); return this; }
+
+    public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
+    public AgentBuilder WithContextManager(IContextManager contextManager) { ContextManager = contextManager; return this; }
+    public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
+    public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
+    public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { LoggerFactory = loggerFactory; return this; }
+    public AgentBuilder WithProvider(ILLMProvider provider) { Provider = provider; return this; }
 
     // Executor callbacks
     public AgentBuilder BeforeToolCall(Func<ToolCall, CancellationToken, Task<IContent?>> callback) { _beforeToolCall = callback; return this; }
@@ -54,38 +55,41 @@ public sealed class AgentBuilder
 
     public LLMAgent Build()
     {
-        Services.AddScoped<ToolRegistry>(sp =>
-        {
-            var reg = new ToolRegistry();
-            foreach (var init in _toolRegistrations) init(reg);
-            return reg;
-        });
+        if (Provider == null)
+            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
-        Services.AddScoped<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistry>());
+        var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
+        var memory = Memory ?? new FileMemory();
+        var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
+        var contextManager = ContextManager ?? new ContextManager(tokenCounter, loggerFactory.CreateLogger<ContextManager>());
+        var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        // Wire executor callbacks via DI factories
-        Services.AddScoped<IToolExecutor>(sp => new ToolExecutor(sp.GetRequiredService<IToolRegistry>())
+        var registry = new ToolRegistry();
+        foreach (var init in _toolRegistrations) init(registry);
+
+        var toolExecutor = new ToolExecutor(registry)
         {
             BeforeCall = _beforeToolCall,
             AfterCall = _afterToolCall
-        });
+        };
 
-        Services.AddScoped<ILLMExecutor>(sp => new LLMExecutor(
-            sp.GetRequiredService<ILLMProvider>(),
-            sp.GetRequiredService<IToolRegistry>(),
-            sp.GetRequiredService<IContextManager>(),
-            sp.GetRequiredService<ITokenManager>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LLMExecutor>>())
+        var llmExecutor = new LLMExecutor(
+            Provider,
+            registry,
+            contextManager,
+            tokenManager,
+            loggerFactory.CreateLogger<LLMExecutor>())
         {
             BeforeCall = _beforeModelCall,
             AfterCall = _afterModelCall
-        });
+        };
 
-        var provider = Services.BuildServiceProvider(validateScopes: true);
+        var executor = new ToolCallingLoop(
+            memory,
+            llmExecutor,
+            toolExecutor,
+            loggerFactory.CreateLogger<ToolCallingLoop>());
 
-        if (provider.GetService<ILLMProvider>() == null)
-            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
-
-        return new LLMAgent(provider, _config);
+        return new LLMAgent(executor, memory, _config, loggerFactory.CreateLogger<LLMAgent>());
     }
 }

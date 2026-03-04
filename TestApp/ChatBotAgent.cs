@@ -6,7 +6,6 @@ using AgentCore.LLM.BuiltInTools;
 using AgentCore.Providers.OpenAI;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System.Text;
@@ -56,28 +55,21 @@ namespace TestApp
                         : $"\n  [Model] {events.Count} events (final response)");
                     Console.ForegroundColor = originalColor;
                 })
-                .ConfigureServices(services =>
+                .WithLoggerFactory(Microsoft.Extensions.Logging.LoggerFactory.Create(logging =>
                 {
-                    services.Configure<FileMemoryOptions>(o =>
-                    {
-                    });
+                    logging.ClearProviders();
 
-                    services.AddLogging(logging =>
-                    {
-                        logging.ClearProviders();
-
-                        Log.Logger = new LoggerConfiguration()
-                            .MinimumLevel.Verbose()
-                            .WriteTo.Console(Serilog.Events.LogEventLevel.Information)
-                            .WriteTo.File(
-                                @"D:\AgentCore\AgentCore.log",
-                                Serilog.Events.LogEventLevel.Verbose,
-                                rollingInterval: RollingInterval.Day)
-                            .CreateLogger();
-                        Log.Debug("Logger initialized");
-                        logging.AddSerilog(dispose: true);
-                    });
-                })
+                    Log.Logger = new LoggerConfiguration()
+                        .MinimumLevel.Verbose()
+                        .WriteTo.Console(Serilog.Events.LogEventLevel.Information)
+                        .WriteTo.File(
+                            @"D:\AgentCore\AgentCore.log",
+                            Serilog.Events.LogEventLevel.Verbose,
+                            rollingInterval: RollingInterval.Day)
+                        .CreateLogger();
+                    Log.Debug("Logger initialized");
+                    logging.AddSerilog(dispose: true);
+                }))
                 .Build();
 
             while (true)

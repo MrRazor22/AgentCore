@@ -1,7 +1,7 @@
 using AgentCore.Chat;
 using AgentCore.LLM;
 using AgentCore.Tooling;
-using Microsoft.Extensions.Options;
+
 using OpenAI;
 using OpenAI.Chat;
 using System.ClientModel;
@@ -13,9 +13,9 @@ internal sealed class OpenAILLMClient : ILLMProvider
     private readonly OpenAIClient _client;
     private readonly string _defaultModel;
 
-    public OpenAILLMClient(IOptions<LLMOptions> options)
+    public OpenAILLMClient(LLMOptions options)
     {
-        var opts = options.Value;
+        var opts = options;
         _client = new OpenAIClient(
             new ApiKeyCredential(opts.ApiKey!),
             new OpenAIClientOptions { Endpoint = new Uri(opts.BaseUrl!) }

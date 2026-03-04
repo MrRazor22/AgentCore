@@ -1,7 +1,7 @@
 using AgentCore.Chat;
 using AgentCore.Runtime;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -14,10 +14,24 @@ public interface IAgent
     IAsyncEnumerable<string> InvokeStreamingAsync(string input, string? sessionId = null, CancellationToken ct = default);
 }
 
-public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : IAgent
+public sealed class LLMAgent : IAgent
 {
-    private readonly IAgentMemory _memory = _services.GetRequiredService<IAgentMemory>();
-    private readonly ILogger<LLMAgent> _logger = _services.GetRequiredService<ILogger<LLMAgent>>();
+    private readonly IAgentExecutor _executor;
+    private readonly IAgentMemory _memory;
+    private readonly AgentConfig _config;
+    private readonly ILogger<LLMAgent> _logger;
+
+    public LLMAgent(
+        IAgentExecutor executor,
+        IAgentMemory memory,
+        AgentConfig config,
+        ILogger<LLMAgent> logger)
+    {
+        _executor = executor;
+        _memory = memory;
+        _config = config;
+        _logger = logger;
+    }
 
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
@@ -55,7 +69,6 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
         Type? outputType,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        using var scope = _services.CreateScope();
         sessionId ??= Guid.NewGuid().ToString("N");
 
         using (_logger.BeginScope(new Dictionary<string, object>
@@ -64,9 +77,7 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
             ["Session"] = sessionId
         }))
         {
-            // Tools are already registered in the scoped ToolRegistry via AgentBuilder
-
-            var ctx = new AgentContext(sessionId, _config, scope.ServiceProvider, input, outputType, ct);
+            var ctx = new AgentContext(sessionId, _config, input, outputType, ct);
             
             var pastMessages = await _memory.RecallAsync(sessionId);
             if (pastMessages.Count > 0)
@@ -83,9 +94,7 @@ public sealed class LLMAgent(IServiceProvider _services, AgentConfig _config) : 
                 ctx.Messages.AddSystem(_config.SystemPrompt);
             }
 
-            var executor = scope.ServiceProvider.GetRequiredService<IAgentExecutor>();
-
-            await foreach (var chunk in executor.ExecuteStreamingAsync(ctx, ct))
+            await foreach (var chunk in _executor.ExecuteStreamingAsync(ctx, ct))
             {
                 yield return chunk;
             }
