@@ -68,18 +68,4 @@ public static class ToolRegistryExtensions
             throwOnBindFailure: false);
     }
     #endregion
-
-
-    public static IToolRegistry AutoDiscoverFrom(
-        this IToolRegistry registry,
-        Assembly assembly)
-    {
-        foreach (var type in assembly.GetTypes())
-        {
-            registry.RegisterAll(type);
-        }
-        return registry;
-    }
 }
-
-

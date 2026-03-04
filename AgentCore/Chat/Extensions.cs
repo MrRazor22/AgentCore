@@ -1,4 +1,3 @@
-using AgentCore.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -116,44 +115,7 @@ public static class Extensions
         return messages;
     }
 
-    public static bool IsLastAssistantMessageSame(this IList<Message> chat, string newMessage)
-    {
-        if (string.IsNullOrWhiteSpace(newMessage)) return false;
 
-        var last = chat.LastOrDefault(m =>
-            m.Role == Role.Assistant && m.Content is Text t && !string.IsNullOrWhiteSpace(t.Value));
-
-        return last?.Content is Text lastText &&
-               string.Equals(lastText.Value.Trim(), newMessage.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static bool ExistsIn(this ToolCall call, IList<Message> chat, IEnumerable<ToolCall>? also = null)
-    {
-        var key = call.Arguments?.NormalizeArgs() ?? "";
-        return (also?.Any(c => c.Name == call.Name && (c.Arguments?.NormalizeArgs() ?? "") == key) ?? false)
-            || chat.Any(m => m.Content is ToolCall t && t.Name == call.Name && (t.Arguments?.NormalizeArgs() ?? "") == key);
-    }
-
-    public static object? GetLastToolResult(this IList<Message> chat, ToolCall toolCall)
-    {
-        var lastResult = chat.LastOrDefault(m =>
-            m.Role == Role.Tool && m.Content is ToolResult r &&
-            r.CallId == toolCall.Id);
-
-        return (lastResult?.Content as ToolResult)?.Result;
-    }
-
-    public static IList<Message> AppendToolResult(this IList<Message> chat, ToolResult result)
-    {
-        chat.AddToolResult(result);
-        return chat;
-    }
-
-    public static IEnumerable<Message> Filter(this IList<Message> convo, MessageKinds filter)
-    {
-        foreach (var msg in convo)
-            if (ShouldInclude(msg, filter)) yield return msg;
-    }
 
     private static bool ShouldInclude(Message chat, MessageKinds filter) => chat.Role switch
     {
@@ -212,15 +174,5 @@ public static class Extensions
         return items;
     }
 
-    public static void RemoveToolCallBlock(this IList<Message> convo, Message toolMsg)
-    {
-        int idx = convo.IndexOf(toolMsg);
-        if (idx <= 0) return;
 
-        var prev = convo[idx - 1];
-        if (prev.Role == Role.Assistant && prev.Content is ToolCall)
-            convo.Remove(prev);
-
-        convo.Remove(toolMsg);
-    }
 }

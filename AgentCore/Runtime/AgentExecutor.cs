@@ -65,7 +65,7 @@ public sealed class ToolCallingLoop(IAgentMemory _memory, ILogger<ToolCallingLoo
             var results = await Task.WhenAll(runningTools);
 
             foreach (var result in results)
-                ctx.Messages.AppendToolResult(result);
+                ctx.Messages.AddToolResult(result);
 
             // Checkpoint after the turn completes
             await _memory.UpdateAsync(ctx.SessionId, ctx.Messages);

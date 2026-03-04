@@ -34,7 +34,6 @@ public sealed class AgentBuilder
         Services.AddSingleton<IContextManager, ContextManager>();
         Services.AddSingleton<ITokenCounter, ApproximateTokenCounter>();
         Services.AddSingleton<ITokenManager, TokenManager>();
-        Services.AddScoped<IToolCallParser, ToolCallParser>();
         Services.AddTransient<IAgentExecutor>(sp => new ToolCallingLoop(
             sp.GetRequiredService<IAgentMemory>(),
             sp.GetRequiredService<ILogger<ToolCallingLoop>>()
