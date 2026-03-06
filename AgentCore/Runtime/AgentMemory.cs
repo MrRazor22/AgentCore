@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using AgentCore.Chat;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
@@ -16,17 +15,19 @@ public sealed class FileMemoryOptions
 {
     public string? PersistDir { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
-    public int MaxChatHistory { get; set; }
 }
 
 public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemory
 {
     private readonly FileMemoryOptions _options = options?.Value ?? new FileMemoryOptions();
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+    
+    // Lock striping: minimal memory overhead, allows high concurrency across different sessions
+    private readonly SemaphoreSlim[] _locks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
 
     public FileMemory() : this(null) { }
 
-    private SemaphoreSlim GetLock(string sessionId) => _locks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+    private SemaphoreSlim GetLock(string sessionId) 
+        => _locks[Math.Abs(sessionId.GetHashCode()) % _locks.Length];
 
     public async Task<IList<Message>> RecallAsync(string sessionId)
     {
@@ -35,20 +36,20 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
         if (!File.Exists(file)) return new List<Message>();
 
-        var semaphore = GetLock(sessionId);
-        await semaphore.WaitAsync().ConfigureAwait(false);
+        var _lock = GetLock(sessionId);
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             var json = await File.ReadAllTextAsync(file).ConfigureAwait(false);
             return Extensions.FromJson(json);
         }
-        catch
+        catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
         {
             return new List<Message>();
         }
         finally
         {
-            semaphore.Release();
+            _lock.Release();
         }
     }
 
@@ -59,8 +60,8 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
         Directory.CreateDirectory(_options.PersistDir);
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
         
-        var semaphore = GetLock(sessionId);
-        await semaphore.WaitAsync().ConfigureAwait(false);
+        var _lock = GetLock(sessionId);
+        await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             var json = messages.ToJson();
@@ -68,17 +69,25 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
         }
         finally
         {
-            semaphore.Release();
+            _lock.Release();
         }
     }
 
-    public Task ClearAsync(string sessionId)
+    public async Task ClearAsync(string sessionId)
     {
-        if (_options.PersistDir == null) return Task.CompletedTask;
+        if (_options.PersistDir == null) return;
 
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
-        if (File.Exists(file)) File.Delete(file);
-
-        return Task.CompletedTask;
+        
+        var _lock = GetLock(sessionId);
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (File.Exists(file)) File.Delete(file);
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 }

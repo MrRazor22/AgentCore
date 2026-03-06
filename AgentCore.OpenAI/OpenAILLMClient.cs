@@ -76,7 +76,6 @@ internal sealed class OpenAILLMClient : ILLMProvider
     private static ChatCompletionOptions BuildChatOptions(LLMOptions options, IReadOnlyList<Tool>? tools)
     {
         var o = new ChatCompletionOptions();
-        o.AllowParallelToolCalls = false;
 
         // Sampling
         o.ApplySamplingOptions(options);

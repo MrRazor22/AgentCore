@@ -72,15 +72,24 @@ public sealed class ContextManager(
             return result;
         }
 
+        // Binary search for the minimum number of messages to skip so tokens fit within budget.
+        // Each probe is O(N) for Build + Count → O(N log N) total vs. previous O(N²).
+        int lo = 0, hi = keepUA.Count;
+        while (lo < hi)
+        {
+            int mid = (lo + hi) / 2;
+            var candidate = Build(keepUA.Skip(mid).ToList());
+            if (_counter.Count(candidate.ToJson()) <= available)
+                hi = mid;
+            else
+                lo = mid + 1;
+        }
+
+        if (lo > 0)
+            keepUA = keepUA.Skip(lo).ToList();
+
         var rebuilt = Build(keepUA);
         int tokens = _counter.Count(rebuilt.ToJson());
-
-        while (tokens > available && keepUA.Count > 0)
-        {
-            keepUA.RemoveAt(0);
-            rebuilt = Build(keepUA);
-            tokens = _counter.Count(rebuilt.ToJson());
-        }
 
         _logger.LogDebug("Context reduced: {Before}→{After} tokens (limit {Limit})",
             current, tokens, available);
