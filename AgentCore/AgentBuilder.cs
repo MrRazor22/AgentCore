@@ -59,9 +59,9 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
         var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
-        var memory = Memory ?? new FileMemory();
+        var memory = Memory ?? new InMemoryMemory();
         var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
-        var contextManager = ContextManager ?? new ContextManager(tokenCounter, loggerFactory.CreateLogger<ContextManager>());
+        var contextManager = ContextManager ?? new SummarizingContextManager(Provider, tokenCounter, loggerFactory.CreateLogger<SummarizingContextManager>());
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var registry = new ToolRegistry();
@@ -77,6 +77,7 @@ public sealed class AgentBuilder
             Provider,
             registry,
             contextManager,
+            tokenCounter,
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>())
         {

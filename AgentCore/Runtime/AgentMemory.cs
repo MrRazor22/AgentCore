@@ -11,13 +11,33 @@ public interface IAgentMemory
     Task ClearAsync(string sessionId);
 }
 
+public sealed class InMemoryMemory : IAgentMemory
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IList<Message>> _store = new();
+    
+    public Task<IList<Message>> RecallAsync(string sessionId) => 
+        Task.FromResult(_store.TryGetValue(sessionId, out var msgs) ? msgs.Clone() : new List<Message>());
+
+    public Task UpdateAsync(string sessionId, IList<Message> messages)
+    {
+        _store[sessionId] = messages.Clone();
+        return Task.CompletedTask;
+    }
+
+    public Task ClearAsync(string sessionId)
+    {
+        _store.TryRemove(sessionId, out _);
+        return Task.CompletedTask;
+    }
+}
+
 public sealed class FileMemoryOptions
 {
     public string? PersistDir { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemory
+public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMemory
 {
     private readonly FileMemoryOptions _options = options?.Value ?? new FileMemoryOptions();
     
@@ -59,13 +79,15 @@ public sealed class FileMemory(IOptions<FileMemoryOptions> options) : IAgentMemo
 
         Directory.CreateDirectory(_options.PersistDir);
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
+        var tmpFile = file + ".tmp";
         
         var _lock = GetLock(sessionId);
         await _lock.WaitAsync().ConfigureAwait(false);
         try
         {
             var json = messages.ToJson();
-            await File.WriteAllTextAsync(file, json).ConfigureAwait(false);
+            await File.WriteAllTextAsync(tmpFile, json).ConfigureAwait(false);
+            File.Move(tmpFile, file, overwrite: true);
         }
         finally
         {

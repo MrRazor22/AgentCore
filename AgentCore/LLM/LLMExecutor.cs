@@ -2,6 +2,7 @@ using AgentCore.Chat;
 using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
+using AgentCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -24,6 +25,7 @@ public class LLMExecutor(
     ILLMProvider _provider,
     IToolRegistry _toolRegistry,
     IContextManager _ctxManager,
+    ITokenCounter _tokenCounter,
     ITokenManager _tokenManager,
     ILogger<LLMExecutor> _logger
 ) : ILLMExecutor
@@ -38,7 +40,7 @@ public class LLMExecutor(
     {
         var sw = Stopwatch.StartNew();
 
-        var reduced = _ctxManager.Reduce([.. messages], options);
+        var reduced = await _ctxManager.ReduceAsync([.. messages], options, ct).ConfigureAwait(false);
         IReadOnlyList<Message> reducedList = [.. reduced];
 
         // Before hook — non-null return short-circuits (e.g. cached response)
@@ -108,7 +110,13 @@ public class LLMExecutor(
 
         // Record token usage for per-session tracking
         if (tokenUsage != null)
+        {
             _tokenManager.Record(tokenUsage);
+            if (_tokenCounter is ApproximateTokenCounter approx)
+            {
+                approx.Calibrate(reducedList, tokenUsage.InputTokens);
+            }
+        }
 
         // After hook — observe-only
         if (AfterCall != null)

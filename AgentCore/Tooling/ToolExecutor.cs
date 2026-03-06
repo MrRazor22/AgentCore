@@ -1,4 +1,5 @@
 using AgentCore.Chat;
+using AgentCore.Diagnostics;
 using AgentCore.Json;
 using AgentCore.Utils;
 using System.Reflection;
@@ -19,6 +20,8 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
 {
     public Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; set; }
     public Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; set; }
+    
+    public int MaxToolResultLength { get; set; } = 4096;
 
     public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
     {
@@ -36,32 +39,20 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
         IContent? result;
         try
         {
-            var func = tool.Function;
-            var method = func.Method;
-            var returnType = method.ReturnType;
-
+            var method = tool.Method!;
             var toolParams = ParseToolParams(tool.Name, method, toolCall.Arguments);
             var finalArgs = InjectCancellationToken(toolParams, method, ct);
 
-            if (typeof(Task).IsAssignableFrom(returnType))
-            {
-                var task = (Task)func.DynamicInvoke(finalArgs)!;
-                await task.ConfigureAwait(false);
+            var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
+            result = (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
 
-                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>))
-                {
-                    var taskResult = returnType.GetProperty("Result")!.GetValue(task);
-                    result = (IContent?)(taskResult is IContent ? taskResult : new Text(taskResult.AsJsonString()));
-                }
-                else
-                {
-                    result = null;
-                }
-            }
-            else
+            if (result is Text txt && txt.Value != null)
             {
-                var rawResult = func.DynamicInvoke(finalArgs);
-                result = (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
+                var strValue = txt.Value.ToString();
+                if (strValue != null && strValue.Length > MaxToolResultLength)
+                {
+                    result = new Text(strValue.Substring(0, MaxToolResultLength) + "...[Truncated]");
+                }
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -81,7 +72,7 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
         ct.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(call.Name))
-            return new ToolResult(call.Id, null);
+            return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", "Tool name cannot be empty."));
 
         try
         {
@@ -96,7 +87,7 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
         }
     }
 
-    private static object[] ParseToolParams(string toolName, MethodInfo method, JsonObject arguments)
+    private static object?[] ParseToolParams(string toolName, MethodInfo method, JsonObject arguments)
     {
         var parameters = method.GetParameters();
         var argsObj = arguments;
@@ -110,6 +101,7 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
         {
             if (p.ParameterType == typeof(CancellationToken)) continue;
 
+            if (p.Name == null) continue;
             var node = argsObj[p.Name];
 
             if (node == null)
@@ -133,7 +125,7 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
     private static object? DeserializeNode(JsonNode? node, Type type)
         => JsonSerializer.Deserialize(node, type);
 
-    private static object?[] InjectCancellationToken(object[] toolParams, MethodInfo method, CancellationToken ct)
+    private static object?[] InjectCancellationToken(object?[] toolParams, MethodInfo method, CancellationToken ct)
     {
         var parameters = method.GetParameters();
         var args = new object?[parameters.Length];

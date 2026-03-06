@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
@@ -17,7 +18,10 @@ public class Tool
     public required JsonObject ParametersSchema { get; set; }
 
     [JsonIgnore]
-    public Delegate? Function { get; set; }
+    public MethodInfo? Method { get; set; }
+
+    [JsonIgnore]
+    public Func<object?[], Task<object?>>? Invoker { get; set; }
 
     public override string ToString()
     {

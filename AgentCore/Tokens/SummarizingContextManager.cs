@@ -1,17 +1,15 @@
 using AgentCore.Chat;
 using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace AgentCore.Tokens;
 
-public interface IContextManager
-{
-    Task<IList<Message>> ReduceAsync(IList<Message> messages, LLMOptions options, CancellationToken ct = default);
-}
-
-public sealed class TailTrimContextManager(
+public sealed class SummarizingContextManager(
+    ILLMProvider _provider,
     ITokenCounter _counter,
-    ILogger<TailTrimContextManager> _logger,
+    ILogger<SummarizingContextManager> _logger,
+    string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad.",
     int keepLastMessages = 10
 ) : IContextManager
 {
@@ -35,13 +33,10 @@ public sealed class TailTrimContextManager(
         var system = source.Where(m => m.Role == Role.System).ToList();
         var history = source.Where(m => m.Role != Role.System).ToList();
 
-        // Ensure we don't drop the latest messages completely if possible
         var keepHistory = history.Skip(Math.Max(0, history.Count - keepLastMessages)).ToList();
 
-        IList<Message> Build(int skipCount)
+        IList<Message> Build(int skipCount, string? summaryText)
         {
-            // Advance skip count so we don't start with a Tool message or an Assistant message that has tool calls 
-            // but no results (actually, OpenAI requires the whole block to be preserved or dropped together).
             while (skipCount < keepHistory.Count)
             {
                 var m = keepHistory[skipCount];
@@ -51,6 +46,10 @@ public sealed class TailTrimContextManager(
 
             var result = new List<Message>();
             foreach (var s in system) result.Add(new Message(s.Role, s.Content));
+            
+            if (!string.IsNullOrWhiteSpace(summaryText))
+                result.Add(new Message(Role.Assistant, new Text($"[Prior Context Scratchpad]:\n{summaryText}")));
+                
             for (int i = skipCount; i < keepHistory.Count; i++) result.Add(new Message(keepHistory[i].Role, keepHistory[i].Content));
             return result;
         }
@@ -59,17 +58,48 @@ public sealed class TailTrimContextManager(
         while (lo < hi)
         {
             int mid = lo + (hi - lo) / 2;
-            var candidate = Build(mid);
+            var candidate = Build(mid, null); // Base check without summary
             if (await _counter.CountAsync(candidate, ct).ConfigureAwait(false) <= available)
                 hi = mid;
             else
                 lo = mid + 1;
         }
 
-        var rebuilt = Build(lo);
-        int tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
+        int skipFromKeep = lo;
+        var totallyDropped = history.Take(history.Count - keepLastMessages + skipFromKeep).ToList();
 
-        _logger.LogWarning("Context Overflow: Budget={Available}, Current={Current}. Trimming conversation history to {Tokens} tokens. Some past context is now lost.", available, current, tokens);
+        string? summary = null;
+        if (totallyDropped.Count > 0)
+        {
+            var summaryReq = new List<Message> 
+            { 
+               new Message(Role.System, new Text(summaryPrompt)),
+               new Message(Role.User, new Text(string.Join("\n\n", totallyDropped.Select(m => $"[{m.Role}]: {m.Content}"))))
+            };
+            
+            // Generate summary without tool calling overhead
+            var sumOptions = new LLMOptions { Model = options.Model, MaxOutputTokens = 1024, ContextLength = options.ContextLength };
+            var stream = _provider.StreamAsync(summaryReq, sumOptions, null, ct);
+            
+            var sb = new StringBuilder();
+            await foreach(var evt in stream.WithCancellation(ct))
+            {
+               if (evt is TextDelta td) sb.Append(td.Value);
+            }
+            summary = sb.ToString().Trim();
+        }
+
+        var rebuilt = Build(lo, summary);
+        
+        int tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
+        if (tokens > available)
+        {
+            _logger.LogWarning("Summary caused token overflow. Falling back to native tail-trim.");
+            rebuilt = Build(lo, null);
+            tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
+        }
+
+        _logger.LogWarning("Context Overflow handled: Summarized {Dropped} skipped messages into context memory. Tokens: {Current} -> {Final}.", totallyDropped.Count, current, tokens);
 
         return rebuilt;
     }

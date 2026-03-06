@@ -17,6 +17,5 @@ public sealed class LLMOptions
     public IReadOnlyList<string>? StopSequences { get; set; }
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
-    public float? TopK { get; set; }
     public JsonObject? ResponseSchema { get; set; }
 }

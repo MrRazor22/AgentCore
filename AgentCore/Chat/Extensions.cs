@@ -79,37 +79,44 @@ public static class Extensions
             var roleStr = item.TryGetValue("role", out var r) ? r.GetString() ?? "user" : "user";
             var role = Enum.TryParse<Role>(roleStr, true, out var parsed) ? parsed : Role.User;
 
-            IContent content;
-
-            if (item.TryGetValue("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
-            {
-                var tc = toolCallsEl.EnumerateArray().FirstOrDefault();
-                var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
-                var name = "";
-                var args = new JsonObject();
-
-                if (tc.TryGetProperty("function", out var fn))
-                {
-                    name = fn.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                    if (fn.TryGetProperty("arguments", out var a))
-                        args = JsonNode.Parse(a.GetRawText())?.AsObject() ?? new JsonObject();
-                }
-
-                content = new ToolCall(id, name, args);
-            }
-            else if (item.TryGetValue("tool_call_id", out var callIdEl))
+            if (item.TryGetValue("tool_call_id", out var callIdEl))
             {
                 var callId = callIdEl.GetString() ?? "";
                 var resultText = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
-                content = new ToolResult(callId, new Text(resultText));
-            }
-            else
-            {
-                var text = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
-                content = new Text(text);
+                messages.Add(new Message(Role.Tool, new ToolResult(callId, new Text(resultText))));
+                continue;
             }
 
-            messages.Add(new Message(role, content));
+            if (item.TryGetValue("content", out var textContentEl) && textContentEl.ValueKind == JsonValueKind.String)
+            {
+                var text = textContentEl.GetString();
+                // Avoid yielding the hacky tool name string that older AgentCore versions serialized
+                if (!string.IsNullOrEmpty(text) && (!item.ContainsKey("tool_calls") || !item["tool_calls"].EnumerateArray().Any(tc => tc.TryGetProperty("function", out var f) && f.TryGetProperty("name", out var n) && n.GetString() == text)))
+                {
+                    messages.Add(new Message(role, new Text(text)));
+                }
+            }
+
+            if (item.TryGetValue("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var tc in toolCallsEl.EnumerateArray())
+                {
+                    var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
+                    var name = "";
+                    var args = new JsonObject();
+
+                    if (tc.TryGetProperty("function", out var fn))
+                    {
+                        name = fn.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                        if (fn.TryGetProperty("arguments", out var a))
+                        {
+                            try { args = JsonNode.Parse(a.GetRawText())?.AsObject() ?? new JsonObject(); } catch { }
+                        }
+                    }
+
+                    messages.Add(new Message(role, new ToolCall(id, name, args)));
+                }
+            }
         }
 
         return messages;
@@ -147,7 +154,6 @@ public static class Extensions
             }
             else if (c.Content is ToolCall call && (filter & MessageKinds.ToolCalls) != 0)
             {
-                msg["content"] = call.Name;
                 msg["tool_calls"] = new List<object>
                 {
                     new Dictionary<string, object>

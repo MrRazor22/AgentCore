@@ -2,6 +2,7 @@ using AgentCore.Json;
 using AgentCore.Utils;
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -33,12 +34,14 @@ public sealed class ToolRegistry : IToolRegistry
         var tool = CreateTool(method, del, name, description);
 
         if (_registry.ContainsKey(tool.Name))
+        {
+            var existing = _registry[tool.Name].Method;
+            var current = tool.Method;
             throw new InvalidOperationException(
                 $"Duplicate tool name '{tool.Name}'. " +
-                $"Already registered by {_registry[tool.Name].Function?.Method.DeclaringType?.FullName}." +
-                $"{_registry[tool.Name].Function?.Method.Name}, " +
-                $"conflicts with {tool.Function?.Method.DeclaringType?.FullName}." +
-                $"{tool.Function?.Method.Name}.");
+                $"Already registered by {existing?.DeclaringType?.FullName}.{existing?.Name}, " +
+                $"conflicts with {current?.DeclaringType?.FullName}.{current?.Name}.");
+        }
 
         _registry[tool.Name] = tool;
     }
@@ -97,8 +100,67 @@ public sealed class ToolRegistry : IToolRegistry
             .Required(required)
             .Build();
 
-        return new Tool { Name = toolName, Description = description, ParametersSchema = schemaObject, Function = func };
+        return new Tool 
+        { 
+            Name = toolName, 
+            Description = description, 
+            ParametersSchema = schemaObject, 
+            Method = method,
+            Invoker = CompileInvoker(method, func.Target)
+        };
     }
+
+    private static Func<object?[], Task<object?>> CompileInvoker(MethodInfo method, object? target)
+    {
+        var argsParam = Expression.Parameter(typeof(object?[]), "args");
+        var parameters = method.GetParameters();
+        var argExpressions = new Expression[parameters.Length];
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var pType = parameters[i].ParameterType;
+            var arrayAccess = Expression.ArrayIndex(argsParam, Expression.Constant(i));
+            argExpressions[i] = Expression.Convert(arrayAccess, pType);
+        }
+
+        var instanceObj = target != null ? Expression.Constant(target) : null;
+        var call = Expression.Call(instanceObj, method, argExpressions);
+        var returnType = method.ReturnType;
+
+        Expression resultExpr;
+        if (returnType == typeof(void))
+        {
+            var block = Expression.Block(call, Expression.Constant(Task.FromResult<object?>(null)));
+            resultExpr = block;
+        }
+        else if (returnType == typeof(Task))
+        {
+            var helper = typeof(ToolRegistry).GetMethod(nameof(CastTaskToTaskObject), BindingFlags.NonPublic | BindingFlags.Static)!;
+            resultExpr = Expression.Call(helper, call);
+        }
+        else if (typeof(Task).IsAssignableFrom(returnType) && returnType.IsGenericType)
+        {
+            var resultType = returnType.GetGenericArguments()[0];
+            var helper = typeof(ToolRegistry).GetMethod(nameof(CastGenericTaskToTaskObject), BindingFlags.NonPublic | BindingFlags.Static)!
+                .MakeGenericMethod(resultType);
+            resultExpr = Expression.Call(helper, call);
+        }
+        else
+        {
+            var fromResult = typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(typeof(object));
+            resultExpr = Expression.Call(fromResult, Expression.Convert(call, typeof(object)));
+        }
+
+        return Expression.Lambda<Func<object?[], Task<object?>>>(resultExpr, argsParam).Compile();
+    }
+
+    private static async Task<object?> CastTaskToTaskObject(Task t)
+    {
+        await t.ConfigureAwait(false);
+        return null;
+    }
+
+    private static async Task<object?> CastGenericTaskToTaskObject<T>(Task<T> t) => await t.ConfigureAwait(false);
 
     private static bool IsMethodJsonCompatible(MethodInfo m)
     {

@@ -1,4 +1,5 @@
 using AgentCore.Chat;
+using AgentCore.Diagnostics;
 using AgentCore.Runtime;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -71,6 +72,10 @@ public sealed class LLMAgent : IAgent
     {
         sessionId ??= Guid.NewGuid().ToString("N");
 
+        using var activity = AgentDiagnosticSource.Source.StartActivity("AgentCore.Invoke");
+        activity?.SetTag("agent.name", _config.Name);
+        activity?.SetTag("agent.session", sessionId);
+
         using (_logger.BeginScope(new Dictionary<string, object>
         {
             ["Agent"] = _config.Name,
@@ -80,18 +85,16 @@ public sealed class LLMAgent : IAgent
             var ctx = new AgentContext(sessionId, _config, input, outputType, ct);
             
             var pastMessages = await _memory.RecallAsync(sessionId);
+            
+            ctx.Messages.AddSystem(_config.SystemPrompt);
+
             if (pastMessages.Count > 0)
             {
-                // Resume from existing state
-                foreach (var msg in pastMessages)
+                // Resume from existing state, but discard any previously persisted system prompts so the latest config is always used.
+                foreach (var msg in pastMessages.Where(m => m.Role != Role.System))
                 {
                     ctx.Messages.Add(msg);
                 }
-            }
-            else
-            {
-                // New session
-                ctx.Messages.AddSystem(_config.SystemPrompt);
             }
 
             await foreach (var chunk in _executor.ExecuteStreamingAsync(ctx, ct))
