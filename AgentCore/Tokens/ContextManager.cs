@@ -1,76 +1,9 @@
 using AgentCore.Chat;
 using AgentCore.LLM;
-using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Tokens;
 
 public interface IContextManager
 {
     Task<IList<Message>> ReduceAsync(IList<Message> messages, LLMOptions options, CancellationToken ct = default);
-}
-
-public sealed class TailTrimContextManager(
-    ITokenCounter _counter,
-    ILogger<TailTrimContextManager> _logger,
-    int keepLastMessages = 10
-) : IContextManager
-{
-    public async Task<IList<Message>> ReduceAsync(IList<Message> messages, LLMOptions options, CancellationToken ct = default)
-    {
-        if (messages == null) throw new ArgumentNullException(nameof(messages));
-
-        int contextLength = options.ContextLength
-            ?? throw new InvalidOperationException("ContextLength is required. Set it in LLMOptions or via provider.");
-
-        int reserveForOutput = options.MaxOutputTokens ?? (int)Math.Min(4096, contextLength * 0.25);
-        int available = contextLength - reserveForOutput;
-
-        if (available <= 0)
-            throw new InvalidOperationException($"No available context budget: ContextLength={contextLength}, MaxOutputTokens={reserveForOutput}.");
-
-        int current = await _counter.CountAsync(messages, ct).ConfigureAwait(false);
-        if (current <= available) return messages;
-
-        var source = messages.Clone();
-        var system = source.Where(m => m.Role == Role.System).ToList();
-        var history = source.Where(m => m.Role != Role.System).ToList();
-
-        // Ensure we don't drop the latest messages completely if possible
-        var keepHistory = history.Skip(Math.Max(0, history.Count - keepLastMessages)).ToList();
-
-        IList<Message> Build(int skipCount)
-        {
-            // Advance skip count so we don't start with a Tool message or an Assistant message that has tool calls 
-            // but no results (actually, OpenAI requires the whole block to be preserved or dropped together).
-            while (skipCount < keepHistory.Count)
-            {
-                var m = keepHistory[skipCount];
-                if (m.Role == Role.Tool) { skipCount++; continue; }
-                break;
-            }
-
-            var result = new List<Message>();
-            foreach (var s in system) result.Add(new Message(s.Role, s.Content));
-            for (int i = skipCount; i < keepHistory.Count; i++) result.Add(new Message(keepHistory[i].Role, keepHistory[i].Content));
-            return result;
-        }
-
-        int lo = 0, hi = keepHistory.Count;
-        while (lo < hi)
-        {
-            int mid = lo + (hi - lo) / 2;
-            var candidate = Build(mid);
-            if (await _counter.CountAsync(candidate, ct).ConfigureAwait(false) <= available)
-                hi = mid;
-            else
-                lo = mid + 1;
-        }
-
-        var rebuilt = Build(lo);
-        int tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
-
-        _logger.LogWarning("Context Overflow: Budget={Available}, Current={Current}. Trimming conversation history to {Tokens} tokens. Some past context is now lost.", available, current, tokens);
-
-        return rebuilt;
-    }
 }

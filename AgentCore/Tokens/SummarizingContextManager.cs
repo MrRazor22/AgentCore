@@ -6,9 +6,9 @@ using System.Text;
 namespace AgentCore.Tokens;
 
 public sealed class SummarizingContextManager(
-    ILLMProvider _provider,
     ITokenCounter _counter,
     ILogger<SummarizingContextManager> _logger,
+    ILLMProvider? _provider = null,
     string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad.",
     int keepLastMessages = 10
 ) : IContextManager
@@ -58,7 +58,7 @@ public sealed class SummarizingContextManager(
         while (lo < hi)
         {
             int mid = lo + (hi - lo) / 2;
-            var candidate = Build(mid, null); // Base check without summary
+            var candidate = Build(mid, null);
             if (await _counter.CountAsync(candidate, ct).ConfigureAwait(false) <= available)
                 hi = mid;
             else
@@ -69,7 +69,7 @@ public sealed class SummarizingContextManager(
         var totallyDropped = history.Take(history.Count - keepLastMessages + skipFromKeep).ToList();
 
         string? summary = null;
-        if (totallyDropped.Count > 0)
+        if (_provider != null && totallyDropped.Count > 0)
         {
             var summaryReq = new List<Message> 
             { 
@@ -77,7 +77,6 @@ public sealed class SummarizingContextManager(
                new Message(Role.User, new Text(string.Join("\n\n", totallyDropped.Select(m => $"[{m.Role}]: {m.Content}"))))
             };
             
-            // Generate summary without tool calling overhead
             var sumOptions = new LLMOptions { Model = options.Model, MaxOutputTokens = 1024, ContextLength = options.ContextLength };
             var stream = _provider.StreamAsync(summaryReq, sumOptions, null, ct);
             
@@ -94,12 +93,15 @@ public sealed class SummarizingContextManager(
         int tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
         if (tokens > available)
         {
-            _logger.LogWarning("Summary caused token overflow. Falling back to native tail-trim.");
+            _logger.LogWarning("Summary caused token overflow. Falling back to tail-trim.");
             rebuilt = Build(lo, null);
             tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
         }
 
-        _logger.LogWarning("Context Overflow handled: Summarized {Dropped} skipped messages into context memory. Tokens: {Current} -> {Final}.", totallyDropped.Count, current, tokens);
+        if (summary != null)
+            _logger.LogWarning("Context Overflow handled: Summarized {Dropped} skipped messages into context memory. Tokens: {Current} -> {Final}.", totallyDropped.Count, current, tokens);
+        else
+            _logger.LogWarning("Context Overflow handled: Tail-trimmed conversation history to {Tokens} tokens.", tokens);
 
         return rebuilt;
     }

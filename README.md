@@ -286,8 +286,8 @@ var agent = LLMAgent.Create("agent")
 
 | File | Lines | Purpose |
 |---|---|---|
-| `ContextManager.cs` | ~76 | `IContextManager` interface + `TailTrimContextManager` default. Tail-trim strategy: keeps system + most recent messages that fit. |
-| `SummarizingContextManager.cs` | ~106 | Alternative: summarizes dropped messages via additional LLM call. |
+| `ContextManager.cs` | ~9 | `IContextManager` interface. |
+| `SummarizingContextManager.cs` | ~95 | Single implementation: tail-trims to fit context. If provider given, summarizes dropped messages. If no provider, just tail-trims. |
 | `TokenManager.cs` | ~39 | Cumulative token usage tracking across LLM calls. |
 | `ITokenCounter.cs` | ~8 | Interface: `Count(string) → int`. |
 | `ApproximateTokenCounter.cs` | ~74 | Default: `length / 4`. Provider packages can register accurate counters (e.g., TikToken for OpenAI). |
@@ -385,33 +385,37 @@ The default `FileMemory` writes JSON files to `%APPDATA%/AgentCore/{sessionId}.j
 
 ## Context Management
 
-The `ContextManager` is the **single source of truth for ALL trimming** — messages and tool results alike. This is a key design decision: instead of having multiple places doing trimming (which can conflict or be inconsistent), AgentCore centralizes it.
+The `ContextManager` is the **single source of truth for ALL trimming** — messages and tool results alike. There's one implementation that handles both cases:
 
-### How It Works
+### SummarizingContextManager (single implementation)
 
-Two implementations available:
+The only implementation. Two modes:
 
-**1. TailTrimContextManager (default)**
-- Keeps all system messages
-- Keeps the last N user/assistant message pairs that fit
-- Drops oldest messages until the total fits within available context
-- Reserves space for output (default: min(4096, 25% of context))
+1. **Without provider (default)**: Tail-trim strategy - keeps all system messages + most recent user/assistant messages that fit within available context. Drops oldest messages until total fits.
 
-**2. SummarizingContextManager**
-- Same tail-trimming as above
-- When messages must be dropped, summarizes them via an additional LLM call
-- Injects the summary as a "scratchpad" message
-- More expensive but preserves more context
+2. **With provider**: Same tail-trimming, but when messages must be dropped, summarizes them via an additional LLM call and injects the summary as a "scratchpad" message. More expensive but preserves more context.
 
 ### Why No MaxResultLength?
 
 Previous versions had `ToolOptions.MaxResultLength` — a hardcoded cap on tool results. This was removed because:
 
 1. It's a magic number: why 32k? What works for gpt-4 (128k) doesn't work for gpt-3.5-turbo (4k)
-2. It's redundant: ContextManager handles trimming
+2. It's redundant: ContextManager handles ALL trimming
 3. It's inflexible: doesn't account for varying context windows
 
 Now: ContextManager calculates available space dynamically based on the model's actual context window.
+
+### Default Behavior
+
+By default, AgentCore uses `SummarizingContextManager` **without a provider** — pure tail-trimming. If you want summarization, provide an LLM provider to the context manager:
+
+```csharp
+// Default (tail-trim only):
+.WithContextManager(new SummarizingContextManager(tokenCounter, logger))
+
+// With summarization (requires a separate LLM provider):
+.WithContextManager(new SummarizingContextManager(tokenCounter, logger, summaryProvider))
+```
 
 ---
 
@@ -537,8 +541,8 @@ AgentCore/                          # Core framework (~1,800 lines)
 │   ├── AgentTelemetryExtensions.cs # OpenTelemetry integration
 │   └── AgentDiagnosticSource.cs    # Diagnostic source
 ├── Tokens/
-│   ├── ContextManager.cs           # IContextManager + TailTrimContextManager
-│   ├── SummarizingContextManager.cs # SummarizingContextManager
+│   ├── ContextManager.cs           # IContextManager interface only
+│   ├── SummarizingContextManager.cs # Single implementation: tail-trim + optional summarize
 │   ├── TokenManager.cs             # Cumulative token tracking
 │   ├── ITokenCounter.cs            # Counter interface
 │   └── ApproximateTokenCounter.cs  # len/4 fallback
