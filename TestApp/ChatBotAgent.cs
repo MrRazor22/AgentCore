@@ -16,6 +16,23 @@ namespace TestApp
     {
         public static async Task RunAsync()
         {
+            async IAsyncEnumerable<LLMEvent> StreamAndLogEvents(LLMRequest req, AgentCore.Execution.PipelineHandler<LLMRequest, IAsyncEnumerable<LLMEvent>> next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+            {
+                var events = new List<LLMEvent>();
+                await foreach (var evt in next(req, ct).ConfigureAwait(false))
+                {
+                    events.Add(evt);
+                    yield return evt;
+                }
+                var toolCalls = events.OfType<ToolCallEvent>().Count();
+                var originalColor = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.DarkGray;
+                Console.WriteLine(toolCalls > 0
+                    ? $"\n  [Model] {events.Count} events, {toolCalls} tool call(s) requested"
+                    : $"\n  [Model] {events.Count} events (final response)");
+                Console.ForegroundColor = originalColor;
+            }
+
             var agent = LLMAgent.Create("chatbot")
                 .WithInstructions("You are an AI agent, execute all user requests faithfully.")
                 .AddOpenAI(o =>
@@ -29,32 +46,23 @@ namespace TestApp
                 .WithTools<ConversionTools>()
                 .WithTools<MathTools>()
                 .WithTools<SearchTools>()
-                .BeforeToolCall(async (call, ct) =>
+                .UseToolMiddleware(async (call, next, ct) =>
                 {
                     var originalColor = Console.ForegroundColor;
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine($"\n  [Tool Executing] -> {call.Name}({call.Arguments.ToJsonString()})");
                     Console.ForegroundColor = originalColor;
-                    return null;
-                })
-                .AfterToolCall(async (call, result, ct) =>
-                {
-                    var originalColor = Console.ForegroundColor;
+                    
+                    var result = await next(call, ct);
+                    
+                    originalColor = Console.ForegroundColor;
                     Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine($"  [Tool Result] <- {result?.AsJsonString()}");
+                    Console.WriteLine($"  [Tool Result] <- {result?.Result?.ForLlm()}");
                     Console.ForegroundColor = originalColor;
-                    return null;
+                    
+                    return result!;
                 })
-                .AfterModelCall(async (events, ct) =>
-                {
-                    var toolCalls = events.OfType<ToolCallEvent>().Count();
-                    var originalColor = Console.ForegroundColor;
-                    Console.ForegroundColor = ConsoleColor.DarkGray;
-                    Console.WriteLine(toolCalls > 0
-                        ? $"\n  [Model] {events.Count} events, {toolCalls} tool call(s) requested"
-                        : $"\n  [Model] {events.Count} events (final response)");
-                    Console.ForegroundColor = originalColor;
-                })
+                .UseLLMMiddleware((req, next, ct) => StreamAndLogEvents(req, next, ct))
                 .WithLoggerFactory(Microsoft.Extensions.Logging.LoggerFactory.Create(logging =>
                 {
                     logging.ClearProviders();

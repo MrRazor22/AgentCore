@@ -157,7 +157,6 @@ public static class GeminiExtensions
         {
             if (options.Temperature.HasValue) config.Temperature = options.Temperature.Value;
             if (options.TopP.HasValue) config.TopP = options.TopP.Value;
-            if (options.TopK.HasValue) config.TopK = options.TopK.Value;
             if (options.MaxOutputTokens.HasValue) config.MaxOutputTokens = options.MaxOutputTokens.Value;
             if (options.StopSequences is { Count: > 0 }) config.StopSequences = options.StopSequences.ToList();
         }

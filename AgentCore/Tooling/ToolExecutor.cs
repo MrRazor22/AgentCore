@@ -1,5 +1,6 @@
 using AgentCore.Chat;
 using AgentCore.Diagnostics;
+using AgentCore.Execution;
 using AgentCore.Json;
 using AgentCore.Utils;
 using System.Reflection;
@@ -10,74 +11,67 @@ namespace AgentCore.Tooling;
 
 public interface IToolExecutor
 {
-    Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; set; }
-    Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; set; }
     Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
+public sealed class ToolExecutor : IToolExecutor
 {
-    public Func<ToolCall, CancellationToken, Task<IContent?>>? BeforeCall { get; set; }
-    public Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? AfterCall { get; set; }
-    
-    public int MaxToolResultLength { get; set; } = 4096;
+    private readonly IToolRegistry _tools;
+    private readonly ToolOptions _options;
+    private readonly SemaphoreSlim _semaphore;
+    private readonly PipelineHandler<ToolCall, Task<ToolResult>> _pipeline;
 
-    public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
+    public ToolExecutor(
+        IToolRegistry tools,
+        ToolOptions options,
+        IEnumerable<PipelineMiddleware<ToolCall, Task<ToolResult>>>? middlewares = null)
     {
-        if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
-        ct.ThrowIfCancellationRequested();
-
-        var tool = _tools.TryGet(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
-
-        if (BeforeCall != null)
-        {
-            var bypass = await BeforeCall(toolCall, ct).ConfigureAwait(false);
-            if (bypass != null) return bypass;
-        }
-
-        IContent? result;
-        try
-        {
-            var method = tool.Method!;
-            var toolParams = ParseToolParams(tool.Name, method, toolCall.Arguments);
-            var finalArgs = InjectCancellationToken(toolParams, method, ct);
-
-            var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
-            result = (IContent?)(rawResult is IContent ? rawResult : new Text(rawResult.AsJsonString()));
-
-            if (result is Text txt && txt.Value != null)
-            {
-                var strValue = txt.Value.ToString();
-                if (strValue != null && strValue.Length > MaxToolResultLength)
-                {
-                    result = new Text(strValue.Substring(0, MaxToolResultLength) + "...[Truncated]");
-                }
-            }
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) when (ex is not ToolExecutionException) { throw new ToolExecutionException(toolCall.Name, ex.Message, ex); }
-
-        if (AfterCall != null)
-        {
-            var replacement = await AfterCall(toolCall, result, ct).ConfigureAwait(false);
-            if (replacement != null) return replacement;
-        }
-
-        return result;
+        _tools = tools;
+        _options = options;
+        _semaphore = new SemaphoreSlim(options.MaxConcurrency);
+        
+        _pipeline = Pipeline<ToolCall, Task<ToolResult>>.Build(
+            middlewares ?? [],
+            HandleInternalAsync);
+    }
+    
+    public Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
+    {
+        throw new NotSupportedException("Use HandleToolCallAsync which executes the pipeline instead");
     }
 
-    public async Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
+    public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
+        => _pipeline(call, ct);
+
+    private async Task<ToolResult> HandleInternalAsync(ToolCall call, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(call.Name))
             return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", "Tool name cannot be empty."));
 
+        await _semaphore.WaitAsync(ct).ConfigureAwait(false);
+        
+        CancellationTokenSource? timeoutCts = null;
+        CancellationTokenSource? linkedCts = null;
+        CancellationToken runCt = ct;
+
+        if (_options.DefaultTimeout.HasValue)
+        {
+            timeoutCts = new CancellationTokenSource(_options.DefaultTimeout.Value);
+            linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+            runCt = linkedCts.Token;
+        }
+
         try
         {
-            var result = await InvokeAsync(call, ct).ConfigureAwait(false);
+            var result = await InvokeInternalAsync(call, runCt).ConfigureAwait(false);
             return new ToolResult(call.Id, result);
+        }
+        catch (OperationCanceledException ex) when (timeoutCts?.IsCancellationRequested == true)
+        {
+            return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution timed out after {_options.DefaultTimeout!.Value.TotalSeconds} seconds.", ex));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -85,6 +79,35 @@ public sealed class ToolExecutor(IToolRegistry _tools) : IToolExecutor
             var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
             return new ToolResult(call.Id, wrapped);
         }
+        finally
+        {
+            _semaphore.Release();
+            linkedCts?.Dispose();
+            timeoutCts?.Dispose();
+        }
+    }
+
+    private async Task<IContent?> InvokeInternalAsync(ToolCall toolCall, CancellationToken ct)
+    {
+        var tool = _tools.TryGet(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
+
+        var method = tool.Method!;
+        var toolParams = ParseToolParams(tool.Name, method, toolCall.Arguments);
+        var finalArgs = InjectCancellationToken(toolParams, method, ct);
+
+        var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
+        IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
+
+        if (result is Text txt && txt.Value != null)
+        {
+            var strValue = txt.Value.ToString();
+            if (strValue != null && strValue.Length > _options.MaxResultLength)
+            {
+                result = new Text(strValue.Substring(0, _options.MaxResultLength) + "...[Truncated]");
+            }
+        }
+
+        return result;
     }
 
     private static object?[] ParseToolParams(string toolName, MethodInfo method, JsonObject arguments)

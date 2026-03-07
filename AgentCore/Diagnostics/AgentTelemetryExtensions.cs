@@ -10,31 +10,53 @@ public static class AgentTelemetryExtensions
 {
     public static AgentBuilder WithOpenTelemetry(this AgentBuilder builder)
     {
-        return builder
-            .BeforeModelCall((opts, msgs, ct) =>
+        builder.UseLLMMiddleware((req, next, ct) =>
+        {
+            var act = AgentDiagnosticSource.Source.StartActivity("LLM.Invoke");
+            act?.SetTag("llm.model", req.Options.Model);
+            
+            return StreamEventsAsync(req, next, act, ct);
+        });
+
+        builder.UseToolMiddleware(async (call, next, ct) =>
+        {
+            var act = AgentDiagnosticSource.Source.StartActivity("Tool.Invoke");
+            act?.SetTag("tool.name", call.Name);
+
+            try
             {
-                var act = AgentDiagnosticSource.Source.StartActivity("LLM.Invoke");
-                act?.SetTag("llm.model", msgs.Model);
-                return Task.FromResult<IReadOnlyList<LLMEvent>?>(null);
-            })
-            .AfterModelCall((events, ct) =>
+                var res = await next(call, ct);
+                if (res.Result is Exception ex)
+                {
+                    act?.SetStatus(ActivityStatusCode.Error, ex.Message);
+                }
+                return res;
+            }
+            finally
             {
-                var act = Activity.Current;
                 act?.Dispose();
-                return Task.CompletedTask;
-            })
-            .BeforeToolCall((call, ct) =>
+            }
+        });
+
+        return builder;
+    }
+
+    private static async IAsyncEnumerable<LLMEvent> StreamEventsAsync(
+        LLMRequest req, 
+        Execution.PipelineHandler<LLMRequest, IAsyncEnumerable<LLMEvent>> next,
+        Activity? act,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var evt in next(req, ct).ConfigureAwait(false))
             {
-                var act = AgentDiagnosticSource.Source.StartActivity("Tool.Invoke");
-                act?.SetTag("tool.name", call.Name);
-                return Task.FromResult<IContent?>(null);
-            })
-            .AfterToolCall((call, res, ct) =>
-            {
-                var act = Activity.Current;
-                if (res is ToolException tex) act?.SetStatus(ActivityStatusCode.Error, tex.Message);
-                act?.Dispose();
-                return Task.FromResult<IContent?>(null);
-            });
+                yield return evt;
+            }
+        }
+        finally
+        {
+            act?.Dispose();
+        }
     }
 }

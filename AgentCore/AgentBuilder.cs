@@ -1,4 +1,5 @@
 using AgentCore.Chat;
+using AgentCore.Execution;
 using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
@@ -13,6 +14,7 @@ public sealed class AgentConfig
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
     public int MaxIterations { get; set; } = 50;
+    public ToolOptions ToolOptions { get; set; } = new();
 }
 
 public sealed class AgentBuilder
@@ -27,11 +29,10 @@ public sealed class AgentBuilder
     public ILoggerFactory? LoggerFactory { get; set; }
     public ILLMProvider? Provider { get; set; }
 
-    // Callback storage
-    private Func<ToolCall, CancellationToken, Task<IContent?>>? _beforeToolCall;
-    private Func<ToolCall, IContent?, CancellationToken, Task<IContent?>>? _afterToolCall;
-    private Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>>? _beforeModelCall;
-    private Func<IReadOnlyList<LLMEvent>, CancellationToken, Task>? _afterModelCall;
+    // Pipeline storage
+    private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
+    private readonly List<PipelineMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = [];
+    private readonly List<PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>>> _agentMiddlewares = [];
 
     public AgentBuilder() { }
 
@@ -39,6 +40,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithInstructions(string prompt) { _config.SystemPrompt = prompt; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
+    public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
     public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
     public AgentBuilder WithContextManager(IContextManager contextManager) { ContextManager = contextManager; return this; }
@@ -47,11 +49,10 @@ public sealed class AgentBuilder
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { LoggerFactory = loggerFactory; return this; }
     public AgentBuilder WithProvider(ILLMProvider provider) { Provider = provider; return this; }
 
-    // Executor callbacks
-    public AgentBuilder BeforeToolCall(Func<ToolCall, CancellationToken, Task<IContent?>> callback) { _beforeToolCall = callback; return this; }
-    public AgentBuilder AfterToolCall(Func<ToolCall, IContent?, CancellationToken, Task<IContent?>> callback) { _afterToolCall = callback; return this; }
-    public AgentBuilder BeforeModelCall(Func<IReadOnlyList<Message>, LLMOptions, CancellationToken, Task<IReadOnlyList<LLMEvent>?>> callback) { _beforeModelCall = callback; return this; }
-    public AgentBuilder AfterModelCall(Func<IReadOnlyList<LLMEvent>, CancellationToken, Task> callback) { _afterModelCall = callback; return this; }
+    // Executor pipelines
+    public AgentBuilder UseToolMiddleware(PipelineMiddleware<ToolCall, Task<ToolResult>> middleware) { _toolMiddlewares.Add(middleware); return this; }
+    public AgentBuilder UseLLMMiddleware(PipelineMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>> middleware) { _llmMiddlewares.Add(middleware); return this; }
+    public AgentBuilder UseAgentMiddleware(PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>> middleware) { _agentMiddlewares.Add(middleware); return this; }
 
     public LLMAgent Build()
     {
@@ -67,11 +68,10 @@ public sealed class AgentBuilder
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
 
-        var toolExecutor = new ToolExecutor(registry)
-        {
-            BeforeCall = _beforeToolCall,
-            AfterCall = _afterToolCall
-        };
+        var toolExecutor = new ToolExecutor(
+            registry, 
+            _config.ToolOptions, 
+            _toolMiddlewares);
 
         var llmExecutor = new LLMExecutor(
             Provider,
@@ -79,17 +79,14 @@ public sealed class AgentBuilder
             contextManager,
             tokenCounter,
             tokenManager,
-            loggerFactory.CreateLogger<LLMExecutor>())
-        {
-            BeforeCall = _beforeModelCall,
-            AfterCall = _afterModelCall
-        };
-
+            loggerFactory.CreateLogger<LLMExecutor>(),
+            _llmMiddlewares);
         var executor = new ToolCallingLoop(
             memory,
             llmExecutor,
             toolExecutor,
-            loggerFactory.CreateLogger<ToolCallingLoop>());
+            loggerFactory.CreateLogger<ToolCallingLoop>(),
+            _agentMiddlewares);
 
         return new LLMAgent(executor, memory, _config, loggerFactory.CreateLogger<LLMAgent>());
     }
