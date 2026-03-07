@@ -79,7 +79,7 @@ public sealed class ToolCallingLoop : IAgentExecutor
             var textBuffer = new StringBuilder();
             var runningTools = new List<Task<ToolResult>>();
 
-            await foreach (var evt in _llm.StreamAsync(new LLMRequest([.. ctx.Messages], options), ct))
+            await foreach (var evt in _llm.StreamAsync([.. ctx.Messages], options, ct))
             {
                 switch (evt)
                 {

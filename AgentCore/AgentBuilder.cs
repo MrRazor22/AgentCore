@@ -31,7 +31,7 @@ public sealed class AgentBuilder
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
-    private readonly List<PipelineMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = [];
+    private readonly List<PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = [];
     private readonly List<PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>>> _agentMiddlewares = [];
 
     public AgentBuilder() { }
@@ -51,7 +51,7 @@ public sealed class AgentBuilder
 
     // Executor pipelines
     public AgentBuilder UseToolMiddleware(PipelineMiddleware<ToolCall, Task<ToolResult>> middleware) { _toolMiddlewares.Add(middleware); return this; }
-    public AgentBuilder UseLLMMiddleware(PipelineMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>> middleware) { _llmMiddlewares.Add(middleware); return this; }
+    public AgentBuilder UseLLMMiddleware(PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>> middleware) { _llmMiddlewares.Add(middleware); return this; }
     public AgentBuilder UseAgentMiddleware(PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>> middleware) { _agentMiddlewares.Add(middleware); return this; }
 
     public LLMAgent Build()

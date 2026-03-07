@@ -42,8 +42,8 @@ public static class AgentTelemetryExtensions
     }
 
     private static async IAsyncEnumerable<LLMEvent> StreamEventsAsync(
-        LLMRequest req, 
-        Execution.PipelineHandler<LLMRequest, IAsyncEnumerable<LLMEvent>> next,
+        LLMCall req, 
+        Execution.PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> next,
         Activity? act,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {

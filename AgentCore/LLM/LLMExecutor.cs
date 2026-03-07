@@ -17,7 +17,7 @@ public interface ILLMExecutor
     IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions options, CancellationToken ct = default);
 }
 
-public class LLMExecutor : ILLMExecutor
+public sealed class LLMExecutor : ILLMExecutor
 {
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
@@ -25,7 +25,7 @@ public class LLMExecutor : ILLMExecutor
     private readonly ITokenCounter _tokenCounter;
     private readonly ITokenManager _tokenManager;
     private readonly ILogger<LLMExecutor> _logger;
-    private readonly PipelineHandler<(IReadOnlyList<Message> Messages, LLMOptions Options), IAsyncEnumerable<LLMEvent>> _pipeline;
+    private readonly PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> _pipeline;
 
     public LLMExecutor(
         ILLMProvider provider,
@@ -34,7 +34,7 @@ public class LLMExecutor : ILLMExecutor
         ITokenCounter tokenCounter,
         ITokenManager tokenManager,
         ILogger<LLMExecutor> logger,
-        IEnumerable<PipelineMiddleware<(IReadOnlyList<Message> Messages, LLMOptions Options), IAsyncEnumerable<LLMEvent>>>? middlewares = null)
+        IEnumerable<PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>>>? middlewares = null)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
@@ -42,15 +42,17 @@ public class LLMExecutor : ILLMExecutor
         _tokenCounter = tokenCounter;
         _tokenManager = tokenManager;
         _logger = logger;
-        
-        _pipeline = Pipeline<LLMRequest, IAsyncEnumerable<LLMEvent>>.Build(
+
+        _pipeline = Pipeline<LLMCall, IAsyncEnumerable<LLMEvent>>.Build(
             middlewares ?? [],
             (req, ct) => StreamInternalAsync(req.Messages, req.Options, ct));
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
-        LLMRequest request,
-        CancellationToken ct = default) => _pipeline(request, ct);
+        IReadOnlyList<Message> messages,
+        LLMOptions options,
+        CancellationToken ct = default)
+        => _pipeline(new LLMCall(messages, options), ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,
@@ -115,7 +117,6 @@ public class LLMExecutor : ILLMExecutor
             if (evt != null) yield return evt;
         }
 
-        // Record token usage for per-session tracking
         if (tokenUsage != null)
         {
             _tokenManager.Record(tokenUsage);

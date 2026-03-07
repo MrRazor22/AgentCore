@@ -98,15 +98,6 @@ public sealed class ToolExecutor : IToolExecutor
         var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
         IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
 
-        if (result is Text txt && txt.Value != null)
-        {
-            var strValue = txt.Value.ToString();
-            if (strValue != null && strValue.Length > _options.MaxResultLength)
-            {
-                result = new Text(strValue.Substring(0, _options.MaxResultLength) + "...[Truncated]");
-            }
-        }
-
         return result;
     }
 
