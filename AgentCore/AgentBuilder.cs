@@ -68,7 +68,7 @@ public sealed class AgentBuilder
         var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
         var memory = Memory ?? new InMemoryMemory();
         var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
-        var contextManager = ContextManager ?? new SummarizingContextManager(tokenCounter, loggerFactory.CreateLogger<SummarizingContextManager>());
+        var contextManager = ContextManager ?? new SummarizingContextManager(tokenCounter, loggerFactory.CreateLogger<SummarizingContextManager>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var registry = new ToolRegistry();
