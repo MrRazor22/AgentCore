@@ -1,6 +1,6 @@
 # AgentCore
 
-AgentCore is an agent execution engine for .NET. You call it like a service: pass in a task, get back a result. Inside, it manages the full agent loop — context, tool execution, provider coordination — without any of it leaking into your code.
+AgentCore is a minimal agent framework for .NET. It acts as a pure execution engine: pass in a task, get back a result. Inside, it manages the full agent loop — context, tool execution, provider coordination — without any of it leaking into your code.
 
 ~1,800 lines. 2 dependencies. Everything an agent needs. Nothing it doesn't.
 
@@ -28,7 +28,7 @@ There are three dedicated functional middleware pipelines — Agent, LLM, and To
 ### 4. Opinionated Context & Token Calibration
 Tail-trimming context windows creates "Amnesia Agents." Exact token counting requires synchronous Tiktoken dependencies that tank performance.
 
-AgentCore solves this by default:
+AgentCore avoids this by default:
 - It uses a LangChain-inspired `ApproximateTokenCounter` that dynamically calibrates based on actual network responses, remaining incredibly fast while self-correcting drift.
 - It defaults to a `SummarizingContextManager` that uses recursive summarization to gracefully fold dropped history into a context scratchpad at the boundary right before the LLM fires, completely decoupled from the true persistent AgentMemory.
 
@@ -200,7 +200,7 @@ var agent = LLMAgent.Create("agent")
 │    Raw provider implementation. Yields:                        │
 │      TextDelta | ToolCallDelta | MetaDelta                    │
 │                                                                │
-│    Providers: AgentCore.OpenAI, AgentCore.Gemini               │
+│    Providers: AgentCore.OpenAI, AgentCore.MEAI                 │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -250,16 +250,135 @@ Uses the official `OpenAI` .NET SDK. Supports any OpenAI-compatible API (LM Stud
 }))
 ```
 
-### AgentCore.Gemini
+### AgentCore.MEAI
 
-Uses `Google.Cloud.AIPlatform.V1` SDK.
+Uses the official `Microsoft.Extensions.AI` abstractions. This means AgentCore natively supports **every provider Microsoft supports**, including:
+- Azure OpenAI & Local OpenAI
+- Google Gemini 
+- Anthropic Claude
+- Mistral AI
+- Local Models (Ollama, LM Studio)
+- ...and any other `.AddChatClient()` package.
 
 ```csharp
-.WithProvider(new GeminiLLMClient(o =>
-{
-    o.Model = "gemini-2.5-flash";
-    o.ApiKey = "...";
-}, project: "my-project", location: "us-central1"))
+// myChatClient implements IChatClient from MEAI
+.WithProvider(new MEAILLMClient(myChatClient))
+```
+
+---
+
+## Core Components
+
+### Runtime
+
+| File | Lines | Purpose |
+|---|---|---|
+| `Agent.cs` | ~106 | `IAgent` interface + `LLMAgent` implementation. String-in, string-out. Orchestrates memory recall → executor → memory update. |
+| `AgentBuilder.cs` | ~93 | Fluent builder. Wires components, hooks, and options via explicit composition. Builds `LLMAgent`. |
+| `AgentExecutor.cs` | ~126 | `IAgentExecutor` interface + `ToolCallingLoop` default. The agent loop. |
+| `IAgentContext.cs` | ~28 | Context passed to executor: sessionId, config, messages, userInput, outputType. |
+| `AgentMemory.cs` | ~115 | `IAgentMemory` interface + `FileMemory` default. Recall/update/clear with JSON file persistence. |
+
+### LLM
+
+| File | Lines | Purpose |
+|---|---|---|
+| `LLMExecutor.cs` | ~143 | Consumes raw deltas from provider, emits `TextEvent`/`ToolCallEvent`. Handles context reduction, token tracking. Uses Pipeline middleware. |
+| `LLMCall.cs` | ~5 | Simple record: `(IReadOnlyList<Message> Messages, LLMOptions Options)`. No bloat. |
+| `ILLMProvider.cs` | ~14 | Single-method interface: `StreamAsync → IAsyncEnumerable<IContentDelta>`. |
+| `LLMEvent.cs` | ~9 | Two events: `TextEvent(string Delta)`, `ToolCallEvent(ToolCall Call)`. |
+| `LLMOptions.cs` | ~21 | Flat config class: model, API key, base URL, sampling parameters, response schema, context length. |
+| `LLMMeta.cs` | ~9 | `FinishReason` enum, `ToolCallMode` enum. |
+
+### Tooling
+
+| File | Lines | Purpose |
+|---|---|---|
+| `Tool.cs` | ~33 | `[Tool]` attribute + `Tool` class (name, description, JSON schema, delegate). |
+| `ToolRegistry.cs` | ~178 | Registration, lookup, auto-schema generation from method signatures. |
+| `ToolExecutor.cs` | ~196 | Invocation engine: parameter parsing, validation, CancellationToken injection. Uses Pipeline middleware. |
+| `ToolOptions.cs` | ~9 | Config: MaxConcurrency, DefaultTimeout. Defaults to framework trimming. |
+| `ToolRegistryExtensions.cs` | ~71 | `RegisterAll<T>()` — discovers `[Tool]` methods from a type via reflection. |
+
+### Execution (Middleware Pipeline)
+
+| File | Lines | Purpose |
+|---|---|---|
+| `Pipeline.cs` | ~28 | Generic middleware pipeline: `PipelineHandler<TRequest, TResult>` and `PipelineMiddleware<TRequest, TResult>`. |
+
+### Tokens
+
+| File | Lines | Purpose |
+|---|---|---|
+| `ContextManager.cs` | ~9 | `IContextManager` interface. |
+| `SummarizingContextManager.cs` | ~95 | Single implementation: tail-trims to fit context. If provider given, summarizes dropped messages. If no provider, just tail-trims. |
+| `TokenManager.cs` | ~39 | Cumulative token usage tracking across LLM calls. |
+| `ITokenCounter.cs` | ~8 | Interface: `CountAsync(messages) → int`. |
+| `ApproximateTokenCounter.cs` | ~74 | Default `len/4` fallback + Dynamic Response Calibration |
+
+### Chat (Internal Primitives)
+
+| File | Lines | Purpose |
+|---|---|---|
+| `Content.cs` | ~45 | `IContent` interface + `Text`, `ToolCall`, `ToolResult` records. |
+| `ContentDelta.cs` | ~17 | `IContentDelta` interface + `TextDelta`, `ToolCallDelta`, `MetaDelta` — raw provider streaming types. |
+| `Message.cs` | ~9 | `Message(Role, IContent)` — the internal message representation. |
+| `Role.cs` | ~6 | `enum Role { System, Assistant, User, Tool }` |
+| `Extensions.cs` | ~184 | Helpers: `AddUser()`, `AddAssistant()`, `Clone()`, `ToJson()`, serialization for providers. |
+
+---
+
+## Project Structure
+
+```
+AgentCore/                          # Core framework (~1,800 lines)
+├── Runtime/
+│   ├── Agent.cs                    # IAgent, LLMAgent — string in, string out
+│   ├── AgentBuilder.cs             # Fluent builder + explicit composition
+│   ├── AgentExecutor.cs            # IAgentExecutor, ToolCallingLoop
+│   ├── IAgentContext.cs            # Context passed to executor
+│   └── AgentMemory.cs              # IAgentMemory, FileMemory
+├── LLM/
+│   ├── LLMExecutor.cs              # Event-level streaming + middleware
+│   ├── LLMCall.cs                  # Simple record: (Messages, Options)
+│   ├── ILLMProvider.cs             # Raw provider interface
+│   ├── LLMEvent.cs                 # TextEvent, ToolCallEvent
+│   ├── LLMOptions.cs              # Model config
+│   └── LLMMeta.cs                  # FinishReason, ToolCallMode
+├── Tooling/
+│   ├── Tool.cs                     # [Tool] attribute + Tool class
+│   ├── ToolRegistry.cs             # Registration + auto-schema
+│   ├── ToolExecutor.cs             # Invocation + middleware
+│   ├── ToolOptions.cs              # MaxConcurrency, DefaultTimeout
+│   └── ToolRegistryExtensions.cs  # RegisterAll<T>() reflection
+├── Execution/
+│   └── Pipeline.cs                 # Middleware pipeline
+├── Diagnostics/
+│   ├── AgentTelemetryExtensions.cs # OpenTelemetry integration
+│   └── AgentDiagnosticSource.cs    # Diagnostic source
+├── Tokens/
+│   ├── ContextManager.cs           # IContextManager interface only
+│   ├── SummarizingContextManager.cs # Single implementation: tail-trim + optional summarize
+│   ├── TokenManager.cs             # Cumulative token tracking
+│   ├── ITokenCounter.cs            # Counter interface
+│   └── ApproximateTokenCounter.cs  # Dynamic length approximation
+├── Chat/
+│   ├── Content.cs                  # IContent, Text, ToolCall, ToolResult
+│   ├── ContentDelta.cs             # Raw streaming delta types
+│   ├── Message.cs                  # Message(Role, IContent)
+│   ├── Role.cs                     # System, Assistant, User, Tool
+│   └── Extensions.cs               # Conversation helpers + serialization
+
+AgentCore.OpenAI/                   # OpenAI provider package
+├── OpenAILLMClient.cs              # ILLMProvider implementation
+├── OpenAIExtensions.cs             # Message/tool conversion helpers
+├── OpenAIServiceExtensions.cs      # .AddOpenAI() builder extension
+└── TikTokenCounter.cs              # Accurate token counting
+
+AgentCore.MEAI/                     # MEAI provider package
+├── MEAILLMClient.cs                # ILLMProvider implementation
+├── MEAIExtensions.cs               # Message/tool conversion helpers
+└── MEAIServiceExtensions.cs        # .AddMEAI() builder extension
 ```
 
 ---
