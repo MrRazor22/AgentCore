@@ -16,7 +16,7 @@ namespace TestApp
     {
         public static async Task RunAsync()
         {
-            async IAsyncEnumerable<LLMEvent> StreamAndLogEvents(LLMRequest req, AgentCore.Execution.PipelineHandler<LLMRequest, IAsyncEnumerable<LLMEvent>> next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+            async IAsyncEnumerable<LLMEvent> StreamAndLogEvents(LLMCall req, AgentCore.Execution.PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> next, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
             {
                 var events = new List<LLMEvent>();
                 await foreach (var evt in next(req, ct).ConfigureAwait(false))
