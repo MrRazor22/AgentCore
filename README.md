@@ -245,8 +245,9 @@ Uses the official `OpenAI` .NET SDK. Supports any OpenAI-compatible API (LM Stud
 ```csharp
 .WithProvider(new OpenAILLMClient(o =>
 {
-    o.Model = "gpt-4o";
-    o.ApiKey = "sk-...";
+    o.Model = "qwen-3.54b";
+    o.ApiKey = "lmstudio";
+    o.BaseUrl = "http://127.0.0.1:1234";
 }))
 ```
 
