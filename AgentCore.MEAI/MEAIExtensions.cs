@@ -115,6 +115,6 @@ internal static class MEAIExtensions
     {
         if (content is Text t) return t.Value;
         if (content is ToolCall tc) return tc.Arguments.ToJsonString();
-        return "";
+        return content.ForLlm();
     }
 }

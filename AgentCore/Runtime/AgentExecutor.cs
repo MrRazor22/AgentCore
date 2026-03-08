@@ -20,6 +20,7 @@ public sealed class ToolCallingLoop : IAgentExecutor
     private readonly IAgentMemory _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _runtime;
+    private readonly LLMOptions _baseOptions;
     private readonly ILogger<ToolCallingLoop> _logger;
     private readonly PipelineHandler<IAgentContext, IAsyncEnumerable<string>> _pipeline;
     private readonly int _maxToolSteps;
@@ -28,6 +29,7 @@ public sealed class ToolCallingLoop : IAgentExecutor
         IAgentMemory memory,
         ILLMExecutor llm,
         IToolExecutor runtime,
+        LLMOptions baseOptions,
         ILogger<ToolCallingLoop> logger,
         IEnumerable<PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>>>? middlewares = null,
         int maxToolSteps = 15)
@@ -35,6 +37,7 @@ public sealed class ToolCallingLoop : IAgentExecutor
         _memory = memory;
         _llm = llm;
         _runtime = runtime;
+        _baseOptions = baseOptions;
         _logger = logger;
         _maxToolSteps = maxToolSteps;
 
@@ -55,6 +58,17 @@ public sealed class ToolCallingLoop : IAgentExecutor
 
         var options = new LLMOptions
         {
+            Model = _baseOptions.Model,
+            ApiKey = _baseOptions.ApiKey,
+            BaseUrl = _baseOptions.BaseUrl,
+            ContextLength = _baseOptions.ContextLength,
+            Temperature = _baseOptions.Temperature,
+            TopP = _baseOptions.TopP,
+            MaxOutputTokens = _baseOptions.MaxOutputTokens,
+            Seed = _baseOptions.Seed,
+            StopSequences = _baseOptions.StopSequences,
+            FrequencyPenalty = _baseOptions.FrequencyPenalty,
+            PresencePenalty = _baseOptions.PresencePenalty,
             ToolCallMode = ToolCallMode.Auto,
             ResponseSchema = ctx.OutputType?.GetSchemaForType()
         };

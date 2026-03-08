@@ -28,6 +28,7 @@ public sealed class AgentBuilder
     public ITokenManager? TokenManager { get; set; }
     public ILoggerFactory? LoggerFactory { get; set; }
     public ILLMProvider? Provider { get; set; }
+    private LLMOptions? _providerOptions;
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
@@ -47,7 +48,12 @@ public sealed class AgentBuilder
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { LoggerFactory = loggerFactory; return this; }
-    public AgentBuilder WithProvider(ILLMProvider provider) { Provider = provider; return this; }
+    public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null) 
+    { 
+        Provider = provider; 
+        if (options != null) _providerOptions = options;
+        return this; 
+    }
 
     // Executor pipelines
     public AgentBuilder UseToolMiddleware(PipelineMiddleware<ToolCall, Task<ToolResult>> middleware) { _toolMiddlewares.Add(middleware); return this; }
@@ -85,6 +91,7 @@ public sealed class AgentBuilder
             memory,
             llmExecutor,
             toolExecutor,
+            _providerOptions ?? new LLMOptions(),
             loggerFactory.CreateLogger<ToolCallingLoop>(),
             _agentMiddlewares);
 

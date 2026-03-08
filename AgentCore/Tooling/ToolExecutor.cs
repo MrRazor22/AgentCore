@@ -136,8 +136,13 @@ public sealed class ToolExecutor : IToolExecutor
         return values.ToArray();
     }
 
+    private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
     private static object? DeserializeNode(JsonNode? node, Type type)
-        => JsonSerializer.Deserialize(node, type);
+        => JsonSerializer.Deserialize(node, type, _jsonOptions);
 
     private static object?[] InjectCancellationToken(object?[] toolParams, MethodInfo method, CancellationToken ct)
     {

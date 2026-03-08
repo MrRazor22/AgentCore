@@ -12,7 +12,7 @@ public static class OpenAIServiceExtensions
         configure(options);
 
         var provider = new OpenAILLMClient(options);
-        builder.WithProvider(provider);
+        builder.WithProvider(provider, options);
 
         var encoding = options.Model?.StartsWith("gpt-4o") == true ? "o200k_base" : "cl100k_base";
         var tokenCounter = new TikTokenCounter(encoding);

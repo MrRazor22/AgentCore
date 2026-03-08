@@ -29,7 +29,7 @@ public static class JsonSchemaExtensions
         type = Nullable.GetUnderlyingType(type) ?? type;
 
         if (visited.Count == 0 && _schemaCache.TryGetValue(type, out var cached))
-            return cached;
+            return (JsonObject)cached.DeepClone();
 
         var result = BuildSchema(type, visited);
 
