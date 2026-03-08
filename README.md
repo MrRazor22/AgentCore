@@ -1,91 +1,62 @@
 # AgentCore
 
-An agent primitive for .NET — not a framework, a foundation.
+AgentCore is an agent execution engine for .NET. You call it like a service: pass in a task, get back a result. Inside, it manages the full agent loop — context, tool execution, provider coordination — without any of it leaking into your code.
 
-An agent is a loop over a conversation. The industry wraps this in state graphs, session objects, memory abstractions, and middleware pipelines. AgentCore strips it down to what actually matters: a conversation, a loop, and tools. ~1,800 lines. 2 dependencies. Zero containers.
+~1,800 lines. 2 dependencies. Everything an agent needs. Nothing it doesn't.
 
 ---
 
-## Design Philosophy
+## The Philosophy
 
-### This is All You Need
+Most agent frameworks solve problems they created. They introduce massive state graphs, then need CheckpointSavers. They build complex memory abstractions, then need semantic memory lifecycle hooks. They merge LLM configurations directly into Agent orchestration, leaking "how it thinks" into "what it does."
 
-Most agent frameworks solve problems they created. They introduce session state dictionaries, then need state management. They add memory abstractions, then need memory lifecycle hooks. They build middleware pipelines, then need filter chains to control them.
+AgentCore provides a fundamentally different bedrock.
 
-An LLM is stateless. You give it messages, it responds. AgentCore aligns with that reality instead of fighting it. The entire agent runtime is: load conversation → run the loop → save conversation. Everything else — context management, tool execution, crash recovery — falls out naturally from this design.
+### 1. One content model, strict boundaries
+All events in an agent's life — user input, model response, a tool call, a tool result, a tool error — are treated as the same kind of thing: `IContent`. There is one pipeline. This means no special error channels or repair hacks. If a tool fails, it's just a message the model reads to self-correct.
 
-### No Wrapper Bloat
+Crucially, the layers are strictly separated. The LLM layer handles tokens and network boundaries; it never leaks provider parameters to the Agent layer. The orchestration layer only receives *completed* concerns.
 
-Many frameworks wrap LLM calls in request/response objects that add no value. AgentCore uses a simple record:
+### 2. The loop does exactly one job
+The agent loop streams from the LLM, dispatches tool calls, appends results, and checkpoints state. That's all it does. Context reduction and token tracking are handled by dedicated layers the loop simply calls. 
 
-```csharp
-public sealed record LLMCall(IReadOnlyList<Message> Messages, LLMOptions Options);
-```
+Because the loop inherently pauses at `Task.WhenAll` to await tools, durability is a natural byproduct. Combined with the default `FileMemory`, AgentCore provides perfect, stateless crash recovery per session ID without a massive lifecycle manager or dedicated database thread.
 
-That's it. No builder patterns, no fluent configuration, no boilerplate. The record holds what it needs: messages and options.
+### 3. Middleware is the extension model
+There are three dedicated functional middleware pipelines — Agent, LLM, and Tool level. Not added for extensibility or as ergonomic bolts-on — they are the core extension model. You get full interception and observability at every meaningful boundary without touching anything internal.
 
-### No Hardcoded Limits
+### 4. Opinionated Context & Token Calibration
+Tail-trimming context windows creates "Amnesia Agents." Exact token counting requires synchronous Tiktoken dependencies that tank performance.
 
-AgentCore avoids magic numbers. Instead of hardcoding `MaxResultLength = 32768`, the `ContextManager` calculates available context dynamically:
+AgentCore solves this by default:
+- It uses a LangChain-inspired `ApproximateTokenCounter` that dynamically calibrates based on actual network responses, remaining incredibly fast while self-correcting drift.
+- It defaults to a `SummarizingContextManager` that uses recursive summarization to gracefully fold dropped history into a context scratchpad at the boundary right before the LLM fires, completely decoupled from the true persistent AgentMemory.
 
-- Takes model's context window from `LLMOptions.ContextLength`
-- Reserves space for output (default: min(4096, 25% of context))
-- Everything — messages, tool results, system prompts — is trimmed uniformly
+---
 
-This means tool results are trimmed the same way as conversation history: intelligently, based on actual available space.
+## What You Build On Top
 
-### Agent as a Boundary
-
-Semantic Kernel exposes `ChatMessageContent`, `FunctionResult` at the agent surface `KernelArguments`,. Google ADK exposes `session.state` and `session.events`. LangChain exposes `AIMessage` and `HumanMessage`. In every case, the agent leaks LLM internals to the caller because the "agent" is really just a thin wrapper around the model API.
-
-AgentCore draws a hard boundary. **The agent is a service, not a wrapper.** At the surface:
-
-- **Input:** a task, as a `string`
-- **Output:** a result, as a `string`
-
-Messages, roles, tool calls, context windows — these are internal implementation details. Your application code has zero coupling to LLM concepts. If you swap the agent implementation tomorrow, nothing else changes.
+Because AgentCore is a completely stateless primitive, building complex topologies like multi-agent workflows or routing isn't a framework feature you have to wait for — it's just your code orchestrating the engine.
 
 ```csharp
-// This is the entire public contract.
-string response = await agent.InvokeAsync("What's the weather in Tokyo?");
+var supervisor = LLMAgent.Create("router")
+    .WithInstructions("Route the user to the correct expert.")
+    .WithTools<RoutingTools>() 
+    .Build();
+
+var worker = LLMAgent.Create("researcher")
+    .WithTools<SearchTools>()
+    .Build();
+
+// It's just C# orchestration
+var decision = await supervisor.InvokeAsync<RouteDecision>("I need to research Quantum Physics.");
+
+if (decision.Target == "worker") 
+{
+    // The worker executes statelessly
+    var result = await worker.InvokeAsync(decision.Query, sessionId: "req-123");
+}
 ```
-
-### Conversation is the Only State
-
-SK manages `ChatHistory` inside `AgentThread` with `ChatMessageStore` options. ADK maintains `session.state` (a key-value scratchpad), `session.events` (an event timeline), and magic key prefixes (`user:`, `app:`) for cross-session persistence. LangGraph uses typed state graphs with channel-based state management.
-
-AgentCore asks: **why?**
-
-The LLM doesn't read your session state dictionary. It reads messages. The conversation IS the session. The message list IS the memory. There is no separate "state" because there's nothing to track outside the conversation.
-
-This has consequences that matter:
-
-- **The agent is stateless.** `LLMAgent` holds zero mutable state. One instance safely serves thousands of concurrent sessions — no locks, no per-session copies, no state synchronization.
-- **Crash recovery is automatic.** The `ToolCallingLoop` saves the conversation after every tool turn. Crash mid-execution? Resume with the same `sessionId` — the agent picks up from the last completed turn. No checkpointer system, no state graph snapshots, no external runtime. Saving a JSON file costs milliseconds; an LLM call costs seconds. The bottleneck makes this trivially cheap.
-- **Cross-session knowledge is a tool, not a framework concern.** Need the agent to remember something from 3 months ago? Give it a search tool. That's RAG — it belongs in a tool, not baked into the agent's memory model.
-
-### Everything is Content
-
-`IContent` is the universal primitive. Text, tool calls, tool results, tool errors — everything implements `IContent` with a single method: `ForLlm()`. There is one pipeline, one flow.
-
-When a tool throws an exception, it becomes a `ToolResult` containing the error — just another message the LLM can read and self-correct from. No special error channels, no retry plugins, no `FunctionInvocationFilter`. Errors flow through the same conversation pipeline as everything else.
-
-Fewer code paths means fewer bugs. The LLM doesn't distinguish between a tool result and an error message — why should the framework?
-
-### Middleware is Optional
-
-AgentCore provides a **middleware pipeline** for extensibility, but it's not required. The default execution works without any middleware:
-
-- **LLM middleware**: logging, caching, retries, telemetry
-- **Tool middleware**: logging, validation, mocking
-
-The pipeline is there if you need it, but the common case (just use the agent) requires zero middleware.
-
-### An Agent Primitive, Not a Framework
-
-~1,800 lines is not a limitation. It's a statement about how much code a correct agent primitive actually requires. Tool calling, context management, session persistence, crash recovery, typed output, streaming, middleware — all present, all working, all in 1,800 lines.
-
-What's missing isn't missing by accident. Multi-agent orchestration is an application-level concern — you compose it on top. RAG is a tool. Multi-modal is a provider concern. The framework doesn't own these because they don't belong in the primitive.
 
 ---
 
@@ -113,7 +84,7 @@ await foreach (var chunk in agent.InvokeStreamingAsync("Tell me about Tokyo"))
 
 ### Tool Definition
 
-Mark any method with `[Tool]`:
+Mark any method with `[Tool]`. AgentCore uses C# reflection to automatically infer `JsonSchema` parameters and generate JSON-compatible execution delegates. Zero definition drift.
 
 ```csharp
 public class WeatherTools
@@ -127,34 +98,32 @@ public class WeatherTools
 }
 ```
 
-AgentCore auto-generates JSON schemas from method signatures. Parameters, types, descriptions, required/optional — all inferred. Async methods and `CancellationToken` injection just work.
-
 ### Typed Output
 
 ```csharp
 var agent = LLMAgent.Create("extractor")
     .WithInstructions("Extract structured data from the user's input.")
     .WithProvider(new OpenAILLMClient(o => { o.Model = "gpt-4o"; o.ApiKey = "..."; }))
-    .WithOutput<PersonInfo>()
+    .WithOutput<PersonInfo>() // Force structured extraction
     .Build();
 
 // The model response is constrained to the schema of PersonInfo.
-var result = await agent.InvokeAsync("John Doe, 30 years old, lives in NYC.");
+var result = await agent.InvokeAsync<PersonInfo>("John Doe, 30 years old.");
 ```
 
 ### Session Persistence & Crash Recovery
 
-Every invocation can have a `sessionId`. The memory system persists every conversation turn to disk, so if your agent crashes mid-session, you can resume exactly where it left off:
+Every invocation can have a `sessionId`. The memory system persists the transcript, so if your agent crashes mid-session, you can resume exactly where it left off.
 
 ```csharp
 // First run:
 await agent.InvokeAsync("Search for flights to Tokyo", sessionId: "session-abc");
 
-// After crash/restart — resumes from saved state:
+// After crash/restart — AgentCore loads the transcript and resumes:
 await agent.InvokeAsync("Now book the cheapest one", sessionId: "session-abc");
 ```
 
-### Middleware for Observability & Control
+### Middleware for Observability
 
 ```csharp
 var agent = LLMAgent.Create("agent")
@@ -179,13 +148,24 @@ var agent = LLMAgent.Create("agent")
 
 ## Architecture
 
+| AgentCore handles | You handle |
+|---|---|
+| Agent invocation loop | Multi-agent topology |
+| Execution history state | Handoff and routing logic |
+| Context trimming / counting | Approval and business flows |
+| Tool execution + errors | External side-effects & state |
+| Middleware pipelines | Orchestration workflow |
+| Session persistence | App-specific user sessions |
+
+### Layer Separation
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                     Agent Layer (Public API)                    │
-│    IAgent: InvokeAsync(string) → string                        │
+│    IAgent: InvokeAsync<T>(string) → T                          │
 │            InvokeStreamingAsync(string) → IAsyncEnumerable     │
 │                                                                │
-│    LLMAgent orchestrates: Memory → Executor → Memory          │
+│    Orchestrates: Memory → Executor → Memory                    │
 ├────────────────────────────────────────────────────────────────┤
 │                   Agent Executor Layer (Control Flow)           │
 │    IAgentExecutor: your agent logic lives here                 │
@@ -211,7 +191,7 @@ var agent = LLMAgent.Create("agent")
 │    - Calls provider, reassembles streaming deltas             │
 │    - Text → streamed as TextEvent immediately                 │
 │    - Tool calls → buffered, emitted as ToolCallEvent at end   │
-│    - Records token usage                                      │
+│    - Records token usage via ApproximateTokenCounter          │
 ├────────────────────────────────────────────────────────────────┤
 │                    LLM Provider Layer (Raw I/O)                │
 │    ILLMProvider: StreamAsync(messages, options, tools)         │
@@ -224,279 +204,62 @@ var agent = LLMAgent.Create("agent")
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### Layer Separation
-
 | Layer | Knows About | Doesn't Know About |
 |---|---|---|
 | **Agent** | strings, session IDs, memory | messages, roles, models, tokens |
 | **AgentExecutor** | messages, tools, LLM events | providers, context windows, raw deltas |
 | **Middleware** | TRequest/TResult types | internal execution details |
-| **LLMExecutor** | messages, options, context strategy, token tracking | provider HTTP, SDK details |
-| **LLMProvider** | HTTP, SDK, raw streaming | context management, token tracking, tools registry |
+| **LLMExecutor** | messages, context strategy, tokens | provider HTTP, network limits, SDKs |
+| **LLMProvider** | HTTP, SDK, raw streaming limits | context management, agent memory |
 
 ---
 
-## Core Components
+## Memory System
 
-### Runtime
+The memory design follows a simple principle: **the transcript IS the session.**
 
-| File | Lines | Purpose |
-|---|---|---|
-| `Agent.cs` | ~106 | `IAgent` interface + `LLMAgent` implementation. String-in, string-out. Orchestrates memory recall → executor → memory update. |
-| `AgentBuilder.cs` | ~93 | Fluent builder. Wires components, hooks, and options via explicit composition. Builds `LLMAgent`. |
-| `AgentExecutor.cs` | ~126 | `IAgentExecutor` interface + `ToolCallingLoop` default. The agent loop. |
-| `IAgentContext.cs` | ~28 | Context passed to executor: sessionId, config, messages, userInput, outputType. |
-| `AgentMemory.cs` | ~115 | `IAgentMemory` interface + `FileMemory` default. Recall/update/clear with JSON file persistence. |
+```csharp
+public interface IAgentMemory
+{
+    Task<IList<Message>> RecallAsync(string sessionId, string userRequest);
+    Task UpdateAsync(string sessionId, IList<Message> messages);
+    Task ClearAsync(string sessionId);
+}
+```
 
-### LLM
+- `RecallAsync` loads the history before execution.
+- `UpdateAsync` persists the transcript during/after execution.
 
-| File | Lines | Purpose |
-|---|---|---|
-| `LLMExecutor.cs` | ~143 | Consumes raw deltas from provider, emits `TextEvent`/`ToolCallEvent`. Handles context reduction, token tracking. Uses Pipeline middleware. |
-| `LLMCall.cs` | ~5 | Simple record: `(IReadOnlyList<Message> Messages, LLMOptions Options)`. No bloat. |
-| `ILLMProvider.cs` | ~14 | Single-method interface: `StreamAsync → IAsyncEnumerable<IContentDelta>`. |
-| `LLMEvent.cs` | ~9 | Two events: `TextEvent(string Delta)`, `ToolCallEvent(ToolCall Call)`. |
-| `LLMOptions.cs` | ~21 | Flat config class: model, API key, base URL, sampling parameters, response schema, context length. |
-| `LLMMeta.cs` | ~9 | `FinishReason` enum, `ToolCallMode` enum. |
-
-### Tooling
-
-| File | Lines | Purpose |
-|---|---|---|
-| `Tool.cs` | ~33 | `[Tool]` attribute + `Tool` class (name, description, JSON schema, delegate). |
-| `ToolRegistry.cs` | ~178 | Registration, lookup, auto-schema generation from method signatures. |
-| `ToolExecutor.cs` | ~196 | Invocation engine: parameter parsing, validation, CancellationToken injection. Uses Pipeline middleware. |
-| `ToolOptions.cs` | ~9 | Config: MaxConcurrency, DefaultTimeout. **No MaxResultLength** — trimming handled by ContextManager. |
-| `ToolRegistryExtensions.cs` | ~71 | `RegisterAll<T>()` — discovers `[Tool]` methods from a type via reflection. |
-
-### Execution (Middleware Pipeline)
-
-| File | Lines | Purpose |
-|---|---|---|
-| `Pipeline.cs` | ~28 | Generic middleware pipeline: `PipelineHandler<TRequest, TResult>` and `PipelineMiddleware<TRequest, TResult>`. |
-
-### Diagnostics
-
-| File | Lines | Purpose |
-|---|---|---|
-| `AgentTelemetryExtensions.cs` | ~62 | `WithOpenTelemetry()` extension for OpenTelemetry integration via middleware. |
-| `AgentDiagnosticSource.cs` | ~8 | `DiagnosticSource` for activity tracking. |
-
-### Tokens
-
-| File | Lines | Purpose |
-|---|---|---|
-| `ContextManager.cs` | ~9 | `IContextManager` interface. |
-| `SummarizingContextManager.cs` | ~95 | Single implementation: tail-trims to fit context. If provider given, summarizes dropped messages. If no provider, just tail-trims. |
-| `TokenManager.cs` | ~39 | Cumulative token usage tracking across LLM calls. |
-| `ITokenCounter.cs` | ~8 | Interface: `Count(string) → int`. |
-| `ApproximateTokenCounter.cs` | ~74 | Default: `length / 4`. Provider packages can register accurate counters (e.g., TikToken for OpenAI). |
-
-### Chat (Internal Primitives)
-
-| File | Lines | Purpose |
-|---|---|---|
-| `Content.cs` | ~45 | `IContent` interface + `Text`, `ToolCall`, `ToolResult` records. |
-| `ContentDelta.cs` | ~17 | `IContentDelta` interface + `TextDelta`, `ToolCallDelta`, `MetaDelta` — raw provider streaming types. |
-| `Message.cs` | ~9 | `Message(Role, IContent)` — the internal message representation. |
-| `Role.cs` | ~6 | `enum Role { System, Assistant, User, Tool }` |
-| `Extensions.cs` | ~184 | Helpers: `AddUser()`, `AddAssistant()`, `Clone()`, `ToJson()`, serialization for providers. |
+The default `FileMemory` writes JSON transcripts safely to disk. Need RAG? Vector search? Just implement `IAgentMemory`.
 
 ---
 
 ## Providers
 
-Provider packages are thin adapters that implement `ILLMProvider`:
+Provider packages are very thin adapters that implement `ILLMProvider`. Because the framework handles context reduction, schema generation, and tooling workflows natively, integrating new models takes roughly ~100 lines of code.
 
 ### AgentCore.OpenAI
+
+Uses the official `OpenAI` .NET SDK. Supports any OpenAI-compatible API (LM Studio, Ollama, Azure, etc.)
 
 ```csharp
 .WithProvider(new OpenAILLMClient(o =>
 {
     o.Model = "gpt-4o";
     o.ApiKey = "sk-...";
-    o.BaseUrl = "https://api.openai.com/v1"; // or any OpenAI-compatible endpoint
 }))
 ```
 
-- Uses the official `OpenAI` .NET SDK
-- Auto-registers `TikTokenCounter` for accurate token counting
-- Supports any OpenAI-compatible API (LM Studio, Ollama, Azure, etc.)
-
 ### AgentCore.Gemini
+
+Uses `Google.Cloud.AIPlatform.V1` SDK.
 
 ```csharp
 .WithProvider(new GeminiLLMClient(o =>
 {
-    o.Model = "gemini-2.0-flash";
+    o.Model = "gemini-2.5-flash";
     o.ApiKey = "...";
 }, project: "my-project", location: "us-central1"))
-```
-
-- Uses `Google.Cloud.AIPlatform.V1` SDK
-- Supports Vertex AI project/location
-
-### Writing Your Own Provider
-
-Implement `ILLMProvider`:
-
-```csharp
-public class MyProvider : ILLMProvider
-{
-    public async IAsyncEnumerable<IContentDelta> StreamAsync(
-        IReadOnlyList<Message> messages,
-        LLMOptions options,
-        IReadOnlyList<Tool>? tools = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        // Call your LLM API, yield deltas:
-        yield return new TextDelta("Hello ");
-        yield return new TextDelta("world!");
-        yield return new MetaDelta(FinishReason.Stop, new TokenUsage(10, 5));
-    }
-}
-
-// Register it:
-builder.WithProvider(new MyProvider());
-```
-
----
-
-## Memory System
-
-The memory design follows a simple principle: **a session is just the list of messages you feed to the agent.**
-
-```csharp
-public interface IAgentMemory
-{
-    Task<IList<Message>> RecallAsync(string sessionId, string userRequest);
-    Task UpdateAsync(string sessionId, string userRequest, string response);
-    Task ClearAsync(string sessionId);
-}
-```
-
-- `RecallAsync` is called **before** execution — loads past conversation
-- `UpdateAsync` is called **after** execution — persists the new turn
-- That's the entire contract
-
-The default `FileMemory` writes JSON files to `%APPDATA%/AgentCore/{sessionId}.json`. Need RAG? Vector search? Redis? Just implement `IAgentMemory`.
-
----
-
-## Context Management
-
-The `ContextManager` is the **single source of truth for ALL trimming** — messages and tool results alike. There's one implementation that handles both cases:
-
-### SummarizingContextManager (single implementation)
-
-The only implementation. Two modes:
-
-1. **Without provider (default)**: Tail-trim strategy - keeps all system messages + most recent user/assistant messages that fit within available context. Drops oldest messages until total fits.
-
-2. **With provider**: Same tail-trimming, but when messages must be dropped, summarizes them via an additional LLM call and injects the summary as a "scratchpad" message. More expensive but preserves more context.
-
-### Why No MaxResultLength?
-
-Previous versions had `ToolOptions.MaxResultLength` — a hardcoded cap on tool results. This was removed because:
-
-1. It's a magic number: why 32k? What works for gpt-4 (128k) doesn't work for gpt-3.5-turbo (4k)
-2. It's redundant: ContextManager handles ALL trimming
-3. It's inflexible: doesn't account for varying context windows
-
-Now: ContextManager calculates available space dynamically based on the model's actual context window.
-
-### Default Behavior
-
-By default, AgentCore uses `SummarizingContextManager` **without a provider** — pure tail-trimming. If you want summarization, provide an LLM provider to the context manager:
-
-```csharp
-// Default (tail-trim only):
-.WithContextManager(new SummarizingContextManager(tokenCounter, logger))
-
-// With summarization (requires a separate LLM provider):
-.WithContextManager(new SummarizingContextManager(tokenCounter, logger, summaryProvider))
-```
-
----
-
-## Middleware Pipeline
-
-AgentCore uses a simple, generic middleware pipeline inspired by ASP.NET Core:
-
-```csharp
-public delegate TResult PipelineHandler<in TRequest, out TResult>(TRequest request, CancellationToken ct);
-public delegate TResult PipelineMiddleware<TRequest, TResult>(TRequest request, PipelineHandler<TRequest, TResult> next, CancellationToken ct);
-```
-
-### LLM Middleware
-
-```csharp
-builder.UseLLMMiddleware(async (req, next, ct) =>
-{
-    // req is LLMCall: (Messages, Options)
-    Console.WriteLine($"Calling {req.Options.Model}");
-    
-    var events = next(req, ct);
-    
-    // Can transform, log, cache, etc.
-    return events;
-});
-```
-
-### Tool Middleware
-
-```csharp
-builder.UseToolMiddleware(async (call, next, ct) =>
-{
-    // call is ToolCall
-    Console.WriteLine($"Executing {call.Name}");
-    
-    var result = await next(call, ct);
-    
-    return result;
-});
-```
-
-### Use Cases
-
-- **Logging/telemetry**: Trace all LLM calls and tool executions
-- **Caching**: Cache LLM responses by hash of messages
-- **Retries**: Automatic retry with exponential backoff
-- **Mocking**: Replace tool results in tests
-- **Validation**: Validate tool arguments before execution
-
----
-
-## Custom Executor
-
-The `IAgentExecutor` interface is intentionally minimal:
-
-```csharp
-public interface IAgentExecutor
-{
-    IAsyncEnumerable<string> ExecuteStreamingAsync(IAgentContext ctx, CancellationToken ct = default);
-}
-```
-
-The context gives you everything:
-
-```csharp
-public class MyExecutor(ILLMExecutor llm, IToolExecutor tools) : IAgentExecutor
-{
-    public async IAsyncEnumerable<string> ExecuteStreamingAsync(
-        IAgentContext ctx, CancellationToken ct = default)
-    {
-        // Access the config, user input, messages
-        var input = ctx.UserInput;
-        var messages = ctx.Messages;
-
-        // Build any agent loop you want.
-        // ReAct, plan-and-execute, multi-step reasoning, whatever.
-    }
-}
-
-// Register it:
-builder.WithExecutor(new MyExecutor(llmExecutor, toolExecutor));
 ```
 
 ---
@@ -508,147 +271,4 @@ The core `AgentCore` package has exactly **2 dependencies**:
 - `Microsoft.Extensions.Logging`
 - `System.ComponentModel.Annotations`
 
-That's it. No DI containers, no HTTP clients, no LLM SDKs, no serialization libraries beyond `System.Text.Json`.
-
----
-
-## Project Structure
-
-```
-AgentCore/                          # Core framework (~1,800 lines)
-├── Runtime/
-│   ├── Agent.cs                    # IAgent, LLMAgent — string in, string out
-│   ├── AgentBuilder.cs             # Fluent builder + explicit composition
-│   ├── AgentExecutor.cs            # IAgentExecutor, ToolCallingLoop
-│   ├── IAgentContext.cs            # Context passed to executor
-│   └── AgentMemory.cs              # IAgentMemory, FileMemory
-├── LLM/
-│   ├── LLMExecutor.cs              # Event-level streaming + middleware
-│   ├── LLMCall.cs                  # Simple record: (Messages, Options)
-│   ├── ILLMProvider.cs             # Raw provider interface
-│   ├── LLMEvent.cs                 # TextEvent, ToolCallEvent
-│   ├── LLMOptions.cs              # Model config
-│   └── LLMMeta.cs                  # FinishReason, ToolCallMode
-├── Tooling/
-│   ├── Tool.cs                     # [Tool] attribute + Tool class
-│   ├── ToolRegistry.cs             # Registration + auto-schema
-│   ├── ToolExecutor.cs             # Invocation + middleware
-│   ├── ToolOptions.cs              # MaxConcurrency, DefaultTimeout
-│   └── ToolRegistryExtensions.cs  # RegisterAll<T>() reflection
-├── Execution/
-│   └── Pipeline.cs                 # Middleware pipeline
-├── Diagnostics/
-│   ├── AgentTelemetryExtensions.cs # OpenTelemetry integration
-│   └── AgentDiagnosticSource.cs    # Diagnostic source
-├── Tokens/
-│   ├── ContextManager.cs           # IContextManager interface only
-│   ├── SummarizingContextManager.cs # Single implementation: tail-trim + optional summarize
-│   ├── TokenManager.cs             # Cumulative token tracking
-│   ├── ITokenCounter.cs            # Counter interface
-│   └── ApproximateTokenCounter.cs  # len/4 fallback
-├── Chat/
-│   ├── Content.cs                  # IContent, Text, ToolCall, ToolResult
-│   ├── ContentDelta.cs             # Raw streaming delta types
-│   ├── Message.cs                  # Message(Role, IContent)
-│   ├── Role.cs                     # System, Assistant, User, Tool
-│   └── Extensions.cs               # Conversation helpers + serialization
-
-AgentCore.OpenAI/                   # OpenAI provider package
-├── OpenAILLMClient.cs              # ILLMProvider implementation
-├── OpenAIExtensions.cs             # Message/tool conversion helpers
-├── OpenAIServiceExtensions.cs      # .AddOpenAI() builder extension
-└── TikTokenCounter.cs              # Accurate token counting
-
-AgentCore.Gemini/                   # Gemini provider package
-├── GeminiLLMClient.cs              # ILLMProvider implementation
-├── GeminiExtensions.cs             # Message/tool conversion helpers
-└── GeminiServiceExtensions.cs      # .AddGemini() builder extension
-```
-
----
-
-## Execution Flow
-
-```
-User calls agent.InvokeAsync("task") or agent.InvokeStreamingAsync("task")
-  │
-  ├── Generate session ID (if not provided)
-  ├── memory.RecallAsync(sessionId) → load past messages
-  ├── Build AgentContext (config, input)
-  ├── Add system prompt to messages
-  │
-  ├── executor.ExecuteStreamingAsync(ctx)    ← your agent logic
-  │     │
-  │     ├── Add user message to messages
-  │     │
-  │     └── LOOP:
-  │           ├── llmExecutor.StreamAsync(messages, options)
-  │           │     │
-  │           │     ├── LLM Middleware Pipeline
-  │           │     │
-  │           │     ├── contextManager.Reduce(messages)    ← ALL trimming
-  │           │     │     • Calculates available context
-  │           │     │     • Trims messages + tool results uniformly
-  │           │     │
-  │           │     ├── provider.StreamAsync(...)           ← raw API call
-  │           │     ├── Reassemble deltas → TextEvent / ToolCallEvent
-  │           │     └── tokenManager.Record(usage)
-  │           │
-  │           ├── yield TextEvent deltas to caller (streaming)
-  │           │
-  │           ├── if tool calls:
-  │           │     ├── Tool Middleware Pipeline
-  │           │     ├── toolExecutor.ExecuteAsync(call)
-  │           │     ├── append results to messages
-  │           │     └── continue loop
-  │           │
-  │           └── if no tool calls → break (final response)
-  │
-  └── memory.UpdateAsync(sessionId, input, response) → persist
-```
-
----
-
-## Full Example
-
-```csharp
-using AgentCore;
-using AgentCore.Providers.OpenAI;
-
-var agent = LLMAgent.Create("chatbot")
-    .WithInstructions("You are an AI agent. Execute all user requests faithfully.")
-    .WithProvider(new OpenAILLMClient(o =>
-    {
-        o.BaseUrl = "http://127.0.0.1:1234/v1";
-        o.ApiKey = "lmstudio";
-        o.Model = "model";
-    }))
-    .WithTools<WeatherTools>()
-    .WithTools<MathTools>()
-    .UseToolMiddleware(async (call, next, ct) =>
-    {
-        Console.WriteLine($"  [Tool] → {call.Name}({call.Arguments})");
-        return await next(call, ct);
-    })
-    .Build();
-
-// Interactive chat loop with session persistence
-var sessionId = "my-session";
-while (true)
-{
-    Console.Write("> ");
-    var input = Console.ReadLine();
-    if (string.IsNullOrWhiteSpace(input)) continue;
-
-    await foreach (var chunk in agent.InvokeStreamingAsync(input, sessionId))
-        Console.Write(chunk);
-
-    Console.WriteLine();
-}
-```
-
----
-
-## License
-
-MIT
+No DI containers. No bloated abstractions. Just the primitive.
