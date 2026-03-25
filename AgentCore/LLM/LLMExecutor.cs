@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.Execution;
 using AgentCore.Json;
 using AgentCore.Tokens;
@@ -21,7 +21,6 @@ public sealed class LLMExecutor : ILLMExecutor
 {
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
-    private readonly IContextManager _ctxManager;
     private readonly ITokenCounter _tokenCounter;
     private readonly ITokenManager _tokenManager;
     private readonly ILogger<LLMExecutor> _logger;
@@ -30,7 +29,6 @@ public sealed class LLMExecutor : ILLMExecutor
     public LLMExecutor(
         ILLMProvider provider,
         IToolRegistry toolRegistry,
-        IContextManager ctxManager,
         ITokenCounter tokenCounter,
         ITokenManager tokenManager,
         ILogger<LLMExecutor> logger,
@@ -38,7 +36,6 @@ public sealed class LLMExecutor : ILLMExecutor
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
-        _ctxManager = ctxManager;
         _tokenCounter = tokenCounter;
         _tokenManager = tokenManager;
         _logger = logger;
@@ -61,14 +58,11 @@ public sealed class LLMExecutor : ILLMExecutor
     {
         var sw = Stopwatch.StartNew();
 
-        var reduced = await _ctxManager.ReduceAsync([.. messages], options, ct).ConfigureAwait(false);
-        IReadOnlyList<Message> reducedList = [.. reduced];
-
         var tools = _toolRegistry.Tools;
 
         _logger.LogTrace("LLM request: {Model} {Options}", options.Model, options);
 
-        var content = _provider.StreamAsync(reducedList, options, tools, ct);
+        var content = _provider.StreamAsync(messages, options, tools, ct);
 
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         TokenUsage? tokenUsage = null;
@@ -120,9 +114,10 @@ public sealed class LLMExecutor : ILLMExecutor
         if (tokenUsage != null)
         {
             _tokenManager.Record(tokenUsage);
+            yield return new TokenUsageEvent(tokenUsage);
             if (_tokenCounter is ApproximateTokenCounter approx)
             {
-                approx.Calibrate(reducedList, tokenUsage.InputTokens);
+                approx.Calibrate(messages, tokenUsage.InputTokens);
             }
         }
 

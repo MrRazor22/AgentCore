@@ -10,7 +10,7 @@ public static class JsonExtensions
     {
         null => string.Empty,
         string s => s,
-        AgentCore.Chat.IContent c => c.ForLlm(),
+        AgentCore.Conversation.IContent c => c.ForLlm(),
         Exception ex => ex.Message,
         _ => JsonSerializer.Serialize(obj)
     };

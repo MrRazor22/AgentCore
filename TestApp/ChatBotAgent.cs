@@ -40,7 +40,7 @@ namespace TestApp
                     o.BaseUrl = "http://127.0.0.1:1234/v1";
                     o.ApiKey = "lmstudio";
                     o.Model = "model";
-                    o.ContextLength = 8192;
+                    o.ContextLength = 8000;
                 })
                 .WithTools<GeoTools>()
                 .WithTools<WeatherTool>()

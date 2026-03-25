@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Chat;
+namespace AgentCore.Conversation;
 
 [Flags]
 public enum MessageKinds

@@ -1,7 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.Tokens;
 
-namespace AgentCore.Chat;
+namespace AgentCore.Conversation;
 
 public interface IContentDelta { }
 

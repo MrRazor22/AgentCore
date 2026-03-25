@@ -1,4 +1,4 @@
-namespace AgentCore.Chat;
+namespace AgentCore.Conversation;
 
 public class Message
 {

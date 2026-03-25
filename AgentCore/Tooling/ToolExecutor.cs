@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.Diagnostics;
 using AgentCore.Execution;
 using AgentCore.Json;

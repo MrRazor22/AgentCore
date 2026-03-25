@@ -1,11 +1,11 @@
-﻿using AgentCore.Chat;
+using AgentCore.Conversation;
 
 namespace AgentCore.Runtime;
 public interface IAgentContext
 {
     string SessionId { get; }
     AgentConfig Config { get; }
-    IList<Message> Messages { get; }
+    Chat Chat { get; set; }
     string UserInput { get; }
     Type? OutputType { get; }
     CancellationToken CancellationToken { get; }
@@ -24,5 +24,5 @@ public sealed class AgentContext(
     public string UserInput => userInput;
     public Type? OutputType => outputType;
     public CancellationToken CancellationToken => cancellationToken;
-    public IList<Message> Messages { get; } = new List<Message>();
-} 
+    public Chat Chat { get; set; } = new();
+}

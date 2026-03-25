@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
 using System.Text;
@@ -9,100 +9,138 @@ public sealed class SummarizingContextManager(
     ITokenCounter _counter,
     ILogger<SummarizingContextManager> _logger,
     ILLMProvider? _provider = null,
-    string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad.",
-    int keepLastMessages = 10
+    string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad."
 ) : IContextManager
 {
-    public async Task<IList<Message>> ReduceAsync(IList<Message> messages, LLMOptions options, CancellationToken ct = default)
+    private Message? _summaryMessage;
+    private readonly string _summaryPrompt = summaryPrompt;
+
+    public async Task<Chat> ReduceAsync(Chat chat, int totalTokens, LLMOptions options, CancellationToken ct = default)
     {
-        if (messages == null) throw new ArgumentNullException(nameof(messages));
+        int ctxLen = options.ContextLength ?? throw new InvalidOperationException("ContextLength is required.");
 
-        int contextLength = options.ContextLength
-            ?? throw new InvalidOperationException("ContextLength is required. Set it in LLMOptions or via provider.");
+        int currentTokens = await _counter.CountAsync(
+            ToMessageList(chat), ct).ConfigureAwait(false);
 
-        int reserveForOutput = options.MaxOutputTokens ?? (int)Math.Min(4096, contextLength * 0.25);
-        int available = contextLength - reserveForOutput;
+        double usage = (double)currentTokens / ctxLen;
+        if (usage < 0.30) return chat;
 
-        if (available <= 0)
-            throw new InvalidOperationException($"No available context budget: ContextLength={contextLength}, MaxOutputTokens={reserveForOutput}.");
+        var (compressible, tail) = await SplitTail(chat.Turns, (int)(ctxLen * 0.35), ct);
 
-        int current = await _counter.CountAsync(messages, ct).ConfigureAwait(false);
-        if (current <= available) return messages;
+        var staged = compressible.ToList();
+        var applied = new List<string>();
 
-        var source = messages.Clone();
-        var system = source.Where(m => m.Role == Role.System).ToList();
-        var history = source.Where(m => m.Role != Role.System).ToList();
-
-        var keepHistory = history.Skip(Math.Max(0, history.Count - keepLastMessages)).ToList();
-
-        IList<Message> Build(int skipCount, string? summaryText)
+        if (usage >= 0.30)
         {
-            while (skipCount < keepHistory.Count)
+            staged = staged.Select(TruncateOutputs).ToList();
+            applied.Add("truncate");
+        }
+
+        if (usage >= 0.50)
+        {
+            staged = staged.Select(DropToolSteps).ToList();
+            applied.Add("drop-steps");
+        }
+
+        if (usage >= 0.70)
+        {
+            staged = staged.Select(t => new Turn(t.User, [], null)).ToList();
+            applied.Add("skeleton");
+        }
+
+        if (usage >= 0.85 && _provider != null)
+        {
+            await Stage4_Summarize(staged, options, ct);
+            applied.Add("summarize");
+            staged = [];
+        }
+
+        var result = new Chat();
+        foreach (var ex in staged.Concat(tail))
+            if (ex.User.Content is not Text t || t.Value.Length > 0)
+                result.Add(ex);
+
+        int after = await _counter.CountAsync(ToMessageList(result), ct).ConfigureAwait(false);
+        _logger.LogDebug("Compacted [{Stages}]: {Before}→{After} ({Saved:P0})",
+            string.Join(",", applied), currentTokens, after, 1.0 - (double)after / currentTokens);
+
+        return result;
+    }
+
+    private static Turn TruncateOutputs(Turn t, int maxChars) =>
+        new(t.User, t.ToolSteps.Select(s => TruncateResult(s, maxChars)).ToList(), t.AssistantReply);
+
+    private static Turn DropToolSteps(Turn t) => new(t.User, [], t.AssistantReply);
+
+    private static (Message Call, Message Result) TruncateResult((Message Call, Message Result) step, int maxChars)
+    {
+        if (step.Result.Content is ToolResult tr)
+        {
+            var text = tr.Result?.ForLlm() ?? "";
+            if (text.Length > maxChars)
+                return (step.Call, new Message(step.Result.Role,
+                    new ToolResult(tr.CallId, new Text(text[..maxChars] + "...[truncated]"))));
+        }
+        return step;
+    }
+
+    private static IEnumerable<Message> ToMessageList(Chat chat)
+    {
+        var result = new List<Message>();
+        foreach (var turn in chat.Turns)
+        {
+            result.Add(turn.User);
+            foreach (var (call, resultMsg) in turn.ToolSteps) { result.Add(call); result.Add(resultMsg); }
+            if (turn.AssistantReply != null) result.Add(turn.AssistantReply);
+        }
+        return result;
+    }
+
+    private async Task<(List<Turn> compressible, List<Turn> tail)> SplitTail(IReadOnlyList<Turn> turns, int targetTokens, CancellationToken ct)
+    {
+        int tokenCount = 0;
+        int boundaryIndex = 0;
+
+        for (int i = turns.Count - 1; i >= 0; i--)
+        {
+            var turn = turns[i];
+            var messages = TurnToMessageList(turn);
+            foreach (var msg in messages)
             {
-                var m = keepHistory[skipCount];
-                if (m.Role == Role.Tool) { skipCount++; continue; }
+                tokenCount += await _counter.CountAsync([msg], ct).ConfigureAwait(false);
+            }
+            if (tokenCount >= targetTokens)
+            {
+                boundaryIndex = i + 1;
                 break;
             }
-
-            var result = new List<Message>();
-            foreach (var s in system) result.Add(new Message(s.Role, s.Content));
-            
-            if (!string.IsNullOrWhiteSpace(summaryText))
-                result.Add(new Message(Role.Assistant, new Text($"[Prior Context Scratchpad]:\n{summaryText}")));
-                
-            for (int i = skipCount; i < keepHistory.Count; i++) result.Add(new Message(keepHistory[i].Role, keepHistory[i].Content));
-            return result;
         }
 
-        int lo = 0, hi = keepHistory.Count;
-        while (lo < hi)
-        {
-            int mid = lo + (hi - lo) / 2;
-            var candidate = Build(mid, null);
-            if (await _counter.CountAsync(candidate, ct).ConfigureAwait(false) <= available)
-                hi = mid;
-            else
-                lo = mid + 1;
-        }
+        return (turns.Take(boundaryIndex).ToList(), turns.Skip(boundaryIndex).ToList());
+    }
 
-        int skipFromKeep = lo;
-        var totallyDropped = history.Take(history.Count - keepLastMessages + skipFromKeep).ToList();
+    private static IEnumerable<Message> TurnToMessageList(Turn turn)
+    {
+        yield return turn.User;
+        foreach (var (call, result) in turn.ToolSteps) { yield return call; yield return result; }
+        if (turn.AssistantReply != null) yield return turn.AssistantReply;
+    }
 
-        string? summary = null;
-        if (_provider != null && totallyDropped.Count > 0)
-        {
-            var summaryReq = new List<Message> 
-            { 
-               new Message(Role.System, new Text(summaryPrompt)),
-               new Message(Role.User, new Text(string.Join("\n\n", totallyDropped.Select(m => $"[{m.Role}]: {m.Content}"))))
-            };
-            
-            var sumOptions = new LLMOptions { Model = options.Model, MaxOutputTokens = 1024, ContextLength = options.ContextLength };
-            var stream = _provider.StreamAsync(summaryReq, sumOptions, null, ct);
-            
-            var sb = new StringBuilder();
-            await foreach(var evt in stream.WithCancellation(ct))
-            {
-               if (evt is TextDelta td) sb.Append(td.Value);
-            }
-            summary = sb.ToString().Trim();
-        }
+    private async Task Stage4_Summarize(List<Turn> turns, LLMOptions options, CancellationToken ct)
+    {
+        var content = turns.SelectMany(TurnToMessageList)
+                           .Select(m => $"[{m.Role}]: {m.Content?.ForLlm() ?? ""}");
 
-        var rebuilt = Build(lo, summary);
-        
-        int tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
-        if (tokens > available)
-        {
-            _logger.LogWarning("Summary caused token overflow. Falling back to tail-trim.");
-            rebuilt = Build(lo, null);
-            tokens = await _counter.CountAsync(rebuilt, ct).ConfigureAwait(false);
-        }
+        var input = new List<Message> { new(Role.System, new Text(_summaryPrompt)) };
+        if (_summaryMessage != null) input.Add(_summaryMessage);
+        input.Add(new(Role.User, new Text(string.Join("\n\n", content))));
 
-        if (summary != null)
-            _logger.LogWarning("Context Overflow handled: Summarized {Dropped} skipped messages into context memory. Tokens: {Current} -> {Final}.", totallyDropped.Count, current, tokens);
-        else
-            _logger.LogWarning("Context Overflow handled: Tail-trimmed conversation history to {Tokens} tokens.", tokens);
+        var sb = new StringBuilder();
+        await foreach (var evt in _provider!.StreamAsync(input,
+            new LLMOptions { Model = options.Model, MaxOutputTokens = 1024, ContextLength = options.ContextLength },
+            null, ct))
+            if (evt is TextDelta td) sb.Append(td.Value);
 
-        return rebuilt;
+        _summaryMessage = new Message(Role.Assistant, new Summary(sb.ToString().Trim()));
     }
 }

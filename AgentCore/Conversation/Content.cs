@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-namespace AgentCore.Chat;
+namespace AgentCore.Conversation;
 
 public interface IContent
 {
@@ -42,4 +42,9 @@ public sealed record ToolResult(
 {
     public string ForLlm()
         => Result?.ForLlm() ?? "";
+}
+
+public sealed record Summary(string Text) : IContent
+{
+    public string ForLlm() => Text;
 }

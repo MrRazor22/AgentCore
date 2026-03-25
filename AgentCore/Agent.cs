@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.Diagnostics;
 using AgentCore.Runtime;
 using Microsoft.Extensions.Logging;
@@ -84,17 +84,16 @@ public sealed class LLMAgent : IAgent
         {
             var ctx = new AgentContext(sessionId, _config, input, outputType, ct);
             
-            var pastMessages = await _memory.RecallAsync(sessionId);
-            
-            ctx.Messages.AddSystem(_config.SystemPrompt);
+            var pastChat = await _memory.RecallAsync(sessionId);
+            ctx.Chat = pastChat;
 
-            if (pastMessages.Count > 0)
+            var systemMsg = new Message(Role.System, new Text(_config.SystemPrompt ?? ""));
+
+            var llmMessages = ctx.Chat.ToMessages(system: [systemMsg]);
+
+            if (llmMessages.Count == 0 || llmMessages.All(m => m.Role != Role.User))
             {
-                // Resume from existing state, but discard any previously persisted system prompts so the latest config is always used.
-                foreach (var msg in pastMessages.Where(m => m.Role != Role.System))
-                {
-                    ctx.Messages.Add(msg);
-                }
+                ctx.Chat.Add(new Turn(new Message(Role.User, new Text(input)), [], null));
             }
 
             await foreach (var chunk in _executor.ExecuteStreamingAsync(ctx, ct))

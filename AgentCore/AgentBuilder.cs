@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.Execution;
 using AgentCore.LLM;
 using AgentCore.Runtime;
@@ -82,7 +82,6 @@ public sealed class AgentBuilder
         var llmExecutor = new LLMExecutor(
             Provider,
             registry,
-            contextManager,
             tokenCounter,
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>(),
@@ -91,6 +90,8 @@ public sealed class AgentBuilder
             memory,
             llmExecutor,
             toolExecutor,
+            contextManager,
+            tokenCounter,
             _providerOptions ?? new LLMOptions(),
             loggerFactory.CreateLogger<ToolCallingLoop>(),
             _agentMiddlewares);

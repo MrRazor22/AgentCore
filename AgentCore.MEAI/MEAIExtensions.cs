@@ -1,4 +1,4 @@
-using AgentCore.Chat;
+using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Tooling;
 using Microsoft.Extensions.AI;
