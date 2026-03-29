@@ -81,6 +81,8 @@ namespace TestApp
                 }))
                 .Build();
 
+            var sessionId = Guid.NewGuid().ToString("N");
+
             while (true)
             {
                 Console.Write("Enter your goal (Ctrl+Q to quit):\n");
@@ -112,10 +114,13 @@ namespace TestApp
                 {
                     var sb = new StringBuilder();
 
-                    await foreach (var chunk in agent.InvokeStreamingAsync(goal, ct: cts.Token))
+                    await foreach (var evt in agent.InvokeStreamingAsync((AgentCore.Conversation.Text)goal, sessionId, cts.Token))
                     {
-                        Console.Write(chunk);
-                        sb.Append(chunk);
+                        if (evt is TextEvent textEvt)
+                        {
+                            Console.Write(textEvt.Delta);
+                            sb.Append(textEvt.Delta);
+                        }
                     }
 
                     var result = sb.ToString();

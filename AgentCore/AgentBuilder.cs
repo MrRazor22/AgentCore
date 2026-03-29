@@ -13,7 +13,7 @@ public sealed class AgentConfig
 {
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
-    public int MaxIterations { get; set; } = 50;
+    public int MaxToolCalls { get; set; } = 15;
     public ToolOptions ToolOptions { get; set; } = new();
 }
 
@@ -33,7 +33,6 @@ public sealed class AgentBuilder
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
     private readonly List<PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = [];
-    private readonly List<PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>>> _agentMiddlewares = [];
 
     public AgentBuilder() { }
 
@@ -58,7 +57,6 @@ public sealed class AgentBuilder
     // Executor pipelines
     public AgentBuilder UseToolMiddleware(PipelineMiddleware<ToolCall, Task<ToolResult>> middleware) { _toolMiddlewares.Add(middleware); return this; }
     public AgentBuilder UseLLMMiddleware(PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>> middleware) { _llmMiddlewares.Add(middleware); return this; }
-    public AgentBuilder UseAgentMiddleware(PipelineMiddleware<IAgentContext, IAsyncEnumerable<string>> middleware) { _agentMiddlewares.Add(middleware); return this; }
 
     public LLMAgent Build()
     {
@@ -86,16 +84,15 @@ public sealed class AgentBuilder
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>(),
             _llmMiddlewares);
-        var executor = new ToolCallingLoop(
+
+        return new LLMAgent(
             memory,
             llmExecutor,
             toolExecutor,
             contextManager,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
-            loggerFactory.CreateLogger<ToolCallingLoop>(),
-            _agentMiddlewares);
-
-        return new LLMAgent(executor, memory, _config, loggerFactory.CreateLogger<LLMAgent>());
+            _config,
+            loggerFactory.CreateLogger<LLMAgent>());
     }
 }

@@ -77,6 +77,10 @@ public sealed class LLMExecutor : ILLMExecutor
                     yield return new TextEvent(t.Value);
                     break;
 
+                case ReasoningDelta r:
+                    yield return new ReasoningEvent(r.Value);
+                    break;
+
                 case ToolCallDelta tc:
                     if (tc.Index != currentToolIndex && currentToolIndex != -1)
                     {

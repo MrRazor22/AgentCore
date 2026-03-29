@@ -15,46 +15,68 @@ public enum MessageKinds
     All = System | User | Assistant | ToolCalls | ToolResults
 }
 
-public static class Extensions
+internal static class Extensions
 {
     private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
 
-    public static IList<Message> AddUser(this IList<Message> convo, string? text)
+    internal static IList<Message> AddUser(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
         convo.Add(new Message(Role.User, new Text(text!)));
         return convo;
     }
 
-    public static IList<Message> AddSystem(this IList<Message> convo, string? text)
+    internal static IList<Message> AddSystem(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
         convo.Add(new Message(Role.System, new Text(text!)));
         return convo;
     }
 
-    public static IList<Message> AddAssistant(this IList<Message> convo, string? text)
+    internal static IList<Message> AddAssistant(this IList<Message> convo, string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return convo;
         convo.Add(new Message(Role.Assistant, new Text(text!)));
         return convo;
     }
 
-    public static IList<Message> AddAssistantToolCall(this IList<Message> convo, ToolCall? call)
+    internal static IList<Message> AddAssistantToolCall(this IList<Message> convo, ToolCall? call)
     {
         if (call == null) return convo;
         convo.Add(new Message(Role.Assistant, call));
         return convo;
     }
 
-    public static IList<Message> AddToolResult(this IList<Message> convo, ToolResult? result)
+    internal static IList<Message> AddToolResult(this IList<Message> convo, ToolResult? result)
     {
         if (result == null) return convo;
         convo.Add(new Message(Role.Tool, result));
         return convo;
     }
 
-    public static IList<Message> Clone(this IList<Message> source, MessageKinds filter = MessageKinds.All)
+    internal static IList<Message> GetActiveWindow(this IList<Message> messages, IReadOnlyList<Message>? system = null)
+    {
+        var result = new List<Message>();
+        if (system != null) result.AddRange(system);
+
+        int startIndex = 0;
+        for (int i = messages.Count - 1; i >= 0; i--)
+        {
+            if (messages[i].Content is Summary)
+            {
+                startIndex = i;
+                break;
+            }
+        }
+
+        for (int i = startIndex; i < messages.Count; i++)
+        {
+            result.Add(messages[i]);
+        }
+        return result;
+    }
+
+    internal static IList<Message> Clone(this IList<Message> source, MessageKinds filter = MessageKinds.All)
     {
         var copy = new List<Message>();
         foreach (var message in source)
@@ -65,10 +87,10 @@ public static class Extensions
         return copy;
     }
 
-    public static string ToJson(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
+    internal static string ToJson(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
         => JsonSerializer.Serialize(chat.GetSerializableMessages(filter), IndentedOptions);
 
-    public static IList<Message> FromJson(string json)
+    internal static IList<Message> FromJson(string json)
     {
         var items = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(json);
         if (items == null) return new List<Message>();
@@ -138,7 +160,7 @@ public static class Extensions
         _ => false
     };
 
-    public static List<Dictionary<string, object>> GetSerializableMessages(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
+    internal static List<Dictionary<string, object>> GetSerializableMessages(this IList<Message> chat, MessageKinds filter = MessageKinds.All)
     {
         var items = new List<Dictionary<string, object>>();
 

@@ -5,5 +5,5 @@ namespace AgentCore.Tokens;
 
 public interface IContextManager
 {
-    Task<Chat> ReduceAsync(Chat chat, int totalTokens, LLMOptions options, CancellationToken ct = default);
+    Task<List<Message>> ReduceAsync(List<Message> chat, int totalTokens, LLMOptions options, CancellationToken ct = default);
 }

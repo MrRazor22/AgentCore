@@ -9,32 +9,28 @@ namespace AgentCore.Runtime;
 
 public interface IAgentMemory
 {
-    Task<Chat> RecallAsync(string sessionId);
-    Task UpdateAsync(string sessionId, Chat chat);
+    Task<List<Message>> RecallAsync(string sessionId);
+    Task UpdateAsync(string sessionId, List<Message> chat);
     Task ClearAsync(string sessionId);
 }
 
 public sealed class InMemoryMemory : IAgentMemory
 {
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Chat> _store = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<Message>> _store = new();
 
-    public Task<Chat> RecallAsync(string sessionId)
+    public Task<List<Message>> RecallAsync(string sessionId)
     {
         if (_store.TryGetValue(sessionId, out var chat))
         {
-            var cloned = new Chat();
-            foreach (var ex in chat.Turns)
-                cloned.Add(ex);
+            var cloned = new List<Message>(chat);
             return Task.FromResult(cloned);
         }
-        return Task.FromResult(new Chat());
+        return Task.FromResult(new List<Message>());
     }
 
-    public Task UpdateAsync(string sessionId, Chat chat)
+    public Task UpdateAsync(string sessionId, List<Message> chat)
     {
-        var cloned = new Chat();
-        foreach (var ex in chat.Turns)
-            cloned.Add(ex);
+        var cloned = new List<Message>(chat);
         _store[sessionId] = cloned;
         return Task.CompletedTask;
     }
@@ -62,12 +58,12 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
     private SemaphoreSlim GetLock(string sessionId)
         => _sessionLocks[Math.Abs(sessionId.GetHashCode()) % _sessionLocks.Length];
 
-    public async Task<Chat> RecallAsync(string sessionId)
+    public async Task<List<Message>> RecallAsync(string sessionId)
     {
-        if (_options.PersistDir == null) return new Chat();
+        if (_options.PersistDir == null) return new List<Message>();
 
         var file = Path.Combine(_options.PersistDir, sessionId + ".json");
-        if (!File.Exists(file)) return new Chat();
+        if (!File.Exists(file)) return new List<Message>();
 
         var sessionLock = GetLock(sessionId);
         await sessionLock.WaitAsync().ConfigureAwait(false);
@@ -78,7 +74,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         }
         catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
         {
-            return new Chat();
+            return new List<Message>();
         }
         finally
         {
@@ -86,7 +82,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         }
     }
 
-    public async Task UpdateAsync(string sessionId, Chat chat)
+    public async Task UpdateAsync(string sessionId, List<Message> chat)
     {
         if (_options.PersistDir == null) return;
 
@@ -126,47 +122,31 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         }
     }
 
-    private static string ToJson(Chat chat)
+    private static string ToJson(List<Message> chat)
     {
-        var exchanges = chat.Turns.Select(e => new ExchangeDto
+        var messages = chat.Select(m => new MessageDto
         {
-            User = new MessageDto { Role = e.User.Role.ToString(), Content = SerializeContent(e.User.Content) },
-            AssistantReply = e.AssistantReply != null ? new MessageDto
-            {
-                Role = e.AssistantReply.Role.ToString(),
-                Content = SerializeContent(e.AssistantReply.Content)
-            } : null,
-            ToolSteps = e.ToolSteps.Select(t => new ToolStepDto
-            {
-                Call = new MessageDto { Role = t.Call.Role.ToString(), Content = SerializeContent(t.Call.Content) },
-                Result = new MessageDto { Role = t.Result.Role.ToString(), Content = SerializeContent(t.Result.Content) }
-            }).ToList()
+            Role = m.Role.ToString(),
+            Content = SerializeContent(m.Content)
         }).ToList();
 
-        return JsonSerializer.Serialize(exchanges, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(messages, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static Chat FromJson(string json)
+    private static List<Message> FromJson(string json)
     {
-        var chat = new Chat();
+        var chat = new List<Message>();
         try
         {
-            var exchanges = JsonSerializer.Deserialize<List<ExchangeDto>>(json);
-            if (exchanges == null) return chat;
+            var messages = JsonSerializer.Deserialize<List<MessageDto>>(json);
+            if (messages == null) return chat;
 
-            foreach (var dto in exchanges)
+            foreach (var dto in messages)
             {
-                var user = new Message(Enum.Parse<Role>(dto.User.Role), DeserializeContent(dto.User.Content));
-                var toolSteps = dto.ToolSteps?.Select(t => (
-                    new Message(Enum.Parse<Role>(t.Call.Role), DeserializeContent(t.Call.Content)),
-                    new Message(Enum.Parse<Role>(t.Result.Role), DeserializeContent(t.Result.Content))
-                )).ToList();
-                Message? assistantReply = null;
-                if (dto.AssistantReply != null)
+                if (dto.Role != null)
                 {
-                    assistantReply = new Message(Enum.Parse<Role>(dto.AssistantReply.Role), DeserializeContent(dto.AssistantReply.Content));
+                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), DeserializeContent(dto.Content)));
                 }
-                chat.Add(new Turn(user, toolSteps, assistantReply));
             }
         }
         catch { }
@@ -229,22 +209,9 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         return new Text("");
     }
 
-    private class ExchangeDto
-    {
-        public MessageDto? User { get; set; }
-        public MessageDto? AssistantReply { get; set; }
-        public List<ToolStepDto>? ToolSteps { get; set; }
-    }
-
     private class MessageDto
     {
         public string? Role { get; set; }
         public object? Content { get; set; }
-    }
-
-    private class ToolStepDto
-    {
-        public MessageDto? Call { get; set; }
-        public MessageDto? Result { get; set; }
     }
 }

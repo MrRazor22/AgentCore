@@ -7,6 +7,8 @@ public interface IContentDelta { }
 
 public sealed record TextDelta(string Value) : IContentDelta;
 
+public sealed record ReasoningDelta(string Value) : IContentDelta;
+
 public sealed record ToolCallDelta(
     int Index,
     string? Id,

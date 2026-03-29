@@ -40,6 +40,10 @@ public static class OpenAIExtensions
                     yield return ChatMessage.CreateSystemMessage(sysText.Value);
                     break;
 
+                case Role.System when msg.Content is Summary summary:
+                    yield return ChatMessage.CreateSystemMessage(summary.ForLlm());
+                    break;
+
                 case Role.User when msg.Content is Text userText:
                     yield return ChatMessage.CreateUserMessage(userText.Value);
                     break;
