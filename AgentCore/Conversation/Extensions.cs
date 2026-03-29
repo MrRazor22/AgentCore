@@ -62,7 +62,7 @@ internal static class Extensions
         int startIndex = 0;
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            if (messages[i].Content is Summary)
+            if (messages[i].Contents.Any(c => c is Summary))
             {
                 startIndex = i;
                 break;
@@ -82,7 +82,7 @@ internal static class Extensions
         foreach (var message in source)
         {
             if (!ShouldInclude(message, filter)) continue;
-            copy.Add(new Message(message.Role, message.Content));
+            copy.Add(new Message(message.Role, message.Contents));
         }
         return copy;
     }
@@ -151,12 +151,11 @@ internal static class Extensions
         Role.System => (filter & MessageKinds.System) != 0,
         Role.User => (filter & MessageKinds.User) != 0,
         Role.Tool => (filter & MessageKinds.ToolResults) != 0,
-        Role.Assistant => chat.Content switch
-        {
-            ToolCall => (filter & MessageKinds.ToolCalls) != 0,
-            Text => (filter & MessageKinds.Assistant) != 0,
-            _ => false
-        },
+        Role.Assistant => chat.Contents.Any(c => c is ToolCall) 
+            ? (filter & MessageKinds.ToolCalls) != 0 
+            : chat.Contents.Any(c => c is Text) 
+                ? (filter & MessageKinds.Assistant) != 0 
+                : false,
         _ => false
     };
 
@@ -170,30 +169,32 @@ internal static class Extensions
 
             var msg = new Dictionary<string, object> { ["role"] = c.Role.ToString().ToLowerInvariant() };
 
-            if (c.Content is Text text)
+            var textContent = c.Contents.OfType<Text>().FirstOrDefault();
+            if (textContent != null)
             {
-                msg["content"] = text.Value;
+                msg["content"] = textContent.Value;
             }
-            else if (c.Content is ToolCall call && (filter & MessageKinds.ToolCalls) != 0)
+
+            var toolCalls = c.Contents.OfType<ToolCall>().ToList();
+            if (toolCalls.Count > 0 && (filter & MessageKinds.ToolCalls) != 0)
             {
-                msg["tool_calls"] = new List<object>
+                msg["tool_calls"] = toolCalls.Select(call => new Dictionary<string, object>
                 {
-                    new Dictionary<string, object>
+                    ["id"] = call.Id,
+                    ["type"] = "function",
+                    ["function"] = new Dictionary<string, object>
                     {
-                        ["id"] = call.Id,
-                        ["type"] = "function",
-                        ["function"] = new Dictionary<string, object>
-                        {
-                            ["name"] = call.Name,
-                            ["arguments"] = call.Arguments ?? new JsonObject()
-                        }
+                        ["name"] = call.Name,
+                        ["arguments"] = call.Arguments ?? new JsonObject()
                     }
-                };
+                }).ToList();
             }
-            else if (c.Content is ToolResult result && (filter & MessageKinds.ToolResults) != 0)
+
+            var toolResult = c.Contents.OfType<ToolResult>().FirstOrDefault();
+            if (toolResult != null && (filter & MessageKinds.ToolResults) != 0)
             {
-                msg["tool_call_id"] = result.CallId;
-                msg["content"] = result.Result?.ForLlm() ?? "";
+                msg["tool_call_id"] = toolResult.CallId;
+                msg["content"] = toolResult.Result?.ForLlm() ?? "";
             }
 
             items.Add(msg);

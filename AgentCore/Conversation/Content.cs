@@ -48,3 +48,8 @@ public sealed record Summary(string Text) : IContent
 {
     public string ForLlm() => Text;
 }
+
+public sealed record Reasoning(string Thought) : IContent
+{
+    public string ForLlm() => Thought;
+}

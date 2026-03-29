@@ -36,37 +36,48 @@ public static class OpenAIExtensions
         {
             switch (msg.Role)
             {
-                case Role.System when msg.Content is Text sysText:
-                    yield return ChatMessage.CreateSystemMessage(sysText.Value);
+                case Role.System:
+                    var sysText = msg.Contents.OfType<Text>().FirstOrDefault();
+                    var sysSummary = msg.Contents.OfType<Summary>().FirstOrDefault();
+                    var sysContent = sysText?.Value ?? sysSummary?.ForLlm() ?? "";
+                    if (!string.IsNullOrEmpty(sysContent))
+                        yield return ChatMessage.CreateSystemMessage(sysContent);
                     break;
 
-                case Role.System when msg.Content is Summary summary:
-                    yield return ChatMessage.CreateSystemMessage(summary.ForLlm());
+                case Role.User:
+                    var userText = msg.Contents.OfType<Text>().FirstOrDefault();
+                    if (userText != null)
+                        yield return ChatMessage.CreateUserMessage(userText.Value);
                     break;
 
-                case Role.User when msg.Content is Text userText:
-                    yield return ChatMessage.CreateUserMessage(userText.Value);
+                case Role.Assistant:
+                    var assistantText = msg.Contents.OfType<Text>().FirstOrDefault();
+                    var reasoning = msg.Contents.OfType<Reasoning>().FirstOrDefault();
+                    var toolCalls = msg.Contents.OfType<ToolCall>().ToList();
+
+                    if (toolCalls.Count > 0)
+                    {
+                        yield return ChatMessage.CreateAssistantMessage(
+                            toolCalls: toolCalls.Select(call => ChatToolCall.CreateFunctionToolCall(
+                                id: call.Id,
+                                functionName: call.Name,
+                                functionArguments: BinaryData.FromString(call.Arguments?.ToJsonString() ?? "{}"))).ToList());
+                    }
+                    else if (assistantText != null || reasoning != null)
+                    {
+                        var text = assistantText?.Value ?? "";
+                        yield return ChatMessage.CreateAssistantMessage(text);
+                    }
                     break;
 
-                case Role.Assistant when msg.Content is Text assistantText:
-                    yield return ChatMessage.CreateAssistantMessage(assistantText.Value);
+                case Role.Tool:
+                    var toolResult = msg.Contents.OfType<ToolResult>().FirstOrDefault();
+                    if (toolResult != null)
+                    {
+                        var payload = toolResult.Result == null ? "{}" : toolResult.Result.AsJsonString();
+                        yield return ChatMessage.CreateToolMessage(toolResult.CallId, payload);
+                    }
                     break;
-
-                case Role.Assistant when msg.Content is ToolCall call:
-                    yield return ChatMessage.CreateAssistantMessage(
-                        toolCalls: [ChatToolCall.CreateFunctionToolCall(
-                            id: call.Id,
-                            functionName: call.Name,
-                            functionArguments: BinaryData.FromString(call.Arguments?.ToJsonString() ?? "{}"))]);
-                    break;
-
-                case Role.Tool when msg.Content is ToolResult result:
-                    var payload = result.Result == null ? "{}" : result.Result.AsJsonString();
-                    yield return ChatMessage.CreateToolMessage(result.CallId, payload);
-                    break;
-
-                default:
-                    throw new InvalidOperationException($"Invalid message state for role {msg.Role} with content {msg.Content?.GetType().Name}");
             }
         }
     }

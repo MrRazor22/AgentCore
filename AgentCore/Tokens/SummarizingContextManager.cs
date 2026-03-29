@@ -25,7 +25,7 @@ public sealed class SummarizingContextManager(
         int startIndex = 0;
         for (int i = chat.Count - 1; i >= 0; i--)
         {
-            if (chat[i].Content is Summary)
+            if (chat[i].Contents.Any(c => c is Summary))
             {
                 startIndex = i;
                 break;
@@ -39,7 +39,7 @@ public sealed class SummarizingContextManager(
         int compressibleCount = activeCount - keepCount;
 
         var compressible = chat.Skip(startIndex).Take(compressibleCount).ToList();
-        var content = compressible.Select(m => $"[{m.Role}]: {m.Content?.ForLlm() ?? ""}");
+        var content = compressible.Select(m => $"[{m.Role}]: {string.Join(", ", m.Contents.Select(c => c.ForLlm()))}");
 
         var input = new List<Message> { 
             new(Role.System, new Text(_summaryPrompt)),

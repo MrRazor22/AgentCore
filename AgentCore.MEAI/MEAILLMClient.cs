@@ -3,12 +3,26 @@ using AgentCore.LLM;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.AI;
+using OpenAI;
+using OpenAI.Chat;
+using System.ClientModel;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.MEAI;
 
-internal sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
+public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
 {
+    public static MEAILLMClient Create(string baseUrl, string model, string? apiKey = null)
+    {
+        var credentials = new ApiKeyCredential(apiKey ?? "not-needed");
+        var options = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
+        var openAiClient = new OpenAIClient(credentials, options);
+        
+        var chatClient = openAiClient.GetChatClient(model);
+        var meaiClient = chatClient.AsIChatClient();
+        return new MEAILLMClient(meaiClient);
+    }
+
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
@@ -39,8 +53,12 @@ internal sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
                             yield return new TextDelta(t.Text);
                         break;
 
+                    case Microsoft.Extensions.AI.TextReasoningContent tr:
+                        if (!string.IsNullOrEmpty(tr.Text))
+                            yield return new ReasoningDelta(tr.Text);
+                        break;
+
                     case FunctionCallContent fc:
-                        // MEAI delivers function call updates. 
                         yield return new ToolCallDelta(
                             Index: 0, 
                             Id: fc.CallId,
@@ -52,12 +70,15 @@ internal sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
                         break;
 
                     case UsageContent u:
-                        yield return new MetaDelta(
-                            AgentCore.LLM.FinishReason.Stop, 
-                            new TokenUsage(
-                                (int)u.Details.InputTokenCount, 
-                                (int)u.Details.OutputTokenCount,
-                                (int)u.Details.ReasoningTokenCount));
+                        if (u.Details != null)
+                        {
+                            yield return new MetaDelta(
+                                AgentCore.LLM.FinishReason.Stop, 
+                                new TokenUsage(
+                                    (int)(u.Details.InputTokenCount ?? 0), 
+                                    (int)(u.Details.OutputTokenCount ?? 0),
+                                    (int)(u.Details.ReasoningTokenCount ?? 0)));
+                        }
                         break;
                 }
             }

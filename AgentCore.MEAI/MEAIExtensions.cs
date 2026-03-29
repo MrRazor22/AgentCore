@@ -18,17 +18,24 @@ internal static class MEAIExtensions
                 Role = msg.Role.ToMEAIChatRole()
             };
             
-            if (msg.Content is Text t)
+            foreach (var content in msg.Contents)
             {
-                chatMsg.Contents.Add(new TextContent(t.Value));
-            }
-            else if (msg.Content is ToolCall tc)
-            {
-                chatMsg.Contents.Add(new FunctionCallContent(tc.Id, tc.Name, tc.Arguments.ToDictionary()));
-            }
-            else if (msg.Content is ToolResult tr)
-            {
-                chatMsg.Contents.Add(new FunctionResultContent(tr.CallId, tr.Result?.AsJsonString() ?? "{}"));
+                if (content is Text t)
+                {
+                    chatMsg.Contents.Add(new TextContent(t.Value));
+                }
+                else if (content is Reasoning r)
+                {
+                    chatMsg.Contents.Add(new Microsoft.Extensions.AI.TextReasoningContent(r.Thought));
+                }
+                else if (content is ToolCall tc)
+                {
+                    chatMsg.Contents.Add(new FunctionCallContent(tc.Id, tc.Name, tc.Arguments.ToDictionary()));
+                }
+                else if (content is ToolResult tr)
+                {
+                    chatMsg.Contents.Add(new FunctionResultContent(tr.CallId, tr.Result?.AsJsonString() ?? "{}"));
+                }
             }
             
             yield return chatMsg;

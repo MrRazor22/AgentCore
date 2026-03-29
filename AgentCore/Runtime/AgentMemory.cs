@@ -127,7 +127,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         var messages = chat.Select(m => new MessageDto
         {
             Role = m.Role.ToString(),
-            Content = SerializeContent(m.Content)
+            Content = m.Contents.Select(SerializeContent).ToList()
         }).ToList();
 
         return JsonSerializer.Serialize(messages, new JsonSerializerOptions { WriteIndented = true });
@@ -145,7 +145,8 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
             {
                 if (dto.Role != null)
                 {
-                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), DeserializeContent(dto.Content)));
+                    var contents = DeserializeContents(dto.Content);
+                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), contents));
                 }
             }
         }
@@ -153,11 +154,36 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         return chat;
     }
 
+    private static List<IContent> DeserializeContents(object? obj)
+    {
+        var contents = new List<IContent>();
+        
+        if (obj is System.Text.Json.JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    var content = DeserializeContent(item);
+                    if (content != null) contents.Add(content);
+                }
+            }
+            else
+            {
+                var content = DeserializeContent(element);
+                if (content != null) contents.Add(content);
+            }
+        }
+        
+        return contents;
+    }
+
     private static object SerializeContent(IContent content)
     {
         return content switch
         {
             Text t => new { type = "text", value = t.Value },
+            Reasoning r => new { type = "reasoning", thought = r.Thought },
             ToolCall tc => new { type = "toolCall", id = tc.Id, name = tc.Name, arguments = tc.Arguments },
             ToolResult tr => new { type = "toolResult", callId = tr.CallId, result = SerializeContent(tr.Result!) },
             Summary s => new { type = "summary", text = s.Text },
@@ -213,5 +239,48 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
     {
         public string? Role { get; set; }
         public object? Content { get; set; }
+    }
+
+    private static IContent? DeserializeContent(JsonElement element)
+    {
+        if (element.TryGetProperty("type", out var typeProp))
+        {
+            var type = typeProp.GetString();
+            switch (type)
+            {
+                case "text":
+                    if (element.TryGetProperty("value", out var text))
+                        return new Text(text.GetString() ?? "");
+                    break;
+                case "reasoning":
+                    if (element.TryGetProperty("thought", out var thought))
+                        return new Reasoning(thought.GetString() ?? "");
+                    break;
+                case "toolCall":
+                    var id = element.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
+                    var name = element.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
+                    JsonObject args = new();
+                    if (element.TryGetProperty("arguments", out var argsProp))
+                    {
+                        try { args = JsonNode.Parse(argsProp.GetRawText())?.AsObject() ?? new JsonObject(); } catch { }
+                    }
+                    return new ToolCall(id, name, args);
+                case "toolResult":
+                    var callId = element.TryGetProperty("callId", out var callIdProp) ? callIdProp.GetString() ?? "" : "";
+                    IContent? result = null;
+                    if (element.TryGetProperty("result", out var resultProp))
+                        result = DeserializeContent(resultProp);
+                    return new ToolResult(callId, result);
+                case "summary":
+                    if (element.TryGetProperty("text", out var summaryText))
+                        return new Summary(summaryText.GetString() ?? "");
+                    break;
+            }
+        }
+
+        if (element.ValueKind == JsonValueKind.String)
+            return new Text(element.GetString() ?? "");
+
+        return new Text("");
     }
 }

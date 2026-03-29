@@ -1,11 +1,8 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.4.11513.90
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore", "AgentCore\AgentCore.csproj", "{5A011AC0-7AB0-4559-A7D2-44CD2356BAEA}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.OpenAI", "AgentCore.OpenAI\AgentCore.OpenAI.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.MEAI", "AgentCore.MEAI\AgentCore.MEAI.csproj", "{C3D4E5F6-7890-1234-BCDE-A12345678901}"
 EndProject
@@ -26,10 +23,6 @@ Global
 		{5A011AC0-7AB0-4559-A7D2-44CD2356BAEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5A011AC0-7AB0-4559-A7D2-44CD2356BAEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5A011AC0-7AB0-4559-A7D2-44CD2356BAEA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C3D4E5F6-7890-1234-BCDE-A12345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C3D4E5F6-7890-1234-BCDE-A12345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C3D4E5F6-7890-1234-BCDE-A12345678901}.Release|Any CPU.ActiveCfg = Release|Any CPU

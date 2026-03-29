@@ -162,10 +162,20 @@ public sealed class LLMAgent : IAgent
                             break;
 
                         case ToolCallEvent tc:
-                            if (textBuffer.Length > 0)
+                            if (textBuffer.Length > 0 || reasoningBuffer.Length > 0)
                             {
-                                chat.Add(new Message(Role.Assistant, new Text(textBuffer.ToString())));
-                                textBuffer.Clear();
+                                var contents = new List<IContent>();
+                                if (reasoningBuffer.Length > 0)
+                                {
+                                    contents.Add(new Reasoning(reasoningBuffer.ToString()));
+                                    reasoningBuffer.Clear();
+                                }
+                                if (textBuffer.Length > 0)
+                                {
+                                    contents.Add(new Text(textBuffer.ToString()));
+                                    textBuffer.Clear();
+                                }
+                                chat.Add(new Message(Role.Assistant, contents));
                             }
                             reasoningBuffer.Clear();
                             var callMsg = new Message(Role.Assistant, tc.Call);
@@ -183,10 +193,20 @@ public sealed class LLMAgent : IAgent
                     yield return evt; // LLMEvent IS an AgentEvent — pass straight through
                 }
 
-                if (textBuffer.Length > 0)
+                if (textBuffer.Length > 0 || reasoningBuffer.Length > 0)
                 {
-                    chat.Add(new Message(Role.Assistant, new Text(textBuffer.ToString().Trim())));
-                    textBuffer.Clear();
+                    var contents = new List<IContent>();
+                    if (reasoningBuffer.Length > 0)
+                    {
+                        contents.Add(new Reasoning(reasoningBuffer.ToString()));
+                        reasoningBuffer.Clear();
+                    }
+                    if (textBuffer.Length > 0)
+                    {
+                        contents.Add(new Text(textBuffer.ToString().Trim()));
+                        textBuffer.Clear();
+                    }
+                    chat.Add(new Message(Role.Assistant, contents));
                 }
 
                 if (runningTools.Count == 0)

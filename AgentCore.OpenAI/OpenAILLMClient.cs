@@ -42,8 +42,10 @@ internal sealed class OpenAILLMClient : ILLMProvider
             if (update.ContentUpdate is { } content)
             {
                 foreach (var c in content)
+                {
                     if (c.Text is { } t)
                         yield return new TextDelta(t);
+                }
             }
 
             if (update.ToolCallUpdates is { } tcuList)

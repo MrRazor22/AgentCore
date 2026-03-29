@@ -61,9 +61,13 @@ public sealed class ApproximateTokenCounter : ITokenCounter
             else
             {
                 int c = 4; // overhead
-                if (m.Content is Text t) c += t.Value?.Length ?? 0;
-                else if (m.Content is ToolCall tc) c += tc.Name.Length + (tc.Arguments?.ToString()?.Length ?? 0);
-                else if (m.Content is ToolResult tr) c += tr.Result?.ForLlm()?.Length ?? 0;
+                foreach (var content in m.Contents)
+                {
+                    if (content is Text t) c += t.Value?.Length ?? 0;
+                    else if (content is Reasoning) c += 0; // reasoning doesn't count toward token estimates
+                    else if (content is ToolCall tc) c += tc.Name.Length + (tc.Arguments?.ToString()?.Length ?? 0);
+                    else if (content is ToolResult tr) c += tr.Result?.ForLlm()?.Length ?? 0;
+                }
                 
                 _cache.Add(m, new CharCountBox(c));
                 total += c;

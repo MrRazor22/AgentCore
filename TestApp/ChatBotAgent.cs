@@ -3,7 +3,7 @@ using AgentCore.BuiltInTools;
 using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
-using AgentCore.Providers.OpenAI;
+using AgentCore.Providers.MEAI;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using Microsoft.Extensions.Logging;
@@ -35,12 +35,10 @@ namespace TestApp
 
             var agent = LLMAgent.Create("chatbot")
                 .WithInstructions("You are an AI agent, execute all user requests faithfully.")
-                .AddOpenAI(o =>
+                .WithProvider(MEAILLMClient.Create("http://127.0.0.1:1234/v1", "model", "lmstudio"), new LLMOptions
                 {
-                    o.BaseUrl = "http://127.0.0.1:1234/v1";
-                    o.ApiKey = "lmstudio";
-                    o.Model = "model";
-                    o.ContextLength = 8000;
+                    ContextLength = 8000,
+                    ReasoningEffort = AgentCore.LLM.ReasoningEffort.High
                 })
                 .WithTools<GeoTools>()
                 .WithTools<WeatherTool>()
@@ -113,11 +111,37 @@ namespace TestApp
                 try
                 {
                     var sb = new StringBuilder();
+                    var reasoningSb = new StringBuilder();
+                    var reasoningShown = false;
 
                     await foreach (var evt in agent.InvokeStreamingAsync((AgentCore.Conversation.Text)goal, sessionId, cts.Token))
                     {
-                        if (evt is TextEvent textEvt)
+                        if (evt is ReasoningEvent reasoningEvt)
                         {
+                            reasoningSb.Append(reasoningEvt.Delta);
+                            
+                            if (!reasoningShown && reasoningSb.Length > 50)
+                            {
+                                var originalColor = Console.ForegroundColor;
+                                Console.ForegroundColor = ConsoleColor.Magenta;
+                                Console.Write($"\n[Reasoning] ");
+                                Console.ForegroundColor = originalColor;
+                                reasoningShown = true;
+                            }
+                            
+                            if (reasoningShown)
+                            {
+                                Console.Write(reasoningEvt.Delta);
+                            }
+                        }
+                        else if (evt is TextEvent textEvt)
+                        {
+                            if (reasoningShown && reasoningSb.Length > 0)
+                            {
+                                Console.WriteLine();
+                                reasoningSb.Clear();
+                            }
+                            reasoningShown = false;
                             Console.Write(textEvt.Delta);
                             sb.Append(textEvt.Delta);
                         }
