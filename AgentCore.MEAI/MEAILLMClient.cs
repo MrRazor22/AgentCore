@@ -37,6 +37,10 @@ public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
             meaiOptions.Tools = tools.ToMEAITools().ToList();
         }
 
+        // MEAI gives us COMPLETE FunctionCallContent objects (not streaming deltas).
+        // Each one needs a unique index so LLMExecutor treats them as separate tool calls.
+        int toolCallIndex = 0;
+
         await foreach (var update in _client.GetStreamingResponseAsync(meaiMessages, meaiOptions, ct).WithCancellation(ct))
         {
             if (update.FinishReason.HasValue)
@@ -59,13 +63,15 @@ public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
                         break;
 
                     case FunctionCallContent fc:
+                        var argsDelta = fc.Arguments?.Count > 0 
+                            ? System.Text.Json.JsonSerializer.Serialize(fc.Arguments) 
+                            : null;
+
                         yield return new ToolCallDelta(
-                            Index: 0, 
+                            Index: toolCallIndex++,  // unique index per tool call
                             Id: fc.CallId,
                             Name: fc.Name,
-                            ArgumentsDelta: fc.Arguments?.Count > 0 
-                                ? System.Text.Json.JsonSerializer.Serialize(fc.Arguments) 
-                                : null
+                            ArgumentsDelta: argsDelta
                         );
                         break;
 
@@ -73,7 +79,7 @@ public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
                         if (u.Details != null)
                         {
                             yield return new MetaDelta(
-                                AgentCore.LLM.FinishReason.Stop, 
+                                null, 
                                 new TokenUsage(
                                     (int)(u.Details.InputTokenCount ?? 0), 
                                     (int)(u.Details.OutputTokenCount ?? 0),
@@ -85,3 +91,4 @@ public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
         }
     }
 }
+

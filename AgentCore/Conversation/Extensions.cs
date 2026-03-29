@@ -71,7 +71,17 @@ internal static class Extensions
 
         for (int i = startIndex; i < messages.Count; i++)
         {
-            result.Add(messages[i]);
+            var msg = messages[i];
+            // Only strip reasoning from the initial compaction boundary message itself
+            if (i == startIndex && msg.Contents.Any(c => c is Summary))
+            {
+                var filteredContents = msg.Contents.Where(c => c is not Reasoning).ToList();
+                result.Add(new Message(msg.Role, filteredContents));
+            }
+            else
+            {
+                result.Add(msg);
+            }
         }
         return result;
     }
@@ -107,6 +117,20 @@ internal static class Extensions
                 var resultText = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
                 messages.Add(new Message(Role.Tool, new ToolResult(callId, new Text(resultText))));
                 continue;
+            }
+
+            if (item.TryGetValue("summary", out var summaryEl) && summaryEl.ValueKind == JsonValueKind.String)
+            {
+                var summaryText = summaryEl.GetString();
+                if (!string.IsNullOrEmpty(summaryText))
+                    messages.Add(new Message(role, new Summary(summaryText)));
+            }
+            
+            if (item.TryGetValue("reasoning", out var reasoningEl) && reasoningEl.ValueKind == JsonValueKind.String)
+            {
+                var reasoningText = reasoningEl.GetString();
+                if (!string.IsNullOrEmpty(reasoningText))
+                    messages.Add(new Message(role, new Reasoning(reasoningText)));
             }
 
             if (item.TryGetValue("content", out var textContentEl) && textContentEl.ValueKind == JsonValueKind.String)
@@ -173,6 +197,18 @@ internal static class Extensions
             if (textContent != null)
             {
                 msg["content"] = textContent.Value;
+            }
+
+            var summary = c.Contents.OfType<Summary>().FirstOrDefault();
+            if (summary != null)
+            {
+                msg["summary"] = summary.Text;
+            }
+            
+            var reasoning = c.Contents.OfType<Reasoning>().FirstOrDefault();
+            if (reasoning != null)
+            {
+                msg["reasoning"] = reasoning.Thought;
             }
 
             var toolCalls = c.Contents.OfType<ToolCall>().ToList();

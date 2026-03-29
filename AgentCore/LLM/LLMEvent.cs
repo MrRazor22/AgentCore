@@ -16,5 +16,6 @@ public sealed record LLMMetaEvent(
     FinishReason FinishReason,
     string ModelName,
     TimeSpan? Duration = null,
+    int ToolSchemaTokens = 0,
     Dictionary<string, object>? Extra = null
 ) : LLMEvent;

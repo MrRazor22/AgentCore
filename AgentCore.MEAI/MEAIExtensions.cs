@@ -24,6 +24,10 @@ internal static class MEAIExtensions
                 {
                     chatMsg.Contents.Add(new TextContent(t.Value));
                 }
+                else if (content is Summary s)
+                {
+                    chatMsg.Contents.Add(new TextContent(s.Text));
+                }
                 else if (content is Reasoning r)
                 {
                     chatMsg.Contents.Add(new Microsoft.Extensions.AI.TextReasoningContent(r.Thought));
@@ -102,10 +106,13 @@ internal static class MEAIExtensions
     {
         foreach (var tool in tools)
         {
-            yield return AIFunctionFactory.Create(
-                (string args) => args, 
-                name: tool.Name, 
-                description: tool.Description);
+            var schemaElement = JsonSerializer.Deserialize<JsonElement>(
+                tool.ParametersSchema.ToJsonString());
+
+            yield return AIFunctionFactory.CreateDeclaration(
+                name: tool.Name,
+                description: tool.Description,
+                jsonSchema: schemaElement);
         }
     }
 

@@ -1,0 +1,2000 @@
+﻿  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "."
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "7"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "Â°C"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "###"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " **"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "WE"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "ATHER"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " ST"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "ABILITY"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "**"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Rank"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Country"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:30][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Stability"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Rating"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "------"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "---------"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "----------------"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "--"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " "
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "1"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " India"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " ("
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "Bang"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "alore"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": ")"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Very"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Stable"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " "
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "2"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Sri"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Lanka"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Good"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " "
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "3"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Pakistan"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " ("
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "Islam"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "abad"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": ")"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:31][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Moderate"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " "
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "4"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Nepal"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Moderate"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "|"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " "
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "5"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Bangladesh"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "â­"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " Poor"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " ("
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "Mon"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "soon"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": ")"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " |"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "---"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "\n\n"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "##"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " ðŸŽ¯"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " FINAL"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " RE"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "COMM"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "END"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "ATION"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": ":"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": " **"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}
+[2026-03-30 01:09:32][INFO][qwen3.5-4b] Generated packet: {
+  "id": "chatcmpl-r4nzcbmso7obsqypxjza1p",
+  "object": "chat.completion.chunk",
+  "created": 1774813142,
+  "model": "qwen3.5-4b",
+  "system_fingerprint": "qwen3.5-4b",
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "content": "BEST"
+      },
+      "logprobs": null,
+      "finish_reason": null
+    }
+  ]
+}

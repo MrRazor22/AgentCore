@@ -59,8 +59,10 @@ public sealed class LLMExecutor : ILLMExecutor
         var sw = Stopwatch.StartNew();
 
         var tools = _toolRegistry.Tools;
+        var toolNames = tools?.Select(t => t.Name).ToList() ?? [];
+        var toolNamesStr = string.Join(", ", toolNames);
 
-        _logger.LogTrace("LLM request: {Model} {Options}", options.Model, options);
+        _logger.LogTrace("LLM request: Model={Model} Tools=[{ToolNames}]", options.Model, toolNamesStr);
 
         var content = _provider.StreamAsync(messages, options, tools, ct);
 
@@ -115,24 +117,45 @@ public sealed class LLMExecutor : ILLMExecutor
             if (evt != null) yield return evt;
         }
 
+        var effectiveUsage = tokenUsage ?? TokenUsage.Empty;
+        var toolSchemaTokens = EstimateToolSchemaTokens(tools);
+
         if (tokenUsage != null)
         {
             _tokenManager.Record(tokenUsage);
-            yield return new LLMMetaEvent(
-                tokenUsage,
-                finishReason ?? FinishReason.Stop,
-                options.Model,
-                sw.Elapsed);
             if (_tokenCounter is ApproximateTokenCounter approx)
             {
-                approx.Calibrate(messages, tokenUsage.InputTokens);
+                approx.Calibrate(messages, Math.Max(1, tokenUsage.InputTokens - toolSchemaTokens));
             }
         }
+        else
+        {
+            _logger.LogDebug("Provider did not report token usage for FinishReason={FinishReason}", finishReason);
+        }
+
+        yield return new LLMMetaEvent(
+            effectiveUsage,
+            finishReason ?? FinishReason.Stop,
+            options.Model,
+            sw.Elapsed,
+            toolSchemaTokens);
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
-        if (tokenUsage != null)
-            _logger.LogTrace("Token usage: In={In} Out={Out}", tokenUsage.InputTokens, tokenUsage.OutputTokens);
+        _logger.LogTrace("Token usage: In={In} Out={Out} ToolSchemas={ToolSchemas}", effectiveUsage.InputTokens, effectiveUsage.OutputTokens, toolSchemaTokens);
+    }
+
+    private static int EstimateToolSchemaTokens(IReadOnlyList<AgentCore.Tooling.Tool>? tools)
+    {
+        if (tools == null || tools.Count == 0) return 0;
+        
+        int totalChars = 0;
+        foreach (var tool in tools)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(tool);
+            totalChars += json?.Length ?? 0;
+        }
+        return (int)(totalChars / 4.0 * 1.15);
     }
 
     private static ToolCallEvent? ParseToolCall(string id, string name, string argsStr)

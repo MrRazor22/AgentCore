@@ -34,7 +34,7 @@ public static class JsonSchemaExtensions
         var result = BuildSchema(type, visited);
 
         if (visited.Count == 0)
-            _schemaCache.TryAdd(type, result);
+            _schemaCache.TryAdd(type, (JsonObject)result.DeepClone());
 
         return result;
     }
@@ -138,25 +138,25 @@ public static class JsonSchemaExtensions
         switch (type)
         {
             case "string":
-                if (kind != JsonValueKind.String) errors.Add(new SchemaValidationError(path, path, "Expected string", "type_error"));
+                if (kind != JsonValueKind.String) errors.Add(new SchemaValidationError(path, path, $"Expected string, got {kind}", "type_error"));
                 break;
             case "integer":
-                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, "Expected integer", "type_error"));
+                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, $"Expected integer, got {kind}", "type_error"));
                 break;
             case "number":
-                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, "Expected number", "type_error"));
+                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, $"Expected number, got {kind}", "type_error"));
                 break;
             case "boolean":
-                if (kind != JsonValueKind.True && kind != JsonValueKind.False) errors.Add(new SchemaValidationError(path, path, "Expected boolean", "type_error"));
+                if (kind != JsonValueKind.True && kind != JsonValueKind.False) errors.Add(new SchemaValidationError(path, path, $"Expected boolean, got {kind}", "type_error"));
                 break;
             case "array":
-                if (kind != JsonValueKind.Array) errors.Add(new SchemaValidationError(path, path, "Expected array", "type_error"));
+                if (kind != JsonValueKind.Array) errors.Add(new SchemaValidationError(path, path, $"Expected array, got {kind}", "type_error"));
                 else if (schema["items"] is JsonObject itemSchema)
                     for (int i = 0; i < node.AsArray().Count; i++)
                         errors.AddRange(itemSchema.Validate(node.AsArray()[i], $"{path}[{i}]"));
                 break;
             case "object":
-                if (kind != JsonValueKind.Object) errors.Add(new SchemaValidationError(path, path, "Expected object", "type_error"));
+                if (kind != JsonValueKind.Object) errors.Add(new SchemaValidationError(path, path, $"Expected object, got {kind}", "type_error"));
                 else if (schema["properties"] is JsonObject props)
                 {
                     var objNode = node.AsObject();
@@ -174,6 +174,19 @@ public static class JsonSchemaExtensions
                         {
                             if (childSchema != null)
                                 errors.AddRange(childSchema.Validate(objNode[key], $"{path}.{key}".Trim('.')));
+                        }
+                    }
+
+                    if (schema[JsonSchemaConstants.AdditionalPropertiesKey] is JsonValue ap 
+                        && ap.GetValue<bool>() == false)
+                    {
+                        var schemaKeys = props.Select(p => p.Key).ToHashSet();
+                        foreach (var key in objNode.Select(k => k.Key))
+                        {
+                            if (!schemaKeys.Contains(key))
+                                errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), 
+                                    $"Unknown property '{key}'. Expected properties: [{string.Join(", ", schemaKeys)}]", 
+                                    "unexpected_key"));
                         }
                     }
                 }

@@ -13,7 +13,7 @@ public sealed class AgentConfig
 {
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
-    public int MaxToolCalls { get; set; } = 15;
+    public int? MaxToolCalls { get; set; } = null;
     public ToolOptions ToolOptions { get; set; } = new();
 }
 
@@ -74,7 +74,8 @@ public sealed class AgentBuilder
 
         var toolExecutor = new ToolExecutor(
             registry, 
-            _config.ToolOptions, 
+            _config.ToolOptions,
+            loggerFactory.CreateLogger<ToolExecutor>(),
             _toolMiddlewares);
 
         var llmExecutor = new LLMExecutor(

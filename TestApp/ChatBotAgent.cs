@@ -34,11 +34,12 @@ namespace TestApp
             }
 
             var agent = LLMAgent.Create("chatbot")
+                .WithMemory(new FileMemory())
                 .WithInstructions("You are an AI agent, execute all user requests faithfully.")
                 .WithProvider(MEAILLMClient.Create("http://127.0.0.1:1234/v1", "model", "lmstudio"), new LLMOptions
                 {
                     ContextLength = 8000,
-                    ReasoningEffort = AgentCore.LLM.ReasoningEffort.High
+                    ReasoningEffort = AgentCore.LLM.ReasoningEffort.Low,
                 })
                 .WithTools<GeoTools>()
                 .WithTools<WeatherTool>()
@@ -79,7 +80,7 @@ namespace TestApp
                 }))
                 .Build();
 
-            var sessionId = Guid.NewGuid().ToString("N");
+            var sessionId = "test-session-123";
 
             while (true)
             {

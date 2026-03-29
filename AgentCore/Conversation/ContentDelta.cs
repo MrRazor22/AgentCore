@@ -16,4 +16,4 @@ public sealed record ToolCallDelta(
     string? ArgumentsDelta
 ) : IContentDelta;
 
-public sealed record MetaDelta(FinishReason FinishReason, TokenUsage? TokenUsage) : IContentDelta;
+public sealed record MetaDelta(FinishReason? FinishReason, TokenUsage? TokenUsage) : IContentDelta;

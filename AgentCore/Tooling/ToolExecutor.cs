@@ -3,6 +3,8 @@ using AgentCore.Diagnostics;
 using AgentCore.Execution;
 using AgentCore.Json;
 using AgentCore.Utils;
+using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -21,14 +23,17 @@ public sealed class ToolExecutor : IToolExecutor
     private readonly ToolOptions _options;
     private readonly SemaphoreSlim _semaphore;
     private readonly PipelineHandler<ToolCall, Task<ToolResult>> _pipeline;
+    private readonly ILogger<ToolExecutor> _logger;
 
     public ToolExecutor(
         IToolRegistry tools,
         ToolOptions options,
+        ILogger<ToolExecutor> logger,
         IEnumerable<PipelineMiddleware<ToolCall, Task<ToolResult>>>? middlewares = null)
     {
         _tools = tools;
         _options = options;
+        _logger = logger;
         _semaphore = new SemaphoreSlim(options.MaxConcurrency);
         
         _pipeline = Pipeline<ToolCall, Task<ToolResult>>.Build(
@@ -51,11 +56,15 @@ public sealed class ToolExecutor : IToolExecutor
         if (string.IsNullOrWhiteSpace(call.Name))
             return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", "Tool name cannot be empty."));
 
+        var argsJson = call.Arguments?.ToString() ?? "{}";
+        _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
+
         await _semaphore.WaitAsync(ct).ConfigureAwait(false);
         
         CancellationTokenSource? timeoutCts = null;
         CancellationTokenSource? linkedCts = null;
         CancellationToken runCt = ct;
+        var sw = Stopwatch.StartNew();
 
         if (_options.DefaultTimeout.HasValue)
         {
@@ -67,16 +76,23 @@ public sealed class ToolExecutor : IToolExecutor
         try
         {
             var result = await InvokeInternalAsync(call, runCt).ConfigureAwait(false);
+            sw.Stop();
+            _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
+            _logger.LogTrace("Tool result: {Name} Result={Content}", call.Name, result?.ForLlm()?.Length > 200 ? result.ForLlm()[..200] + "..." : result?.ForLlm());
             return new ToolResult(call.Id, result);
         }
         catch (OperationCanceledException ex) when (timeoutCts?.IsCancellationRequested == true)
         {
+            sw.Stop();
+            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, $"Tool execution timed out after {_options.DefaultTimeout!.Value.TotalSeconds} seconds.");
             return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution timed out after {_options.DefaultTimeout!.Value.TotalSeconds} seconds.", ex));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
+            sw.Stop();
             var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
+            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, wrapped.Message);
             return new ToolResult(call.Id, wrapped);
         }
         finally
@@ -109,6 +125,19 @@ public sealed class ToolExecutor : IToolExecutor
         if (parameters.Length == 1 && !parameters[0].ParameterType.IsSimpleType() && !argsObj.ContainsKey(parameters[0].Name!))
             argsObj = new JsonObject { [parameters[0].Name!] = argsObj };
 
+        var expectedNames = parameters
+            .Where(p => p.ParameterType != typeof(CancellationToken) && p.Name != null)
+            .Select(p => p.Name!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unknownKeys = argsObj.Select(kv => kv.Key)
+            .Where(k => !expectedNames.Contains(k))
+            .ToList();
+        if (unknownKeys.Count > 0)
+        {
+            throw new ToolValidationException(toolName, unknownKeys[0],
+                $"Unknown parameter(s): [{string.Join(", ", unknownKeys)}]. Expected: [{FormatExpectedParams(parameters)}].");
+        }
+
         var values = new List<object?>();
 
         foreach (var p in parameters)
@@ -121,7 +150,8 @@ public sealed class ToolExecutor : IToolExecutor
             if (node == null)
             {
                 if (p.HasDefaultValue) values.Add(p.DefaultValue);
-                else throw new ToolValidationException(toolName, p.Name!, "Missing required parameter.");
+                else throw new ToolValidationException(toolName, p.Name!, 
+                    $"Missing required parameter '{p.Name}' (type: {p.ParameterType.MapClrTypeToJsonType()}). Expected parameters: [{FormatExpectedParams(parameters)}].");
                 continue;
             }
 
@@ -135,6 +165,20 @@ public sealed class ToolExecutor : IToolExecutor
 
         return values.ToArray();
     }
+
+    private static string FormatExpectedParams(ParameterInfo[] parameters)
+        => string.Join(", ", parameters
+            .Where(p => p.ParameterType != typeof(CancellationToken) && p.Name != null)
+            .Select(p =>
+            {
+                var type = p.ParameterType.MapClrTypeToJsonType();
+                var opt = p.HasDefaultValue ? ", optional" : "";
+                var underlying = Nullable.GetUnderlyingType(p.ParameterType) ?? p.ParameterType;
+                var enumVals = underlying.IsEnum 
+                    ? $", one of: {string.Join("|", Enum.GetNames(underlying))}" 
+                    : "";
+                return $"{p.Name} ({type}{opt}{enumVals})";
+            }));
 
     private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
     {
@@ -173,7 +217,7 @@ public abstract class ToolException : Exception, IContent
         ToolName = toolName;
     }
     public virtual string ForLlm()
-        => $"{ToolName}: {Message}";
+        => $"Error calling tool '{ToolName}': {Message}";
 }
 public sealed class ToolExecutionException : ToolException
 {
@@ -188,7 +232,8 @@ public sealed class ToolValidationAggregateException : ToolException
     {
         Errors = errors.ToList();
     }
-    public override string ForLlm() => $"{ToolName}: {Message}";
+    public override string ForLlm() 
+        => $"Error calling tool '{ToolName}': {string.Join("; ", Errors.Select(e => e.Message))}";
 }
 public sealed class ToolValidationException : ToolException
 {
@@ -198,4 +243,6 @@ public sealed class ToolValidationException : ToolException
     {
         ParamName = paramName;
     }
+    public override string ForLlm()
+        => $"Error calling tool '{ToolName}', parameter '{ParamName}': {Message}";
 }

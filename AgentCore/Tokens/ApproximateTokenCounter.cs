@@ -6,7 +6,7 @@ namespace AgentCore.Tokens;
 
 public sealed class ApproximateTokenCounter : ITokenCounter
 {
-    private double _charsPerToken = 4.0;
+    private double _charsPerToken = 5.0;
     private int _sampleCount = 0;
     private readonly object _lock = new();
 
