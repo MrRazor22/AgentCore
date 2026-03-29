@@ -118,7 +118,11 @@ public sealed class LLMExecutor : ILLMExecutor
         if (tokenUsage != null)
         {
             _tokenManager.Record(tokenUsage);
-            yield return new TokenUsageEvent(tokenUsage);
+            yield return new LLMMetaEvent(
+                tokenUsage,
+                finishReason ?? FinishReason.Stop,
+                options.Model,
+                sw.Elapsed);
             if (_tokenCounter is ApproximateTokenCounter approx)
             {
                 approx.Calibrate(messages, tokenUsage.InputTokens);

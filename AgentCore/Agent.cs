@@ -175,8 +175,8 @@ public sealed class LLMAgent : IAgent
                             runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                             break;
 
-                        case TokenUsageEvent tu:
-                            lastLlmTokens = tu.Usage.InputTokens + tu.Usage.OutputTokens;
+                        case LLMMetaEvent meta:
+                            lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
                             break;
                     }
 

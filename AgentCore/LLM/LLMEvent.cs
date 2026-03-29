@@ -11,4 +11,10 @@ public sealed record ReasoningEvent(string Delta) : LLMEvent;
 
 public sealed record ToolCallEvent(ToolCall Call) : LLMEvent;
 
-public sealed record TokenUsageEvent(TokenUsage Usage) : LLMEvent;
+public sealed record LLMMetaEvent(
+    TokenUsage Usage,
+    FinishReason FinishReason,
+    string ModelName,
+    TimeSpan? Duration = null,
+    Dictionary<string, object>? Extra = null
+) : LLMEvent;
