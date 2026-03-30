@@ -22,12 +22,12 @@ public static class ChatBotAgent
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         // ─── Setup Agent ───
+        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\memory" });
+        
         var agent = LLMAgent.Create("chatbot")
-            .WithMemory(new FileMemory(new() { PersistDir = @"D:\AgentCore\memory" }))
+            .WithMemory(memory)
             .WithInstructions("You are an AI agent, execute all user requests faithfully.")
-            .WithProvider(
-                MEAILLMClient.Create("http://127.0.0.1:1234/v1", "model", "lmstudio"),
-                new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
@@ -41,6 +41,9 @@ public static class ChatBotAgent
             .Build();
 
         var sessionId = "demo-session-001";
+
+        // ─── Load & Display Previous Messages ───
+        await LoadPreviousMessages(memory, sessionId);
 
         // ─── Interactive Loop ───
         while (true)
@@ -61,6 +64,42 @@ public static class ChatBotAgent
                 Console.WriteLine("\n⚠️  Cancelled");
             }
         }
+    }
+
+    // ─── Load Previous Messages ───
+    private static async Task LoadPreviousMessages(FileMemory memory, string sessionId)
+    {
+        var history = await memory.RecallAsync(sessionId);
+        if (history.Count == 0) return;
+
+        Console.WriteLine("\n" + new string('=', 50));
+        Console.WriteLine("📜 Previous conversation loaded:");
+        Console.WriteLine(new string('=', 50));
+
+        foreach (var msg in history)
+        {
+            var text = msg.Contents.OfType<Text>().FirstOrDefault()?.Value ?? "";
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            var roleLabel = msg.Role.ToString() switch
+            {
+                "User" => "👤 User",
+                "Assistant" => "🤖 Assistant",
+                "Tool" => "🔧 Tool",
+                _ => msg.Role.ToString()
+            };
+
+            Console.ForegroundColor = msg.Role == Role.User ? ConsoleColor.Cyan : 
+                                       msg.Role == Role.Assistant ? ConsoleColor.Yellow : ConsoleColor.Gray;
+            Console.WriteLine($"\n{roleLabel}:");
+            Console.ResetColor();
+            
+            var displayText = text;
+            Console.WriteLine(displayText);
+        }
+
+        Console.WriteLine("\n" + new string('=', 50));
+        Console.WriteLine("Continuing conversation...\n");
     }
 
     // ─── Stream Processing ───

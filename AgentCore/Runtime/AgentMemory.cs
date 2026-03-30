@@ -11,6 +11,7 @@ public interface IAgentMemory
     Task<List<Message>> RecallAsync(string sessionId);
     Task UpdateAsync(string sessionId, List<Message> chat);
     Task ClearAsync(string sessionId);
+    Task<IReadOnlyList<string>> GetAllSessionsAsync();
 }
 
 public sealed class InMemoryMemory : IAgentMemory
@@ -38,6 +39,11 @@ public sealed class InMemoryMemory : IAgentMemory
     {
         _store.TryRemove(sessionId, out _);
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> GetAllSessionsAsync()
+    {
+        return Task.FromResult<IReadOnlyList<string>>(_store.Keys.ToList());
     }
 }
 
@@ -119,6 +125,18 @@ public sealed class FileMemory(FileMemoryOptions? options) : IAgentMemory
         {
             sessionLock.Release();
         }
+    }
+
+    public Task<IReadOnlyList<string>> GetAllSessionsAsync()
+    {
+        if (_options.PersistDir == null || !Directory.Exists(_options.PersistDir))
+            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        var files = Directory.GetFiles(_options.PersistDir, "*.json");
+        var sessions = files
+            .Select(f => Path.GetFileNameWithoutExtension(f))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<string>>(sessions);
     }
 
     private static string ToJson(List<Message> chat)

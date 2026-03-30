@@ -12,17 +12,6 @@ namespace AgentCore.Providers.MEAI;
 
 public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
 {
-    public static MEAILLMClient Create(string baseUrl, string model, string? apiKey = null)
-    {
-        var credentials = new ApiKeyCredential(apiKey ?? "not-needed");
-        var options = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
-        var openAiClient = new OpenAIClient(credentials, options);
-        
-        var chatClient = openAiClient.GetChatClient(model);
-        var meaiClient = chatClient.AsIChatClient();
-        return new MEAILLMClient(meaiClient);
-    }
-
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
@@ -41,54 +30,85 @@ public sealed class MEAILLMClient(IChatClient _client) : ILLMProvider
         // Each one needs a unique index so LLMExecutor treats them as separate tool calls.
         int toolCallIndex = 0;
 
-        await foreach (var update in _client.GetStreamingResponseAsync(meaiMessages, meaiOptions, ct).WithCancellation(ct))
+        var enumerator = _client.GetStreamingResponseAsync(meaiMessages, meaiOptions, ct).WithCancellation(ct).GetAsyncEnumerator();
+        try
         {
-            if (update.FinishReason.HasValue)
+            while (true)
             {
-                yield return new MetaDelta(update.FinishReason.ToCoreFinishReason(), null);
-            }
-
-            foreach (var content in update.Contents)
-            {
-                switch (content)
+                bool hasNext = false;
+                try
                 {
-                    case TextContent t:
-                        if (!string.IsNullOrEmpty(t.Text))
-                            yield return new TextDelta(t.Text);
-                        break;
+                    hasNext = await enumerator.MoveNextAsync();
+                }
+                catch (Exception ex) when (IsContextLimitException(ex))
+                {
+                    throw new ContextLengthExceededException("The provider rejected the request due to context length limits.", ex);
+                }
 
-                    case Microsoft.Extensions.AI.TextReasoningContent tr:
-                        if (!string.IsNullOrEmpty(tr.Text))
-                            yield return new ReasoningDelta(tr.Text);
-                        break;
+                if (!hasNext) break;
 
-                    case FunctionCallContent fc:
-                        var argsDelta = fc.Arguments?.Count > 0 
-                            ? System.Text.Json.JsonSerializer.Serialize(fc.Arguments) 
-                            : null;
+                var update = enumerator.Current;
+                if (update.FinishReason.HasValue)
+                {
+                    yield return new MetaDelta(update.FinishReason.ToCoreFinishReason(), null);
+                }
 
-                        yield return new ToolCallDelta(
-                            Index: toolCallIndex++,  // unique index per tool call
-                            Id: fc.CallId,
-                            Name: fc.Name,
-                            ArgumentsDelta: argsDelta
-                        );
-                        break;
+                foreach (var content in update.Contents)
+                {
+                    switch (content)
+                    {
+                        case TextContent t:
+                            if (!string.IsNullOrEmpty(t.Text))
+                                yield return new TextDelta(t.Text);
+                            break;
 
-                    case UsageContent u:
-                        if (u.Details != null)
-                        {
-                            yield return new MetaDelta(
-                                null, 
-                                new TokenUsage(
-                                    (int)(u.Details.InputTokenCount ?? 0), 
-                                    (int)(u.Details.OutputTokenCount ?? 0),
-                                    (int)(u.Details.ReasoningTokenCount ?? 0)));
-                        }
-                        break;
+                        case Microsoft.Extensions.AI.TextReasoningContent tr:
+                            if (!string.IsNullOrEmpty(tr.Text))
+                                yield return new ReasoningDelta(tr.Text);
+                            break;
+
+                        case FunctionCallContent fc:
+                            var argsDelta = fc.Arguments?.Count > 0 
+                                ? System.Text.Json.JsonSerializer.Serialize(fc.Arguments) 
+                                : null;
+
+                            yield return new ToolCallDelta(
+                                Index: toolCallIndex++,  // unique index per tool call
+                                Id: fc.CallId,
+                                Name: fc.Name,
+                                ArgumentsDelta: argsDelta
+                            );
+                            break;
+
+                        case UsageContent u:
+                            if (u.Details != null)
+                            {
+                                yield return new MetaDelta(
+                                    null, 
+                                    new TokenUsage(
+                                        (int)(u.Details.InputTokenCount ?? 0), 
+                                        (int)(u.Details.OutputTokenCount ?? 0),
+                                        (int)(u.Details.ReasoningTokenCount ?? 0)));
+                            }
+                            break;
+                    }
                 }
             }
         }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+    }
+
+    private static bool IsContextLimitException(Exception ex)
+    {
+        var msg = ex.Message.ToLowerInvariant();
+        return msg.Contains("maximum context length") || 
+               msg.Contains("context_length_exceeded") ||
+               (msg.Contains("context") && msg.Contains("exceed")) ||
+               (msg.Contains("token") && msg.Contains("exceed")) ||
+               msg.Contains("too many tokens");
     }
 }
 
