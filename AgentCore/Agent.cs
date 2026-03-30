@@ -13,7 +13,7 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    Task<string> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
+    Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
 }
@@ -52,29 +52,50 @@ public sealed class LLMAgent : IAgent
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
 
-    public async Task<string> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default)
-    {
-        var sb = new StringBuilder();
-        await foreach (var evt in CoreStreamAsync(input, sessionId, null, ct))
-        {
-            if (evt is TextEvent text)
-                sb.Append(text.Delta);
-        }
-        return sb.ToString();
-    }
+    public Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default)
+        => InvokeAsyncInternal(input, sessionId, null, ct);
 
     public async Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default)
     {
-        var sb = new StringBuilder();
-        await foreach (var evt in CoreStreamAsync(input, sessionId, typeof(T), ct))
-        {
-            if (evt is TextEvent text)
-                sb.Append(text.Delta);
-        }
-
-        var json = sb.ToString();
+        var response = await InvokeAsyncInternal(input, sessionId, typeof(T), ct);
+        var json = response.Text;
+        
         if (string.IsNullOrWhiteSpace(json)) return default;
         return System.Text.Json.JsonSerializer.Deserialize<T>(json);
+    }
+
+    private async Task<AgentResponse> InvokeAsyncInternal(
+        IContent input, 
+        string? sessionId, 
+        Type? outputType, 
+        CancellationToken ct)
+    {
+        sessionId ??= Guid.NewGuid().ToString("N");
+        
+        var chatBefore = await _memory.RecallAsync(sessionId);
+        int startIndex = chatBefore.Count;
+
+        int inTokens = 0;
+        int outTokens = 0;
+        int reasoningTokens = 0;
+
+        await foreach (var evt in CoreStreamAsync(input, sessionId, outputType, ct))
+        {
+            if (evt is LLMMetaEvent meta)
+            {
+                inTokens += meta.Usage.InputTokens;
+                outTokens += meta.Usage.OutputTokens;
+                reasoningTokens += meta.Usage.ReasoningTokens;
+            }
+        }
+
+        var chatAfter = await _memory.RecallAsync(sessionId);
+        var turnMessages = chatAfter.Skip(startIndex).ToList();
+
+        return new AgentResponse(
+            sessionId,
+            turnMessages,
+            new TokenUsage(inTokens, outTokens, reasoningTokens));
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
@@ -259,6 +280,13 @@ public sealed class LLMAgent : IAgent
 
                 if (runningTools.Count == 0)
                 {
+                    if (options.ContextLength.HasValue)
+                    {
+                        _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
+                        chat = await _ctxManager.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
+                        workingChat.Clear();
+                        workingChat.AddRange(chat);
+                    }
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _memory.UpdateAsync(sessionId, chat);
                     break;
@@ -282,6 +310,13 @@ public sealed class LLMAgent : IAgent
 
                 pendingToolCalls.Clear();
 
+                if (options.ContextLength.HasValue)
+                {
+                    _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
+                    chat = await _ctxManager.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
+                    workingChat.Clear();
+                    workingChat.AddRange(chat);
+                }
 
                 await _memory.UpdateAsync(sessionId, chat);
             }
