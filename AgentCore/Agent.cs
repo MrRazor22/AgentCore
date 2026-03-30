@@ -129,9 +129,10 @@ public sealed class LLMAgent : IAgent
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
 
-            var pendingCalls = new Dictionary<string, Message>();
+            var pendingToolCalls = new Dictionary<string, ToolCall>();
             var textBuffer = new StringBuilder();
             var reasoningBuffer = new StringBuilder();
+            var toolCallsBuffer = new List<ToolCall>();
 
             var options = BuildLLMOptions(outputType);
             int consecutiveToolSteps = 0;
@@ -154,8 +155,6 @@ public sealed class LLMAgent : IAgent
 
                 await foreach (var evt in _llm.StreamAsync(messages, options, ct))
                 {
-                    // Side-effects first, then pass event through unchanged — no re-boxing needed
-                    // since LLMEvent : AgentEvent directly.
                     switch (evt)
                     {
                         case TextEvent t:
@@ -167,25 +166,8 @@ public sealed class LLMAgent : IAgent
                             break;
 
                         case ToolCallEvent tc:
-                            if (textBuffer.Length > 0 || reasoningBuffer.Length > 0)
-                            {
-                                var contents = new List<IContent>();
-                                if (reasoningBuffer.Length > 0)
-                                {
-                                    contents.Add(new Reasoning(reasoningBuffer.ToString()));
-                                    reasoningBuffer.Clear();
-                                }
-                                if (textBuffer.Length > 0)
-                                {
-                                    contents.Add(new Text(textBuffer.ToString()));
-                                    textBuffer.Clear();
-                                }
-                                chat.Add(new Message(Role.Assistant, contents));
-                            }
-                            reasoningBuffer.Clear();
-                            var callMsg = new Message(Role.Assistant, tc.Call);
-                            pendingCalls[tc.Call.Id] = callMsg;
-                            chat.Add(callMsg);
+                            toolCallsBuffer.Add(tc.Call);
+                            pendingToolCalls[tc.Call.Id] = tc.Call;
                             _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
                             runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                             break;
@@ -203,10 +185,10 @@ public sealed class LLMAgent : IAgent
                             break;
                     }
 
-                    yield return evt; // LLMEvent IS an AgentEvent — pass straight through
+                    yield return evt;
                 }
 
-                if (textBuffer.Length > 0 || reasoningBuffer.Length > 0)
+                if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
                 {
                     var contents = new List<IContent>();
                     if (reasoningBuffer.Length > 0)
@@ -218,6 +200,11 @@ public sealed class LLMAgent : IAgent
                     {
                         contents.Add(new Text(textBuffer.ToString().Trim()));
                         textBuffer.Clear();
+                    }
+                    if (toolCallsBuffer.Count > 0)
+                    {
+                        contents.AddRange(toolCallsBuffer);
+                        toolCallsBuffer.Clear();
                     }
                     chat.Add(new Message(Role.Assistant, contents));
                 }
@@ -243,13 +230,13 @@ public sealed class LLMAgent : IAgent
                 foreach (var result in results)
                 {
                     var resultLength = result.ForLlm()?.Length ?? 0;
-                    var toolName = pendingCalls.TryGetValue(result.CallId, out var msg) && msg.Contents.FirstOrDefault() is ToolCall tc ? tc.Name : "unknown";
+                    var toolName = pendingToolCalls.TryGetValue(result.CallId, out var tc) ? tc.Name : "unknown";
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
                     chat.Add(new Message(Role.Tool, result));
                     yield return new AgentToolResultEvent(result);
                 }
 
-                pendingCalls.Clear();
+                pendingToolCalls.Clear();
 
                 if (options.ContextLength.HasValue)
                 {

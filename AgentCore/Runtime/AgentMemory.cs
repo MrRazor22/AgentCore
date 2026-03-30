@@ -1,6 +1,5 @@
 using AgentCore.Conversation;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging; 
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -48,9 +47,9 @@ public sealed class FileMemoryOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMemory
+public sealed class FileMemory(FileMemoryOptions? options) : IAgentMemory
 {
-    private readonly FileMemoryOptions _options = options?.Value ?? new FileMemoryOptions();
+    private readonly FileMemoryOptions _options = options ?? new FileMemoryOptions();
     private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
 
     public FileMemory() : this(null) { }
@@ -127,6 +126,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
         var messages = chat.Select(m => new MessageDto
         {
             Role = m.Role.ToString(),
+            Kind = m.Kind != MessageKind.Default ? m.Kind.ToString() : null,
             Content = m.Contents.Select(SerializeContent).ToList()
         }).ToList();
 
@@ -146,7 +146,10 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
                 if (dto.Role != null)
                 {
                     var contents = DeserializeContents(dto.Content);
-                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), contents));
+                    var kind = MessageKind.Default;
+                    if (!string.IsNullOrEmpty(dto.Kind) && Enum.TryParse<MessageKind>(dto.Kind, out var parsed))
+                        kind = parsed;
+                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), contents, kind));
                 }
             }
         }
@@ -186,7 +189,6 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
             Reasoning r => new { type = "reasoning", thought = r.Thought },
             ToolCall tc => new { type = "toolCall", id = tc.Id, name = tc.Name, arguments = tc.Arguments },
             ToolResult tr => new { type = "toolResult", callId = tr.CallId, result = SerializeContent(tr.Result!) },
-            Summary s => new { type = "summary", text = s.Text },
             _ => new { type = "text", value = content.ForLlm() }
         };
     }
@@ -224,7 +226,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
                     return new ToolResult(callId, result);
                 case "summary":
                     if (root.TryGetProperty("text", out var summaryText))
-                        return new Summary(summaryText.GetString() ?? "");
+                        return new Text(summaryText.GetString() ?? "");
                     break;
             }
         }
@@ -238,6 +240,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
     private class MessageDto
     {
         public string? Role { get; set; }
+        public string? Kind { get; set; }
         public object? Content { get; set; }
     }
 
@@ -273,7 +276,7 @@ public sealed class FileMemory(IOptions<FileMemoryOptions>? options) : IAgentMem
                     return new ToolResult(callId, result);
                 case "summary":
                     if (element.TryGetProperty("text", out var summaryText))
-                        return new Summary(summaryText.GetString() ?? "");
+                        return new Text(summaryText.GetString() ?? "");
                     break;
             }
         }

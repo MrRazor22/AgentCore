@@ -62,21 +62,25 @@ internal static class Extensions
         int startIndex = 0;
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            if (messages[i].Contents.Any(c => c is Summary))
+            if ((messages[i].Kind & MessageKind.Summary) != 0)
             {
                 startIndex = i;
                 break;
             }
         }
 
+        if (startIndex > 0 && messages[startIndex - 1].Role == Role.User && (messages[startIndex - 1].Kind & MessageKind.Synthetic) != 0)
+        {
+            result.Add(messages[startIndex - 1]);
+        }
+
         for (int i = startIndex; i < messages.Count; i++)
         {
             var msg = messages[i];
-            // Only strip reasoning from the initial compaction boundary message itself
-            if (i == startIndex && msg.Contents.Any(c => c is Summary))
+            if (i == startIndex && (msg.Kind & MessageKind.Summary) != 0)
             {
                 var filteredContents = msg.Contents.Where(c => c is not Reasoning).ToList();
-                result.Add(new Message(msg.Role, filteredContents));
+                result.Add(new Message(msg.Role, filteredContents, msg.Kind));
             }
             else
             {
@@ -111,11 +115,19 @@ internal static class Extensions
             var roleStr = item.TryGetValue("role", out var r) ? r.GetString() ?? "user" : "user";
             var role = Enum.TryParse<Role>(roleStr, true, out var parsed) ? parsed : Role.User;
 
+            MessageKind kind = MessageKind.Default;
+            if (item.TryGetValue("kind", out var kindEl) && kindEl.ValueKind == JsonValueKind.String)
+            {
+                var kindStr = kindEl.GetString();
+                if (!string.IsNullOrEmpty(kindStr) && Enum.TryParse<MessageKind>(kindStr, out var parsedKind))
+                    kind = parsedKind;
+            }
+
             if (item.TryGetValue("tool_call_id", out var callIdEl))
             {
                 var callId = callIdEl.GetString() ?? "";
                 var resultText = item.TryGetValue("content", out var c) ? c.GetString() ?? "" : "";
-                messages.Add(new Message(Role.Tool, new ToolResult(callId, new Text(resultText))));
+                messages.Add(new Message(Role.Tool, new ToolResult(callId, new Text(resultText)), kind));
                 continue;
             }
 
@@ -123,14 +135,14 @@ internal static class Extensions
             {
                 var summaryText = summaryEl.GetString();
                 if (!string.IsNullOrEmpty(summaryText))
-                    messages.Add(new Message(role, new Summary(summaryText)));
+                    messages.Add(new Message(role, new Text(summaryText), kind | MessageKind.Summary));
             }
             
             if (item.TryGetValue("reasoning", out var reasoningEl) && reasoningEl.ValueKind == JsonValueKind.String)
             {
                 var reasoningText = reasoningEl.GetString();
                 if (!string.IsNullOrEmpty(reasoningText))
-                    messages.Add(new Message(role, new Reasoning(reasoningText)));
+                    messages.Add(new Message(role, new Reasoning(reasoningText), kind));
             }
 
             if (item.TryGetValue("content", out var textContentEl) && textContentEl.ValueKind == JsonValueKind.String)
@@ -139,12 +151,13 @@ internal static class Extensions
                 // Avoid yielding the hacky tool name string that older AgentCore versions serialized
                 if (!string.IsNullOrEmpty(text) && (!item.ContainsKey("tool_calls") || !item["tool_calls"].EnumerateArray().Any(tc => tc.TryGetProperty("function", out var f) && f.TryGetProperty("name", out var n) && n.GetString() == text)))
                 {
-                    messages.Add(new Message(role, new Text(text)));
+                    messages.Add(new Message(role, new Text(text), kind));
                 }
             }
 
             if (item.TryGetValue("tool_calls", out var toolCallsEl) && toolCallsEl.ValueKind == JsonValueKind.Array)
             {
+                var contents = new List<IContent>();
                 foreach (var tc in toolCallsEl.EnumerateArray())
                 {
                     var id = tc.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
@@ -160,8 +173,9 @@ internal static class Extensions
                         }
                     }
 
-                    messages.Add(new Message(role, new ToolCall(id, name, args)));
+                    contents.Add(new ToolCall(id, name, args));
                 }
+                messages.Add(new Message(role, contents, kind));
             }
         }
 
@@ -199,10 +213,9 @@ internal static class Extensions
                 msg["content"] = textContent.Value;
             }
 
-            var summary = c.Contents.OfType<Summary>().FirstOrDefault();
-            if (summary != null)
+            if (c.Kind != MessageKind.Default)
             {
-                msg["summary"] = summary.Text;
+                msg["kind"] = c.Kind.ToString();
             }
             
             var reasoning = c.Contents.OfType<Reasoning>().FirstOrDefault();

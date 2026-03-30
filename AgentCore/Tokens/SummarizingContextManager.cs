@@ -27,76 +27,126 @@ public sealed class SummarizingContextManager(
         int startIndex = 0;
         for (int i = chat.Count - 1; i >= 0; i--)
         {
-            if (chat[i].Contents.Any(c => c is Summary))
+            if ((chat[i].Kind & MessageKind.Summary) != 0)
             {
                 startIndex = i;
                 break;
             }
         }
 
+        if (startIndex > 0 && chat[startIndex - 1].Role == Role.User && (chat[startIndex - 1].Kind & MessageKind.Synthetic) != 0)
+        {
+            startIndex--;
+        }
+
         int activeCount = chat.Count - startIndex;
-        if (activeCount <= 4) return chat; // Too few messages to summarize
+        if (activeCount <= 4) return chat;
 
         int keepCount = Math.Min(4, activeCount - 1);
         int compressibleCount = activeCount - keepCount;
 
+        int tailIndex = startIndex + compressibleCount;
+        bool tailStartsWithUser = tailIndex < chat.Count && chat[tailIndex].Role == Role.User;
+
         var compressible = chat.Skip(startIndex).Take(compressibleCount).ToList();
         var contentLines = compressible.Select(m => $"[{m.Role}]: {string.Join(", ", m.Contents.Select(c => c.ForLlm()))}");
-        var contentStr = string.Join("\n\n", contentLines);
-
+        
         // Cap summary input to ~60% of context to leave room for the prompt + output.
         // Use a rough 4 chars/token estimate for the cap.
         int maxInputTokens = (int)(ctxLen * 0.60);
         int maxChars = maxInputTokens * 4;
-        if (contentStr.Length > maxChars)
+
+        var chunks = ChunkContent(contentLines, maxChars);
+        _logger.LogInformation("Split context into {ChunkCount} chunks for parallel summarization.", chunks.Count);
+
+        var tasks = chunks.Select(chunkText => SummarizeChunkAsync(chunkText, options, ct)).ToList();
+        var results = await Task.WhenAll(tasks);
+
+        var combinedSummary = string.Join("\n\n", results.Select(r => r.Summary).Where(s => !string.IsNullOrEmpty(s)));
+        var combinedReasoning = string.Join("\n\n", results.Select(r => r.Reasoning).Where(r => !string.IsNullOrEmpty(r)));
+
+        if (string.IsNullOrEmpty(combinedSummary) && string.IsNullOrEmpty(combinedReasoning))
         {
-            _logger.LogDebug("Summary input truncated: {Original} chars → {Capped} chars to fit context", contentStr.Length, maxChars);
-            contentStr = contentStr[..maxChars];
-        }
-
-        var input = new List<Message> { 
-            new(Role.System, new Text(_summaryPrompt)),
-            new(Role.User, new Text(contentStr))
-        };
-
-        var textSb = new StringBuilder();
-        var reasonSb = new StringBuilder();
-
-        // Summary call: no tools, no hardcoded constraints. Let it output until it hits a natural stop token
-        // bounded only by the remaining 40% of the context window buffer.
-        await foreach (var evt in _provider.StreamAsync(input,
-            new LLMOptions { Model = options.Model },
-            null, ct))
-        {
-            if (evt is TextDelta td) textSb.Append(td.Value);
-            else if (evt is ReasoningDelta rd) reasonSb.Append(rd.Value);
-        }
-
-        var summaryContent = textSb.ToString().Trim();
-        var reasonContent = reasonSb.ToString().Trim();
-
-        if (string.IsNullOrEmpty(summaryContent) && string.IsNullOrEmpty(reasonContent))
-        {
-            _logger.LogWarning("LLM returned empty summary. Context compaction aborted to prevent data loss.");
+            _logger.LogWarning("LLM returned empty summaries for all chunks. Context compaction aborted to prevent data loss.");
             return chat;
         }
 
         var contents = new List<IContent>();
-        if (!string.IsNullOrEmpty(reasonContent)) contents.Add(new Reasoning(reasonContent));
-        if (!string.IsNullOrEmpty(summaryContent)) contents.Add(new Summary(summaryContent));
+        if (!string.IsNullOrEmpty(combinedSummary)) contents.Add(new Text(combinedSummary));
+        if (!string.IsNullOrEmpty(combinedReasoning)) contents.Add(new Reasoning(combinedReasoning));
 
-        var summaryMsg = new Message(Role.Assistant, contents.ToArray());
         chat.RemoveRange(startIndex, compressibleCount);
-        chat.Insert(startIndex, summaryMsg);
+        
+        chat.Insert(startIndex, new Message(Role.User, new Text("What have we done so far?"), MessageKind.Synthetic));
+        chat.Insert(startIndex + 1, new Message(Role.Assistant, contents, MessageKind.Summary | MessageKind.Synthetic));
+
+        if (!tailStartsWithUser)
+        {
+            chat.Insert(startIndex + 2, new Message(Role.User, new Text("Continue if you have a next step or stop and ask for clarification if you are unsure how to proceed."), MessageKind.Synthetic));
+        }
         
         _logger.LogTrace("Summary content produced: {Summary} | Reasoning: {Reasoning}", 
-            summaryContent.Length > 200 ? summaryContent[..200] + "..." : summaryContent,
-            reasonContent.Length > 200 ? reasonContent[..200] + "..." : reasonContent);
+            combinedSummary.Length > 200 ? combinedSummary[..200] + "..." : combinedSummary,
+            combinedReasoning.Length > 200 ? combinedReasoning[..200] + "..." : combinedReasoning);
 
         int after = await _counter.CountAsync(chat.GetActiveWindow(), ct).ConfigureAwait(false);
         _logger.LogDebug("Compacted [summarize]: {Before}→{After} ({Saved:P0})",
             totalTokens, after, 1.0 - (double)after / totalTokens);
 
         return chat;
+    }
+
+    private static List<string> ChunkContent(IEnumerable<string> lines, int maxChars)
+    {
+        var chunks = new List<string>();
+        var currentChunk = new StringBuilder();
+
+        foreach (var line in lines)
+        {
+            if (currentChunk.Length + line.Length > maxChars && currentChunk.Length > 0)
+            {
+                chunks.Add(currentChunk.ToString());
+                currentChunk.Clear();
+            }
+
+            // If a single line is enormous, it will exceed maxChars but at least we process it
+            currentChunk.AppendLine(line);
+        }
+
+        if (currentChunk.Length > 0)
+        {
+            chunks.Add(currentChunk.ToString());
+        }
+
+        return chunks;
+    }
+
+    private async Task<(string Summary, string Reasoning)> SummarizeChunkAsync(string text, LLMOptions options, CancellationToken ct)
+    {
+        if (_provider == null) return ("", "");
+
+        var input = new List<Message> { 
+            new(Role.System, new Text(_summaryPrompt)),
+            new(Role.User, new Text(text))
+        };
+
+        var textSb = new StringBuilder();
+        var reasonSb = new StringBuilder();
+
+        try
+        {
+            await foreach (var evt in _provider.StreamAsync(input, new LLMOptions { Model = options.Model }, null, ct))
+            {
+                if (evt is TextDelta td) textSb.Append(td.Value);
+                else if (evt is ReasoningDelta rd) reasonSb.Append(rd.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to summarize context chunk.");
+            return ("", "");
+        }
+
+        return (textSb.ToString().Trim(), reasonSb.ToString().Trim());
     }
 }

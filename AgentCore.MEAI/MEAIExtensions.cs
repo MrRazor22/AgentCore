@@ -24,10 +24,6 @@ internal static class MEAIExtensions
                 {
                     chatMsg.Contents.Add(new TextContent(t.Value));
                 }
-                else if (content is Summary s)
-                {
-                    chatMsg.Contents.Add(new TextContent(s.Text));
-                }
                 else if (content is Reasoning r)
                 {
                     chatMsg.Contents.Add(new Microsoft.Extensions.AI.TextReasoningContent(r.Thought));
