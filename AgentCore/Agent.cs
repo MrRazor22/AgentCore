@@ -155,39 +155,84 @@ public sealed class LLMAgent : IAgent
                 var messages = (IReadOnlyList<Message>)workingChat.GetActiveWindow();
                 _logger.LogDebug("LLM step {Step}: Messages={Count} ContextTokens≈{Approx}", consecutiveToolSteps + 1, messages.Count, lastLlmTokens);
 
-                await foreach (var evt in _llm.StreamAsync(messages, options, ct))
+                var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
+                bool limitsExceeded = false;
+
+                try
                 {
-                    switch (evt)
+                    while (true)
                     {
-                        case TextEvent t:
-                            textBuffer.Append(t.Delta);
+                        bool hasNext = false;
+                        try
+                        {
+                            hasNext = await enumerator.MoveNextAsync();
+                        }
+                        catch (ContextLengthExceededException)
+                        {
+                            limitsExceeded = true;
                             break;
+                        }
 
-                        case ReasoningEvent r:
-                            reasoningBuffer.Append(r.Delta);
-                            break;
+                        if (!hasNext) break;
 
-                        case ToolCallEvent tc:
-                            toolCallsBuffer.Add(tc.Call);
-                            pendingToolCalls[tc.Call.Id] = tc.Call;
-                            _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
-                            runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
-                            break;
+                        var evt = enumerator.Current;
+                        switch (evt)
+                        {
+                            case TextEvent t:
+                                textBuffer.Append(t.Delta);
+                                break;
 
-                        case LLMMetaEvent meta:
-                            if (meta.Usage.IsEmpty)
-                            {
-                                lastLlmTokens = await _tokenCounter.CountAsync(workingChat.GetActiveWindow(), ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
-                                _logger.LogDebug("LLM Provider did not report tokens. Counted {TokenCount} natively (including {ToolSchemaTokens} tool schemas).", lastLlmTokens, meta.ToolSchemaTokens);
-                            }
-                            else
-                            {
-                                lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
-                            }
-                            break;
+                            case ReasoningEvent r:
+                                reasoningBuffer.Append(r.Delta);
+                                break;
+
+                            case ToolCallEvent tc:
+                                toolCallsBuffer.Add(tc.Call);
+                                pendingToolCalls[tc.Call.Id] = tc.Call;
+                                _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
+                                runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
+                                break;
+
+                            case LLMMetaEvent meta:
+                                if (meta.Usage.IsEmpty)
+                                {
+                                    lastLlmTokens = await _tokenCounter.CountAsync(workingChat.GetActiveWindow(), ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
+                                    _logger.LogDebug("LLM Provider did not report tokens. Counted {TokenCount} natively (including {ToolSchemaTokens} tool schemas).", lastLlmTokens, meta.ToolSchemaTokens);
+                                }
+                                else
+                                {
+                                    lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
+                                }
+                                break;
+                        }
+
+                        yield return evt;
                     }
+                }
+                finally
+                {
+                    await enumerator.DisposeAsync();
+                }
 
-                    yield return evt;
+                if (limitsExceeded)
+                {
+                    _logger.LogWarning("Context limit exceeded. Forcing proactive summarization and retrying.");
+                    
+                    int currentTokensCount = await _tokenCounter.CountAsync(messages, ct);
+                    int limit = options.ContextLength ?? (int)(currentTokensCount * 0.75);
+                    
+                    workingChat = await _ctxManager.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
+                    
+                    chat.Clear();
+                    chat.AddRange(workingChat);
+                    
+                    textBuffer.Clear();
+                    reasoningBuffer.Clear();
+                    toolCallsBuffer.Clear();
+                    pendingToolCalls.Clear();
+                    runningTools.Clear();
+                    
+                    continue;
                 }
 
                     if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
@@ -214,11 +259,6 @@ public sealed class LLMAgent : IAgent
 
                 if (runningTools.Count == 0)
                 {
-                    if (options.ContextLength.HasValue)
-                    {
-                        _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                        workingChat = await _ctxManager.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                    }
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _memory.UpdateAsync(sessionId, chat);
                     break;
@@ -242,11 +282,6 @@ public sealed class LLMAgent : IAgent
 
                 pendingToolCalls.Clear();
 
-                if (options.ContextLength.HasValue)
-                {
-                    _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                    workingChat = await _ctxManager.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                }
 
                 await _memory.UpdateAsync(sessionId, chat);
             }
