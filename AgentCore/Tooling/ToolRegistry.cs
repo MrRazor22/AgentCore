@@ -13,6 +13,7 @@ public interface IToolRegistry
 {
     IReadOnlyList<Tool> Tools { get; }
     void Register(Delegate del, string? name = null, string? description = null);
+    void Register(Tool tool);
     bool Unregister(string toolName);
     Tool? TryGet(string toolName);
 }
@@ -41,6 +42,21 @@ public sealed class ToolRegistry : IToolRegistry
                 $"Duplicate tool name '{tool.Name}'. " +
                 $"Already registered by {existing?.DeclaringType?.FullName}.{existing?.Name}, " +
                 $"conflicts with {current?.DeclaringType?.FullName}.{current?.Name}.");
+        }
+
+        _registry[tool.Name] = tool;
+    }
+
+    public void Register(Tool tool)
+    {
+        if (tool == null) throw new ArgumentNullException(nameof(tool));
+        
+        if (string.IsNullOrWhiteSpace(tool.Name))
+            throw new ArgumentException("Tool name is required.", nameof(tool));
+
+        if (_registry.ContainsKey(tool.Name))
+        {
+            throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'.");
         }
 
         _registry[tool.Name] = tool;

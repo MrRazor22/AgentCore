@@ -40,6 +40,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithInstructions(string prompt) { _config.SystemPrompt = prompt; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
+    public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
     public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
