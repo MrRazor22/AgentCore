@@ -33,7 +33,8 @@ public sealed partial class CodingAgent : IAgent
         SandboxPolicy sandboxPolicy,
         int maxSteps,
         (string open, string close) codeBlockTags,
-        IAgentMemory memory)
+        IAgentMemory memory,
+        IToolExecutor toolExecutor)
     {
         _name = name;
         _instructions = instructions;
@@ -47,7 +48,7 @@ public sealed partial class CodingAgent : IAgent
         _memory = memory;
 
         var tools = toolRegistry.Tools;
-        _executor.SendTools(tools, new ToolExecutorAdapter(toolRegistry));
+        _executor.SendTools(tools, toolExecutor);
     }
 
     public async Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default)
@@ -101,7 +102,7 @@ public sealed partial class CodingAgent : IAgent
                 Temperature = _llmOptions.Temperature,
                 MaxOutputTokens = _llmOptions.MaxOutputTokens,
                 ToolCallMode = ToolCallMode.None,
-                StopSequences = ["Observation:", "```", _codeBlockTags.close],
+                StopSequences = ["Observation:"],
             };
 
             var textBuffer = new StringBuilder();
@@ -208,30 +209,4 @@ public sealed partial class CodingAgent : IAgent
     }
 }
 
-public class ToolExecutorAdapter : IToolExecutor
-{
-    private readonly IToolRegistry _registry;
 
-    public ToolExecutorAdapter(IToolRegistry registry)
-    {
-        _registry = registry;
-    }
-
-    public async Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
-    {
-        var tool = _registry.TryGet(toolCall.Name);
-        if (tool == null || tool.Invoker == null)
-            return new Text($"Error calling tool '{toolCall.Name}': Tool not found.");
-
-        var args = new object?[tool.Method?.GetParameters().Length ?? 0];
-        // Note: This is an approximation. ToolExecutor in core handles complex mapping.
-        var result = await tool.Invoker(args);
-        return new Text(result?.ToString() ?? "");
-    }
-
-    public async Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
-    {
-        var result = await InvokeAsync(call, ct);
-        return new ToolResult(call.Id, result);
-    }
-}

@@ -24,7 +24,6 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
     private readonly ScriptOptions _scriptOptions;
     private ScriptState<object>? _scriptState;
     private readonly StringBuilder _logs = new();
-    private Dictionary<string, Delegate> _toolDelegates = [];
     private IToolExecutor? _toolExecutor;
     private IReadOnlyList<Tool>? _tools;
 
@@ -36,7 +35,17 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
 
     private ScriptOptions CreateScriptOptions()
     {
-        var options = ScriptOptions.Default;
+        var options = ScriptOptions.Default
+            .WithReferences(
+                typeof(object).Assembly, 
+                typeof(Console).Assembly, 
+                typeof(System.Linq.Enumerable).Assembly,
+                typeof(System.Collections.Generic.List<>).Assembly,
+                typeof(System.Text.StringBuilder).Assembly,
+                typeof(System.Text.Json.JsonSerializer).Assembly,
+                typeof(System.Text.Json.Nodes.JsonNode).Assembly,
+                typeof(AgentCore.Conversation.ToolCall).Assembly
+            );
 
         if (_policy.AllowedNamespaces.Count > 0 && !_policy.AllowedNamespaces.Contains("*"))
         {
@@ -50,7 +59,6 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
     {
         _tools = tools;
         _toolExecutor = executor;
-        _toolDelegates = ToolBridge.CreateToolDelegates(tools, executor);
     }
 
     public void SendVariables(Dictionary<string, object?> variables)
@@ -59,7 +67,7 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
         {
             Print = (Action<object?>)((obj) => _logs.AppendLine(obj?.ToString() ?? "null")),
             FinalAnswer = (Action<object?>)((obj) => throw new FinalAnswerException(obj)),
-            Tools = _toolDelegates,
+            ToolsExecutor = _toolExecutor!,
             Variables = variables,
         };
 
@@ -100,35 +108,39 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
                     _logs.AppendLine(output);
                 }),
                 FinalAnswer = (Action<object?>)((obj) => throw new FinalAnswerException(obj)),
-                Tools = _toolDelegates,
+                ToolsExecutor = _toolExecutor!,
                 Variables = [],
             };
 
-            var task = _scriptState == null
-                ? CSharpScript.RunAsync<object>(codeAction, _scriptOptions, globals, typeof(ScriptGlobals), cts.Token)
-                : _scriptState.ContinueWithAsync<object>(codeAction, _scriptOptions, cts.Token);
+            if (_scriptState == null)
+            {
+                var wrappers = ToolBridge.GenerateToolWrappers(_tools ?? []);
+                _scriptState = CSharpScript.RunAsync<object>(wrappers, _scriptOptions, globals, typeof(ScriptGlobals), cts.Token).Result;
+            }
 
-            _scriptState = task.Result;
+            _scriptState = _scriptState.ContinueWithAsync<object>(codeAction, _scriptOptions, cts.Token).Result;
 
             var output = _scriptState?.ReturnValue;
             var logs = TruncateLogs(_logs.ToString());
 
             return new CodeOutput(output, logs, false);
         }
-        catch (FinalAnswerException ex)
-        {
-            var logs = TruncateLogs(_logs.ToString());
-            return new CodeOutput(ex.Value, logs, true);
-        }
-        catch (CompilationErrorException ex)
-        {
-            var errorMsg = $"Compilation error:\n{string.Join("\n", ex.Diagnostics)}";
-            return new CodeOutput(null, _logs.ToString() + errorMsg, false);
-        }
         catch (Exception ex)
         {
-            var errorMsg = $"Execution error: {ex.Message}";
-            return new CodeOutput(null, _logs.ToString() + errorMsg, false);
+            var inner = UnwrapException(ex);
+            if (inner is FinalAnswerException fae)
+            {
+                var logs = TruncateLogs(_logs.ToString());
+                return new CodeOutput(fae.Value, logs, true);
+            }
+            if (inner is CompilationErrorException cee)
+            {
+                var errorMsgComp = $"Compilation error:\n{string.Join("\n", cee.Diagnostics)}";
+                return new CodeOutput(null, _logs.ToString() + errorMsgComp, false);
+            }
+
+            var errorMsgExec = $"Execution error: {inner?.Message ?? ex.Message}";
+            return new CodeOutput(null, _logs.ToString() + errorMsgExec, false);
         }
     }
 
@@ -141,6 +153,23 @@ public sealed class RoslynScriptExecutor : ICSharpExecutor
         return logs;
     }
 
+    private static Exception? UnwrapException(Exception ex)
+    {
+        Exception? current = ex;
+        while (current != null)
+        {
+            if (current is FinalAnswerException or CompilationErrorException)
+                return current;
+            if (current is AggregateException agg && agg.InnerException != null)
+                current = agg.InnerException;
+            else if (current.InnerException != null)
+                current = current.InnerException;
+            else
+                break;
+        }
+        return ex;
+    }
+
     public void Dispose()
     {
     }
@@ -150,6 +179,6 @@ public class ScriptGlobals
 {
     public required Action<object?> Print { get; init; }
     public required Action<object?> FinalAnswer { get; init; }
-    public required Dictionary<string, Delegate> Tools { get; init; }
+    public required IToolExecutor ToolsExecutor { get; init; }
     public required Dictionary<string, object?> Variables { get; init; }
 }

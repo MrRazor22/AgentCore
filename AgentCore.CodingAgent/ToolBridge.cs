@@ -29,6 +29,57 @@ public static class ToolBridge
 
     private static string GenerateMethodSignature(Tool tool)
     {
+        var paramList = GetParametersStrings(tool);
+        var methodName = GetCSharpMethodName(tool.Name);
+        return $"public static object? {methodName}({string.Join(", ", paramList)}) => throw new NotImplementedException();";
+    }
+
+    public static string GenerateToolWrappers(IReadOnlyList<Tool> tools)
+    {
+        var sb = new StringBuilder();
+        foreach (var tool in tools)
+        {
+            sb.AppendLine(GenerateToolWrapper(tool));
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
+
+    private static string GenerateToolWrapper(Tool tool)
+    {
+        var methodName = GetCSharpMethodName(tool.Name);
+        var originalName = tool.Name;
+        var paramList = GetParametersStrings(tool);
+        
+        var sb = new StringBuilder();
+        sb.AppendLine($"public object? {methodName}({string.Join(", ", paramList)})");
+        sb.AppendLine("{");
+        sb.AppendLine("    var __args = new System.Text.Json.Nodes.JsonObject();");
+
+        var props = tool.ParametersSchema["properties"] as JsonObject;
+        if (props != null)
+        {
+            foreach (var (paramName, _) in props)
+            {
+                sb.AppendLine($"    __args[\"{paramName}\"] = System.Text.Json.Nodes.JsonValue.Create({paramName});");
+            }
+        }
+
+        sb.AppendLine($"    var __call = new AgentCore.Conversation.ToolCall(System.Guid.NewGuid().ToString(\"N\"), \"{originalName}\", __args);");
+        sb.AppendLine("    var __result = ToolsExecutor.HandleToolCallAsync(__call, default).GetAwaiter().GetResult();");
+        sb.AppendLine("    return __result.Result?.ForLlm();");
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    private static string GetCSharpMethodName(string toolName)
+    {
+        return toolName.Replace(".", "_").Replace("-", "_");
+    }
+
+    private static List<string> GetParametersStrings(Tool tool)
+    {
         var paramList = new List<string>();
         var props = tool.ParametersSchema["properties"] as JsonObject;
         if (props != null)
@@ -42,10 +93,7 @@ public static class ToolBridge
                 paramList.Add($"{type} {paramName}{defaultValue}");
             }
         }
-
-        var methodName = tool.Name;
-
-        return $"public static object? {methodName}({string.Join(", ", paramList)}) => throw new NotImplementedException(\"Tool called via delegate\");";
+        return paramList;
     }
 
     private static string MapJsonToCSharpType(JsonObject schema)
@@ -72,8 +120,8 @@ public static class ToolBridge
             "integer" => "int",
             "number" => "double",
             "boolean" => "bool",
-            "array" => "List<object>",
-            "object" => "Dictionary<string, object>",
+            "array" => "System.Collections.Generic.List<object>",
+            "object" => "System.Collections.Generic.Dictionary<string, object>",
             _ => "object"
         };
     }
@@ -96,73 +144,6 @@ public static class ToolBridge
                 };
             }
         }
-        return "null";
-    }
-
-    public static Dictionary<string, Delegate> CreateToolDelegates(
-        IReadOnlyList<Tool> tools,
-        IToolExecutor executor)
-    {
-        var delegates = new Dictionary<string, Delegate>();
-
-        foreach (var tool in tools)
-        {
-            var delegate_ = CreateToolDelegate(tool, executor);
-            delegates[tool.Name] = delegate_;
-        }
-
-        return delegates;
-    }
-
-    private static Delegate CreateToolDelegate(Tool tool, IToolExecutor executor)
-    {
-        var method = tool.Method;
-        if (method == null)
-        {
-            return CreateDynamicDelegate(tool, executor);
-        }
-
-        var parameters = method.GetParameters();
-        var returnType = typeof(object);
-        var paramTypes = new List<Type>();
-
-        foreach (var param in parameters)
-        {
-            paramTypes.Add(param.ParameterType);
-        }
-
-        return CreateAsyncDelegate(tool.Name, paramTypes.ToArray(), executor);
-    }
-
-    private static Delegate CreateDynamicDelegate(Tool tool, IToolExecutor executor)
-    {
-        return (Func<Task<object?>>)(async () =>
-        {
-            var result = await executor.HandleToolCallAsync(
-                new ToolCall(Guid.NewGuid().ToString("N"), tool.Name, new JsonObject()),
-                default);
-            return result.Result?.ForLlm();
-        });
-    }
-
-    private static Delegate CreateAsyncDelegate(string toolName, Type[] paramTypes, IToolExecutor executor)
-    {
-        return (Func<object?[], Task<object?>>)(async (args) =>
-        {
-            var jsonArgs = new JsonObject();
-            var paramInfos = executor.GetType().GetMethod("HandleToolCallAsync")?.GetParameters();
-            
-            if (paramInfos != null)
-            {
-                for (int i = 0; i < paramInfos.Length && i < args.Length; i++)
-                {
-                    jsonArgs[paramInfos[i].Name ?? $"arg{i}"] = JsonValue.Create(args[i]);
-                }
-            }
-
-            var toolCall = new ToolCall(Guid.NewGuid().ToString("N"), toolName, jsonArgs);
-            var result = await executor.HandleToolCallAsync(toolCall, default);
-            return result.Result?.ForLlm();
-        });
+        return "default";
     }
 }

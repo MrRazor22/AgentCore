@@ -3,8 +3,12 @@ using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tooling;
 using AgentCore.Tokens;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenAI;
+using Anthropic;
+using System.ClientModel;
 using System.Text;
 
 namespace AgentCore.CodingAgent;
@@ -42,13 +46,24 @@ public sealed class CodingAgentBuilder
         var options = new LLMOptions
         {
             Model = model,
-            ApiKey = apiKey ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY"),
+            ApiKey = apiKey ?? "dummy",
             BaseUrl = baseUrl ?? "https://api.openai.com/v1",
             ToolCallMode = ToolCallMode.None,
-            StopSequences = ["Observation:", "```"],
+            StopSequences = ["Observation:"],
         };
         configure?.Invoke(options);
         _llmOptions = options;
+
+        var openAiOptions = new OpenAIClientOptions();
+        if (!string.IsNullOrEmpty(baseUrl))
+            openAiOptions.Endpoint = new Uri(baseUrl);
+        
+        var credentials = new ApiKeyCredential(apiKey ?? "dummy");
+        var openAiClient = new OpenAIClient(credentials, openAiOptions);
+        var chatClient = openAiClient.GetChatClient(model).AsIChatClient();
+        
+        _provider = new AgentCore.Providers.MEAI.MEAILLMClient(chatClient);
+        
         return this;
     }
 
@@ -60,17 +75,22 @@ public sealed class CodingAgentBuilder
             ApiKey = apiKey ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
             BaseUrl = "https://api.anthropic.com/v1",
             ToolCallMode = ToolCallMode.None,
-            StopSequences = ["Observation:", "```"],
+            StopSequences = ["Observation:"],
         };
         configure?.Invoke(options);
         _llmOptions = options;
+
+        var anthropicClient = new AnthropicClient { ApiKey = apiKey ?? "" };
+        var chatClient = anthropicClient.AsIChatClient(model);
+        _provider = new AgentCore.Providers.MEAI.MEAILLMClient(chatClient);
+        
         return this;
     }
 
     public CodingAgentBuilder WithProvider(ILLMProvider provider, Action<LLMOptions>? configure = null)
     {
         _provider = provider;
-        var options = new LLMOptions { ToolCallMode = ToolCallMode.None, StopSequences = ["Observation:", "```"] };
+        var options = new LLMOptions { ToolCallMode = ToolCallMode.None, StopSequences = ["Observation:"] };
         configure?.Invoke(options);
         _llmOptions = options;
         return this;
@@ -122,6 +142,11 @@ public sealed class CodingAgentBuilder
             _ => throw new ArgumentException($"Unknown executor type: {_executorType}")
         };
 
-        return new CodingAgent(_name, _instructions, llmExecutor, _llmOptions!, toolRegistry, executor, _sandboxPolicy, _maxSteps, _codeBlockTags, memory);
+        var toolExecutor = new ToolExecutor(
+            toolRegistry,
+            new ToolOptions(),
+            loggerFactory.CreateLogger<ToolExecutor>());
+
+        return new CodingAgent(_name, _instructions, llmExecutor, _llmOptions!, toolRegistry, executor, _sandboxPolicy, _maxSteps, _codeBlockTags, memory, toolExecutor);
     }
 }
