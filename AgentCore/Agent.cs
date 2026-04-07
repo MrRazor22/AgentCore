@@ -5,6 +5,7 @@ using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
+using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -23,7 +24,8 @@ public sealed class LLMAgent : IAgent
     private readonly IAgentMemory _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
-    private readonly IContextManager _ctxManager;
+    private readonly IContextCompactor _ctxCompactor;
+    private readonly IContextAssembler _assembler;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -33,7 +35,8 @@ public sealed class LLMAgent : IAgent
         IAgentMemory memory,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
-        IContextManager contextManager,
+        IContextCompactor contextCompactor,
+        IContextAssembler assembler,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -42,7 +45,8 @@ public sealed class LLMAgent : IAgent
         _memory = memory;
         _llm = llm;
         _toolRuntime = toolRuntime;
-        _ctxManager = contextManager;
+        _ctxCompactor = contextCompactor;
+        _assembler = assembler;
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -173,8 +177,17 @@ public sealed class LLMAgent : IAgent
                 }
 
                 var runningTools = new List<Task<ToolResult>>();
-                var messages = (IReadOnlyList<Message>)workingChat.GetActiveWindow();
-                _logger.LogDebug("LLM step {Step}: Messages={Count} ContextTokens≈{Approx}", consecutiveToolSteps + 1, messages.Count, lastLlmTokens);
+                
+                // Assemble context
+                int totalLimit = options.ContextLength ?? 128_000;
+                int contextBudget = totalLimit / 4; // 25% for injected context
+                var contextMessages = await _assembler.AssembleAsync(contextBudget, ct);
+
+                var activeWindow = workingChat.GetActiveWindow();
+                var messages = contextMessages.Concat(activeWindow).ToList();
+                
+                _logger.LogDebug("LLM step {Step}: Context={CtxMsgs} History={HistMsgs} Tokens≈{Approx}", 
+                    consecutiveToolSteps + 1, contextMessages.Count, activeWindow.Count, lastLlmTokens);
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;
@@ -242,7 +255,7 @@ public sealed class LLMAgent : IAgent
                     int currentTokensCount = await _tokenCounter.CountAsync(messages, ct);
                     int limit = options.ContextLength ?? (int)(currentTokensCount * 0.75);
                     
-                    workingChat = await _ctxManager.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
+                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
                     
                     chat.Clear();
                     chat.AddRange(workingChat);
@@ -283,7 +296,7 @@ public sealed class LLMAgent : IAgent
                     if (options.ContextLength.HasValue)
                     {
                         _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                        chat = await _ctxManager.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
+                        chat = await _ctxCompactor.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
                         workingChat.Clear();
                         workingChat.AddRange(chat);
                     }
@@ -313,7 +326,7 @@ public sealed class LLMAgent : IAgent
                 if (options.ContextLength.HasValue)
                 {
                     _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                    chat = await _ctxManager.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
+                    chat = await _ctxCompactor.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
                     workingChat.Clear();
                     workingChat.AddRange(chat);
                 }

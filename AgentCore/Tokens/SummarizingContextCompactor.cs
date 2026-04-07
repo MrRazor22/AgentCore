@@ -5,12 +5,12 @@ using System.Text;
 
 namespace AgentCore.Tokens;
 
-public sealed class SummarizingContextManager(
+public sealed class SummarizingContextCompactor(
     ITokenCounter _counter,
-    ILogger<SummarizingContextManager> _logger,
+    ILogger<SummarizingContextCompactor> _logger,
     ILLMProvider? _provider = null,
     string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad."
-) : IContextManager
+) : IContextCompactor
 {
     private readonly string _summaryPrompt = summaryPrompt;
 

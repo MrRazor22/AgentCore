@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
     <ProjectReference Include="..\AgentCore.MEAI\AgentCore.MEAI.csproj" />
+    <ProjectReference Include="..\AgentCore.Context\AgentCore.Context.csproj" />
   </ItemGroup>
 
 </Project>

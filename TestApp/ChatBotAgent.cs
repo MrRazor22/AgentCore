@@ -1,10 +1,12 @@
 using AgentCore;
 using AgentCore.BuiltInTools;
-using AgentCore.Conversation; 
+using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
+using AgentCore.Tokens;
 using AgentCore.Providers.MEAI;
-using AgentCore.Runtime; 
+using AgentCore.Runtime;
+using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -22,11 +24,15 @@ public static class ChatBotAgent
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         // ─── Setup Agent ───
-        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\memory" });
+        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\chat-history" });
+        var knowledge = new FileKnowledge(@"D:\AgentCore\knowledge.json");
         
         var agent = LLMAgent.Create("chatbot")
             .WithMemory(memory)
-            .WithInstructions("You are an AI agent, execute all user requests faithfully.")
+            .WithMemory(knowledge)
+            .WithContextAssembler(new ContextAssembler(new ApproximateTokenCounter(), ConfigureLogging().CreateLogger<ContextAssembler>()))
+            .AddContext("rules", "You are an AI agent, execute all user requests faithfully.", priority: 100)
+            .AddContext("persona", "You are helpful, concise and technical.", priority: 90)
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             
             .WithTools<GeoTools>()

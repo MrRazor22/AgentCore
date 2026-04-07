@@ -4,6 +4,7 @@ using AgentCore.LLM;
 using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
+using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -23,12 +24,16 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
 
     public IAgentMemory? Memory { get; set; }
-    public IContextManager? ContextManager { get; set; }
+    public IContextCompactor? ContextCompactor { get; set; }
+    public IContextAssembler? ContextAssembler { get; set; }
+    public IMemory? KnowledgeMemory { get; set; }
     public ITokenCounter? TokenCounter { get; set; }
     public ITokenManager? TokenManager { get; set; }
     public ILoggerFactory? LoggerFactory { get; set; }
     public ILLMProvider? Provider { get; set; }
     private LLMOptions? _providerOptions;
+
+    private readonly List<ContextRegistration> _contextSources = [];
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
@@ -44,7 +49,22 @@ public sealed class AgentBuilder
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
     public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
-    public AgentBuilder WithContextManager(IContextManager contextManager) { ContextManager = contextManager; return this; }
+    public AgentBuilder WithMemory(IMemory knowledge) { KnowledgeMemory = knowledge; return this; }
+    public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
+    public AgentBuilder WithContextAssembler(IContextAssembler assembler) { ContextAssembler = assembler; return this; }
+    
+    public AgentBuilder AddContext(IContextSource source, int? maxTokenBudget = null) 
+    { 
+        _contextSources.Add(new ContextRegistration(source, maxTokenBudget)); 
+        return this; 
+    }
+
+    public AgentBuilder AddContext(string name, string text, Role role = Role.System, int? maxTokenBudget = null, int priority = 50)
+    {
+        _contextSources.Add(new ContextRegistration(new StaticContextSource(name, text, role, priority), maxTokenBudget));
+        return this;
+    }
+
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { LoggerFactory = loggerFactory; return this; }
@@ -67,8 +87,21 @@ public sealed class AgentBuilder
         var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
         var memory = Memory ?? new InMemoryMemory();
         var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
-        var contextManager = ContextManager ?? new SummarizingContextManager(tokenCounter, loggerFactory.CreateLogger<SummarizingContextManager>(), Provider);
+        var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
+
+        var assembler = ContextAssembler ?? new SimpleContextAssembler();
+        foreach (var reg in _contextSources)
+            assembler.Register(reg.Source, reg.MaxTokenBudget);
+
+        if (_config.SystemPrompt != null)
+            assembler.Register(new StaticContextSource("instructions", _config.SystemPrompt, Role.System, 100));
+
+        if (KnowledgeMemory != null)
+        {
+            assembler.Register(KnowledgeMemory);
+            _toolRegistrations.Add(r => r.RegisterAll(new KnowledgeTools(KnowledgeMemory)));
+        }
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
@@ -91,7 +124,8 @@ public sealed class AgentBuilder
             memory,
             llmExecutor,
             toolExecutor,
-            contextManager,
+            contextCompactor,
+            assembler,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
