@@ -20,6 +20,10 @@ public sealed class ScratchpadTools(IList<Scratchpad> blocks)
         if (block.ReadOnly)
             return $"Error: The scratchpad '{label}' is read-only and cannot be modified by the agent.";
 
+        // Check limit before updating - return error if would exceed
+        if (block.Limit > 0 && content.Length > block.Limit)
+            return $"Error: Content length ({content.Length} characters) exceeds scratchpad limit ({block.Limit} characters). You must summarize or replace the existing content instead of appending.";
+
         block.Value = content;
         return $"Success: Scratchpad '{label}' updated. Current size: {block.Value.Length} characters.";
     }
