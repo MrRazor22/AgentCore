@@ -30,8 +30,8 @@ public static class ChatBotAgent
         var agent = LLMAgent.Create("chatbot")
             .WithMemory(memory)
             // .WithMemory(engine)   // <- enables cognitive memory recall/retain
-            .WithBlock("rules", "You are an AI agent, execute all user requests faithfully.")
-            .WithBlock("persona", "You are helpful, concise and technical.")
+            .WithScratchpad("rules", "You are an AI agent, execute all user requests faithfully.")
+            .WithScratchpad("persona", "You are helpful, concise and technical.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             
             .WithTools<GeoTools>()

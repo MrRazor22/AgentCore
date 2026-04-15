@@ -30,7 +30,7 @@ public sealed class AgentBuilder
     public ILLMProvider? Provider { get; set; }
     private LLMOptions? _providerOptions;
 
-    private readonly List<MemoryBlock> _blocks = [];
+    private readonly List<Scratchpad> _blocks = [];
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
@@ -49,21 +49,12 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IAgentMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
 
-    /// <summary>Adds a named memory block to the agent.</summary>
-    public AgentBuilder WithBlock(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
+    /// <summary>Adds a named scratchpad to the agent.</summary>
+    public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System)
     {
-        _blocks.Add(new MemoryBlock(label, value, role, limit, readOnly));
+        _blocks.Add(new Scratchpad(label, value, role, limit));
         return this;
-    }
-
-    /// <summary>Loads instructions from a file as a read-only memory block.</summary>
-    public AgentBuilder WithInstructionFile(string path, int limit = 32000, string? label = null)
-    {
-        if (!File.Exists(path)) throw new FileNotFoundException("Instruction file not found.", path);
-        label ??= Path.GetFileNameWithoutExtension(path);
-        var content = File.ReadAllText(path);
-        return WithBlock(label, content, Role.System, limit, readOnly: true);
-    }
+    } 
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
@@ -90,9 +81,9 @@ public sealed class AgentBuilder
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        var blocksToBeUsed = new List<MemoryBlock>(_blocks);
+        var blocksToBeUsed = new List<Scratchpad>(_blocks);
         if (_config.SystemPrompt != null)
-            blocksToBeUsed.Insert(0, new MemoryBlock("instructions", _config.SystemPrompt, Role.System, 0, true));
+            blocksToBeUsed.Insert(0, new Scratchpad("instructions", _config.SystemPrompt, Role.System, 0, true));
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);

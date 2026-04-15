@@ -6,7 +6,7 @@ namespace AgentCore;
 /// A named, bounded, optionally agent-editable chunk of text injected into the prompt.
 /// Inspired by Letta's Core Memory blocks.
 /// </summary>
-public sealed class MemoryBlock
+public sealed class Scratchpad
 {
     private string _value;
 
@@ -33,7 +33,7 @@ public sealed class MemoryBlock
             : value;
     }
 
-    public MemoryBlock(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
+    public Scratchpad(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
     {
         Label = label;
         Role = role;

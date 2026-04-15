@@ -24,7 +24,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
-    private readonly List<MemoryBlock> _blocks;
+    private readonly List<Scratchpad> _blocks;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -35,7 +35,7 @@ public sealed class LLMAgent : IAgent
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
-        IEnumerable<MemoryBlock> blocks,
+        IEnumerable<Scratchpad> blocks,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -197,10 +197,16 @@ public sealed class LLMAgent : IAgent
                 
                 // Assemble context (Render blocks followed by cognitive memory & history)
                 var messages = new List<Message>();
-                
-                foreach (var block in _blocks.Where(b => !string.IsNullOrEmpty(b.Value)))
+
+                // Group scratchpad blocks by role to avoid consecutive same-role messages
+                var blocksByRole = _blocks
+                    .Where(b => !string.IsNullOrEmpty(b.Value))
+                    .GroupBy(b => b.Role);
+
+                foreach (var group in blocksByRole)
                 {
-                    messages.Add(new Message(block.Role, new Text(block.ToLlmString())));
+                    var combinedContent = string.Join("\n\n", group.Select(b => b.ToLlmString()));
+                    messages.Add(new Message(group.Key, new Text(combinedContent)));
                 }
 
                 if (memoryMessages.Count > 0)
