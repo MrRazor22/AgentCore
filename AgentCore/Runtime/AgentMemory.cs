@@ -6,7 +6,11 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Runtime;
 
-public interface IAgentMemory
+/// <summary>
+/// Stores and retrieves conversation history (List&lt;Message&gt;) per session.
+/// This is the chat memory layer — separate from IMemory (cognitive/knowledge memory).
+/// </summary>
+public interface IChatStore
 {
     Task<List<Message>> RecallAsync(string sessionId);
     Task UpdateAsync(string sessionId, List<Message> chat);
@@ -14,7 +18,11 @@ public interface IAgentMemory
     Task<IReadOnlyList<string>> GetAllSessionsAsync();
 }
 
-public sealed class InMemoryMemory : IAgentMemory
+/// <summary>Backwards-compat alias. Prefer IChatStore.</summary>
+[Obsolete("Use IChatStore instead.")]
+public interface IAgentMemory : IChatStore { }
+
+public sealed class InMemoryMemory : IChatStore
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<Message>> _store = new();
 
@@ -53,7 +61,7 @@ public sealed class FileMemoryOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class FileMemory(FileMemoryOptions? options) : IAgentMemory
+public sealed class FileMemory(FileMemoryOptions? options) : IChatStore
 {
     private readonly FileMemoryOptions _options = options ?? new FileMemoryOptions();
     private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();

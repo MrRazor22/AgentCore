@@ -21,7 +21,8 @@ public interface IAgent
 
 public sealed class LLMAgent : IAgent
 {
-    private readonly IAgentMemory _memory;
+    private readonly IChatStore _chatStore;
+    private readonly IMemory? _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
@@ -32,7 +33,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILogger<LLMAgent> _logger;
 
     public LLMAgent(
-        IAgentMemory memory,
+        IChatStore chatStore,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
@@ -40,8 +41,10 @@ public sealed class LLMAgent : IAgent
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
-        ILogger<LLMAgent> logger)
+        ILogger<LLMAgent> logger,
+        IMemory? memory = null)
     {
+        _chatStore = chatStore;
         _memory = memory;
         _llm = llm;
         _toolRuntime = toolRuntime;
@@ -76,7 +79,7 @@ public sealed class LLMAgent : IAgent
     {
         sessionId ??= Guid.NewGuid().ToString("N");
         
-        var chatBefore = await _memory.RecallAsync(sessionId);
+        var chatBefore = await _chatStore.RecallAsync(sessionId);
         int startIndex = chatBefore.Count;
 
         int inTokens = 0;
@@ -93,7 +96,7 @@ public sealed class LLMAgent : IAgent
             }
         }
 
-        var chatAfter = await _memory.RecallAsync(sessionId);
+        var chatAfter = await _chatStore.RecallAsync(sessionId);
         var turnMessages = chatAfter.Skip(startIndex).ToList();
 
         return new AgentResponse(
@@ -147,13 +150,29 @@ public sealed class LLMAgent : IAgent
             ["Session"] = sessionId
         }))
         {
-            var chat = await _memory.RecallAsync(sessionId);
+            var chat = await _chatStore.RecallAsync(sessionId);
             var isNewSession = chat.Count == 0;
             _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} NewSession={IsNew}", sessionId, input.ForLlm().Length, isNewSession);
             
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
-            await _memory.UpdateAsync(sessionId, chat);
+            await _chatStore.UpdateAsync(sessionId, chat);
+
+            // Recall cognitive memory before first LLM step
+            List<Message> memoryMessages = [];
+            if (_memory != null)
+            {
+                try
+                {
+                    var recalled = await _memory.RecallAsync(input.ForLlm(), ct);
+                    if (recalled.Count > 0)
+                        memoryMessages = [new Message(Role.System, recalled)];
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Memory recall failed — continuing without memory context.");
+                }
+            }
 
             var workingChat = new List<Message>(chat);
             var pendingToolCalls = new Dictionary<string, ToolCall>();
@@ -178,13 +197,13 @@ public sealed class LLMAgent : IAgent
 
                 var runningTools = new List<Task<ToolResult>>();
                 
-                // Assemble context
+                // Assemble context (memory injected as additional system messages)
                 int totalLimit = options.ContextLength ?? 128_000;
-                int contextBudget = totalLimit / 4; // 25% for injected context
+                int contextBudget = totalLimit / 4;
                 var contextMessages = await _assembler.AssembleAsync(contextBudget, ct);
 
                 var activeWindow = workingChat.GetActiveWindow();
-                var messages = contextMessages.Concat(activeWindow).ToList();
+                var messages = memoryMessages.Concat(contextMessages).Concat(activeWindow).ToList();
                 
                 _logger.LogDebug("LLM step {Step}: Context={CtxMsgs} History={HistMsgs} Tokens≈{Approx}", 
                     consecutiveToolSteps + 1, contextMessages.Count, activeWindow.Count, lastLlmTokens);
@@ -301,7 +320,18 @@ public sealed class LLMAgent : IAgent
                         workingChat.AddRange(chat);
                     }
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
-                    await _memory.UpdateAsync(sessionId, chat);
+                    await _chatStore.UpdateAsync(sessionId, chat);
+
+                    // Fire-and-forget: retain knowledge from this turn
+                    if (_memory != null)
+                    {
+                        var turnSnapshot = new List<Message>(chat);
+                        _ = Task.Run(async () =>
+                        {
+                            try { await _memory.RetainAsync(turnSnapshot, CancellationToken.None); }
+                            catch { /* non-fatal */ }
+                        }, CancellationToken.None);
+                    }
                     break;
                 }
 
@@ -331,7 +361,7 @@ public sealed class LLMAgent : IAgent
                     workingChat.AddRange(chat);
                 }
 
-                await _memory.UpdateAsync(sessionId, chat);
+                await _chatStore.UpdateAsync(sessionId, chat);
             }
         }
     }

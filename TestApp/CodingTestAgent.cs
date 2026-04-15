@@ -21,7 +21,7 @@ public static class CodingTestAgent
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\coding-history" });
-        var knowledge = new FileKnowledge(@"D:\AgentCore\knowledge.json");
+        // TODO: Wire MemoryEngine: var engine = new MemoryEngine(new FileStore(@"D:\AgentCore", "coding"), llmProvider);
 
         var agent = CodingAgentBuilder.Create("coding-agent")
             .WithInstructions("You are a helpful coding assistant that solves problems by writing and executing C# code. " +

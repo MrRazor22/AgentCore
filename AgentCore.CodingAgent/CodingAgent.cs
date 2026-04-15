@@ -18,7 +18,7 @@ public sealed partial class CodingAgent : IAgent
     private readonly SandboxPolicy _sandboxPolicy;
     private readonly int _maxSteps;
     private readonly (string open, string close) _codeBlockTags;
-    private readonly IAgentMemory _memory;
+    private readonly IChatStore _memory;
 
     public string Name => _name;
     public string? Description => "A code-executing agent that generates C# code to solve tasks";
@@ -33,7 +33,7 @@ public sealed partial class CodingAgent : IAgent
         SandboxPolicy sandboxPolicy,
         int maxSteps,
         (string open, string close) codeBlockTags,
-        IAgentMemory memory,
+        IChatStore memory,
         IToolExecutor toolExecutor)
     {
         _name = name;

@@ -25,11 +25,12 @@ public static class ChatBotAgent
 
         // ─── Setup Agent ───
         var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\chat-history" });
-        var knowledge = new FileKnowledge(@"D:\AgentCore\knowledge.json");
+        // TODO: Wire MemoryEngine for cognitive memory:
+        // var engine = new MemoryEngine(new FileStore(@"D:\AgentCore", "chatbot"), llmProvider);
         
         var agent = LLMAgent.Create("chatbot")
             .WithMemory(memory)
-            .WithMemory(knowledge)
+            // .WithMemory(engine)   // <- enables cognitive memory recall/retain
             .WithContextAssembler(new ContextAssembler(new ApproximateTokenCounter(), ConfigureLogging().CreateLogger<ContextAssembler>()))
             .AddContext("rules", "You are an AI agent, execute all user requests faithfully.", priority: 100)
             .AddContext("persona", "You are helpful, concise and technical.", priority: 90)

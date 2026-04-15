@@ -23,10 +23,10 @@ public sealed class AgentBuilder
     private readonly AgentConfig _config = new();
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
 
-    public IAgentMemory? Memory { get; set; }
+    public IChatStore? ChatStore { get; set; }
+    public IMemory? CognitiveMemory { get; set; }
     public IContextCompactor? ContextCompactor { get; set; }
     public IContextAssembler? ContextAssembler { get; set; }
-    public IMemory? KnowledgeMemory { get; set; }
     public ITokenCounter? TokenCounter { get; set; }
     public ITokenManager? TokenManager { get; set; }
     public ILoggerFactory? LoggerFactory { get; set; }
@@ -48,8 +48,8 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
-    public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
-    public AgentBuilder WithMemory(IMemory knowledge) { KnowledgeMemory = knowledge; return this; }
+    public AgentBuilder WithMemory(IChatStore chatStore) { ChatStore = chatStore; return this; }
+    public AgentBuilder WithMemory(IMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
     public AgentBuilder WithContextAssembler(IContextAssembler assembler) { ContextAssembler = assembler; return this; }
     
@@ -85,7 +85,7 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
         var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
-        var memory = Memory ?? new InMemoryMemory();
+        var chatStore = ChatStore ?? new InMemoryMemory();
         var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
@@ -96,12 +96,6 @@ public sealed class AgentBuilder
 
         if (_config.SystemPrompt != null)
             assembler.Register(new StaticContextSource("instructions", _config.SystemPrompt, Role.System, 100));
-
-        if (KnowledgeMemory != null)
-        {
-            assembler.Register(KnowledgeMemory);
-            _toolRegistrations.Add(r => r.RegisterAll(new KnowledgeTools(KnowledgeMemory)));
-        }
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
@@ -121,7 +115,7 @@ public sealed class AgentBuilder
             _llmMiddlewares);
 
         return new LLMAgent(
-            memory,
+            chatStore,
             llmExecutor,
             toolExecutor,
             contextCompactor,
@@ -129,6 +123,7 @@ public sealed class AgentBuilder
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
-            loggerFactory.CreateLogger<LLMAgent>());
+            loggerFactory.CreateLogger<LLMAgent>(),
+            CognitiveMemory);
     } 
 }
