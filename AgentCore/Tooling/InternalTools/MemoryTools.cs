@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tooling.InternalTools;
 
 /// <summary>
 /// Opt-in LLM tool surface for cognitive memory operations.

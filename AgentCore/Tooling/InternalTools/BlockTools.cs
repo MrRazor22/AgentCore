@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tooling.InternalTools;
 
 /// <summary>
 /// Tools for the agent to manage its own memory blocks (Letta pattern).
