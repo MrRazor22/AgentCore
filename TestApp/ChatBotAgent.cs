@@ -6,7 +6,6 @@ using AgentCore.LLM.BuiltInTools;
 using AgentCore.Tokens;
 using AgentCore.Providers.MEAI;
 using AgentCore.Runtime;
-using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -31,9 +30,8 @@ public static class ChatBotAgent
         var agent = LLMAgent.Create("chatbot")
             .WithMemory(memory)
             // .WithMemory(engine)   // <- enables cognitive memory recall/retain
-            .WithContextAssembler(new ContextAssembler(new ApproximateTokenCounter(), ConfigureLogging().CreateLogger<ContextAssembler>()))
-            .AddContext("rules", "You are an AI agent, execute all user requests faithfully.", priority: 100)
-            .AddContext("persona", "You are helpful, concise and technical.", priority: 90)
+            .WithBlock("rules", "You are an AI agent, execute all user requests faithfully.")
+            .WithBlock("persona", "You are helpful, concise and technical.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             
             .WithTools<GeoTools>()

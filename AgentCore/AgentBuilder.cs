@@ -3,7 +3,6 @@ using AgentCore.Execution;
 using AgentCore.LLM;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
-using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -25,14 +24,13 @@ public sealed class AgentBuilder
     public IChat? ChatStore { get; set; }
     public IAgentMemory? CognitiveMemory { get; set; }
     public IContextCompactor? ContextCompactor { get; set; }
-    public IContextAssembler? ContextAssembler { get; set; }
     public ITokenCounter? TokenCounter { get; set; }
     public ITokenManager? TokenManager { get; set; }
     public ILoggerFactory? LoggerFactory { get; set; }
     public ILLMProvider? Provider { get; set; }
     private LLMOptions? _providerOptions;
 
-    private readonly List<ContextRegistration> _contextSources = [];
+    private readonly List<MemoryBlock> _blocks = [];
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
@@ -50,18 +48,21 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IChat chatStore) { ChatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
-    public AgentBuilder WithContextAssembler(IContextAssembler assembler) { ContextAssembler = assembler; return this; }
-    
-    public AgentBuilder AddContext(IContextSource source, int? maxTokenBudget = null) 
-    { 
-        _contextSources.Add(new ContextRegistration(source, maxTokenBudget)); 
-        return this; 
+
+    /// <summary>Adds a named memory block to the agent.</summary>
+    public AgentBuilder WithBlock(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
+    {
+        _blocks.Add(new MemoryBlock(label, value, role, limit, readOnly));
+        return this;
     }
 
-    public AgentBuilder AddContext(string name, string text, Role role = Role.System, int? maxTokenBudget = null, int priority = 50)
+    /// <summary>Loads instructions from a file as a read-only memory block.</summary>
+    public AgentBuilder WithInstructionFile(string path, int limit = 32000, string? label = null)
     {
-        _contextSources.Add(new ContextRegistration(new ContextS(name, text, role, priority), maxTokenBudget));
-        return this;
+        if (!File.Exists(path)) throw new FileNotFoundException("Instruction file not found.", path);
+        label ??= Path.GetFileNameWithoutExtension(path);
+        var content = File.ReadAllText(path);
+        return WithBlock(label, content, Role.System, limit, readOnly: true);
     }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
@@ -89,12 +90,9 @@ public sealed class AgentBuilder
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        var assembler = ContextAssembler ?? new SimpleContextAssembler();
-        foreach (var reg in _contextSources)
-            assembler.Register(reg.Source, reg.MaxTokenBudget);
-
+        var blocksToBeUsed = new List<MemoryBlock>(_blocks);
         if (_config.SystemPrompt != null)
-            assembler.Register(new StaticContextSource("instructions", _config.SystemPrompt, Role.System, 100));
+            blocksToBeUsed.Insert(0, new MemoryBlock("instructions", _config.SystemPrompt, Role.System, 0, true));
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
@@ -118,7 +116,7 @@ public sealed class AgentBuilder
             llmExecutor,
             toolExecutor,
             contextCompactor,
-            assembler,
+            blocksToBeUsed,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,

@@ -1,7 +1,6 @@
 using AgentCore;
 using AgentCore.BuiltInTools;
 using AgentCore.Conversation;
-using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.MCP.Server;
@@ -28,8 +27,7 @@ public static class McpTestAgent
 
         var agent = LLMAgent.Create("mcp-agent")
             .WithMemory(memory)
-            .WithContextAssembler(new ContextAssembler(new ApproximateTokenCounter(), ConfigureLogging().CreateLogger<ContextAssembler>()))
-            .AddContext("role", "You are a helpful AI assistant with access to various tools.", priority: 100)
+            .WithBlock("role", "You are a helpful AI assistant with access to various tools.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000 })
             
             .WithTools<GeoTools>()

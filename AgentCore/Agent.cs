@@ -4,7 +4,6 @@ using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
-using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -25,7 +24,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
-    private readonly IContextAssembler _assembler;
+    private readonly List<MemoryBlock> _blocks;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -36,7 +35,7 @@ public sealed class LLMAgent : IAgent
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
-        IContextAssembler assembler,
+        IEnumerable<MemoryBlock> blocks,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -48,7 +47,7 @@ public sealed class LLMAgent : IAgent
         _llm = llm;
         _toolRuntime = toolRuntime;
         _ctxCompactor = contextCompactor;
-        _assembler = assembler;
+        _blocks = blocks.ToList();
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -196,16 +195,22 @@ public sealed class LLMAgent : IAgent
 
                 var runningTools = new List<Task<ToolResult>>();
                 
-                // Assemble context (memory injected as additional system messages)
-                int totalLimit = options.ContextLength ?? 128_000;
-                int contextBudget = totalLimit / 4;
-                var contextMessages = await _assembler.AssembleAsync(contextBudget, ct);
+                // Assemble context (Render blocks followed by cognitive memory & history)
+                var messages = new List<Message>();
+                
+                foreach (var block in _blocks.Where(b => !string.IsNullOrEmpty(b.Value)))
+                {
+                    messages.Add(new Message(block.Role, new Text(block.ToLlmString())));
+                }
+
+                if (memoryMessages.Count > 0)
+                    messages.AddRange(memoryMessages);
 
                 var activeWindow = workingChat.GetActiveWindow();
-                var messages = memoryMessages.Concat(contextMessages).Concat(activeWindow).ToList();
+                messages.AddRange(activeWindow);
                 
-                _logger.LogDebug("LLM step {Step}: Context={CtxMsgs} History={HistMsgs} Tokens≈{Approx}", 
-                    consecutiveToolSteps + 1, contextMessages.Count, activeWindow.Count, lastLlmTokens);
+                _logger.LogDebug("LLM step {Step}: Blocks={BlockCount} History={HistMsgs} Tokens≈{Approx}", 
+                    consecutiveToolSteps + 1, _blocks.Count, activeWindow.Count, lastLlmTokens);
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;
