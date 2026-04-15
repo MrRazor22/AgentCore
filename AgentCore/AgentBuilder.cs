@@ -1,7 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.Execution;
 using AgentCore.LLM;
-using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using AgentCore.Context;
@@ -23,8 +22,8 @@ public sealed class AgentBuilder
     private readonly AgentConfig _config = new();
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
 
-    public IChatStore? ChatStore { get; set; }
-    public IMemory? CognitiveMemory { get; set; }
+    public IChat? ChatStore { get; set; }
+    public IAgentMemory? CognitiveMemory { get; set; }
     public IContextCompactor? ContextCompactor { get; set; }
     public IContextAssembler? ContextAssembler { get; set; }
     public ITokenCounter? TokenCounter { get; set; }
@@ -48,8 +47,8 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
-    public AgentBuilder WithMemory(IChatStore chatStore) { ChatStore = chatStore; return this; }
-    public AgentBuilder WithMemory(IMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
+    public AgentBuilder WithMemory(IChat chatStore) { ChatStore = chatStore; return this; }
+    public AgentBuilder WithMemory(IAgentMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
     public AgentBuilder WithContextAssembler(IContextAssembler assembler) { ContextAssembler = assembler; return this; }
     
@@ -61,7 +60,7 @@ public sealed class AgentBuilder
 
     public AgentBuilder AddContext(string name, string text, Role role = Role.System, int? maxTokenBudget = null, int priority = 50)
     {
-        _contextSources.Add(new ContextRegistration(new StaticContextSource(name, text, role, priority), maxTokenBudget));
+        _contextSources.Add(new ContextRegistration(new ContextS(name, text, role, priority), maxTokenBudget));
         return this;
     }
 
@@ -85,7 +84,7 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
         var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
-        var chatStore = ChatStore ?? new InMemoryMemory();
+        var chatStore = ChatStore ?? new InMemoryChat();
         var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());

@@ -1,6 +1,5 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
-using AgentCore.Runtime;
 using AgentCore.Tooling;
 using AgentCore.Tokens;
 using Microsoft.Extensions.AI;
@@ -31,7 +30,7 @@ public sealed class CodingAgentBuilder
     private ExecutorType _executorType = ExecutorType.Roslyn;
     private int _maxSteps = 20;
     private (string open, string close) _codeBlockTags = ("```csharp", "```");
-    private IChatStore? _memory;
+    private IChat? _memory;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
@@ -114,7 +113,7 @@ public sealed class CodingAgentBuilder
     public CodingAgentBuilder WithExecutor(ExecutorType type) { _executorType = type; return this; }
     public CodingAgentBuilder WithMaxSteps(int maxSteps) { _maxSteps = maxSteps; return this; }
     public CodingAgentBuilder WithCodeBlockTags(string open, string close) { _codeBlockTags = (open, close); return this; }
-    public CodingAgentBuilder WithMemory(IChatStore memory) { _memory = memory; return this; }
+    public CodingAgentBuilder WithMemory(IChat memory) { _memory = memory; return this; }
     public CodingAgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public CodingAgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
     public CodingAgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { _loggerFactory = loggerFactory; return this; }
@@ -123,7 +122,7 @@ public sealed class CodingAgentBuilder
     {
         var toolRegistry = _tools ?? new ToolRegistry();
         foreach (var registration in _toolRegistrations) registration(toolRegistry);
-        var memory = _memory ?? new InMemoryMemory();
+        var memory = _memory ?? new InMemoryChat();
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());

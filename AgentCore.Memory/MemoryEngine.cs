@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using AgentCore.Context;
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
@@ -18,7 +17,7 @@ namespace AgentCore.Memory;
 /// - Per-session read tracking for outcome feedback
 /// - Full provenance via SourceEntryIds, Version, InvalidatedAt
 /// </summary>
-public sealed class MemoryEngine : IMemory, IDisposable
+public sealed class MemoryEngine : IAgentMemory, IDisposable
 {
     private readonly IMemoryStore _store;
     private readonly ILLMProvider _llm;

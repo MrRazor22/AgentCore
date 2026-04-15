@@ -1,16 +1,15 @@
-using AgentCore.Conversation;
-using Microsoft.Extensions.Logging; 
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace AgentCore.Runtime;
+namespace AgentCore.Conversation;
 
 /// <summary>
 /// Stores and retrieves conversation history (List&lt;Message&gt;) per session.
 /// This is the chat memory layer — separate from IMemory (cognitive/knowledge memory).
 /// </summary>
-public interface IChatStore
+public interface IChat
 {
     Task<List<Message>> RecallAsync(string sessionId);
     Task UpdateAsync(string sessionId, List<Message> chat);
@@ -18,55 +17,18 @@ public interface IChatStore
     Task<IReadOnlyList<string>> GetAllSessionsAsync();
 }
 
-/// <summary>Backwards-compat alias. Prefer IChatStore.</summary>
-[Obsolete("Use IChatStore instead.")]
-public interface IAgentMemory : IChatStore { }
-
-public sealed class InMemoryMemory : IChatStore
-{
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, List<Message>> _store = new();
-
-    public Task<List<Message>> RecallAsync(string sessionId)
-    {
-        if (_store.TryGetValue(sessionId, out var chat))
-        {
-            var cloned = new List<Message>(chat);
-            return Task.FromResult(cloned);
-        }
-        return Task.FromResult(new List<Message>());
-    }
-
-    public Task UpdateAsync(string sessionId, List<Message> chat)
-    {
-        var cloned = new List<Message>(chat);
-        _store[sessionId] = cloned;
-        return Task.CompletedTask;
-    }
-
-    public Task ClearAsync(string sessionId)
-    {
-        _store.TryRemove(sessionId, out _);
-        return Task.CompletedTask;
-    }
-
-    public Task<IReadOnlyList<string>> GetAllSessionsAsync()
-    {
-        return Task.FromResult<IReadOnlyList<string>>(_store.Keys.ToList());
-    }
-}
-
-public sealed class FileMemoryOptions
+public sealed class ChatFileStoreOptions
 {
     public string? PersistDir { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class FileMemory(FileMemoryOptions? options) : IChatStore
+public sealed class ChatFileStore(ChatFileStoreOptions? options) : IChat
 {
-    private readonly FileMemoryOptions _options = options ?? new FileMemoryOptions();
+    private readonly ChatFileStoreOptions _options = options ?? new ChatFileStoreOptions();
     private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
 
-    public FileMemory() : this(null) { }
+    public ChatFileStore() : this(null) { }
 
     private SemaphoreSlim GetLock(string sessionId)
         => _sessionLocks[Math.Abs(sessionId.GetHashCode()) % _sessionLocks.Length];
@@ -186,7 +148,7 @@ public sealed class FileMemory(FileMemoryOptions? options) : IChatStore
     private static List<IContent> DeserializeContents(object? obj)
     {
         var contents = new List<IContent>();
-        
+
         if (obj is System.Text.Json.JsonElement element)
         {
             if (element.ValueKind == JsonValueKind.Array)
@@ -203,7 +165,7 @@ public sealed class FileMemory(FileMemoryOptions? options) : IChatStore
                 if (content != null) contents.Add(content);
             }
         }
-        
+
         return contents;
     }
 
@@ -313,3 +275,5 @@ public sealed class FileMemory(FileMemoryOptions? options) : IChatStore
         return new Text("");
     }
 }
+
+

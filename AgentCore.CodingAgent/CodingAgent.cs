@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using AgentCore.Conversation;
 using AgentCore.LLM;
-using AgentCore.Runtime;
 using AgentCore.Tooling;
 
 namespace AgentCore.CodingAgent;
@@ -18,7 +17,7 @@ public sealed partial class CodingAgent : IAgent
     private readonly SandboxPolicy _sandboxPolicy;
     private readonly int _maxSteps;
     private readonly (string open, string close) _codeBlockTags;
-    private readonly IChatStore _memory;
+    private readonly IChat _memory;
 
     public string Name => _name;
     public string? Description => "A code-executing agent that generates C# code to solve tasks";
@@ -33,7 +32,7 @@ public sealed partial class CodingAgent : IAgent
         SandboxPolicy sandboxPolicy,
         int maxSteps,
         (string open, string close) codeBlockTags,
-        IChatStore memory,
+        IChat memory,
         IToolExecutor toolExecutor)
     {
         _name = name;

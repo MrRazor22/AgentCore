@@ -2,7 +2,6 @@ using AgentCore.Conversation;
 using AgentCore.Diagnostics;
 using AgentCore.Json;
 using AgentCore.LLM;
-using AgentCore.Runtime;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using AgentCore.Context;
@@ -21,8 +20,8 @@ public interface IAgent
 
 public sealed class LLMAgent : IAgent
 {
-    private readonly IChatStore _chatStore;
-    private readonly IMemory? _memory;
+    private readonly IChat _chatStore;
+    private readonly IAgentMemory? _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
@@ -33,7 +32,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILogger<LLMAgent> _logger;
 
     public LLMAgent(
-        IChatStore chatStore,
+        IChat chatStore,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
@@ -42,7 +41,7 @@ public sealed class LLMAgent : IAgent
         LLMOptions baseOptions,
         AgentConfig config,
         ILogger<LLMAgent> logger,
-        IMemory? memory = null)
+        IAgentMemory? memory = null)
     {
         _chatStore = chatStore;
         _memory = memory;

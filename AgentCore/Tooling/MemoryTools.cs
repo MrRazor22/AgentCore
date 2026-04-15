@@ -1,12 +1,12 @@
 using System.ComponentModel;
 
-namespace AgentCore.Context;
+namespace AgentCore.Tooling;
 
 /// <summary>
 /// Opt-in LLM tool surface for cognitive memory operations.
 /// NOT auto-registered — user opts in: .WithTools(new MemoryTools(engine))
 /// </summary>
-public sealed class MemoryTools(IMemory memory)
+public sealed class MemoryTools(IAgentMemory memory)
 {
     [Description("Reflect deeply on a question using all stored memory and understanding. Creates a persistent observation.")]
     public async Task<string> Reflect([Description("The question to reflect on")] string query)

@@ -1,12 +1,12 @@
 using AgentCore.Conversation;
 
-namespace AgentCore.Context;
+namespace AgentCore;
 
 /// <summary>
 /// The agent's cognitive memory — a world model that persists knowledge across turns and sessions.
 /// Provides query-driven retrieval, automatic retention, deep synthesis, and outcome-based confidence tuning.
 /// </summary>
-public interface IMemory
+public interface IAgentMemory
 {
     /// <summary>
     /// Called BEFORE each LLM step. Semantically retrieves relevant knowledge for the given query.
