@@ -317,9 +317,7 @@ public sealed class LLMAgent : IAgent
                     if (options.ContextLength.HasValue)
                     {
                         _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                        chat = await _ctxCompactor.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                        workingChat.Clear();
-                        workingChat.AddRange(chat);
+                        workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
                     }
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _chatStore.UpdateAsync(sessionId, chat);
@@ -358,9 +356,7 @@ public sealed class LLMAgent : IAgent
                 if (options.ContextLength.HasValue)
                 {
                     _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                    chat = await _ctxCompactor.ReduceAsync(chat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                    workingChat.Clear();
-                    workingChat.AddRange(chat);
+                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
                 }
 
                 await _chatStore.UpdateAsync(sessionId, chat);
