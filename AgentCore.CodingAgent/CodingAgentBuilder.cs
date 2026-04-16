@@ -1,5 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
+using AgentCore.Memory;
 using AgentCore.Tooling;
 using AgentCore.Tokens;
 using Microsoft.Extensions.AI;
@@ -31,6 +32,7 @@ public sealed class CodingAgentBuilder
     private int _maxSteps = 20;
     private (string open, string close) _codeBlockTags = ("```csharp", "```");
     private IChat? _memory;
+    private IAgentMemory? _semanticMemory;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
@@ -114,6 +116,7 @@ public sealed class CodingAgentBuilder
     public CodingAgentBuilder WithMaxSteps(int maxSteps) { _maxSteps = maxSteps; return this; }
     public CodingAgentBuilder WithCodeBlockTags(string open, string close) { _codeBlockTags = (open, close); return this; }
     public CodingAgentBuilder WithMemory(IChat memory) { _memory = memory; return this; }
+    public CodingAgentBuilder WithMemory(IAgentMemory memory) { _semanticMemory = memory; return this; }
     public CodingAgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public CodingAgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
     public CodingAgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { _loggerFactory = loggerFactory; return this; }
@@ -146,6 +149,6 @@ public sealed class CodingAgentBuilder
             new ToolOptions(),
             loggerFactory.CreateLogger<ToolExecutor>());
 
-        return new CodingAgent(_name, _instructions, llmExecutor, _llmOptions!, toolRegistry, executor, _sandboxPolicy, _maxSteps, _codeBlockTags, memory, toolExecutor);
+        return new CodingAgent(_name, _instructions, llmExecutor, _llmOptions!, toolRegistry, executor, _sandboxPolicy, _maxSteps, _codeBlockTags, memory, toolExecutor, _semanticMemory);
     }
 }

@@ -13,7 +13,7 @@ Most agent frameworks solve problems they created. They introduce massive state 
 AgentCore provides a fundamentally different bedrock.
 
 ### 1. One content model, strict boundaries
-All events in an agent's life — user input, model response, a tool call, a tool result, a tool error, reasoning/thoughts — are treated as the same kind of thing: `IContent`. There is one pipeline. This means no special error channels or repair hacks. If a tool fails, it's just a message the model reads to self-correct.
+All events in an agent's life — user input, model response, a tool call, a tool result, a tool error, reasoning/thoughts — are treated as the same kind of thing: `IContent`. This means no special error channels or repair hacks. If a tool fails, it's just a message the model reads to self-correct.
 
 Crucially, the layers are strictly separated. The LLM layer handles tokens and network boundaries; it never leaks provider parameters to the Agent layer. The orchestration layer only receives *completed* concerns.
 
@@ -22,8 +22,8 @@ The agent loop streams from the LLM, dispatches tool calls, appends results, and
 
 Because the loop inherently pauses at `Task.WhenAll` to await tools, durability is a natural byproduct. Combined with the default `FileMemory`, AgentCore provides perfect, stateless crash recovery per session ID without a massive lifecycle manager or dedicated database thread.
 
-### 3. Middleware is the extension model
-There are three dedicated functional middleware pipelines — Agent, LLM, and Tool level. Not added for extensibility or as ergonomic bolts-on — they are the core extension model. You get full interception and observability at every meaningful boundary without touching anything internal.
+### 3. Direct execution, no magic layers
+AgentCore uses direct method calls throughout — no middleware chains, no pipeline abstractions. The LLM executor streams events directly, the tool executor invokes methods directly, and the agent loop orchestrates everything with simple, readable code. This means zero runtime overhead, easy debugging, and full control over execution flow.
 
 ### 4. Opinionated Context & Token Calibration
 Tail-trimming context windows creates "Amnesia Agents." Exact token counting requires synchronous Tiktoken dependencies that tank performance.
@@ -35,11 +35,26 @@ AgentCore avoids this by default:
 
 ---
 
+## Key Features
+
+- **Zero Middleware Overhead**: Direct method calls throughout the codebase — no pipeline abstractions, no middleware chains. Maximum performance and full control.
+- **Streaming-First Architecture**: All operations stream asynchronously — LLM responses, tool execution, context summarization. No blocking, minimal latency.
+- **Built-in Tool Approval**: Two-phase approval workflow for sensitive tool execution. Register requests, wait for human decision, execute or reject.
+- **AMFS-Style Memory**: Advanced Memory for Semantic Search with confidence decay, inspired by state-of-the-art agent memory systems.
+- **Parallel Context Summarization**: When context limits are exceeded, chunks are summarized in parallel for maximum speed.
+- **Dynamic Token Calibration**: ApproximateTokenCounter self-corrects based on actual network responses, remaining fast while accurate.
+- **Perfect Crash Recovery**: File-based chat persistence enables stateless crash recovery per session ID without lifecycle management.
+- **MCP Protocol Support**: Full Model Context Protocol client and server integration for tool interoperability.
+- **Code Execution Sandbox**: CodingAgent with Roslyn in-process or isolated process sandbox execution.
+- **RAG-Ready Context System**: ContextAssembler composes multiple knowledge sources with token budgets for retrieval-augmented generation.
+
+---
+
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| `AgentCore` | Core framework — agent loop, tools, memory, middleware |
+| `AgentCore` | Core framework — agent loop, tools, memory, diagnostics |
 | `AgentCore.CodingAgent` | Code-executing agent with Roslyn/Process sandboxes |
 | `AgentCore.Context` | Context assembler + knowledge sources for RAG-style patterns |
 | `AgentCore.MCP` | Model Context Protocol client & server integration |
@@ -96,6 +111,25 @@ await agent.InvokeAsync("Search for flights to Tokyo", sessionId: "session-abc")
 
 // After crash/restart — AgentCore loads the transcript and resumes:
 await agent.InvokeAsync("Now book the cheapest one", sessionId: "session-abc");
+```
+
+### Tool Approval Workflow
+
+For sensitive operations, use the built-in two-phase approval workflow:
+
+```csharp
+var approvalService = new ApprovalService();
+
+var agent = LLMAgent.Create("my-agent")
+    .WithInstructions("You are a helpful assistant.")
+    .AddOpenAI("gpt-4o", apiKey: "...")
+    .WithTools<FilesystemTools>()  // Mark tools with [RequiresApproval]
+    .WithApprovalService(approvalService)
+    .WithToolOptions(options => options.ApprovalTimeoutSeconds = 300)
+    .Build();
+
+// Tools requiring approval will trigger the approval workflow
+// You can approve/reject via the ApprovalService from another process/UI
 ```
 
 ### Coding Agent
@@ -163,18 +197,20 @@ mcpTools.RegisterTools(agent.Tools);
 │            InvokeStreamingAsync(string) → IAsyncEnumerable     │
 ├────────────────────────────────────────────────────────────────┤
 │                    Agent Executor Layer (Control Flow)          │
-│    CoreStreamAsync:                                            │
+│    LLMAgent.CoreStreamAsync:                                   │
 │      - Handles the full agent loop                             │
 │      - Manages tool call iteration                             │
 │      - Context length exceeded → proactive summarization       │
 ├────────────────────────────────────────────────────────────────┤
-│                    Middleware Pipeline Layer                    │
-│    PipelineHandler<TRequest, TResult>:                         │
-│      Executes middleware chain before reaching executor        │
-├────────────────────────────────────────────────────────────────┤
 │                    LLM Executor Layer (Events)                 │
 │    ILLMExecutor: StreamAsync → LLMEvent                       │
 │    LLM Event: TextEvent, ReasoningEvent, ToolCallEvent        │
+│      - Direct streaming, no middleware overhead                 │
+├────────────────────────────────────────────────────────────────┤
+│                    Tool Executor Layer (Direct)                 │
+│    IToolExecutor: HandleToolCallAsync → ToolResult            │
+│      - Direct method invocation via reflection                 │
+│      - Built-in approval service integration                   │
 ├────────────────────────────────────────────────────────────────┤
 │                    LLM Provider Layer (Raw I/O)                │
 │    ILLMProvider: StreamAsync → IAsyncEnumerable<IContentDelta>│
@@ -192,12 +228,13 @@ mcpTools.RegisterTools(agent.Tools);
 |-----------|-------------|
 | `Agent.cs` | `IAgent` interface + `LLMAgent` implementation |
 | `AgentBuilder.cs` | Fluent builder for agent composition |
-| `Runtime/AgentMemory.cs` | `IAgentMemory`, `FileMemory`, `InMemoryMemory` |
-| `Tooling/` | `[Tool]` attribute, `ToolRegistry`, `ToolExecutor` |
-| `Execution/Pipeline.cs` | Generic middleware pipeline |
-| `Tokens/` | Token counting, context management |
-| `Conversation/` | `IContent`, `Message`, `Role` primitives |
+| `Memory/CoreMemory.cs` | Core memory with scratchpad tools |
+| `Tooling/` | `[Tool]` attribute, `ToolRegistry`, `ToolExecutor`, ApprovalService |
+| `LLM/` | `ILLMExecutor`, `ILLMProvider`, LLM events streaming |
+| `Tokens/` | Token counting, context management, summarization |
+| `Conversation/` | `IContent`, `Message`, `Role` primitives, chat persistence |
 | `Json/` | JSON Schema generation for tools/structured output |
+| `Diagnostics/` | Diagnostic source for observability |
 
 ### AgentCore.CodingAgent
 
@@ -263,34 +300,39 @@ No DI containers. No bloated abstractions. Just the primitives you need.
 ## Project Structure
 
 ```
-AgentCore/                          # Core framework (~2,100 lines)
+AgentCore/                          # Core framework (~2,000 lines)
 ├── Agent.cs                        # IAgent, LLMAgent
 ├── AgentBuilder.cs                 # Fluent builder
-├── Runtime/
-│   └── AgentMemory.cs              # IAgentMemory, FileMemory, InMemoryMemory
+├── Memory/
+│   ├── CoreMemory.cs              # Core memory with scratchpad tools
+│   ├── MemoryEngine.cs            # AMFS-style memory with embeddings
+│   └── ScratchpadTools.cs         # Built-in scratchpad tools
 ├── LLM/
-│   ├── LLMExecutor.cs              # Event streaming + middleware
+│   ├── LLMExecutor.cs              # Direct event streaming
 │   ├── ILLMProvider.cs            # Raw provider interface
 │   ├── LLMOptions.cs               # Model config
 │   └── LLMEvent.cs                 # TextEvent, ReasoningEvent, ToolCallEvent
 ├── Tooling/
 │   ├── Tool.cs                     # [Tool] attribute
 │   ├── ToolRegistry.cs            # Registration + auto-schema
-│   ├── ToolExecutor.cs             # Invocation + middleware
+│   ├── ToolExecutor.cs             # Direct invocation with approval
+│   ├── ApprovalService.cs          # Two-phase approval workflow
 │   └── ToolRegistryExtensions.cs # RegisterAll<T>() reflection
-├── Execution/
-│   └── Pipeline.cs                 # Middleware pipeline
 ├── Tokens/
-│   ├── ContextManager.cs           # IContextManager interface
-│   ├── SummarizingContextManager.cs # Tail-trim + summarize
-│   ├── TokenManager.cs             # TokenUsage record
+│   ├── IContextCompactor.cs       # Context reduction interface
+│   ├── SummarizingContextCompactor.cs # Parallel summarization
+│   ├── TokenManager.cs             # TokenUsage tracking
 │   └── ApproximateTokenCounter.cs # Dynamic calibration
 ├── Conversation/
 │   ├── Content.cs                  # IContent primitives
 │   ├── Message.cs                  # Message(Role, IContent)
+│   ├── Chat.cs                     # IChat, InMemoryChat, ChatFileStore
 │   └── Extensions.cs              # Helpers + serialization
-└── Json/
-    └── JsonSchemaExtensions.cs   # Type to JSON Schema
+├── Json/
+│   ├── JsonSchemaExtensions.cs   # Type to JSON Schema
+│   └── JsonExtensions.cs          # JSON serialization helpers
+└── Diagnostics/
+    └── AgentDiagnosticSource.cs   # Diagnostic source
 
 AgentCore.CodingAgent/              # Code-executing agent
 ├── CodingAgent.cs                  # Agent implementation

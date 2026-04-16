@@ -9,14 +9,24 @@ public interface IContextCompactor
 {
     Task<List<Message>> ReduceAsync(List<Message> chat, int totalTokens, LLMOptions options, CancellationToken ct = default);
 }
-public sealed class SummarizingContextCompactor(
-    ITokenCounter _counter,
-    ILogger<SummarizingContextCompactor> _logger,
-    ILLMProvider? _provider = null,
-    string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad."
-) : IContextCompactor
+public sealed class SummarizingContextCompactor : IContextCompactor
 {
-    private readonly string _summaryPrompt = summaryPrompt;
+    private readonly ITokenCounter _counter;
+    private readonly ILogger<SummarizingContextCompactor> _logger;
+    private readonly ILLMProvider? _provider;
+    private readonly string _summaryPrompt;
+
+    public SummarizingContextCompactor(
+        ITokenCounter counter,
+        ILogger<SummarizingContextCompactor> logger,
+        ILLMProvider? provider = null,
+        string summaryPrompt = "Extract and summarize the core persistent facts, database credentials, specific user preferences, and prior tool results from this history. Create a concise scratchpad.")
+    {
+        _counter = counter;
+        _logger = logger;
+        _provider = provider;
+        _summaryPrompt = summaryPrompt;
+    }
 
     public async Task<List<Message>> ReduceAsync(List<Message> chat, int totalTokens, LLMOptions options, CancellationToken ct = default)
     {
@@ -61,10 +71,15 @@ public sealed class SummarizingContextCompactor(
         int maxChars = maxInputTokens * 4;
 
         var chunks = ChunkContent(contentLines, maxChars);
-        _logger.LogInformation("Split context into {ChunkCount} chunks for parallel summarization.", chunks.Count);
+        var chunkSizes = chunks.Select(c => c.Length).ToList();
+        _logger.LogInformation("Split context into {ChunkCount} chunks for parallel summarization. ChunkSizeRange: Min={Min} Max={Max} Avg={Avg}",
+            chunks.Count, chunkSizes.Min(), chunkSizes.Max(), chunkSizes.Average());
 
-        var tasks = chunks.Select(chunkText => SummarizeChunkAsync(chunkText, options, ct)).ToList();
+        var tasks = chunks.Select((chunkText, index) => SummarizeChunkAsync(chunkText, options, ct)).ToList();
         var results = await Task.WhenAll(tasks);
+
+        var successCount = results.Count(r => !string.IsNullOrEmpty(r.Summary) || !string.IsNullOrEmpty(r.Reasoning));
+        _logger.LogDebug("Chunk summarization results: Success={Success}/{Total}", successCount, results.Count);
 
         var combinedSummary = string.Join("\n\n", results.Select(r => r.Summary).Where(s => !string.IsNullOrEmpty(s)));
         var combinedReasoning = string.Join("\n\n", results.Select(r => r.Reasoning).Where(r => !string.IsNullOrEmpty(r)));
@@ -89,7 +104,8 @@ public sealed class SummarizingContextCompactor(
             chat.Insert(startIndex + 2, new Message(Role.User, new Text("Continue if you have a next step or stop and ask for clarification if you are unsure how to proceed."), MessageKind.Synthetic));
         }
         
-        _logger.LogTrace("Summary content produced: {Summary} | Reasoning: {Reasoning}", 
+        _logger.LogTrace("Summary content produced: SummaryLength={SumLen} ReasoningLength={ReasonLen} | Summary: {Summary} | Reasoning: {Reasoning}",
+            combinedSummary.Length, combinedReasoning.Length,
             combinedSummary.Length > 200 ? combinedSummary[..200] + "..." : combinedSummary,
             combinedReasoning.Length > 200 ? combinedReasoning[..200] + "..." : combinedReasoning);
 

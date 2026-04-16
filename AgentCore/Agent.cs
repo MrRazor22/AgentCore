@@ -149,7 +149,8 @@ public sealed class LLMAgent : IAgent
         {
             var chat = await _chatStore.RecallAsync(sessionId);
             var isNewSession = chat.Count == 0;
-            _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} NewSession={IsNew}", sessionId, input.ForLlm().Length, isNewSession);
+            _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} NewSession={IsNew} MemoryType={MemType} ContextLimit={CtxLimit}",
+                sessionId, input.ForLlm().Length, isNewSession, _memory?.GetType().Name ?? "None", _baseOptions.ContextLength ?? 0);
             
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
@@ -163,7 +164,12 @@ public sealed class LLMAgent : IAgent
                 {
                     var recalled = await _memory.RecallAsync(input.ForLlm(), ct);
                     if (recalled.Count > 0)
+                    {
                         memoryMessages = [new Message(Role.System, recalled)];
+                        var recalledText = string.Join("\n\n", recalled.Select(c => c.ForLlm()));
+                        _logger.LogDebug("Memory recall result: ContentCount={Count} ContentPreview={Preview}",
+                            recalled.Count, recalledText.Length > 200 ? recalledText[..200] + "..." : recalledText);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -201,6 +207,8 @@ public sealed class LLMAgent : IAgent
                 var memoryContents = await _memory.RecallAsync(textBuffer.ToString(), ct);
                 if (memoryContents.Count > 0)
                 {
+                    var totalLength = memoryContents.Sum(c => c.ForLlm()?.Length ?? 0);
+                    _logger.LogDebug("Memory injection: ContentCount={Count} TotalLength={Len}", memoryContents.Count, totalLength);
                     messages.Add(new Message(Role.System, new Text(string.Join("\n\n", memoryContents.Select(c => c.ToString())))));
                 }
 
@@ -244,7 +252,8 @@ public sealed class LLMAgent : IAgent
                             case ToolCallEvent tc:
                                 toolCallsBuffer.Add(tc.Call);
                                 pendingToolCalls[tc.Call.Id] = tc.Call;
-                                _logger.LogInformation("Tool called: {ToolName}", tc.Call.Name);
+                                var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
+                                _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
                                 runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                                 break;
 
@@ -271,10 +280,9 @@ public sealed class LLMAgent : IAgent
 
                 if (limitsExceeded)
                 {
-                    _logger.LogWarning("Context limit exceeded. Forcing proactive summarization and retrying.");
-                    
                     int currentTokensCount = await _tokenCounter.CountAsync(messages, ct);
                     int limit = options.ContextLength ?? (int)(currentTokensCount * 0.75);
+                    _logger.LogWarning("Context limit exceeded: CurrentTokens={Current} Limit={Limit} Forcing proactive summarization and retrying.", currentTokensCount, limit);
                     
                     workingChat = await _ctxCompactor.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
                     
@@ -328,8 +336,15 @@ public sealed class LLMAgent : IAgent
                         var turnSnapshot = new List<Message>(chat);
                         _ = Task.Run(async () =>
                         {
-                            try { await _memory.RetainAsync(turnSnapshot, CancellationToken.None); }
-                            catch { /* non-fatal */ }
+                            try
+                            {
+                                await _memory.RetainAsync(turnSnapshot, CancellationToken.None);
+                                _logger.LogDebug("Memory retain: Success MessageCount={Count}", turnSnapshot.Count);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Memory retain: Failed MessageCount={Count}", turnSnapshot.Count);
+                            }
                         }, CancellationToken.None);
                     }
                     break;

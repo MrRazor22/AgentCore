@@ -1,9 +1,10 @@
 using AgentCore;
 using AgentCore.BuiltInTools;
 using AgentCore.Conversation;
-using AgentCore.Runtime;
 using AgentCore.CodingAgent;
 using AgentCore.LLM.BuiltInTools;
+using AgentCore.Memory;
+using AgentCore.Providers.Embeddings;
 using AgentCore.Tokens;
 using AgentCore.Providers.MEAI;
 using Microsoft.Extensions.Logging;
@@ -19,14 +20,22 @@ public static class CodingTestAgent
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\coding-history" });
-        // TODO: Wire MemoryEngine: var engine = new MemoryEngine(new FileStore(@"D:\AgentCore", "coding"), llmProvider);
+        // Conversation history (IChat) - stores chat messages per session
+        var chatStore = new ChatFileStore(new() { PersistDir = @"D:\AgentCore\coding-history" });
+        
+        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
+        var memoryStore = new FileStore(@"D:\AgentCore\memory", "coding");
+        var loggerFactory = ConfigureLogging();
+        
+        // Embeddings provider for semantic search
+        var embeddings = new OpenAIEmbeddings("your-openai-api-key", "text-embedding-3-small", 1536);
 
         var agent = CodingAgentBuilder.Create("coding-agent")
             .WithInstructions("You are a helpful coding assistant that solves problems by writing and executing C# code. " +
                 "IMPORTANT: Even for simple greetings, you MUST use the Thought/Code format. " +
                 "Always respond with a FinalAnswer() call in a ```csharp code block, even for greetings.")
-            .WithMemory(memory)
+            .WithMemory(chatStore)
+            .WithMemory(new MemoryEngine(memoryStore, null!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()))
             .WithTokenCounter(new ApproximateTokenCounter())
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", opts => opts.ContextLength = 8000)
             .WithTools<GeoTools>()
@@ -40,7 +49,7 @@ public static class CodingTestAgent
 
         var sessionId = "coding-demo-001";
 
-        await LoadPreviousMessages(memory, sessionId);
+        await LoadPreviousMessages(chatStore, sessionId);
 
         while (true)
         {
@@ -62,9 +71,9 @@ public static class CodingTestAgent
         }
     }
 
-    private static async Task LoadPreviousMessages(FileMemory memory, string sessionId)
+    private static async Task LoadPreviousMessages(IChat chatStore, string sessionId)
     {
-        var history = await memory.RecallAsync(sessionId);
+        var history = await chatStore.RecallAsync(sessionId);
         if (history.Count == 0) return;
 
         Console.WriteLine("\n" + new string('=', 50));

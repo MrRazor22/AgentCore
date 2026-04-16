@@ -1,5 +1,4 @@
 using AgentCore.Conversation;
-using AgentCore.Execution;
 using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
@@ -24,32 +23,26 @@ public sealed class LLMExecutor : ILLMExecutor
     private readonly ITokenCounter _tokenCounter;
     private readonly ITokenManager _tokenManager;
     private readonly ILogger<LLMExecutor> _logger;
-    private readonly PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> _pipeline;
 
     public LLMExecutor(
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
         ITokenManager tokenManager,
-        ILogger<LLMExecutor> logger,
-        IEnumerable<PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>>>? middlewares = null)
+        ILogger<LLMExecutor> logger)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
         _tokenManager = tokenManager;
         _logger = logger;
-
-        _pipeline = Pipeline<LLMCall, IAsyncEnumerable<LLMEvent>>.Build(
-            middlewares ?? [],
-            (req, ct) => StreamInternalAsync(req.Messages, req.Options, ct));
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
         CancellationToken ct = default)
-        => _pipeline(new LLMCall(messages, options), ct);
+        => StreamInternalAsync(messages, options, ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,

@@ -3,6 +3,7 @@ using System.Text;
 using AgentCore.Conversation;
 using AgentCore.Execution;
 using AgentCore.LLM;
+using AgentCore.Memory;
 using AgentCore.Tooling;
 
 namespace AgentCore.CodingAgent;
@@ -19,6 +20,7 @@ public sealed partial class CodingAgent : IAgent
     private readonly int _maxSteps;
     private readonly (string open, string close) _codeBlockTags;
     private readonly IChat _memory;
+    private readonly IAgentMemory? _semanticMemory;
 
     public string Name => _name;
     public string? Description => "A code-executing agent that generates C# code to solve tasks";
@@ -34,7 +36,8 @@ public sealed partial class CodingAgent : IAgent
         int maxSteps,
         (string open, string close) codeBlockTags,
         IChat memory,
-        IToolExecutor toolExecutor)
+        IToolExecutor toolExecutor,
+        IAgentMemory? semanticMemory = null)
     {
         _name = name;
         _instructions = instructions;
@@ -46,6 +49,7 @@ public sealed partial class CodingAgent : IAgent
         _maxSteps = maxSteps;
         _codeBlockTags = codeBlockTags;
         _memory = memory;
+        _semanticMemory = semanticMemory;
 
         var tools = toolRegistry.Tools;
         _executor.SendTools(tools, toolExecutor);

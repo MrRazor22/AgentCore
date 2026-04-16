@@ -3,9 +3,10 @@ using AgentCore.BuiltInTools;
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
+using AgentCore.Memory;
+using AgentCore.Providers.Embeddings;
 using AgentCore.Tokens;
 using AgentCore.Providers.MEAI;
-using AgentCore.Runtime;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -14,7 +15,7 @@ using System.Text;
 namespace TestApp;
 
 /// <summary>
-/// Demo showcasing AgentCore capabilities: streaming, middleware pipeline, tool use, and memory.
+/// Demo showcasing AgentCore capabilities: streaming, tool use, and memory.
 /// </summary>
 public static class ChatBotAgent
 {
@@ -23,16 +24,22 @@ public static class ChatBotAgent
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         // ─── Setup Agent ───
-        var chatStore = new FileMemory(new() { PersistDir = @"D:\AgentCore\chat-history" });
-        // Optional: Advanced memory with AMFS (from AgentCore.Memory)
-        // var engine = new MemoryEngine(new FileStore(@"D:\AgentCore", "chatbot"), llmProvider);
+        // Conversation history (IChat) - stores chat messages per session
+        var chatStore = new ChatFileStore(new() { PersistDir = @"D:\AgentCore\chat-history" });
+        
+        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
+        var memoryStore = new FileStore(@"D:\AgentCore\memory", "chatbot");
+        var loggerFactory = ConfigureLogging();
+        
+        // Embeddings provider for semantic search
+        var embeddings = new OpenAIEmbeddings("your-openai-api-key", "text-embedding-3-small", 1536);
         
         var agent = LLMAgent.Create("chatbot")
             .WithMemory(chatStore)
-            // .WithMemory(engine)   // <- optional: enables semantic memory recall/retain
+            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .WithMemory(new MemoryEngine(memoryStore, null!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()))
             .WithInstructions("rules", "You are an AI agent, execute all user requests faithfully.")
             .WithInstructions("persona", "You are helpful, concise and technical.")
-            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
@@ -40,8 +47,6 @@ public static class ChatBotAgent
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
 
-            .UseToolMiddleware(MonitorToolExecution)
-            .UseLLMMiddleware(MonitorLLMStream)
             .WithLoggerFactory(ConfigureLogging())
             .Build();
 
@@ -144,46 +149,6 @@ public static class ChatBotAgent
 
         if (output.Length == 0)
             Console.WriteLine("⚠️  No response");
-    }
-
-    // ─── Middleware: Tool Monitoring ───
-    private static async Task<ToolResult> MonitorToolExecution(
-        ToolCall call,
-        AgentCore.Execution.PipelineHandler<ToolCall, Task<ToolResult>> next,
-        CancellationToken ct)
-    {
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"\n🔧 {call.Name}({call.Arguments.ToJsonString()})");
-        Console.ResetColor();
-
-        var result = await next(call, ct);
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"✅ Result: {result?.Result?.ForLlm()}");
-        Console.ResetColor();
-
-        return result!;
-    }
-
-    // ─── Middleware: Stream Monitoring ───
-    private static async IAsyncEnumerable<LLMEvent> MonitorLLMStream(
-        LLMCall req,
-        AgentCore.Execution.PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> next,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        var events = new List<LLMEvent>();
-        await foreach (var evt in next(req, ct).ConfigureAwait(false))
-        {
-            events.Add(evt);
-            yield return evt;
-        }
-
-        var tools = events.OfType<ToolCallEvent>().Count();
-        Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine(tools > 0
-            ? $"\n📊 {events.Count} events, {tools} tool calls"
-            : $"\n📊 {events.Count} events (complete)");
-        Console.ResetColor();
     }
 
     // ─── Infrastructure ───

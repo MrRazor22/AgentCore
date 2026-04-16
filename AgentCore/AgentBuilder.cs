@@ -1,5 +1,4 @@
 using AgentCore.Conversation;
-using AgentCore.Execution;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.Tokens;
@@ -21,6 +20,7 @@ public sealed class AgentBuilder
 {
     private readonly AgentConfig _config = new();
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
+    private ILogger<AgentBuilder> _logger;
 
     public IChat? ChatStore { get; set; }
     public IAgentMemory? Memory { get; set; }
@@ -29,15 +29,15 @@ public sealed class AgentBuilder
     public ITokenManager? TokenManager { get; set; }
     public ILoggerFactory? LoggerFactory { get; set; }
     public ILLMProvider? Provider { get; set; }
+    public IApprovalService? ApprovalService { get; set; }
     private LLMOptions? _providerOptions;
 
     private readonly List<CoreMemoryBlock> _blocks = [];
 
-    // Pipeline storage
-    private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
-    private readonly List<PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = [];
-
-    public AgentBuilder() { }
+    public AgentBuilder()
+    {
+        _logger = NullLogger<AgentBuilder>.Instance;
+    }
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithSystemPrompt(string prompt) { _config.SystemPrompt = prompt; return this; }
@@ -75,20 +75,24 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
-    public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory) { LoggerFactory = loggerFactory; return this; }
-    public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null) 
-    { 
-        Provider = provider; 
-        if (options != null) _providerOptions = options;
-        return this; 
+    public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
+    {
+        LoggerFactory = loggerFactory;
+        _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
+        return this;
     }
-
-    // Executor pipelines
-    public AgentBuilder UseToolMiddleware(PipelineMiddleware<ToolCall, Task<ToolResult>> middleware) { _toolMiddlewares.Add(middleware); return this; }
-    public AgentBuilder UseLLMMiddleware(PipelineMiddleware<LLMCall, IAsyncEnumerable<LLMEvent>> middleware) { _llmMiddlewares.Add(middleware); return this; }
+    public AgentBuilder WithApprovalService(IApprovalService approvalService) { ApprovalService = approvalService; return this; }
+    public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null)
+    {
+        Provider = provider;
+        if (options != null) _providerOptions = options;
+        return this;
+    }
 
     public LLMAgent Build()
     {
+        _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
+
         if (Provider == null)
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
 
@@ -98,6 +102,11 @@ public sealed class AgentBuilder
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
+        _logger.LogDebug("Agent configuration: MemoryType={MemoryType} ContextCompactorType={CompactorType} TokenCounterType={TokenCounterType}",
+            Memory?.GetType().Name ?? "CoreMemory",
+            contextCompactor.GetType().Name,
+            tokenCounter.GetType().Name);
+
         // Use provided memory or default CoreMemory
         var memory = Memory ?? new CoreMemory();
         var coreMemory = memory as CoreMemory;
@@ -106,36 +115,46 @@ public sealed class AgentBuilder
         if (coreMemory != null)
         {
             var blocksToUse = new List<CoreMemoryBlock>();
-            
+
             if (_config.SystemPrompt != null)
                 blocksToUse.Add(new CoreMemoryBlock("system", _config.SystemPrompt, Role.System, 0, readOnly: true));
-            
+
             blocksToUse.AddRange(_blocks);
-            
+
+            _logger.LogDebug("Memory configuration: SystemPromptLength={PromptLength} BuilderBlocks={BlockCount}",
+                _config.SystemPrompt?.Length ?? 0, _blocks.Count);
+
             // Reconstruct CoreMemory with all blocks
             memory = new CoreMemory(blocksToUse);
         }
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
-        
+
+        _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
+
         // Register scratchpad tools automatically if using CoreMemory
         if (memory is CoreMemory cm)
             registry.RegisterAll(new ScratchpadTools(cm.GetBlocks()));
 
         var toolExecutor = new ToolExecutor(
-            registry, 
+            registry,
             _config.ToolOptions,
             loggerFactory.CreateLogger<ToolExecutor>(),
-            _toolMiddlewares);
+            ApprovalService);
 
         var llmExecutor = new LLMExecutor(
             Provider,
             registry,
             tokenCounter,
             tokenManager,
-            loggerFactory.CreateLogger<LLMExecutor>(),
-            _llmMiddlewares);
+            loggerFactory.CreateLogger<LLMExecutor>());
+
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryBlocks={BlockCount} ProviderType={ProviderType}",
+            _config.Name,
+            registry.Tools.Count,
+            memory is CoreMemory coreMem ? coreMem.GetBlocks().Count : 0,
+            Provider?.GetType().Name ?? "Unknown");
 
         return new LLMAgent(
             chatStore,

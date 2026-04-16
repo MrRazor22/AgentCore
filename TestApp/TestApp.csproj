@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.6" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
@@ -19,6 +19,7 @@
     <ProjectReference Include="..\AgentCore.MEAI\AgentCore.MEAI.csproj" />
     <ProjectReference Include="..\AgentCore.MCP\AgentCore.MCP.csproj" />
     <ProjectReference Include="..\AgentCore.CodingAgent\AgentCore.CodingAgent.csproj" />
+    <ProjectReference Include="..\AgentCore.Providers.Embeddings\AgentCore.Providers.Embeddings.csproj" />
   </ItemGroup>
 
 </Project>

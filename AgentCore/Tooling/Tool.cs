@@ -9,6 +9,25 @@ public sealed class ToolAttribute(string? name = null, string? description = nul
 {
     public string? Name { get; } = name;
     public string? Description { get; } = description;
+    
+    /// <summary>
+    /// Whether this tool requires user approval before execution (Letta-style)
+    /// </summary>
+    public bool RequiresApproval { get; set; } = false;
+    
+    /// <summary>
+    /// Tool category for auto-approval decisions (Cline-style)
+    /// </summary>
+    public ToolCategory Category { get; set; } = ToolCategory.Execute;
+}
+
+public enum ToolCategory
+{
+    Read,
+    Edit,
+    Execute,
+    Browser,
+    Mcp
 }
 
 public class Tool
@@ -16,6 +35,16 @@ public class Tool
     public required string Name { get; set; }
     public required string Description { get; set; }
     public required JsonObject ParametersSchema { get; set; }
+
+    /// <summary>
+    /// Whether this tool requires user approval before execution (Letta-style)
+    /// </summary>
+    public bool RequiresApproval { get; set; } = false;
+
+    /// <summary>
+    /// Tool category for auto-approval decisions (Cline-style)
+    /// </summary>
+    public ToolCategory Category { get; set; } = ToolCategory.Execute;
 
     [JsonIgnore]
     public MethodInfo? Method { get; set; }

@@ -4,9 +4,10 @@ using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.MCP.Server;
+using AgentCore.Memory;
+using AgentCore.Providers.Embeddings;
 using AgentCore.Tokens;
 using AgentCore.Providers.MEAI;
-using AgentCore.Runtime;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -23,10 +24,19 @@ public static class McpTestAgent
         Console.WriteLine("This demo wraps an agent with an MCP server for stdio transport.\n");
         Console.WriteLine("The agent can be connected to from any MCP-compatible client.\n");
 
-        var chatStore = new FileMemory(new() { PersistDir = @"D:\AgentCore\mcp-history" });
+        // Conversation history (IChat) - stores chat messages per session
+        var chatStore = new ChatFileStore(new() { PersistDir = @"D:\AgentCore\mcp-history" });
+        
+        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
+        var memoryStore = new FileStore(@"D:\AgentCore\memory", "mcp");
+        var loggerFactory = ConfigureLogging();
+        
+        // Embeddings provider for semantic search
+        var embeddings = new OpenAIEmbeddings("your-openai-api-key", "text-embedding-3-small", 1536);
 
         var agent = LLMAgent.Create("mcp-agent")
             .WithMemory(chatStore)
+            .WithMemory(new MemoryEngine(memoryStore, null!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()))
             .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000 })
             
@@ -36,8 +46,6 @@ public static class McpTestAgent
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
 
-            .UseToolMiddleware(MonitorToolExecution)
-            .UseLLMMiddleware(MonitorLLMStream)
             .WithLoggerFactory(ConfigureLogging())
             .Build();
 
@@ -50,44 +58,6 @@ public static class McpTestAgent
             Description = "A helpful AI assistant available via MCP protocol",
             Transport = McpTransportType.Stdio
         });
-    }
-
-    private static async Task<ToolResult> MonitorToolExecution(
-        ToolCall call,
-        AgentCore.Execution.PipelineHandler<ToolCall, Task<ToolResult>> next,
-        CancellationToken ct)
-    {
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"\n🔧 Tool: {call.Name}({call.Arguments.ToJsonString()})");
-        Console.ResetColor();
-
-        var result = await next(call, ct);
-
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"✅ Result: {result?.Result?.ForLlm()}");
-        Console.ResetColor();
-
-        return result!;
-    }
-
-    private static async IAsyncEnumerable<LLMEvent> MonitorLLMStream(
-        LLMCall req,
-        AgentCore.Execution.PipelineHandler<LLMCall, IAsyncEnumerable<LLMEvent>> next,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
-    {
-        var events = new List<LLMEvent>();
-        await foreach (var evt in next(req, ct).ConfigureAwait(false))
-        {
-            events.Add(evt);
-            yield return evt;
-        }
-
-        var tools = events.OfType<ToolCallEvent>().Count();
-        Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine(tools > 0
-            ? $"\n📊 {events.Count} events, {tools} tool calls"
-            : $"\n📊 {events.Count} events (complete)");
-        Console.ResetColor();
     }
 
     private static ILoggerFactory ConfigureLogging()
