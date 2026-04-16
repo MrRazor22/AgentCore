@@ -23,7 +23,7 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
 
     public IChat? ChatStore { get; set; }
-    public IAgentMemory? CognitiveMemory { get; set; }
+    public IAgentMemory? Memory { get; set; }
     public IContextCompactor? ContextCompactor { get; set; }
     public ITokenCounter? TokenCounter { get; set; }
     public ITokenManager? TokenManager { get; set; }
@@ -47,7 +47,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
     public AgentBuilder WithMemory(IChat chatStore) { ChatStore = chatStore; return this; }
-    public AgentBuilder WithMemory(IAgentMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
+    public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
 
     /// <summary>Adds read-only instructions (rules, persona) as a core memory block.</summary>
@@ -98,12 +98,30 @@ public sealed class AgentBuilder
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        var blocksToBeUsed = new List<CoreMemoryBlock>(_blocks);
-        if (_config.SystemPrompt != null)
-            blocksToBeUsed.Insert(0, new CoreMemoryBlock("instructions", _config.SystemPrompt, Role.System, 0, true));
+        // Use provided memory or default CoreMemory
+        var memory = Memory ?? new CoreMemory();
+        var coreMemory = memory as CoreMemory;
+        
+        // Add builder blocks to CoreMemory if it's the default/simple implementation
+        if (coreMemory != null)
+        {
+            var blocksToUse = new List<CoreMemoryBlock>();
+            
+            if (_config.SystemPrompt != null)
+                blocksToUse.Add(new CoreMemoryBlock("system", _config.SystemPrompt, Role.System, 0, readOnly: true));
+            
+            blocksToUse.AddRange(_blocks);
+            
+            // Reconstruct CoreMemory with all blocks
+            memory = new CoreMemory(blocksToUse);
+        }
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
+        
+        // Register scratchpad tools automatically if using CoreMemory
+        if (memory is CoreMemory cm)
+            registry.RegisterAll(new ScratchpadTools(cm.GetBlocks()));
 
         var toolExecutor = new ToolExecutor(
             registry, 
@@ -124,11 +142,10 @@ public sealed class AgentBuilder
             llmExecutor,
             toolExecutor,
             contextCompactor,
-            blocksToBeUsed,
+            memory,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
-            loggerFactory.CreateLogger<LLMAgent>(),
-            CognitiveMemory);
+            loggerFactory.CreateLogger<LLMAgent>());
     } 
 }

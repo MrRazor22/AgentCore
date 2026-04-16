@@ -3,16 +3,16 @@ namespace AgentCore.Memory;
 /// <summary>
 /// The ONE data type for all stored knowledge. 12 fields. One table.
 /// Covers facts, experiences, beliefs, and consolidated observations.
-/// No separate MentalModel type — observations ARE entries with Kind=Observation.
+/// Independent from CoreMemory - advanced AMFS decay, embeddings, semantic search.
 /// </summary>
-public sealed class MemoryEntry : IMemoryRecord
+public sealed class MemoryEntry
 {
-    // ── IMemoryRecord (2 fields - shared with CoreMemoryBlock) ───────────────
+    // ── Identity ───────────────────────────────────────────────────────────
 
-    /// <inheritdoc/>
+    /// <summary>Unique identifier for this memory entry.</summary>
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
 
-    /// <inheritdoc/>
+    /// <summary>The actual text content.</summary>
     public string Content { get; set; } = "";
 
     // ── Cognitive Memory Specific (2 fields) ──────────────────────────────────

@@ -22,11 +22,10 @@ public interface IAgent
 public sealed class LLMAgent : IAgent
 {
     private readonly IChat _chatStore;
-    private readonly IAgentMemory? _memory;
+    private readonly IAgentMemory _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
-    private readonly List<CoreMemoryBlock> _blocks;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -37,19 +36,17 @@ public sealed class LLMAgent : IAgent
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
-        IEnumerable<CoreMemoryBlock> blocks,
+        IAgentMemory memory,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
-        ILogger<LLMAgent> logger,
-        IAgentMemory? memory = null)
+        ILogger<LLMAgent> logger)
     {
         _chatStore = chatStore;
         _memory = memory;
         _llm = llm;
         _toolRuntime = toolRuntime;
         _ctxCompactor = contextCompactor;
-        _blocks = blocks.ToList();
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -197,28 +194,21 @@ public sealed class LLMAgent : IAgent
 
                 var runningTools = new List<Task<ToolResult>>();
                 
-                // Assemble context (Render blocks followed by cognitive memory & history)
+                // Assemble context using IAgentMemory.RecallAsync
                 var messages = new List<Message>();
 
-                // Group core memory blocks by role to avoid consecutive same-role messages
-                var blocksByRole = _blocks
-                    .Where(b => !string.IsNullOrEmpty(b.Value))
-                    .GroupBy(b => b.Role);
-
-                foreach (var group in blocksByRole)
+                // Recall memories for injection (CoreMemory returns blocks, MemoryEngine returns semantic matches)
+                var memoryContents = await _memory.RecallAsync(textBuffer.ToString(), ct);
+                if (memoryContents.Count > 0)
                 {
-                    var combinedContent = string.Join("\n\n", group.Select(b => b.ToLlmString()));
-                    messages.Add(new Message(group.Key, new Text(combinedContent)));
+                    messages.Add(new Message(Role.System, new Text(string.Join("\n\n", memoryContents.Select(c => c.ToString())))));
                 }
-
-                if (memoryMessages.Count > 0)
-                    messages.AddRange(memoryMessages);
 
                 var activeWindow = workingChat.GetActiveWindow();
                 messages.AddRange(activeWindow);
                 
-                _logger.LogDebug("LLM step {Step}: Blocks={BlockCount} History={HistMsgs} Tokens≈{Approx}", 
-                    consecutiveToolSteps + 1, _blocks.Count, activeWindow.Count, lastLlmTokens);
+                _logger.LogDebug("LLM step {Step}: MemoryCount={MemCount} History={HistMsgs} Tokens≈{Approx}", 
+                    consecutiveToolSteps + 1, memoryContents.Count, activeWindow.Count, lastLlmTokens);
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;

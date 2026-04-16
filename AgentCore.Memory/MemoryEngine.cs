@@ -10,14 +10,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.Memory;
 
 /// <summary>
-/// The cognitive memory engine. Implements IMemory with:
+/// The cognitive memory engine. Implements ISemanticMemory with:
 /// - 3-strategy parallel retrieval (semantic + keyword + entity graph) fused via RRF
 /// - AMFS confidence decay formula with kind-based multipliers
 /// - Automatic background dream (consolidation) and prune cycles
 /// - Per-session read tracking for outcome feedback
 /// - Full provenance via SourceEntryIds, Version, InvalidatedAt
 /// </summary>
-public sealed class MemoryEngine : IAgentMemory, IDisposable
+public sealed class MemoryEngine : ISemanticMemory, IDisposable
 {
     private readonly IMemoryStore _store;
     private readonly ILLMProvider _llm;

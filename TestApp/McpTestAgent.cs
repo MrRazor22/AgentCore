@@ -23,10 +23,10 @@ public static class McpTestAgent
         Console.WriteLine("This demo wraps an agent with an MCP server for stdio transport.\n");
         Console.WriteLine("The agent can be connected to from any MCP-compatible client.\n");
 
-        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\mcp-history" });
+        var chatStore = new FileMemory(new() { PersistDir = @"D:\AgentCore\mcp-history" });
 
         var agent = LLMAgent.Create("mcp-agent")
-            .WithMemory(memory)
+            .WithMemory(chatStore)
             .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000 })
             

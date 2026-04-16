@@ -1,21 +1,15 @@
 using AgentCore.Conversation;
 
-namespace AgentCore.Memory;
+namespace AgentCore;
 
 /// <summary>
 /// A named, bounded, optionally agent-editable chunk of text injected into the prompt.
 /// Core memory block for both static instructions and agent-writable working memory.
-/// Implements IMemoryRecord for unified rendering with cognitive memory.
+/// Simple - no decay, always injected if provided.
 /// </summary>
-public sealed class CoreMemoryBlock : IMemoryRecord
+public sealed class CoreMemoryBlock
 {
     private string _value;
-
-    /// <summary>IMemoryRecord: Header/Label (e.g., "instructions", "scratchpad", "persona").</summary>
-    public string Id => Label;
-
-    /// <summary>IMemoryRecord: The actual text body.</summary>
-    public string Content => Value;
 
     /// <summary>Unique label for this block (e.g., "instructions", "scratchpad", "persona").</summary>
     public string Label { get; }

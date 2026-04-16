@@ -23,13 +23,13 @@ public static class ChatBotAgent
         Console.OutputEncoding = System.Text.Encoding.UTF8;
 
         // ─── Setup Agent ───
-        var memory = new FileMemory(new() { PersistDir = @"D:\AgentCore\chat-history" });
-        // TODO: Wire MemoryEngine for cognitive memory:
+        var chatStore = new FileMemory(new() { PersistDir = @"D:\AgentCore\chat-history" });
+        // Optional: Advanced memory with AMFS (from AgentCore.Memory)
         // var engine = new MemoryEngine(new FileStore(@"D:\AgentCore", "chatbot"), llmProvider);
         
         var agent = LLMAgent.Create("chatbot")
-            .WithMemory(memory)
-            // .WithMemory(engine)   // <- enables cognitive memory recall/retain
+            .WithMemory(chatStore)
+            // .WithMemory(engine)   // <- optional: enables semantic memory recall/retain
             .WithInstructions("rules", "You are an AI agent, execute all user requests faithfully.")
             .WithInstructions("persona", "You are helpful, concise and technical.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
@@ -48,7 +48,7 @@ public static class ChatBotAgent
         var sessionId = "demo-session-001";
 
         // ─── Load & Display Previous Messages ───
-        await LoadPreviousMessages(memory, sessionId);
+        await LoadPreviousMessages(chatStore, sessionId);
 
         // ─── Interactive Loop ───
         while (true)
@@ -72,9 +72,9 @@ public static class ChatBotAgent
     }
 
     // ─── Load Previous Messages ───
-    private static async Task LoadPreviousMessages(FileMemory memory, string sessionId)
+    private static async Task LoadPreviousMessages(IChat chatStore, string sessionId)
     {
-        var history = await memory.RecallAsync(sessionId);
+        var history = await chatStore.RecallAsync(sessionId);
         if (history.Count == 0) return;
 
         Console.WriteLine("\n" + new string('=', 50));
