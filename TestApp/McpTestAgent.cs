@@ -27,7 +27,7 @@ public static class McpTestAgent
 
         var agent = LLMAgent.Create("mcp-agent")
             .WithMemory(memory)
-            .WithScratchpad("role", "You are a helpful AI assistant with access to various tools.")
+            .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
             .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000 })
             
             .WithTools<GeoTools>()

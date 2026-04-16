@@ -1,7 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.Tooling;
 
-namespace AgentCore;
+namespace AgentCore.Execution;
 
 public abstract record AgentEvent;
 

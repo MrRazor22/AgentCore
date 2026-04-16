@@ -1,3 +1,4 @@
+using AgentCore.Memory;
 using System.ComponentModel;
 
 namespace AgentCore.Tooling.InternalTools;

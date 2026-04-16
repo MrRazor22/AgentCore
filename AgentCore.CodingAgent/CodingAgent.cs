@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using AgentCore.Conversation;
+using AgentCore.Execution;
 using AgentCore.LLM;
 using AgentCore.Tooling;
 

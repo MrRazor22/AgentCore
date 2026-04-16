@@ -1,6 +1,6 @@
 using AgentCore.Conversation;
 
-namespace AgentCore;
+namespace AgentCore.Memory;
 
 /// <summary>
 /// The agent's cognitive memory — a world model that persists knowledge across turns and sessions.

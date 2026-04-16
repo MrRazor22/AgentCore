@@ -1,7 +1,9 @@
 using AgentCore.Conversation;
 using AgentCore.Diagnostics;
+using AgentCore.Execution;
 using AgentCore.Json;
 using AgentCore.LLM;
+using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
@@ -24,7 +26,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
-    private readonly List<Scratchpad> _blocks;
+    private readonly List<CoreMemoryBlock> _blocks;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -35,7 +37,7 @@ public sealed class LLMAgent : IAgent
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
-        IEnumerable<Scratchpad> blocks,
+        IEnumerable<CoreMemoryBlock> blocks,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -198,7 +200,7 @@ public sealed class LLMAgent : IAgent
                 // Assemble context (Render blocks followed by cognitive memory & history)
                 var messages = new List<Message>();
 
-                // Group scratchpad blocks by role to avoid consecutive same-role messages
+                // Group core memory blocks by role to avoid consecutive same-role messages
                 var blocksByRole = _blocks
                     .Where(b => !string.IsNullOrEmpty(b.Value))
                     .GroupBy(b => b.Role);

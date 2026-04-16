@@ -7,7 +7,7 @@ namespace AgentCore.Memory;
 /// </summary>
 public sealed class MemoryEntry : IMemoryRecord
 {
-    // ── IMemoryRecord (4 fields) ─────────────────────────────────────────────
+    // ── IMemoryRecord (2 fields - shared with CoreMemoryBlock) ───────────────
 
     /// <inheritdoc/>
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
@@ -15,10 +15,12 @@ public sealed class MemoryEntry : IMemoryRecord
     /// <inheritdoc/>
     public string Content { get; set; } = "";
 
-    /// <inheritdoc/>
+    // ── Cognitive Memory Specific (2 fields) ──────────────────────────────────
+
+    /// <summary>Dense vector for semantic similarity search. Null until embedded.</summary>
     public float[]? Embedding { get; set; }
 
-    /// <inheritdoc/>
+    /// <summary>When this record was first created (UTC).</summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 
     // ── Classification (2 fields) ────────────────────────────────────────────

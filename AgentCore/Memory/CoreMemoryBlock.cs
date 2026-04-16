@@ -1,14 +1,21 @@
 using AgentCore.Conversation;
 
-namespace AgentCore;
+namespace AgentCore.Memory;
 
 /// <summary>
 /// A named, bounded, optionally agent-editable chunk of text injected into the prompt.
-/// Inspired by Letta's Core Memory blocks.
+/// Core memory block for both static instructions and agent-writable working memory.
+/// Implements IMemoryRecord for unified rendering with cognitive memory.
 /// </summary>
-public sealed class Scratchpad
+public sealed class CoreMemoryBlock : IMemoryRecord
 {
     private string _value;
+
+    /// <summary>IMemoryRecord: Header/Label (e.g., "instructions", "scratchpad", "persona").</summary>
+    public string Id => Label;
+
+    /// <summary>IMemoryRecord: The actual text body.</summary>
+    public string Content => Value;
 
     /// <summary>Unique label for this block (e.g., "instructions", "scratchpad", "persona").</summary>
     public string Label { get; }
@@ -33,7 +40,7 @@ public sealed class Scratchpad
             : value;
     }
 
-    public Scratchpad(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
+    public CoreMemoryBlock(string label, string value, Role role = Role.System, int limit = 0, bool readOnly = true)
     {
         Label = label;
         Role = role;

@@ -1,6 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.Execution;
 using AgentCore.LLM;
+using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,7 @@ public sealed class AgentBuilder
     public ILLMProvider? Provider { get; set; }
     private LLMOptions? _providerOptions;
 
-    private readonly List<Scratchpad> _blocks = [];
+    private readonly List<CoreMemoryBlock> _blocks = [];
 
     // Pipeline storage
     private readonly List<PipelineMiddleware<ToolCall, Task<ToolResult>>> _toolMiddlewares = [];
@@ -39,7 +40,7 @@ public sealed class AgentBuilder
     public AgentBuilder() { }
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
-    public AgentBuilder WithInstructions(string prompt) { _config.SystemPrompt = prompt; return this; }
+    public AgentBuilder WithSystemPrompt(string prompt) { _config.SystemPrompt = prompt; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
@@ -49,11 +50,27 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IAgentMemory cognitiveMemory) { CognitiveMemory = cognitiveMemory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
 
-    /// <summary>Adds a named scratchpad to the agent.</summary>
+    /// <summary>Adds read-only instructions (rules, persona) as a core memory block.</summary>
     public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System)
     {
-        _blocks.Add(new Scratchpad(label, value, role, limit));
+        _blocks.Add(new CoreMemoryBlock(label, value, role, limit, readOnly: true));
         return this;
+    }
+
+    /// <summary>Adds a writable scratchpad for agent working memory.</summary>
+    public AgentBuilder WithScratchpad(string label, int limit = 2000)
+    {
+        _blocks.Add(new CoreMemoryBlock(label, "", Role.System, limit, readOnly: false));
+        return this;
+    }
+
+    /// <summary>Loads instructions from a file as a read-only core memory block.</summary>
+    public AgentBuilder WithInstructionFile(string path, int limit = 8000, string? label = null)
+    {
+        if (!File.Exists(path)) throw new FileNotFoundException("Instruction file not found.", path);
+        label ??= Path.GetFileNameWithoutExtension(path);
+        var content = File.ReadAllText(path);
+        return WithInstructions(label, content, limit);
     } 
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
@@ -81,9 +98,9 @@ public sealed class AgentBuilder
         var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
         var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        var blocksToBeUsed = new List<Scratchpad>(_blocks);
+        var blocksToBeUsed = new List<CoreMemoryBlock>(_blocks);
         if (_config.SystemPrompt != null)
-            blocksToBeUsed.Insert(0, new Scratchpad("instructions", _config.SystemPrompt, Role.System, 0, true));
+            blocksToBeUsed.Insert(0, new CoreMemoryBlock("instructions", _config.SystemPrompt, Role.System, 0, true));
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
