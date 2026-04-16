@@ -79,7 +79,6 @@ public sealed class SummarizingContextCompactor : IContextCompactor
         var results = await Task.WhenAll(tasks);
 
         var successCount = results.Count(r => !string.IsNullOrEmpty(r.Summary) || !string.IsNullOrEmpty(r.Reasoning));
-        _logger.LogDebug("Chunk summarization results: Success={Success}/{Total}", successCount, results.Count);
 
         var combinedSummary = string.Join("\n\n", results.Select(r => r.Summary).Where(s => !string.IsNullOrEmpty(s)));
         var combinedReasoning = string.Join("\n\n", results.Select(r => r.Reasoning).Where(r => !string.IsNullOrEmpty(r)));
