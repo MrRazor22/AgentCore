@@ -5,6 +5,10 @@ using System.Text;
 
 namespace AgentCore.Tokens;
 
+public interface IContextCompactor
+{
+    Task<List<Message>> ReduceAsync(List<Message> chat, int totalTokens, LLMOptions options, CancellationToken ct = default);
+}
 public sealed class SummarizingContextCompactor(
     ITokenCounter _counter,
     ILogger<SummarizingContextCompactor> _logger,

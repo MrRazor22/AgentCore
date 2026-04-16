@@ -4,6 +4,10 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tokens;
 
+public interface ITokenCounter
+{
+    Task<int> CountAsync(IEnumerable<Message> messages, CancellationToken ct = default);
+}
 public sealed class ApproximateTokenCounter : ITokenCounter
 {
     private double _charsPerToken = 5.0;
