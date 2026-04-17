@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Memory;
+namespace AgentCore.Memory.Tools;
 
 /// <summary>
 /// Tools for the agent to manage its scratchpad (in-context working memory).

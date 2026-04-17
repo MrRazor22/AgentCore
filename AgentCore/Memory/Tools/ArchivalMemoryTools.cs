@@ -2,7 +2,7 @@ using System.ComponentModel;
 using AgentCore.Conversation;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Memory;
+namespace AgentCore.Memory.Tools;
 
 /// <summary>
 /// Exposes Letta-style `archival_memory_search` tool so the agent can actively search semantic memory

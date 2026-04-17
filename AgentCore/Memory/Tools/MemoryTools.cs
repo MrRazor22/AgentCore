@@ -1,6 +1,6 @@
 using System.ComponentModel;
 
-namespace AgentCore.Memory;
+namespace AgentCore.Memory.Tools;
 
 /// <summary>
 /// Opt-in LLM tool surface for semantic memory operations (AMFS).
