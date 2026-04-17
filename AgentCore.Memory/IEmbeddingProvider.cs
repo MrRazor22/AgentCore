@@ -1,4 +1,4 @@
-namespace AgentCore;
+namespace AgentCore.Memory;
 
 /// <summary>
 /// Converts text to dense embedding vectors for semantic similarity search.

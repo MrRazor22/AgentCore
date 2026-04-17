@@ -1,4 +1,4 @@
-using AgentCore;
+using AgentCore.Memory;
 using LlmTornado;
 using LlmTornado.Embedding;
 using LlmTornado.Embedding.Models;
