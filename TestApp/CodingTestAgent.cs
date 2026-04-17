@@ -4,9 +4,12 @@ using AgentCore.Conversation;
 using AgentCore.CodingAgent;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.Memory;
-using AgentCore.Providers.Embeddings;
+using AgentCore.Providers.Tornado;
 using AgentCore.Tokens;
-using AgentCore.Providers.MEAI;
+using LlmTornado;
+using LlmTornado.Code;
+using LlmTornado.Chat.Models;
+using LlmTornado.Embedding.Models;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -27,25 +30,29 @@ public static class CodingTestAgent
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "coding");
         var loggerFactory = ConfigureLogging();
         
-        // Embeddings provider for semantic search
-        var embeddings = new OpenAIEmbeddings("your-openai-api-key", "text-embedding-3-small", 1536);
+        var api = new TornadoApi(LLmProviders.OpenAi, "dummy");
+        var model = new ChatModel("model");
+        var embedModel = new EmbeddingModel("text-embedding-3-small");
 
-        var agent = CodingAgentBuilder.Create("coding-agent")
+        var builder = CodingAgentBuilder.Create("coding-agent")
             .WithInstructions("You are a helpful coding assistant that solves problems by writing and executing C# code. " +
                 "IMPORTANT: Even for simple greetings, you MUST use the Thought/Code format. " +
                 "Always respond with a FinalAnswer() call in a ```csharp code block, even for greetings.")
             .WithMemory(chatStore)
-            .WithMemory(new MemoryEngine(memoryStore, null!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()))
             .WithTokenCounter(new ApproximateTokenCounter())
-            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", opts => opts.ContextLength = 8000)
+            .WithProvider(new TornadoLLMProvider(api, model), opts => opts.ContextLength = 8000)
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
             .WithTools<ConversionTools>()
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
-            .WithLoggerFactory(ConfigureLogging())
-            .WithMaxSteps(20)
-            .Build();
+            .WithLoggerFactory(loggerFactory)
+            .WithMaxSteps(20);
+
+        var embeddings = new TornadoEmbeddingProvider(api, embedModel);
+        builder.WithMemory(new MemoryEngine(memoryStore, builder.Provider!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()));
+
+        var agent = builder.Build();
 
         var sessionId = "coding-demo-001";
 

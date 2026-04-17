@@ -3,12 +3,8 @@ using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.Tooling;
 using AgentCore.Tokens;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using OpenAI;
-using Anthropic;
-using System.ClientModel;
 using System.Text;
 
 namespace AgentCore.CodingAgent;
@@ -24,6 +20,7 @@ public sealed class CodingAgentBuilder
     private string _name = "coding-agent";
     private string? _instructions;
     private ILLMProvider? _provider;
+    public ILLMProvider? Provider => _provider;
     private LLMOptions? _llmOptions;
     private ToolRegistry? _tools;
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
@@ -42,51 +39,7 @@ public sealed class CodingAgentBuilder
     public CodingAgentBuilder WithName(string name) { _name = name; return this; }
     public CodingAgentBuilder WithInstructions(string? instructions) { _instructions = instructions; return this; }
 
-    public CodingAgentBuilder AddOpenAI(string model, string? apiKey = null, string? baseUrl = null, Action<LLMOptions>? configure = null)
-    {
-        var options = new LLMOptions
-        {
-            Model = model,
-            ApiKey = apiKey ?? "dummy",
-            BaseUrl = baseUrl ?? "https://api.openai.com/v1",
-            ToolCallMode = ToolCallMode.None,
-            StopSequences = ["Observation:"],
-        };
-        configure?.Invoke(options);
-        _llmOptions = options;
 
-        var openAiOptions = new OpenAIClientOptions();
-        if (!string.IsNullOrEmpty(baseUrl))
-            openAiOptions.Endpoint = new Uri(baseUrl);
-        
-        var credentials = new ApiKeyCredential(apiKey ?? "dummy");
-        var openAiClient = new OpenAIClient(credentials, openAiOptions);
-        var chatClient = openAiClient.GetChatClient(model).AsIChatClient();
-        
-        _provider = new AgentCore.Providers.MEAI.MEAILLMClient(chatClient);
-        
-        return this;
-    }
-
-    public CodingAgentBuilder AddAnthropic(string model, string? apiKey = null, Action<LLMOptions>? configure = null)
-    {
-        var options = new LLMOptions
-        {
-            Model = model,
-            ApiKey = apiKey ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
-            BaseUrl = "https://api.anthropic.com/v1",
-            ToolCallMode = ToolCallMode.None,
-            StopSequences = ["Observation:"],
-        };
-        configure?.Invoke(options);
-        _llmOptions = options;
-
-        var anthropicClient = new AnthropicClient { ApiKey = apiKey ?? "" };
-        var chatClient = anthropicClient.AsIChatClient(model);
-        _provider = new AgentCore.Providers.MEAI.MEAILLMClient(chatClient);
-        
-        return this;
-    }
 
     public CodingAgentBuilder WithProvider(ILLMProvider provider, Action<LLMOptions>? configure = null)
     {

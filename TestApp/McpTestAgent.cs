@@ -5,9 +5,12 @@ using AgentCore.LLM;
 using AgentCore.LLM.BuiltInTools;
 using AgentCore.MCP.Server;
 using AgentCore.Memory;
-using AgentCore.Providers.Embeddings;
+using AgentCore.Providers.Tornado;
 using AgentCore.Tokens;
-using AgentCore.Providers.MEAI;
+using LlmTornado;
+using LlmTornado.Code;
+using LlmTornado.Chat.Models;
+using LlmTornado.Embedding.Models;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -31,14 +34,15 @@ public static class McpTestAgent
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "mcp");
         var loggerFactory = ConfigureLogging();
         
-        // Embeddings provider for semantic search
-        var embeddings = new OpenAIEmbeddings("your-openai-api-key", "text-embedding-3-small", 1536);
+        var api = new TornadoApi(LLmProviders.OpenAi, "dummy");
+        var model = new ChatModel("model");
+        var embedModel = new EmbeddingModel("text-embedding-3-small");
+        var embeddings = new TornadoEmbeddingProvider(api, embedModel);
 
-        var agent = LLMAgent.Create("mcp-agent")
+        var builder = LLMAgent.Create("mcp-agent")
             .WithMemory(chatStore)
-            .WithMemory(new MemoryEngine(memoryStore, null!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()))
             .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
-            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000 })
+            .AddTornado(api, model, new() { ContextLength = 8000 })
             
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
@@ -46,8 +50,10 @@ public static class McpTestAgent
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
 
-            .WithLoggerFactory(ConfigureLogging())
-            .Build();
+            .WithLoggerFactory(loggerFactory);
+
+        builder.WithMemory(new MemoryEngine(memoryStore, builder.Provider!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()));
+        var agent = builder.Build();
 
         Console.WriteLine("Agent configured with tools: Geo, Weather, Conversion, Math, Search");
         Console.WriteLine("\nStarting MCP server (stdio transport)...\n");

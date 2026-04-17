@@ -11,6 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
-    <ProjectReference Include="..\AgentCore.MEAI\AgentCore.MEAI.csproj" />
+    <ProjectReference Include="..\AgentCore.Providers.Tornado\AgentCore.Providers.Tornado.csproj" />
   </ItemGroup>
 </Project>
