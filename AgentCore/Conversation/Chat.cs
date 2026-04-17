@@ -23,52 +23,6 @@ public sealed class ChatFileStoreOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class InMemoryChat : IChat
-{
-    private readonly Dictionary<string, List<Message>> _sessions = new();
-    private readonly ILogger<InMemoryChat> _logger;
-
-    public InMemoryChat(ILogger<InMemoryChat>? logger = null)
-    {
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<InMemoryChat>.Instance;
-    }
-
-    public Task<List<Message>> RecallAsync(string sessionId)
-    {
-        _logger.LogDebug("Chat recall: SessionId={SessionId}", sessionId);
-
-        if (_sessions.TryGetValue(sessionId, out var chat))
-        {
-            _logger.LogDebug("Chat recall result: SessionId={SessionId} MessageCount={MsgCount}", sessionId, chat.Count);
-            return Task.FromResult(new List<Message>(chat));
-        }
-
-        _logger.LogDebug("Chat recall result: SessionId={SessionId} MessageCount=0 (new session)", sessionId);
-        return Task.FromResult(new List<Message>());
-    }
-
-    public Task UpdateAsync(string sessionId, List<Message> chat)
-    {
-        _logger.LogDebug("Chat update: SessionId={SessionId} MessageCount={MsgCount}", sessionId, chat.Count);
-        _sessions[sessionId] = new List<Message>(chat);
-        return Task.CompletedTask;
-    }
-
-    public Task ClearAsync(string sessionId)
-    {
-        _logger.LogDebug("Chat clear: SessionId={SessionId}", sessionId);
-        _sessions.Remove(sessionId);
-        return Task.CompletedTask;
-    }
-
-    public Task<IReadOnlyList<string>> GetAllSessionsAsync()
-    {
-        var sessions = _sessions.Keys.ToList();
-        _logger.LogDebug("Chat get all sessions: SessionCount={SessionCount}", sessions.Count);
-        return Task.FromResult<IReadOnlyList<string>>(sessions);
-    }
-}
-
 public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFileStore>? logger = null) : IChat
 {
     private readonly ChatFileStoreOptions _options = options ?? new ChatFileStoreOptions();

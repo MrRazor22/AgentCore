@@ -30,14 +30,20 @@ public static class ChatBotAgent
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "chatbot");
         var loggerFactory = ConfigureLogging();
         
-        // Setup Provider using LLMTornado (connecting to LMStudio / Local for e.g.)
-        var api = new LlmTornado.TornadoApi(LlmTornado.Code.LLmProviders.OpenAi, "dummy");
-        var model = new LlmTornado.Chat.Models.ChatModel("model");
+        // Explicit construction of dependencies
+        var tornadoApi = new LlmTornado.TornadoApi("your-api-key"); // Base URL is optional if using default OpenAI
+        var modelName = "gpt-4o";
         var embedModel = new LlmTornado.Embedding.Models.EmbeddingModel("text-embedding-3-small");
+        var provider = new TornadoLLMProvider(tornadoApi, new LlmTornado.Chat.Models.ChatModel(modelName));
+        var embeddings = new TornadoEmbeddingProvider(tornadoApi, embedModel);
+        
+        var memoryEngine = new MemoryEngine(memoryStore, provider, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>());
 
+        // Setup Provider using LLMTornado
         var builder = LLMAgent.Create("chatbot")
-            .WithMemory(chatStore)
-            .AddTornado(api, model, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .WithChatHistory(chatStore)
+            .WithMemory(memoryEngine)
+            .AddTornado(tornadoApi, modelName, embedModel.Name, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             .WithInstructions("rules", "You are an AI agent, execute all user requests faithfully.")
             .WithInstructions("persona", "You are helpful, concise and technical.")
             .WithTools<GeoTools>()
@@ -46,9 +52,6 @@ public static class ChatBotAgent
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
             .WithLoggerFactory(loggerFactory);
-
-        var embeddings = new TornadoEmbeddingProvider(api, embedModel);
-        builder.WithMemory(new MemoryEngine(memoryStore, builder.Provider!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()));
         
         var agent = builder.Build();
 

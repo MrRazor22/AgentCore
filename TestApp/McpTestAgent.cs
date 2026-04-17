@@ -34,15 +34,19 @@ public static class McpTestAgent
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "mcp");
         var loggerFactory = ConfigureLogging();
         
-        var api = new TornadoApi(LLmProviders.OpenAi, "dummy");
-        var model = new ChatModel("model");
+        var api = new TornadoApi(new Uri("http://localhost"), "dummy");
+        var modelName = "model";
         var embedModel = new EmbeddingModel("text-embedding-3-small");
         var embeddings = new TornadoEmbeddingProvider(api, embedModel);
+        
+        // Manual construction of the memory engine for clarity
+        var memoryEngine = new MemoryEngine(memoryStore, new TornadoLLMProvider(api, new ChatModel(modelName)), embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>());
 
         var builder = LLMAgent.Create("mcp-agent")
-            .WithMemory(chatStore)
+            .WithChatHistory(chatStore)
+            .WithMemory(memoryEngine)
             .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
-            .AddTornado(api, model, new() { ContextLength = 8000 })
+            .AddTornado(api, modelName, null, new LLMOptions { ContextLength = 8000 })
             
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
@@ -52,7 +56,6 @@ public static class McpTestAgent
 
             .WithLoggerFactory(loggerFactory);
 
-        builder.WithMemory(new MemoryEngine(memoryStore, builder.Provider!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()));
         var agent = builder.Build();
 
         Console.WriteLine("Agent configured with tools: Geo, Weather, Conversion, Math, Search");

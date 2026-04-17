@@ -1,6 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
+using AgentCore.Memory.Tools;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
@@ -22,14 +23,14 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
     private ILogger<AgentBuilder> _logger;
 
-    public IChat? ChatStore { get; set; }
-    public IAgentMemory? Memory { get; set; }
-    public IContextCompactor? ContextCompactor { get; set; }
-    public ITokenCounter? TokenCounter { get; set; }
-    public ITokenManager? TokenManager { get; set; }
-    public ILoggerFactory? LoggerFactory { get; set; }
-    public ILLMProvider? Provider { get; set; }
-    public IApprovalService? ApprovalService { get; set; }
+    private IChat? _chatStore;
+    private IAgentMemory? _memory;
+    private IContextCompactor? _contextCompactor;
+    private ITokenCounter? _tokenCounter;
+    private ITokenManager? _tokenManager;
+    private ILoggerFactory? _loggerFactory;
+    private ILLMProvider? _provider;
+    private IApprovalService? _approvalService;
     private LLMOptions? _providerOptions;
 
     private readonly List<CoreMemoryBlock> _blocks = [];
@@ -46,45 +47,29 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
     public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
-    public AgentBuilder WithMemory(IChat chatStore) { ChatStore = chatStore; return this; }
-    public AgentBuilder WithMemory(IAgentMemory memory) { Memory = memory; return this; }
-    public AgentBuilder WithContextCompactor(IContextCompactor compactor) { ContextCompactor = compactor; return this; }
+    public AgentBuilder WithChatHistory(IChat chatStore) { _chatStore = chatStore; return this; }
+    public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
+    public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
 
-    /// <summary>Adds read-only instructions (rules, persona) as a core memory block.</summary>
-    public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System)
+    /// <summary>Adds a core memory block with instructions or working memory.</summary>
+    public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System, bool readOnly = true)
     {
-        _blocks.Add(new CoreMemoryBlock(label, value, role, limit, readOnly: true));
+        _blocks.Add(new CoreMemoryBlock(label, value, role, limit, readOnly));
         return this;
-    }
-
-    /// <summary>Adds a writable scratchpad for agent working memory.</summary>
-    public AgentBuilder WithScratchpad(string label, int limit = 2000)
-    {
-        _blocks.Add(new CoreMemoryBlock(label, "", Role.System, limit, readOnly: false));
-        return this;
-    }
-
-    /// <summary>Loads instructions from a file as a read-only core memory block.</summary>
-    public AgentBuilder WithInstructionFile(string path, int limit = 8000, string? label = null)
-    {
-        if (!File.Exists(path)) throw new FileNotFoundException("Instruction file not found.", path);
-        label ??= Path.GetFileNameWithoutExtension(path);
-        var content = File.ReadAllText(path);
-        return WithInstructions(label, content, limit);
     } 
 
-    public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { TokenCounter = tokenCounter; return this; }
-    public AgentBuilder WithTokenManager(ITokenManager tokenManager) { TokenManager = tokenManager; return this; }
+    public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
+    public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
-        LoggerFactory = loggerFactory;
+        _loggerFactory = loggerFactory;
         _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
         return this;
     }
-    public AgentBuilder WithApprovalService(IApprovalService approvalService) { ApprovalService = approvalService; return this; }
+    public AgentBuilder WithApprovalService(IApprovalService approvalService) { _approvalService = approvalService; return this; }
     public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null)
     {
-        Provider = provider;
+        _provider = provider;
         if (options != null) _providerOptions = options;
         return this;
     }
@@ -93,22 +78,16 @@ public sealed class AgentBuilder
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
 
-        if (Provider == null)
-            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call AddOpenAI().");
+        if (_provider == null)
+            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
-        var loggerFactory = LoggerFactory ?? NullLoggerFactory.Instance;
-        var chatStore = ChatStore ?? new InMemoryChat();
-        var tokenCounter = TokenCounter ?? new ApproximateTokenCounter();
-        var contextCompactor = ContextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), Provider);
-        var tokenManager = TokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
+        var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
+        var chatStore = _chatStore ?? new ChatFileStore(new() { PersistDir = "./chat-history" });
+        var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
+        var contextCompactor = _contextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), _provider);
+        var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        _logger.LogDebug("Agent configuration: MemoryType={MemoryType} ContextCompactorType={CompactorType} TokenCounterType={TokenCounterType}",
-            Memory?.GetType().Name ?? "CoreMemory",
-            contextCompactor.GetType().Name,
-            tokenCounter.GetType().Name);
-
-        // Use provided memory or default CoreMemory
-        var memory = Memory ?? new CoreMemory();
+        var memory = _memory ?? new CoreMemory();
         var coreMemory = memory as CoreMemory;
         
         // Add builder blocks to CoreMemory if it's the default/simple implementation
@@ -141,10 +120,10 @@ public sealed class AgentBuilder
             registry,
             _config.ToolOptions,
             loggerFactory.CreateLogger<ToolExecutor>(),
-            ApprovalService);
+            _approvalService);
 
         var llmExecutor = new LLMExecutor(
-            Provider,
+            _provider,
             registry,
             tokenCounter,
             tokenManager,
@@ -154,7 +133,7 @@ public sealed class AgentBuilder
             _config.Name,
             registry.Tools.Count,
             memory is CoreMemory coreMem ? coreMem.GetBlocks().Count : 0,
-            Provider?.GetType().Name ?? "Unknown");
+            _provider.GetType().Name);
 
         return new LLMAgent(
             chatStore,
