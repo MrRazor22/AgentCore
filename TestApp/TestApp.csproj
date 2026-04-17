@@ -18,7 +18,6 @@
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
     <ProjectReference Include="..\AgentCore.Providers.Tornado\AgentCore.Providers.Tornado.csproj" />
     <ProjectReference Include="..\AgentCore.MCP\AgentCore.MCP.csproj" />
-    <ProjectReference Include="..\AgentCore.CodingAgent\AgentCore.CodingAgent.csproj" />
     <ProjectReference Include="..\AgentCore.Memory\AgentCore.Memory.csproj" />
   </ItemGroup>
 
