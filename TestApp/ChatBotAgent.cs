@@ -30,12 +30,14 @@ public static class ChatBotAgent
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "chatbot");
         var loggerFactory = ConfigureLogging();
         
-        // Embeddings provider for semantic search
-        var embeddings = new OpenAIEmbeddings("lmstudio", "publisherme/bge/bge-large-en-v1.5-q4_k_m.gguf", 1536);
-        
+        // Setup Provider using LLMTornado (connecting to LMStudio / Local for e.g.)
+        var api = new LlmTornado.TornadoApi(LlmTornado.Code.LLmProviders.OpenAi, "dummy");
+        var model = new LlmTornado.Chat.Models.ChatModel("model");
+        var embedModel = new LlmTornado.Embedding.Models.EmbeddingModel("text-embedding-3-small");
+
         var builder = LLMAgent.Create("chatbot")
             .WithMemory(chatStore)
-            .AddOpenAI("model", "lmstudio", "http://127.0.0.1:1234/v1", new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .AddTornado(api, model, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
             .WithInstructions("rules", "You are an AI agent, execute all user requests faithfully.")
             .WithInstructions("persona", "You are helpful, concise and technical.")
             .WithTools<GeoTools>()
@@ -45,6 +47,7 @@ public static class ChatBotAgent
             .WithTools<SearchTools>()
             .WithLoggerFactory(loggerFactory);
 
+        var embeddings = new TornadoEmbeddingProvider(api, embedModel);
         builder.WithMemory(new MemoryEngine(memoryStore, builder.Provider!, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>()));
         
         var agent = builder.Build();

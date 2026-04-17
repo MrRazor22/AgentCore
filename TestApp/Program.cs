@@ -1,4 +1,4 @@
-﻿// File: Program.cs 
+// File: Program.cs 
 namespace TestApp
 {
     public class Program
@@ -22,10 +22,10 @@ namespace TestApp
                     await ChatBotAgent.RunAsync();
                     break;
                 case "2":
-                    await McpTestAgent.RunAsync();
+                    Console.WriteLine("McpTestAgent currently disabled.");
                     break;
                 case "3":
-                    await CodingTestAgent.RunAsync();
+                    Console.WriteLine("CodingTestAgent currently disabled.");
                     break;
                 default:
                     Console.WriteLine("Invalid choice. Running ChatBot by default...");
