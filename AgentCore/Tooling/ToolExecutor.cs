@@ -1,7 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.Diagnostics;
 using AgentCore.Json;
-using AgentCore.Utils;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Reflection;
@@ -12,7 +11,6 @@ namespace AgentCore.Tooling;
 
 public interface IToolExecutor
 {
-    Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default);
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
@@ -32,11 +30,6 @@ public sealed class ToolExecutor : IToolExecutor
         _options = options;
         _logger = logger;
         _semaphore = new SemaphoreSlim(options.MaxConcurrency);
-    }
-    
-    public Task<IContent?> InvokeAsync(ToolCall toolCall, CancellationToken ct = default)
-    {
-        throw new NotSupportedException("Use HandleToolCallAsync instead");
     }
 
     public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)

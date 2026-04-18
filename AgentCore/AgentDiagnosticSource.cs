@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace AgentCore.Diagnostics;
+namespace AgentCore;
 
 public static class AgentDiagnosticSource
 {

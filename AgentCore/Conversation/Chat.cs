@@ -228,59 +228,6 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
         };
     }
 
-    private static IContent DeserializeContent(object? obj)
-    {
-        if (obj is not System.Text.Json.JsonElement element) return new Text("");
-
-        using var doc = JsonDocument.Parse(element.GetRawText());
-        var root = doc.RootElement;
-
-        if (root.TryGetProperty("type", out var typeProp))
-        {
-            var type = typeProp.GetString();
-            switch (type)
-            {
-                case "text":
-                    if (root.TryGetProperty("value", out var text))
-                        return new Text(text.GetString() ?? "");
-                    break;
-                case "toolCall":
-                    var id = root.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
-                    var name = root.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
-                    JsonObject args = new();
-                    if (root.TryGetProperty("arguments", out var argsProp))
-                    {
-                        try { args = JsonNode.Parse(argsProp.GetRawText())?.AsObject() ?? new JsonObject(); } catch { }
-                    }
-                    
-                    // Parse approval status
-                    var approvalStatus = ApprovalStatus.Pending;
-                    if (root.TryGetProperty("approval_status", out var statusProp))
-                    {
-                        if (Enum.TryParse<ApprovalStatus>(statusProp.GetString(), true, out var parsedStatus))
-                            approvalStatus = parsedStatus;
-                    }
-                    
-                    return new ToolCall(id, name, args, approvalStatus);
-                case "toolResult":
-                    var callId = root.TryGetProperty("callId", out var callIdProp) ? callIdProp.GetString() ?? "" : "";
-                    IContent? result = null;
-                    if (root.TryGetProperty("result", out var resultProp))
-                        result = DeserializeContent(resultProp);
-                    return new ToolResult(callId, result);
-                case "summary":
-                    if (root.TryGetProperty("text", out var summaryText))
-                        return new Text(summaryText.GetString() ?? "");
-                    break;
-            }
-        }
-
-        if (root.ValueKind == JsonValueKind.String)
-            return new Text(root.GetString() ?? "");
-
-        return new Text("");
-    }
-
     private class MessageDto
     {
         public string? Role { get; set; }

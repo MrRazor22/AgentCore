@@ -1,6 +1,6 @@
 using AgentCore.Conversation;
 
-namespace AgentCore.Utils;
+namespace AgentCore;
 
 public static class Helpers
 {
