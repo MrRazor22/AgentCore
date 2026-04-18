@@ -13,7 +13,6 @@ public sealed class AgentConfig
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
     public int? MaxToolCalls { get; set; } = null;
-    public ToolOptions ToolOptions { get; set; } = new();
 }
 
 public sealed class AgentBuilder
@@ -43,7 +42,6 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
-    public AgentBuilder WithToolOptions(Action<ToolOptions> configure) { configure(_config.ToolOptions); return this; }
 
     public AgentBuilder WithChatHistory(IChat chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
@@ -115,7 +113,6 @@ public sealed class AgentBuilder
 
         var toolExecutor = new ToolExecutor(
             registry,
-            _config.ToolOptions,
             loggerFactory.CreateLogger<ToolExecutor>());
 
         var llmExecutor = new LLMExecutor(

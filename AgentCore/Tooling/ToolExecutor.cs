@@ -17,19 +17,14 @@ public interface IToolExecutor
 public sealed class ToolExecutor : IToolExecutor
 {
     private readonly IToolRegistry _tools;
-    private readonly ToolOptions _options;
-    private readonly SemaphoreSlim _semaphore;
     private readonly ILogger<ToolExecutor> _logger;
 
     public ToolExecutor(
         IToolRegistry tools,
-        ToolOptions options,
         ILogger<ToolExecutor> logger)
     {
         _tools = tools;
-        _options = options;
         _logger = logger;
-        _semaphore = new SemaphoreSlim(options.MaxConcurrency);
     }
 
     public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
@@ -45,19 +40,7 @@ public sealed class ToolExecutor : IToolExecutor
         var argsJson = call.Arguments?.ToString() ?? "{}";
         _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
 
-        await _semaphore.WaitAsync(ct).ConfigureAwait(false);
-        
-        CancellationTokenSource? timeoutCts = null;
-        CancellationTokenSource? linkedCts = null;
-        CancellationToken runCt = ct;
         var sw = Stopwatch.StartNew();
-
-        if (_options.DefaultTimeout.HasValue)
-        {
-            timeoutCts = new CancellationTokenSource(_options.DefaultTimeout.Value);
-            linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
-            runCt = linkedCts.Token;
-        }
 
         try
         {
@@ -73,17 +56,11 @@ public sealed class ToolExecutor : IToolExecutor
                 return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval"));
             }
 
-            var result = await InvokeInternalAsync(call, runCt).ConfigureAwait(false);
+            var result = await InvokeInternalAsync(call, ct).ConfigureAwait(false);
             sw.Stop();
             _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
             _logger.LogTrace("Tool result: {Name} Result={Content}", call.Name, result?.ForLlm()?.Length > 200 ? result.ForLlm()[..200] + "..." : result?.ForLlm());
             return new ToolResult(call.Id, result);
-        }
-        catch (OperationCanceledException ex) when (timeoutCts?.IsCancellationRequested == true)
-        {
-            sw.Stop();
-            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, $"Tool execution timed out after {_options.DefaultTimeout!.Value.TotalSeconds} seconds.");
-            return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution timed out after {_options.DefaultTimeout!.Value.TotalSeconds} seconds.", ex));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -92,12 +69,6 @@ public sealed class ToolExecutor : IToolExecutor
             var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
             _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, wrapped.Message);
             return new ToolResult(call.Id, wrapped);
-        }
-        finally
-        {
-            _semaphore.Release();
-            linkedCts?.Dispose();
-            timeoutCts?.Dispose();
         }
     }
 
