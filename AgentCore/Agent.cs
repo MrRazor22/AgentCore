@@ -449,23 +449,3 @@ public sealed class LLMAgent : IAgent
         }
     }
 }
-                    _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
-                    workingChat.Add(new Message(Role.Tool, result));
-                    chat.Add(new Message(Role.Tool, result));
-                    yield return new AgentToolResultEvent(result);
-                }
-
-                toolCallsBuffer.Clear();
-                pendingToolCalls.Clear();
-
-                if (options.ContextLength.HasValue)
-                {
-                    _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                }
-
-                await _chatStore.UpdateAsync(sessionId, chat);
-            }
-        }
-    }
-}

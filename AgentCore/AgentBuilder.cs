@@ -1,7 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.Memory.Tools;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
