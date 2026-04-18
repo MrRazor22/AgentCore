@@ -3,6 +3,8 @@ using AgentCore.Tooling;
 
 namespace AgentCore.LLM;
 
+public enum ReasoningEffort { None, Low, Medium, High }
+
 public sealed class LLMOptions
 {
     public string? Model { get; set; }
@@ -18,4 +20,5 @@ public sealed class LLMOptions
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
     public JsonObject? ResponseSchema { get; set; }
+    public ReasoningEffort? ReasoningEffort { get; set; }
 }

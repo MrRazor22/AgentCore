@@ -104,3 +104,21 @@ public enum MemoryKind
     /// </summary>
     Observation
 }
+
+/// <summary>
+/// Outcome type for AMFS confidence adjustment via CommitOutcomeAsync.
+/// </summary>
+public enum OutcomeType
+{
+    /// <summary>Task succeeded — boost confidence by 1.1x.</summary>
+    Success,
+
+    /// <summary>Minor failure — reduce confidence by 0.95x.</summary>
+    MinorFailure,
+
+    /// <summary>Failure — reduce confidence by 0.8x.</summary>
+    Failure,
+
+    /// <summary>Critical failure — reduce confidence by 0.5x.</summary>
+    CriticalFailure
+}
