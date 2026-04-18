@@ -1,6 +1,6 @@
 using AgentCore.Conversation;
-using AgentCore.Diagnostics;
 using AgentCore.Json;
+using AgentCore;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Reflection;
@@ -61,24 +61,16 @@ public sealed class ToolExecutor : IToolExecutor
 
         try
         {
-            // Check ToolCall.ApprovalStatus - if rejected, don't execute
-            if (call.ApprovalStatus == Conversation.ApprovalStatus.Rejected)
-            {
-                sw.Stop();
-                _logger.LogWarning("Tool rejected: {Name}", call.Name);
-                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution rejected"));
-            }
-
-            // If pending and tool requires approval, don't execute - agent should pause
+            // If not approved and tool requires approval, don't execute - agent should pause
             var tool = _tools.TryGet(call.Name);
             if (tool == null)
                 return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", $"Tool '{call.Name}' not registered"));
 
-            if (call.ApprovalStatus == Conversation.ApprovalStatus.Pending && tool.RequiresApproval)
+            if (!call.IsApproved && tool.RequiresApproval)
             {
                 sw.Stop();
                 _logger.LogInformation("Tool pending approval: {Name}", call.Name);
-                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval. Status: Pending"));
+                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval"));
             }
 
             var result = await InvokeInternalAsync(call, runCt).ConfigureAwait(false);

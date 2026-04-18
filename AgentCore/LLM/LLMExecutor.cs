@@ -2,7 +2,7 @@ using AgentCore.Conversation;
 using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
-using AgentCore.Diagnostics;
+using AgentCore;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;

@@ -128,10 +128,10 @@ public sealed class LLMAgent : IAgent
                 {
                     if (content is ToolCall tc && tc.Id == toolCallId)
                     {
-                        var updatedCall = tc.WithApproval(approved);
+                        var updatedCall = tc with { IsApproved = approved };
                         updatedContents.Add(updatedCall);
                         updated = true;
-                        _logger.LogInformation("Updated ToolCall approval: {ToolCallId} Status={Status}", toolCallId, updatedCall.ApprovalStatus);
+                        _logger.LogInformation("Updated ToolCall approval: {ToolCallId} IsApproved={IsApproved}", toolCallId, updatedCall.IsApproved);
                     }
                     else
                     {

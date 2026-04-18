@@ -216,12 +216,12 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
         {
             Text t => new { type = "text", value = t.Value },
             Reasoning r => new { type = "reasoning", thought = r.Thought },
-            ToolCall tc => new { 
-                type = "toolCall", 
-                id = tc.Id, 
-                name = tc.Name, 
+            ToolCall tc => new {
+                type = "toolCall",
+                id = tc.Id,
+                name = tc.Name,
                 arguments = tc.Arguments,
-                approval_status = tc.ApprovalStatus.ToString().ToLowerInvariant()
+                is_approved = tc.IsApproved
             },
             ToolResult tr => new { type = "toolResult", callId = tr.CallId, result = SerializeContent(tr.Result!) },
             _ => new { type = "text", value = content.ForLlm() }
@@ -258,16 +258,15 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
                     {
                         try { args = JsonNode.Parse(argsProp.GetRawText())?.AsObject() ?? new JsonObject(); } catch { }
                     }
-                    
+
                     // Parse approval status
-                    var approvalStatus = ApprovalStatus.Pending;
-                    if (element.TryGetProperty("approval_status", out var statusProp))
+                    var isApproved = false;
+                    if (element.TryGetProperty("is_approved", out var statusProp))
                     {
-                        if (Enum.TryParse<ApprovalStatus>(statusProp.GetString(), true, out var parsedStatus))
-                            approvalStatus = parsedStatus;
+                        isApproved = statusProp.GetBoolean();
                     }
-                    
-                    return new ToolCall(id, name, args, approvalStatus);
+
+                    return new ToolCall(id, name, args, isApproved);
                 case "toolResult":
                     var callId = element.TryGetProperty("callId", out var callIdProp) ? callIdProp.GetString() ?? "" : "";
                     IContent? result = null;
