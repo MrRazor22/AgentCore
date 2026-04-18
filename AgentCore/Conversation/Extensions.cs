@@ -2,19 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Conversation;
-
-[Flags]
-public enum MessageKinds
-{
-    None = 0,
-    System = 1 << 0,
-    User = 1 << 1,
-    Assistant = 1 << 2,
-    ToolCalls = 1 << 3,
-    ToolResults = 1 << 4,
-    All = System | User | Assistant | ToolCalls | ToolResults
-}
-
+ 
 internal static class Extensions
 {
     private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };

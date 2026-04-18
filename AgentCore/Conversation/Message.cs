@@ -30,3 +30,17 @@ public class Message
         Kind = kind;
     }
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum Role { System, Assistant, User, Tool }
+
+
+[Flags]
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum MessageKind
+{
+    Default = 0,
+    Synthetic = 1 << 0,
+    Summary = 1 << 1,
+}
+
