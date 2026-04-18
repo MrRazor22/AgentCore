@@ -21,7 +21,7 @@ public interface IAgent
 public sealed class LLMAgent : IAgent
 {
     private readonly IChatMemory _chatStore;
-    private readonly IAgentMemory _memory;
+    private readonly IAgentMemory? _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
     private readonly IContextCompactor _ctxCompactor;
@@ -35,7 +35,7 @@ public sealed class LLMAgent : IAgent
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
-        IAgentMemory memory,
+        IAgentMemory? memory,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -253,20 +253,23 @@ public sealed class LLMAgent : IAgent
                 // Assemble context using IAgentMemory.RecallAsync
                 var messages = new List<Message>();
 
-                // Recall memories for injection (CoreMemory returns blocks, MemoryEngine returns semantic matches)
-                var memoryContents = await _memory.RecallAsync(textBuffer.ToString(), ct);
-                if (memoryContents.Count > 0)
+                // Recall memories for injection (MemoryEngine returns semantic matches)
+                if (_memory != null)
                 {
-                    var totalLength = memoryContents.Sum(c => c.ForLlm()?.Length ?? 0);
-                    _logger.LogDebug("Memory injection: ContentCount={Count} TotalLength={Len}", memoryContents.Count, totalLength);
-                    messages.Add(new Message(Role.System, new Text(string.Join("\n\n", memoryContents.Select(c => c.ToString())))));
+                    var memoryContents = await _memory.RecallAsync(textBuffer.ToString(), ct);
+                    if (memoryContents.Count > 0)
+                    {
+                        var totalLength = memoryContents.Sum(c => c.ForLlm()?.Length ?? 0);
+                        _logger.LogDebug("Memory injection: ContentCount={Count} TotalLength={Len}", memoryContents.Count, totalLength);
+                        messages.Add(new Message(Role.System, new Text(string.Join("\n\n", memoryContents.Select(c => c.ToString())))));
+                    }
                 }
 
                 var activeWindow = workingChat.GetActiveWindow();
                 messages.AddRange(activeWindow);
                 
                 _logger.LogDebug("LLM step {Step}: MemoryCount={MemCount} History={HistMsgs} Tokens≈{Approx}", 
-                    consecutiveToolSteps + 1, memoryContents.Count, activeWindow.Count, lastLlmTokens);
+                    consecutiveToolSteps + 1, _memory != null ? 1 : 0, activeWindow.Count, lastLlmTokens);
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;

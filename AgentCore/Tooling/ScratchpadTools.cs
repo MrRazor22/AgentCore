@@ -7,7 +7,7 @@ namespace AgentCore.Tooling;
 /// Tools for the agent to manage its scratchpad (in-context working memory).
 /// Matches Letta's core_memory_append, core_memory_replace pattern.
 /// </summary>
-public sealed class ScratchpadTools(IList<CoreMemoryBlock> blocks, ILogger<ScratchpadTools>? logger = null)
+public sealed class ScratchpadTools(IList<MemoryItem> blocks, ILogger<ScratchpadTools>? logger = null)
 {
     private readonly ILogger<ScratchpadTools> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ScratchpadTools>.Instance;
     [Description("Append content to a scratchpad section. Use to add new information without overwriting existing notes.")]

@@ -30,7 +30,7 @@ public sealed class AgentBuilder
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
 
-    private readonly List<CoreMemoryBlock> _blocks = [];
+    private readonly List<MemoryItem> _blocks = [];
 
     public AgentBuilder()
     {
@@ -47,10 +47,10 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
 
-    /// <summary>Adds a core memory block with instructions or working memory.</summary>
+    /// <summary>Adds a memory item with instructions or working memory.</summary>
     public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System, bool readOnly = true)
     {
-        _blocks.Add(new CoreMemoryBlock(label, value, role, limit, readOnly));
+        _blocks.Add(new MemoryItem(label, value, role, limit, readOnly));
         return this;
     } 
 
@@ -82,34 +82,16 @@ public sealed class AgentBuilder
         var contextCompactor = _contextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), _provider);
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
-        var memory = _memory ?? new CoreMemory();
-        var coreMemory = memory as CoreMemory;
-        
-        // Add builder blocks to CoreMemory if it's the default/simple implementation
-        if (coreMemory != null)
-        {
-            var blocksToUse = new List<CoreMemoryBlock>();
-
-            if (_config.SystemPrompt != null)
-                blocksToUse.Add(new CoreMemoryBlock("system", _config.SystemPrompt, Role.System, 0, readOnly: true));
-
-            blocksToUse.AddRange(_blocks);
-
-            _logger.LogDebug("Memory configuration: SystemPromptLength={PromptLength} BuilderBlocks={BlockCount}",
-                _config.SystemPrompt?.Length ?? 0, _blocks.Count);
-
-            // Reconstruct CoreMemory with all blocks
-            memory = new CoreMemory(blocksToUse);
-        }
+        var memory = _memory; // Memory is optional - if null, no semantic memory
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
 
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
 
-        // Register scratchpad tools automatically if using CoreMemory
-        if (memory is CoreMemory cm)
-            registry.RegisterAll(new ScratchpadTools(cm.GetBlocks()));
+        // Register scratchpad tools if memory items are provided
+        if (_blocks.Count > 0)
+            registry.RegisterAll(new ScratchpadTools(_blocks));
 
         var toolExecutor = new ToolExecutor(
             registry,
@@ -122,10 +104,10 @@ public sealed class AgentBuilder
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryBlocks={BlockCount} ProviderType={ProviderType}",
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryItems={ItemCount} ProviderType={ProviderType}",
             _config.Name,
             registry.Tools.Count,
-            memory is CoreMemory coreMem ? coreMem.GetBlocks().Count : 0,
+            _blocks.Count,
             _provider.GetType().Name);
 
         return new LLMAgent(

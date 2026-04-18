@@ -37,7 +37,7 @@ public static class ChatBotAgent
         var provider = new TornadoLLMProvider(tornadoApi, new LlmTornado.Chat.Models.ChatModel(modelName));
         var embeddings = new TornadoEmbeddingProvider(tornadoApi, embedModel);
         
-        var memoryEngine = new MemoryEngine(memoryStore, provider, embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>());
+        var memoryEngine = new MemoryEngine(memoryStore, provider, embeddings, null, loggerFactory.CreateLogger<MemoryEngine>());
 
         // Setup Provider using LLMTornado
         var builder = LLMAgent.Create("chatbot")

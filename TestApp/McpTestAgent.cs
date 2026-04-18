@@ -40,7 +40,7 @@ public static class McpTestAgent
         var embeddings = new TornadoEmbeddingProvider(api, embedModel);
         
         // Manual construction of the memory engine for clarity
-        var memoryEngine = new MemoryEngine(memoryStore, new TornadoLLMProvider(api, new ChatModel(modelName)), embeddings, null, null, loggerFactory.CreateLogger<MemoryEngine>());
+        var memoryEngine = new MemoryEngine(memoryStore, new TornadoLLMProvider(api, new ChatModel(modelName)), embeddings, null, loggerFactory.CreateLogger<MemoryEngine>());
 
         var builder = LLMAgent.Create("mcp-agent")
             .WithChatHistory(chatStore)
