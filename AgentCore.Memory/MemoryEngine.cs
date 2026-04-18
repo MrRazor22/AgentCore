@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using Microsoft.Extensions.Logging;
@@ -11,7 +13,9 @@ namespace AgentCore.Memory;
 /// The cognitive memory engine. Implements IAgentMemory with:
 /// - 2-strategy parallel retrieval (semantic + keyword) fused via RRF
 /// - AMFS confidence decay formula with kind-based multipliers
-/// - LLM fact extraction from conversations
+/// - Automatic background dream (consolidation) and prune cycles
+/// - Per-session read tracking for outcome feedback
+/// - Reflection for deep synthesis over memories
 /// - Full provenance via SourceEntryIds, Version, InvalidatedAt
 /// </summary>
 public sealed class MemoryEngine : IAgentMemory, IDisposable
@@ -22,6 +26,15 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     private readonly MemoryEngineOptions _options;
     private readonly ILogger<MemoryEngine> _logger;
 
+    // Background processing
+    private readonly Channel<string> _workQueue;
+    private readonly Task _backgroundLoop;
+    private readonly CancellationTokenSource _cts = new();
+
+    // Per-session read tracker: sessionId → set of recalled entry IDs
+    // Lives in engine memory (not on entries) — like AMFS's ReadTracker
+    private readonly ConcurrentDictionary<string, HashSet<string>> _sessionReads = new();
+    private string _currentSession = "default";
 
     public MemoryEngine(
         IMemoryStore store,
@@ -35,6 +48,13 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         _embeddings = embeddings ?? NullEmbeddingProvider.Instance;
         _options = options ?? new MemoryEngineOptions();
         _logger = logger ?? NullLogger<MemoryEngine>.Instance;
+
+        _workQueue = Channel.CreateBounded<string>(new BoundedChannelOptions(_options.BackgroundQueueSize)
+        {
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
+
+        _backgroundLoop = Task.Run(BackgroundLoopAsync);
     }
 
     // ── IMemory: RecallAsync ────────────────────────────────────────────────
@@ -80,6 +100,23 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
             semantic.Count, keyword.Count, fused.Count, confident.Count);
 
         if (confident.Count == 0) return [];
+
+        // Track recalled entries for outcome feedback
+        var reads = _sessionReads.GetOrAdd(_currentSession, _ => new HashSet<string>());
+        lock (reads)
+            foreach (var e in confident)
+                reads.Add(e.Id);
+
+        // Bump RecallCount on returned entries (async, best-effort)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var e in confident) e.RecallCount++;
+                await _store.UpsertAsync(confident, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch { /* non-fatal */ }
+        }, CancellationToken.None);
 
         // Render: observations first (highest density), then by kind, then recency
         var ordered = confident
@@ -141,7 +178,93 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         // Store
         await _store.UpsertAsync(extracted, ct).ConfigureAwait(false);
         _logger.LogInformation("Retained {Count} memory entries.", extracted.Count);
+
+        // Queue background dream if enabled
+        if (_options.AutoDreamEnabled)
+            _workQueue.Writer.TryWrite("dream");
     }
+
+    // ── IMemory: ReflectAsync ───────────────────────────────────────────────
+
+    public async Task<string> ReflectAsync(string query, CancellationToken ct = default)
+    {
+        // Step 1: recall relevant memories
+        var recalled = await RecallAsync(query, ct).ConfigureAwait(false);
+        var memoryContext = recalled.Count > 0
+            ? string.Join("\n", recalled.Select(c => c.ForLlm()))
+            : "(no relevant memories found)";
+
+        // Step 2: LLM synthesizes an answer
+        var systemPrompt = _options.DefaultReflectionPromptResolved;
+        var userMessage = $"## Recalled Memories\n{memoryContext}\n\n## Question\n{query}";
+
+        var messages = new List<Message>
+        {
+            new(Role.System, new Text(systemPrompt)),
+            new(Role.User, new Text(userMessage))
+        };
+
+        var answer = await CompleteLLMAsync(messages, ct).ConfigureAwait(false);
+
+        // Step 3: persist as an Observation
+        var observation = new MemoryEntry
+        {
+            Kind = MemoryKind.Observation,
+            Name = TruncateName(query),
+            Content = answer,
+            SourceEntryIds = [] // could be populated from recalled entry IDs if needed
+        };
+
+        await EmbedEntriesAsync([observation], ct).ConfigureAwait(false);
+        await _store.UpsertAsync([observation], ct).ConfigureAwait(false);
+        _logger.LogInformation("Reflection created observation: '{Name}'", observation.Name);
+
+        return answer;
+    }
+
+    // ── IMemory: CommitOutcomeAsync ─────────────────────────────────────────
+
+    public async Task CommitOutcomeAsync(OutcomeType outcome, CancellationToken ct = default)
+    {
+        var reads = _sessionReads.GetOrAdd(_currentSession, _ => new HashSet<string>());
+        string[] entryIds;
+        lock (reads)
+            entryIds = [.. reads];
+
+        if (entryIds.Length == 0)
+        {
+            _logger.LogDebug("CommitOutcome: no entries recalled this session.");
+            return;
+        }
+
+        // Retrieve the entries that were recalled
+        var recalled = await _store.FindAsync(ct: ct).ConfigureAwait(false);
+        var affected = recalled.Where(e => entryIds.Contains(e.Id)).ToList();
+
+        if (affected.Count == 0) return;
+
+        // Apply AMFS outcome multiplier to confidence
+        foreach (var entry in affected)
+        {
+            entry.Confidence = outcome switch
+            {
+                OutcomeType.Success => Math.Min(1.0f, entry.Confidence * 1.1f),
+                OutcomeType.MinorFailure => Math.Max(0f, entry.Confidence * 0.95f),
+                OutcomeType.Failure => Math.Max(0f, entry.Confidence * 0.8f),
+                OutcomeType.CriticalFailure => Math.Max(0f, entry.Confidence * 0.5f),
+                _ => entry.Confidence
+            };
+
+            if (outcome == OutcomeType.Success)
+                entry.OutcomeCount++;
+        }
+
+        await _store.UpsertAsync(affected, ct).ConfigureAwait(false);
+        _logger.LogInformation("CommitOutcome({Outcome}): adjusted confidence for {Count} entries.", outcome, affected.Count);
+    }
+
+    // ── Public: set current session for read tracking ────────────────────────
+    public void SetSession(string sessionId) => _currentSession = sessionId;
 
     // ── Private: AMFS Confidence Decay Formula ──────────────────────────────
 
@@ -258,6 +381,143 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         public string? Content { get; set; }
     }
 
+    // ── Private: Background Loop (Dream + Prune) ─────────────────────────────
+
+    private async Task BackgroundLoopAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(
+            Math.Max(100, _options.ConsolidationDebounceMs)));
+
+        string? pendingWork = null;
+
+        while (!_cts.Token.IsCancellationRequested)
+        {
+            try
+            {
+                // Try to read from queue (non-blocking)
+                if (_workQueue.Reader.TryRead(out var work))
+                {
+                    pendingWork = work;
+                    continue; // debounce: keep reading until queue is quiet
+                }
+
+                // If we have pending work and timer fired, execute it
+                if (pendingWork != null && await timer.WaitForNextTickAsync(_cts.Token).ConfigureAwait(false))
+                {
+                    if (pendingWork == "dream")
+                        await DreamAsync(_cts.Token).ConfigureAwait(false);
+                    pendingWork = null;
+                }
+                else if (pendingWork == null)
+                {
+                    await timer.WaitForNextTickAsync(_cts.Token).ConfigureAwait(false);
+                    await PruneAsync(_cts.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Background memory loop error.");
+            }
+        }
+    }
+
+    private async Task DreamAsync(CancellationToken ct)
+    {
+        try
+        {
+            // Get all non-observation entries for consolidation
+            var all = await _store.FindAsync(
+                limit: 200,
+                kinds: [MemoryKind.Fact, MemoryKind.Experience, MemoryKind.Belief],
+                ct: ct).ConfigureAwait(false);
+
+            if (all.Count < _options.MinFactsForConsolidation)
+            {
+                _logger.LogDebug("Dream skipped: only {Count} facts (min: {Min}).", all.Count, _options.MinFactsForConsolidation);
+                return;
+            }
+
+            // Simple clustering: take all recent facts and consolidate
+            // More sophisticated: group by Name similarity, but single-call is good enough
+            var factTexts = all
+                .OrderByDescending(e => e.CreatedAt)
+                .Take(30)
+                .Select(e => $"- [{e.Kind}] {e.Content}")
+                .ToList();
+
+            var messages = new List<Message>
+            {
+                new(Role.System, new Text(MemoryEngineOptions.DefaultDreamPrompt)),
+                new(Role.User, new Text(string.Join("\n", factTexts)))
+            };
+
+            var synthesis = await CompleteLLMAsync(messages, ct).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(synthesis)) return;
+
+            var sourceIds = all.Take(30).Select(e => e.Id).ToArray();
+
+            // Check if an observation with same source IDs already exists (update pattern)
+            var existing = await _store.FindAsync(
+                text: null, kinds: [MemoryKind.Observation], limit: 50, ct: ct).ConfigureAwait(false);
+
+            var existingMatch = existing.FirstOrDefault(o =>
+                o.SourceEntryIds.Length > 0 &&
+                o.SourceEntryIds.Intersect(sourceIds).Count() > sourceIds.Length / 2);
+
+            MemoryEntry observation;
+            if (existingMatch != null)
+            {
+                existingMatch.Content = synthesis;
+                existingMatch.Name = $"Dream consolidation ({DateTime.UtcNow:yyyy-MM-dd})";
+                observation = existingMatch;
+            }
+            else
+            {
+                observation = new MemoryEntry
+                {
+                    Kind = MemoryKind.Observation,
+                    Name = $"Dream consolidation ({DateTime.UtcNow:yyyy-MM-dd})",
+                    Content = synthesis,
+                    SourceEntryIds = sourceIds
+                };
+            }
+
+            await EmbedEntriesAsync([observation], ct).ConfigureAwait(false);
+            await _store.UpsertAsync([observation], ct).ConfigureAwait(false);
+            _logger.LogInformation("Dream: consolidated {Count} facts into observation '{Name}'.", sourceIds.Length, observation.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Dream cycle failed.");
+        }
+    }
+
+    private async Task PruneAsync(CancellationToken ct)
+    {
+        try
+        {
+            var all = await _store.FindAsync(limit: 500, ct: ct).ConfigureAwait(false);
+            var now = DateTime.UtcNow;
+            var toInvalidate = all
+                .Where(e => e.InvalidatedAt == null && EffectiveConfidence(e, now) < _options.PruneThreshold)
+                .ToList();
+
+            if (toInvalidate.Count == 0) return;
+
+            foreach (var e in toInvalidate)
+                e.InvalidatedAt = now;
+
+            await _store.UpsertAsync(toInvalidate, ct).ConfigureAwait(false);
+            _logger.LogInformation("Pruned {Count} entries below confidence threshold {Threshold}.",
+                toInvalidate.Count, _options.PruneThreshold);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Prune cycle failed.");
+        }
+    }
+
     // ── Private: Helpers ─────────────────────────────────────────────────────
 
     private async Task EmbedEntriesAsync(IReadOnlyList<MemoryEntry> entries, CancellationToken ct)
@@ -309,5 +569,11 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     private static string TruncateName(string name, int max = 60)
         => name.Length <= max ? name : name[..max];
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _workQueue.Writer.TryComplete();
+        try { _backgroundLoop.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        _cts.Dispose();
+    }
 }

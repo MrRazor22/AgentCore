@@ -123,13 +123,32 @@ public sealed class FileStore : IMemoryStore
         File.Move(tmp, _filePath, overwrite: true);
     }
 
+    private static float CosineSimilarity(float[] a, float[] b)
+    {
+        if (a.Length != b.Length) return 0f;
+
+        float dot = 0f;
+        float magA = 0f;
+        float magB = 0f;
+
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+
+        float denominator = (float)Math.Sqrt(magA) * (float)Math.Sqrt(magB);
+        return denominator == 0 ? 0f : dot / denominator;
+    }
+
     private static float Score(MemoryEntry entry, float[]? embedding, string? text)
     {
         float vectorScore = 0f;
         float textScore = 0f;
 
         if (embedding is { Length: > 0 } && entry.Embedding is { Length: > 0 })
-            vectorScore = InMemoryStore.CosineSimilarity(embedding, entry.Embedding);
+            vectorScore = CosineSimilarity(embedding, entry.Embedding);
 
         if (!string.IsNullOrEmpty(text) && entry.Content.Contains(text, StringComparison.OrdinalIgnoreCase))
             textScore = 1.0f;
