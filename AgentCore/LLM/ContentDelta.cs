@@ -1,7 +1,6 @@
-using AgentCore.LLM;
 using AgentCore.Tokens;
 
-namespace AgentCore.Conversation;
+namespace AgentCore.LLM;
 
 public interface IContentDelta { }
 

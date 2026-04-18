@@ -2,6 +2,11 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 namespace AgentCore.Conversation;
 
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(Text), "text")]
+[JsonDerivedType(typeof(ToolCall), "toolCall")]
+[JsonDerivedType(typeof(ToolResult), "toolResult")]
+[JsonDerivedType(typeof(Reasoning), "reasoning")]
 public interface IContent
 {
     string ForLlm();
@@ -17,7 +22,7 @@ public sealed record ToolCall(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("arguments")] JsonObject Arguments,
-    [property: JsonPropertyName("is_approved")] bool IsApproved = false
+    [property: JsonPropertyName("isApproved")] bool IsApproved = false
 ) : IContent
 {
 

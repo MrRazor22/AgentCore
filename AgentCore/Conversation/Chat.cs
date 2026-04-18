@@ -150,141 +150,18 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
         return Task.FromResult<IReadOnlyList<string>>(sessions);
     }
 
-    private static string ToJson(List<Message> chat)
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        var messages = chat.Select(m => new MessageDto
-        {
-            Role = m.Role.ToString(),
-            Kind = m.Kind != MessageKind.Default ? m.Kind.ToString() : null,
-            Content = m.Contents.Select(SerializeContent).ToList()
-        }).ToList();
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
-        return JsonSerializer.Serialize(messages, new JsonSerializerOptions { WriteIndented = true });
-    }
+    private static string ToJson(List<Message> chat) =>
+        JsonSerializer.Serialize(chat, JsonOptions);
 
-    private static List<Message> FromJson(string json)
-    {
-        var chat = new List<Message>();
-        try
-        {
-            var messages = JsonSerializer.Deserialize<List<MessageDto>>(json);
-            if (messages == null) return chat;
+    private static List<Message> FromJson(string json) =>
+        JsonSerializer.Deserialize<List<Message>>(json, JsonOptions) ?? new List<Message>();
 
-            foreach (var dto in messages)
-            {
-                if (dto.Role != null)
-                {
-                    var contents = DeserializeContents(dto.Content);
-                    var kind = MessageKind.Default;
-                    if (!string.IsNullOrEmpty(dto.Kind) && Enum.TryParse<MessageKind>(dto.Kind, out var parsed))
-                        kind = parsed;
-                    chat.Add(new Message(Enum.Parse<Role>(dto.Role), contents, kind));
-                }
-            }
-        }
-        catch { }
-        return chat;
-    }
-
-    private static List<IContent> DeserializeContents(object? obj)
-    {
-        var contents = new List<IContent>();
-
-        if (obj is System.Text.Json.JsonElement element)
-        {
-            if (element.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in element.EnumerateArray())
-                {
-                    var content = DeserializeContent(item);
-                    if (content != null) contents.Add(content);
-                }
-            }
-            else
-            {
-                var content = DeserializeContent(element);
-                if (content != null) contents.Add(content);
-            }
-        }
-
-        return contents;
-    }
-
-    private static object SerializeContent(IContent content)
-    {
-        return content switch
-        {
-            Text t => new { type = "text", value = t.Value },
-            Reasoning r => new { type = "reasoning", thought = r.Thought },
-            ToolCall tc => new {
-                type = "toolCall",
-                id = tc.Id,
-                name = tc.Name,
-                arguments = tc.Arguments,
-                is_approved = tc.IsApproved
-            },
-            ToolResult tr => new { type = "toolResult", callId = tr.CallId, result = SerializeContent(tr.Result!) },
-            _ => new { type = "text", value = content.ForLlm() }
-        };
-    }
-
-    private class MessageDto
-    {
-        public string? Role { get; set; }
-        public string? Kind { get; set; }
-        public object? Content { get; set; }
-    }
-
-    private static IContent? DeserializeContent(JsonElement element)
-    {
-        if (element.TryGetProperty("type", out var typeProp))
-        {
-            var type = typeProp.GetString();
-            switch (type)
-            {
-                case "text":
-                    if (element.TryGetProperty("value", out var text))
-                        return new Text(text.GetString() ?? "");
-                    break;
-                case "reasoning":
-                    if (element.TryGetProperty("thought", out var thought))
-                        return new Reasoning(thought.GetString() ?? "");
-                    break;
-                case "toolCall":
-                    var id = element.TryGetProperty("id", out var idProp) ? idProp.GetString() ?? "" : "";
-                    var name = element.TryGetProperty("name", out var nameProp) ? nameProp.GetString() ?? "" : "";
-                    JsonObject args = new();
-                    if (element.TryGetProperty("arguments", out var argsProp))
-                    {
-                        try { args = JsonNode.Parse(argsProp.GetRawText())?.AsObject() ?? new JsonObject(); } catch { }
-                    }
-
-                    // Parse approval status
-                    var isApproved = false;
-                    if (element.TryGetProperty("is_approved", out var statusProp))
-                    {
-                        isApproved = statusProp.GetBoolean();
-                    }
-
-                    return new ToolCall(id, name, args, isApproved);
-                case "toolResult":
-                    var callId = element.TryGetProperty("callId", out var callIdProp) ? callIdProp.GetString() ?? "" : "";
-                    IContent? result = null;
-                    if (element.TryGetProperty("result", out var resultProp))
-                        result = DeserializeContent(resultProp);
-                    return new ToolResult(callId, result);
-                case "summary":
-                    if (element.TryGetProperty("text", out var summaryText))
-                        return new Text(summaryText.GetString() ?? "");
-                    break;
-            }
-        }
-
-        if (element.ValueKind == JsonValueKind.String)
-            return new Text(element.GetString() ?? "");
-
-        return new Text("");
-    }
 }
 
 

@@ -55,27 +55,4 @@ internal static class Extensions
         return result;
     }
 
-    internal static IList<Message> Clone(this IList<Message> source, MessageKinds filter = MessageKinds.All)
-    {
-        var copy = new List<Message>();
-        foreach (var message in source)
-        {
-            if (!ShouldInclude(message, filter)) continue;
-            copy.Add(new Message(message.Role, message.Contents));
-        }
-        return copy;
-    }
-
-    private static bool ShouldInclude(Message chat, MessageKinds filter) => chat.Role switch
-    {
-        Role.System => (filter & MessageKinds.System) != 0,
-        Role.User => (filter & MessageKinds.User) != 0,
-        Role.Tool => (filter & MessageKinds.ToolResults) != 0,
-        Role.Assistant => chat.Contents.Any(c => c is ToolCall) 
-            ? (filter & MessageKinds.ToolCalls) != 0 
-            : chat.Contents.Any(c => c is Text) 
-                ? (filter & MessageKinds.Assistant) != 0 
-                : false,
-        _ => false
-    };
 }

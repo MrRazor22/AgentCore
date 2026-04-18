@@ -1,14 +1,32 @@
+using System.Text.Json.Serialization;
+
 namespace AgentCore.Conversation;
 
 public class Message
 {
-    public Role Role { get; }
-    public IReadOnlyList<IContent> Contents { get; }
-    public MessageKind Kind { get; }
+    [JsonPropertyName("role")]
+    public Role Role { get; set; }
 
-    public Message(Role role, IContent content, MessageKind kind = MessageKind.Default) 
-        => (Role, Contents, Kind) = (role, [content], kind);
+    [JsonPropertyName("contents")]
+    public IReadOnlyList<IContent> Contents { get; set; } = Array.Empty<IContent>();
 
-    public Message(Role role, IReadOnlyList<IContent> contents, MessageKind kind = MessageKind.Default) 
-        => (Role, Contents, Kind) = (role, contents, kind);
+    [JsonPropertyName("kind")]
+    public MessageKind Kind { get; set; } = MessageKind.Default;
+
+    [JsonConstructor]
+    public Message() { }
+
+    public Message(Role role, IContent content, MessageKind kind = MessageKind.Default)
+    {
+        Role = role;
+        Contents = [content];
+        Kind = kind;
+    }
+
+    public Message(Role role, IReadOnlyList<IContent> contents, MessageKind kind = MessageKind.Default)
+    {
+        Role = role;
+        Contents = contents;
+        Kind = kind;
+    }
 }
