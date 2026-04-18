@@ -17,6 +17,7 @@ public interface IAgent
     Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
+    Task<AgentResponse> ResumeAsync(string sessionId, string toolCallId, bool approved, CancellationToken ct = default);
 }
 
 public sealed class LLMAgent : IAgent
@@ -109,6 +110,57 @@ public sealed class LLMAgent : IAgent
     {
         sessionId ??= Guid.NewGuid().ToString("N");
         return CoreStreamAsync(input, sessionId, null, ct);
+    }
+
+    public async Task<AgentResponse> ResumeAsync(string sessionId, string toolCallId, bool approved, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Resume called: Session={SessionId} ToolCallId={ToolCallId} Approved={Approved}", sessionId, toolCallId, approved);
+
+        var chat = await _chatStore.RecallAsync(sessionId);
+        var updated = false;
+
+        // Find and update the ToolCall with matching Id
+        for (int i = 0; i < chat.Count; i++)
+        {
+            var message = chat[i];
+            if (message.Role == Role.Assistant)
+            {
+                var updatedContents = new List<IContent>();
+                foreach (var content in message.Contents)
+                {
+                    if (content is ToolCall tc && tc.Id == toolCallId)
+                    {
+                        var updatedCall = tc.WithApproval(approved);
+                        updatedContents.Add(updatedCall);
+                        updated = true;
+                        _logger.LogInformation("Updated ToolCall approval: {ToolCallId} Status={Status}", toolCallId, updatedCall.ApprovalStatus);
+                    }
+                    else
+                    {
+                        updatedContents.Add(content);
+                    }
+                }
+
+                if (updated)
+                {
+                    chat[i] = new Message(Role.Assistant, updatedContents);
+                    break;
+                }
+            }
+        }
+
+        if (!updated)
+        {
+            _logger.LogWarning("ToolCall not found: {ToolCallId}", toolCallId);
+            throw new InvalidOperationException($"ToolCall with ID '{toolCallId}' not found in session '{sessionId}'");
+        }
+
+        await _chatStore.UpdateAsync(sessionId, chat);
+
+        // Resume execution from where we left off
+        // We'll re-run the agent with the updated conversation history
+        // The ToolExecutor will now see the Approved/Rejected status and execute/skip accordingly
+        return await InvokeAsyncInternal(new Text(""), sessionId, null, ct);
     }
 
     private LLMOptions BuildLLMOptions(Type? outputType)
@@ -356,14 +408,32 @@ public sealed class LLMAgent : IAgent
                 var results = await Task.WhenAll(runningTools);
                 var toolDuration = (DateTime.UtcNow - toolStartTime).TotalMilliseconds;
 
+                // Check if any tools are pending approval
+                var pendingApprovals = new List<string>();
                 foreach (var result in results)
                 {
-                    var resultLength = result.ForLlm()?.Length ?? 0;
                     var toolName = pendingToolCalls.TryGetValue(result.CallId, out var tc) ? tc.Name : "unknown";
+                    var resultLength = result.ForLlm()?.Length ?? 0;
+                    
+                    // Check if this is a pending approval error
+                    if (result.Result is ToolExecutionException tex && tex.Message.Contains("requires approval"))
+                    {
+                        pendingApprovals.Add(result.CallId);
+                        _logger.LogInformation("Tool pending approval: {ToolName} CallId={CallId}", toolName, result.CallId);
+                    }
+                    
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
                     workingChat.Add(new Message(Role.Tool, result));
                     chat.Add(new Message(Role.Tool, result));
                     yield return new AgentToolResultEvent(result);
+                }
+
+                // If there are pending approvals, pause execution
+                if (pendingApprovals.Count > 0)
+                {
+                    _logger.LogInformation("Pausing execution: {Count} tools pending approval", pendingApprovals.Count);
+                    await _chatStore.UpdateAsync(sessionId, chat);
+                    break;
                 }
 
                 pendingToolCalls.Clear();

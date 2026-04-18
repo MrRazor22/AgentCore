@@ -13,10 +13,27 @@ public sealed record Text(string Value) : IContent
     public string ForLlm() => Value;
 }
 
+public enum ToolCategory
+{
+    Read,
+    Edit,
+    Execute,
+    Browser,
+    Mcp
+}
+
+public enum ApprovalStatus
+{
+    Pending,
+    Approved,
+    Rejected
+}
+
 public sealed record ToolCall(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("arguments")] JsonObject Arguments
+    [property: JsonPropertyName("arguments")] JsonObject Arguments,
+    [property: JsonPropertyName("approval_status")] ApprovalStatus ApprovalStatus = ApprovalStatus.Pending
 ) : IContent
 {
     public static ToolCall Create(
@@ -32,6 +49,14 @@ public sealed record ToolCall(
 
         var args = string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"));
         return $"{Name}({args})";
+    }
+
+    public ToolCall WithApproval(bool approved)
+    {
+        return this with
+        {
+            ApprovalStatus = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected
+        };
     }
 }
 

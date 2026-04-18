@@ -30,7 +30,6 @@ public sealed class AgentBuilder
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
-    private IApprovalService? _approvalService;
     private LLMOptions? _providerOptions;
 
     private readonly List<CoreMemoryBlock> _blocks = [];
@@ -66,7 +65,6 @@ public sealed class AgentBuilder
         _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
         return this;
     }
-    public AgentBuilder WithApprovalService(IApprovalService approvalService) { _approvalService = approvalService; return this; }
     public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null)
     {
         _provider = provider;
@@ -119,8 +117,7 @@ public sealed class AgentBuilder
         var toolExecutor = new ToolExecutor(
             registry,
             _config.ToolOptions,
-            loggerFactory.CreateLogger<ToolExecutor>(),
-            _approvalService);
+            loggerFactory.CreateLogger<ToolExecutor>());
 
         var llmExecutor = new LLMExecutor(
             _provider,

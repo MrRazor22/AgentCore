@@ -22,18 +22,15 @@ public sealed class ToolExecutor : IToolExecutor
     private readonly ToolOptions _options;
     private readonly SemaphoreSlim _semaphore;
     private readonly ILogger<ToolExecutor> _logger;
-    private readonly IApprovalService? _approvalService;
 
     public ToolExecutor(
         IToolRegistry tools,
         ToolOptions options,
-        ILogger<ToolExecutor> logger,
-        IApprovalService? approvalService = null)
+        ILogger<ToolExecutor> logger)
     {
         _tools = tools;
         _options = options;
         _logger = logger;
-        _approvalService = approvalService;
         _semaphore = new SemaphoreSlim(options.MaxConcurrency);
     }
     
@@ -71,13 +68,24 @@ public sealed class ToolExecutor : IToolExecutor
 
         try
         {
-            // Check approval before execution
-            var approvalResult = await CheckApprovalAsync(call, ct).ConfigureAwait(false);
-            if (!approvalResult.IsApproved)
+            // Check ToolCall.ApprovalStatus - if rejected, don't execute
+            if (call.ApprovalStatus == Conversation.ApprovalStatus.Rejected)
             {
                 sw.Stop();
-                _logger.LogWarning("Tool rejected: {Name} Reason={Reason}", call.Name, approvalResult.Reason);
-                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution rejected: {approvalResult.Reason}"));
+                _logger.LogWarning("Tool rejected: {Name}", call.Name);
+                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool execution rejected"));
+            }
+
+            // If pending and tool requires approval, don't execute - agent should pause
+            var tool = _tools.TryGet(call.Name);
+            if (tool == null)
+                return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", $"Tool '{call.Name}' not registered"));
+
+            if (call.ApprovalStatus == Conversation.ApprovalStatus.Pending && tool.RequiresApproval)
+            {
+                sw.Stop();
+                _logger.LogInformation("Tool pending approval: {Name}", call.Name);
+                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval. Status: Pending"));
             }
 
             var result = await InvokeInternalAsync(call, runCt).ConfigureAwait(false);
@@ -106,73 +114,6 @@ public sealed class ToolExecutor : IToolExecutor
             linkedCts?.Dispose();
             timeoutCts?.Dispose();
         }
-    }
-
-    private async Task<ApprovalResult> CheckApprovalAsync(ToolCall call, CancellationToken ct)
-    {
-        var tool = _tools.TryGet(call.Name);
-        if (tool == null)
-            return new ApprovalResult { IsApproved = false, Reason = $"Tool '{call.Name}' not registered" };
-
-        // Step 1: Check YOLO mode - auto-execute all tools
-        if (_options.YoloMode)
-            return new ApprovalResult { IsApproved = true, Reason = "YOLO mode enabled" };
-
-        // Step 2: Check tool requires approval if false, execute immediately
-        if (!tool.RequiresApproval)
-            return new ApprovalResult { IsApproved = true, Reason = "Tool does not require approval" };
-
-        // Step 3: Check auto_approve_categories if tool category approved, execute immediately
-        var categoryName = tool.Category.ToString().ToLowerInvariant();
-        if (_options.AutoApproveCategories.Contains(categoryName, StringComparer.OrdinalIgnoreCase))
-            return new ApprovalResult { IsApproved = true, Reason = $"Tool category '{categoryName}' is auto-approved" };
-
-        // Step 4: Check tool profile allow/deny if denied, reject
-        if (_options.Deny.Contains(tool.Name, StringComparer.OrdinalIgnoreCase))
-            return new ApprovalResult { IsApproved = false, Reason = $"Tool '{tool.Name}' is explicitly denied" };
-
-        if (_options.ToolProfile == ToolProfile.Custom && 
-            !_options.Allow.Contains(tool.Name, StringComparer.OrdinalIgnoreCase))
-            return new ApprovalResult { IsApproved = false, Reason = $"Tool '{tool.Name}' not in custom allow list" };
-
-        if (_options.ToolProfile == ToolProfile.Messaging && 
-            tool.Category != ToolCategory.Read)
-            return new ApprovalResult { IsApproved = false, Reason = $"Tool category '{tool.Category}' not allowed in messaging profile" };
-
-        // Step 5: If requires_approval and not auto-approved, register approval (OpenClaw two-phase)
-        if (_approvalService == null)
-            return new ApprovalResult { IsApproved = false, Reason = "Approval service not configured" };
-
-        var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var expiresAtMs = nowMs + (_options.ApprovalTimeoutSeconds * 1000);
-
-        var request = new ToolApprovalRequest
-        {
-            ApprovalId = Guid.NewGuid().ToString(),
-            ToolName = tool.Name,
-            ToolDescription = tool.Description,
-            Category = tool.Category,
-            Arguments = call.Arguments ?? new JsonObject(),
-            CreatedAtMs = nowMs,
-            ExpiresAtMs = expiresAtMs
-        };
-
-        // Phase 1: Register approval request (immediate, no wait)
-        var registration = _approvalService.RegisterApprovalRequest(request);
-        _logger.LogInformation("Approval request registered: {ApprovalId} for tool {ToolName}", registration.ApprovalId, tool.Name);
-
-        // Phase 2: Wait for user decision
-        var decision = _approvalService.WaitForDecision(registration.ApprovalId, ct);
-
-        // Step 6: Execute or reject based on decision
-        if (decision.Status == ApprovalStatus.Approved)
-            return new ApprovalResult { IsApproved = true, Reason = $"User approved (ID: {registration.ApprovalId})" };
-
-        var reason = decision.Status == ApprovalStatus.Expired 
-            ? $"Approval request expired (ID: {registration.ApprovalId})" 
-            : $"User rejected (ID: {registration.ApprovalId})";
-        
-        return new ApprovalResult { IsApproved = false, Reason = reason };
     }
 
     private async Task<IContent?> InvokeInternalAsync(ToolCall toolCall, CancellationToken ct)
@@ -317,13 +258,4 @@ public sealed class ToolValidationException : ToolException
     }
     public override string ForLlm()
         => $"Error calling tool '{ToolName}', parameter '{ParamName}': {Message}";
-}
-
-/// <summary>
-/// Result of approval check
-/// </summary>
-internal class ApprovalResult
-{
-    public bool IsApproved { get; set; }
-    public string Reason { get; set; } = string.Empty;
 }

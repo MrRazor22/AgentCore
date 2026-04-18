@@ -38,9 +38,4 @@ public sealed record ToolOptions
     /// YOLO mode - auto-execute all tools without approval (Cline-style)
     /// </summary>
     public bool YoloMode { get; init; } = false;
-
-    /// <summary>
-    /// Approval timeout in seconds (default: 30s)
-    /// </summary>
-    public int ApprovalTimeoutSeconds { get; init; } = 30;
 }
