@@ -137,9 +137,8 @@ public sealed class ToolRegistry : IToolRegistry
         { 
             Name = toolName, 
             Description = description, 
-            ParametersSchema = schemaObject, 
+            ParametersSchema = schemaObject,
             RequiresApproval = attr?.RequiresApproval ?? false,
-            Category = attr?.Category ?? ToolCategory.Execute,
             Method = method,
             Invoker = CompileInvoker(method, func.Target)
         };

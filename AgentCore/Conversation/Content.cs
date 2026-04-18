@@ -13,15 +13,6 @@ public sealed record Text(string Value) : IContent
     public string ForLlm() => Value;
 }
 
-public enum ToolCategory
-{
-    Read,
-    Edit,
-    Execute,
-    Browser,
-    Mcp
-}
-
 public enum ApprovalStatus
 {
     Pending,
@@ -35,12 +26,7 @@ public sealed record ToolCall(
     [property: JsonPropertyName("arguments")] JsonObject Arguments,
     [property: JsonPropertyName("approval_status")] ApprovalStatus ApprovalStatus = ApprovalStatus.Pending
 ) : IContent
-{
-    public static ToolCall Create(
-        string name,
-        JsonObject? arguments = null,
-        string? id = null)
-        => new(id ?? Guid.NewGuid().ToString(), name, arguments ?? new());
+{ 
 
     public string ForLlm()
     {
