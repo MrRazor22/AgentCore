@@ -28,7 +28,7 @@ public static class McpTestAgent
         Console.WriteLine("The agent can be connected to from any MCP-compatible client.\n");
 
         // Conversation history (IChat) - stores chat messages per session
-        var chatStore = new ChatFileStore(new() { PersistDir = @"D:\AgentCore\mcp-history" });
+        var chatStore = new ChatFileStore(@"D:\AgentCore\mcp-history");
         
         // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
         var memoryStore = new FileStore(@"D:\AgentCore\memory", "mcp");

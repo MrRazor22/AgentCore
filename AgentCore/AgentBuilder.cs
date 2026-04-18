@@ -29,6 +29,7 @@ public sealed class AgentBuilder
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
+    private IEmbeddingProvider? _embeddingProvider;
 
     private readonly List<MemoryItem> _blocks = [];
 
@@ -45,6 +46,14 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
+    public AgentBuilder WithMemory(IMemoryStore store, MemoryEngineOptions? options = null)
+    {
+        if (_provider == null)
+            throw new InvalidOperationException("Cannot create MemoryEngine without LLM provider. Call AddTornadoLLMProvider or WithProvider first.");
+        
+        _memory = new MemoryEngine(store, _provider, _embeddingProvider, options, _loggerFactory?.CreateLogger<MemoryEngine>());
+        return this;
+    }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
 
     /// <summary>Adds a memory item with instructions or working memory.</summary>
@@ -69,6 +78,12 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithEmbeddingProvider(IEmbeddingProvider provider)
+    {
+        _embeddingProvider = provider;
+        return this;
+    }
+
     public LLMAgent Build()
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
@@ -77,7 +92,7 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
-        var chatStore = _chatStore ?? new ChatFileStore(new() { PersistDir = "./chat-history" });
+        var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
         var contextCompactor = _contextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), _provider);
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());

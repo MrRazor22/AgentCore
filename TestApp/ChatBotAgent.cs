@@ -24,26 +24,22 @@ public static class ChatBotAgent
 
         // ─── Setup Agent ───
         // Conversation history (IChat) - stores chat messages per session
-        var chatStore = new ChatFileStore(new() { PersistDir = @"D:\AgentCore\chat-history" });
+        var chatStore = new ChatFileStore(@"D:\AgentCore\chat-history");
         
-        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
-        var memoryStore = new FileStore(@"D:\AgentCore\memory", "chatbot");
+        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay 
         var loggerFactory = ConfigureLogging();
         
-        // Explicit construction of dependencies
-        var tornadoApi = new LlmTornado.TornadoApi("your-api-key"); // Base URL is optional if using default OpenAI
+        var apiKey = "your-api-key";
         var modelName = "gpt-4o";
-        var embedModel = new LlmTornado.Embedding.Models.EmbeddingModel("text-embedding-3-small");
-        var provider = new TornadoLLMProvider(tornadoApi, new LlmTornado.Chat.Models.ChatModel(modelName));
-        var embeddings = new TornadoEmbeddingProvider(tornadoApi, embedModel);
-        
-        var memoryEngine = new MemoryEngine(memoryStore, provider, embeddings, null, loggerFactory.CreateLogger<MemoryEngine>());
+        var embedModelName = "text-embedding-3-small";
+        string? baseUrl = null; // or specify if needed
 
         // Setup Provider using LLMTornado
         var builder = LLMAgent.Create("chatbot")
+            .AddTornadoLLMProvider(apiKey, modelName, baseUrl, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .AddTornadoEmbeddingProvider(embedModelName, apiKey, baseUrl)
             .WithChatHistory(chatStore)
-            .WithMemory(memoryEngine)
-            .AddTornado(tornadoApi, modelName, embedModel.Name, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
+            .WithMemory(new FileStore(@"D:\AgentCore\memory", "chatbot"))
             .WithInstructions("rules", "You are an AI agent, execute all user requests faithfully.")
             .WithInstructions("persona", "You are helpful, concise and technical.")
             .WithTools<GeoTools>()

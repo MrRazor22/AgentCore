@@ -17,20 +17,18 @@ public interface IChatMemory
     Task ClearAsync(string sessionId);
 }
 
-public sealed class ChatFileStoreOptions
+public sealed class ChatFileStore : IChatMemory
 {
-    public string? PersistDir { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
-}
-
-public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFileStore>? logger = null) : IChatMemory
-{
-    private readonly ChatFileStoreOptions _options = options ?? new ChatFileStoreOptions();
+    private readonly string _persistDir;
     private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
-    private readonly ILogger<ChatFileStore> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ChatFileStore>.Instance;
+    private readonly ILogger<ChatFileStore> _logger;
 
-    public ChatFileStore() : this(null, null) { }
-    public ChatFileStore(ChatFileStoreOptions? options) : this(options, null) { }
+    public ChatFileStore(string? persistDir = null, ILogger<ChatFileStore>? logger = null)
+    {
+        _persistDir = persistDir ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ChatFileStore>.Instance;
+    }
 
     private SemaphoreSlim GetLock(string sessionId)
         => _sessionLocks[Math.Abs(sessionId.GetHashCode()) % _sessionLocks.Length];
@@ -39,9 +37,9 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
     {
         _logger.LogDebug("Chat file recall: SessionId={SessionId}", sessionId);
 
-        if (_options.PersistDir == null) return new List<Message>();
+        if (_persistDir == null) return new List<Message>();
 
-        var file = Path.Combine(_options.PersistDir, sessionId + ".json");
+        var file = Path.Combine(_persistDir, sessionId + ".json");
         if (!File.Exists(file))
         {
             _logger.LogDebug("Chat file recall result: SessionId={SessionId} FileNotFound MessageCount=0", sessionId);
@@ -73,10 +71,10 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
     {
         _logger.LogDebug("Chat file update: SessionId={SessionId} MessageCount={MsgCount}", sessionId, chat.Count);
 
-        if (_options.PersistDir == null) return;
+        if (_persistDir == null) return;
 
-        Directory.CreateDirectory(_options.PersistDir);
-        var file = Path.Combine(_options.PersistDir, sessionId + ".json");
+        Directory.CreateDirectory(_persistDir);
+        var file = Path.Combine(_persistDir, sessionId + ".json");
         var tmpFile = file + ".tmp";
 
         var sessionLock = GetLock(sessionId);
@@ -104,9 +102,9 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
     {
         _logger.LogDebug("Chat file clear: SessionId={SessionId}", sessionId);
 
-        if (_options.PersistDir == null) return;
+        if (_persistDir == null) return;
 
-        var file = Path.Combine(_options.PersistDir, sessionId + ".json");
+        var file = Path.Combine(_persistDir, sessionId + ".json");
 
         var sessionLock = GetLock(sessionId);
         await sessionLock.WaitAsync().ConfigureAwait(false);
@@ -136,13 +134,13 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
 
     public Task<IReadOnlyList<string>> GetAllSessionsAsync()
     {
-        if (_options.PersistDir == null || !Directory.Exists(_options.PersistDir))
+        if (_persistDir == null || !Directory.Exists(_persistDir))
         {
             _logger.LogDebug("Chat file get all sessions: SessionCount=0 (directory not configured or doesn't exist)");
             return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
         }
 
-        var files = Directory.GetFiles(_options.PersistDir, "*.json");
+        var files = Directory.GetFiles(_persistDir, "*.json");
         var sessions = files
             .Select(f => Path.GetFileNameWithoutExtension(f))
             .ToList();

@@ -3,6 +3,23 @@ using System.Text.Json;
 namespace AgentCore.Memory;
 
 /// <summary>
+/// Memory store interface for persistence and retrieval.
+/// </summary>
+public interface IMemoryStore
+{
+    Task UpsertAsync(IReadOnlyList<MemoryEntry> entries, CancellationToken ct = default);
+    Task<IReadOnlyList<MemoryEntry>> FindAsync(
+        float[]? embedding = null,
+        string? text = null,
+        int limit = 20,
+        MemoryKind[]? kinds = null,
+        bool includeInvalidated = false,
+        DateTime? after = null,
+        DateTime? before = null,
+        CancellationToken ct = default);
+}
+
+/// <summary>
 /// JSON file-backed persistent memory store.
 /// Loads all entries into memory on startup, writes on every upsert (with tmp-file atomic swap).
 /// Good for single-process agents with moderate memory sizes (hundreds to low thousands of entries).
