@@ -21,7 +21,7 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
     private ILogger<AgentBuilder> _logger;
 
-    private IChat? _chatStore;
+    private IChatMemory? _chatStore;
     private IAgentMemory? _memory;
     private IContextCompactor? _contextCompactor;
     private ITokenCounter? _tokenCounter;
@@ -43,7 +43,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
 
-    public AgentBuilder WithChatHistory(IChat chatStore) { _chatStore = chatStore; return this; }
+    public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
 

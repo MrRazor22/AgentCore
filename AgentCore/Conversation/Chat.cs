@@ -9,12 +9,12 @@ namespace AgentCore.Conversation;
 /// Stores and retrieves conversation history (List&lt;Message&gt;) per session.
 /// This is the chat memory layer — separate from IMemory (cognitive/knowledge memory).
 /// </summary>
-public interface IChat
+public interface IChatMemory
 {
-    Task<List<Message>> RecallAsync(string sessionId);
-    Task UpdateAsync(string sessionId, List<Message> chat);
-    Task ClearAsync(string sessionId);
     Task<IReadOnlyList<string>> GetAllSessionsAsync();
+    Task<List<Message>> RecallAsync(string sessionId);
+    Task RetainAsync(string sessionId, List<Message> chat);
+    Task ClearAsync(string sessionId);
 }
 
 public sealed class ChatFileStoreOptions
@@ -23,7 +23,7 @@ public sealed class ChatFileStoreOptions
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
 }
 
-public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFileStore>? logger = null) : IChat
+public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFileStore>? logger = null) : IChatMemory
 {
     private readonly ChatFileStoreOptions _options = options ?? new ChatFileStoreOptions();
     private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
@@ -69,7 +69,7 @@ public sealed class ChatFileStore(ChatFileStoreOptions? options, ILogger<ChatFil
         }
     }
 
-    public async Task UpdateAsync(string sessionId, List<Message> chat)
+    public async Task RetainAsync(string sessionId, List<Message> chat)
     {
         _logger.LogDebug("Chat file update: SessionId={SessionId} MessageCount={MsgCount}", sessionId, chat.Count);
 

@@ -20,7 +20,7 @@ public interface IAgent
 
 public sealed class LLMAgent : IAgent
 {
-    private readonly IChat _chatStore;
+    private readonly IChatMemory _chatStore;
     private readonly IAgentMemory _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
@@ -31,7 +31,7 @@ public sealed class LLMAgent : IAgent
     private readonly ILogger<LLMAgent> _logger;
 
     public LLMAgent(
-        IChat chatStore,
+        IChatMemory chatStore,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
         IContextCompactor contextCompactor,
@@ -153,7 +153,7 @@ public sealed class LLMAgent : IAgent
             throw new InvalidOperationException($"ToolCall with ID '{toolCallId}' not found in session '{sessionId}'");
         }
 
-        await _chatStore.UpdateAsync(sessionId, chat);
+        await _chatStore.RetainAsync(sessionId, chat);
 
         // Resume execution from where we left off
         // We'll re-run the agent with the updated conversation history
@@ -204,7 +204,7 @@ public sealed class LLMAgent : IAgent
             
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
-            await _chatStore.UpdateAsync(sessionId, chat);
+            await _chatStore.RetainAsync(sessionId, chat);
 
             // Recall cognitive memory before first LLM step
             List<Message> memoryMessages = [];
@@ -378,7 +378,7 @@ public sealed class LLMAgent : IAgent
                         workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
                     }
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
-                    await _chatStore.UpdateAsync(sessionId, chat);
+                    await _chatStore.RetainAsync(sessionId, chat);
 
                     // Fire-and-forget: retain knowledge from this turn
                     if (_memory != null)
@@ -430,7 +430,7 @@ public sealed class LLMAgent : IAgent
                 if (pendingApprovals.Count > 0)
                 {
                     _logger.LogInformation("Pausing execution: {Count} tools pending approval", pendingApprovals.Count);
-                    await _chatStore.UpdateAsync(sessionId, chat);
+                    await _chatStore.RetainAsync(sessionId, chat);
                     break;
                 }
 
@@ -442,7 +442,7 @@ public sealed class LLMAgent : IAgent
                     workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
                 }
 
-                await _chatStore.UpdateAsync(sessionId, chat);
+                await _chatStore.RetainAsync(sessionId, chat);
             }
         }
     }

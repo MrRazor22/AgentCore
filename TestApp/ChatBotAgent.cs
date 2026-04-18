@@ -82,7 +82,7 @@ public static class ChatBotAgent
     }
 
     // ─── Load Previous Messages ───
-    private static async Task LoadPreviousMessages(IChat chatStore, string sessionId)
+    private static async Task LoadPreviousMessages(IChatMemory chatStore, string sessionId)
     {
         var history = await chatStore.RecallAsync(sessionId);
         if (history.Count == 0) return;
