@@ -35,9 +35,10 @@ class Program
             loggerFactory.CreateLogger<MemoryEngine>()
         );
 
-        var dataPath = "locomo10.json";
+        var dataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "locomo10.json");
         if (!File.Exists(dataPath)) 
         {
+            Console.WriteLine($"Could not find dataset at: {dataPath}");
             Console.WriteLine("Please download locomo10.json into the working directory.");
             return;
         }

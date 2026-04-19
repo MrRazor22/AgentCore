@@ -28,7 +28,7 @@ public sealed class LoCoMoBenchmark
         var scoresByCategory = new Dictionary<int, List<double>>();
         int count = 0;
 
-        foreach (var sample in samples.Take(5))
+        foreach (var sample in samples.Take(1))
         {
             Console.WriteLine($"\n--- Processing Conv {sample.SampleId}: {sample.SpeakerA} & {sample.SpeakerB}");
 

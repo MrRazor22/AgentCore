@@ -135,9 +135,7 @@ public sealed class FileStore : IMemoryStore
     {
         var dtos = _cache.Values.Select(EntryToDto).ToList();
         var json = JsonSerializer.Serialize(dtos, JsonOpts);
-        var tmp = _filePath + ".tmp";
-        await File.WriteAllTextAsync(tmp, json).ConfigureAwait(false);
-        File.Move(tmp, _filePath, overwrite: true);
+        await File.WriteAllTextAsync(_filePath, json).ConfigureAwait(false);
     }
 
     private static float CosineSimilarity(float[] a, float[] b)
