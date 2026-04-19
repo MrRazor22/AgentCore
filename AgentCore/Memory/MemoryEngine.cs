@@ -466,6 +466,47 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         target.Value = sb.Length > 0 ? sb.ToString().Trim() : "";
     }
 
+    // ── Public: feature - provenance graph traversal ───────────────────────
+
+    /// <summary>
+    /// BFS traversal of the provenance graph via SourceEntryIds.
+    /// Walks both forward (entry → its sources) and reverse (entry → entries derived from it).
+    /// Use cases: "what evidence supports this observation?", "how has this skill evolved?",
+    /// "what did this fact supersede?". Configurable hop depth.
+    /// </summary>
+    public async Task<IReadOnlyList<MemoryEntry>> TraverseAsync(
+        string entryId, int maxHops = 2, CancellationToken ct = default)
+    {
+        var all = await _store.FindAsync(limit: 1000, includeInvalidated: true, ct: ct).ConfigureAwait(false);
+        var index = all.ToDictionary(e => e.Id);
+
+        var visited = new HashSet<string>();
+        var queue = new Queue<(string Id, int Depth)>();
+        queue.Enqueue((entryId, 0));
+
+        var results = new List<MemoryEntry>();
+
+        while (queue.Count > 0)
+        {
+            var (id, depth) = queue.Dequeue();
+            if (!visited.Add(id) || depth > maxHops) continue;
+
+            if (!index.TryGetValue(id, out var entry)) continue;
+            results.Add(entry);
+
+            // Forward: this entry's sources
+            foreach (var sourceId in entry.SourceEntryIds)
+                queue.Enqueue((sourceId, depth + 1));
+
+            // Reverse: entries that list this entry as a source
+            foreach (var e in all)
+                if (e.SourceEntryIds.Contains(id) && !visited.Contains(e.Id))
+                    queue.Enqueue((e.Id, depth + 1));
+        }
+
+        return results;
+    }
+
     // ── Public: set current session for read tracking ────────────────────────
     public void SetSession(string sessionId) => _currentSession = sessionId;
 
