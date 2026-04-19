@@ -115,6 +115,46 @@ public sealed class AgentBuilder
         return this;
     }
 
+    /// <summary>
+    /// Registers another agent as a tool. The LLM can call the sub-agent by name,
+    /// passing a task string and receiving the agent's response.
+    /// This enables multi-agent orchestration with zero infrastructure.
+    /// </summary>
+    public AgentBuilder WithAgentTool(IAgent agent, string name, string description)
+    {
+        _toolRegistrations.Add(registry =>
+        {
+            var inputSchema = new System.Text.Json.Nodes.JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["task"] = new System.Text.Json.Nodes.JsonObject
+                    {
+                        ["type"] = "string",
+                        ["description"] = "The task or question to delegate to this agent"
+                    }
+                },
+                ["required"] = new System.Text.Json.Nodes.JsonArray("task")
+            };
+
+            registry.Register(new Tooling.Tool
+            {
+                Name = name,
+                Description = description,
+                ParametersSchema = inputSchema,
+                Invoker = async (args) =>
+                {
+                    var task = args.Length > 0 ? args[0]?.ToString() ?? "" : "";
+                    var response = await agent.InvokeAsync(new Conversation.Text(task));
+                    return new Conversation.Text(response.Text ?? "");
+                }
+            });
+        });
+        return this;
+    }
+
+
     public LLMAgent Build()
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);

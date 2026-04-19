@@ -11,24 +11,51 @@ public sealed record Skill(string Name, string Description, string Content, stri
 
 /// <summary>
 /// Tools for the agent to discover and load skills.
+/// The tool description dynamically lists all available skills so the LLM
+/// knows what's available without a separate discovery call.
 /// </summary>
-public sealed class SkillTools(IReadOnlyList<Skill> skills)
+public sealed class SkillTools
 {
-    [Description("Load a specialized skill by name. Returns the skill content as context for the task.")]
+    private readonly IReadOnlyList<Skill> _skills;
+    private readonly string _description;
+
+    public SkillTools(IReadOnlyList<Skill> skills)
+    {
+        _skills = skills;
+        
+        if (skills.Count == 0)
+        {
+            _description = "Load a specialized skill. No skills are currently available.";
+        }
+        else
+        {
+            var listing = string.Join("\n", skills.Select(s => $"  - {s.Name}: {s.Description}"));
+            _description = $"""
+                Load a specialized skill that provides domain-specific instructions and workflows.
+                When you recognize that a task matches one of the available skills below, use this tool to load the full instructions.
+
+                Available skills:
+                {listing}
+                """;
+        }
+    }
+
+    [Description("Load a specialized skill by name. Call this when a task matches an available skill.")]
     public string LoadSkill(
         [Description("The name of the skill to load")] string name)
     {
-        var skill = skills.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var skill = _skills.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         
         if (skill == null)
         {
-            var available = string.Join(", ", skills.Select(s => s.Name));
+            var available = string.Join(", ", _skills.Select(s => s.Name));
             return $"Error: Skill '{name}' not found. Available skills: {available}";
         }
         
-        return $"<skill_content>\n{skill.Content}\n</skill_content>";
+        return $"<skill_content name=\"{skill.Name}\">\n# Skill: {skill.Name}\n\n{skill.Content.Trim()}\n</skill_content>";
     }
 }
+
 
 /// <summary>
 /// Static methods for loading skills from filesystem.
