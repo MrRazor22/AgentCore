@@ -50,6 +50,8 @@ public sealed class AgentBuilder
     {
         if (_provider == null)
             throw new InvalidOperationException("Cannot create MemoryEngine without LLM provider. Call AddTornadoLLMProvider or WithProvider first.");
+        if (_embeddingProvider == null)
+            throw new InvalidOperationException("Cannot create MemoryEngine without embedding provider. Call AddTornadoEmbeddingProvider or WithEmbeddingProvider first.");
         
         _memory = new MemoryEngine(store, _provider, _embeddingProvider, options, _loggerFactory?.CreateLogger<MemoryEngine>());
         return this;

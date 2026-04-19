@@ -39,13 +39,13 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     public MemoryEngine(
         IMemoryStore store,
         ILLMProvider llm,
-        IEmbeddingProvider? embeddings = null,
+        IEmbeddingProvider embeddings,
         MemoryEngineOptions? options = null,
         ILogger<MemoryEngine>? logger = null)
     {
         _store = store;
         _llm = llm;
-        _embeddings = embeddings ?? NullEmbeddingProvider.Instance;
+        _embeddings = embeddings;
         _options = options ?? new MemoryEngineOptions();
         _logger = logger ?? NullLogger<MemoryEngine>.Instance;
 
