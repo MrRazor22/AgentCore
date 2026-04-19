@@ -96,7 +96,7 @@ public sealed class AgentBuilder
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
-        var contextCompactor = _contextCompactor ?? new SummarizingContextCompactor(tokenCounter, loggerFactory.CreateLogger<SummarizingContextCompactor>(), _provider);
+        var contextCompactor = _contextCompactor ?? new TruncatingContextCompactor(tokenCounter, loggerFactory.CreateLogger<TruncatingContextCompactor>());
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var memory = _memory; // Memory is optional - if null, no semantic memory
