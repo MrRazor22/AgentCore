@@ -69,4 +69,74 @@ public sealed class MemoryTools(IAgentMemory memory, ILogger<MemoryTools>? logge
             return $"Error during outcome commit: {ex.Message}";
         }
     }
+
+    [Description("Learn a new reusable skill/workflow. The agent stores a named procedure for future reuse.")]
+    public async Task<string> LearnSkill(
+        [Description("Short name for the skill (e.g., 'deploy_to_prod')")] string name,
+        [Description("When to use this skill (e.g., 'When user asks to deploy to production')")] string trigger,
+        [Description("JSON array of steps: [{\"step\":1,\"action\":\"...\",\"detail\":\"...\"}]")] string stepsJson,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("Agent invoked LearnSkill: {Name}", name);
+
+        if (memory is not AgentCore.Memory.MemoryEngine engine)
+            return "Error: LearnSkill tool requires MemoryEngine.";
+
+        try
+        {
+            await engine.LearnSkillAsync(name, trigger, stepsJson, ct).ConfigureAwait(false);
+            return $"Success: Learned skill '{name}'.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "LearnSkill failed.");
+            return $"Error learning skill: {ex.Message}";
+        }
+    }
+
+    [Description("Update an existing skill with improved steps based on experience.")]
+    public async Task<string> ImproveSkill(
+        [Description("Name of the skill to update")] string name,
+        [Description("Updated JSON steps array: [{\"step\":1,\"action\":\"...\",\"detail\":\"...\"}]")] string updatedStepsJson,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("Agent invoked ImproveSkill: {Name}", name);
+
+        if (memory is not AgentCore.Memory.MemoryEngine engine)
+            return "Error: ImproveSkill tool requires MemoryEngine.";
+
+        try
+        {
+            await engine.ImproveSkillAsync(name, updatedStepsJson, ct).ConfigureAwait(false);
+            return $"Success: Improved skill '{name}'.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ImproveSkill failed.");
+            return $"Error improving skill: {ex.Message}";
+        }
+    }
+
+    [Description("Report whether a skill execution succeeded or failed. Adjusts the skill's confidence for future reuse.")]
+    public async Task<string> ReportSkillOutcome(
+        [Description("Name of the skill")] string name,
+        [Description("true if succeeded, false if failed")] bool success,
+        CancellationToken ct = default)
+    {
+        _logger.LogInformation("Agent invoked ReportSkillOutcome: {Name}, Success={Success}", name, success);
+
+        if (memory is not AgentCore.Memory.MemoryEngine engine)
+            return "Error: ReportSkillOutcome tool requires MemoryEngine.";
+
+        try
+        {
+            await engine.ReportSkillOutcomeAsync(name, success, ct).ConfigureAwait(false);
+            return $"Success: Reported outcome for skill '{name}'.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ReportSkillOutcome failed.");
+            return $"Error reporting outcome: {ex.Message}";
+        }
+    }
 }

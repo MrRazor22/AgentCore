@@ -44,12 +44,8 @@ public sealed class MemoryEngineOptions
     /// <summary>Capacity of the background work queue (bounded channel).</summary>
     public int BackgroundQueueSize { get; set; } = 100;
 
-    /// <summary>
-    /// BFS hop depth for graph entity traversal during RecallAsync.
-    /// 1 = direct neighbors. 2 = neighbors-of-neighbors (richer but slower).
-    /// Only applies when IGraphStore is provided.
-    /// </summary>
-    public int GraphMaxHops { get; set; } = 1;
+    /// <summary>Cosine similarity threshold for contradiction detection. Above this = supersede old entry.</summary>
+    public float ContradictionThreshold { get; set; } = 0.85f;
 
     /// <summary>
     /// Custom system prompt for fact extraction. Leave empty to use the built-in prompt.
@@ -65,15 +61,22 @@ public sealed class MemoryEngineOptions
         You are a memory extraction assistant. Given a conversation, extract key pieces of knowledge the agent should remember.
         
         For each piece of knowledge, output a JSON object with:
-        - "kind": one of "Fact", "Experience", "Belief"
+        - "kind": one of "Fact", "Experience", "Belief", "Skill"
         - "name": a short label/key (max 50 chars)
         - "content": the knowledge to store (1-3 sentences, self-contained)
         
+        KIND RULES:
+        - Fact: verified knowledge. ("User prefers dark mode.")
+        - Experience: event that happened. ("Deployment failed due missing env vars on Jan 15.")
+        - Belief: uncertain/hypothetical. ("User might prefer TypeScript over JavaScript.")
+        - Skill: repeatable workflow with 2+ steps. Content = JSON: {"trigger":"...", "steps":[{"step":1,"action":"...","detail":"..."}]}
+
         Return ONLY a valid JSON array. No markdown fences, no explanation. Example:
         [{"kind":"Fact","name":"user_preference","content":"User prefers concise responses without markdown."},
          {"kind":"Experience","name":"deploy_issue","content":"Deployment to prod failed due to missing env vars on 2025-01-15."}]
         
-        Extract only meaningful, durable knowledge. Skip greetings, filler, and ephemeral details.
+        Extract Fact/Experience/Belief normally. Only extract Skill when someone describes
+        a clear multi-step process they perform or recommend. Don't force it. Skip greetings, filler, and ephemeral details.
         """;
 
     internal const string DefaultReflectionPrompt = """
@@ -88,12 +91,5 @@ public sealed class MemoryEngineOptions
         The observation should be more valuable than any individual fact — identify patterns,
         draw conclusions, and surface non-obvious connections.
         Return ONLY the synthesized observation text (1-4 sentences). No JSON, no markdown.
-        """;
-
-    internal const string DefaultEntityExtractionPrompt = """
-        Extract entity relationship triples from this conversation excerpt.
-        Return ONLY a valid JSON array of {source, relation, target, weight} objects where weight is 0.1–1.0.
-        Example: [{"source":"Alice","relation":"works_at","target":"Acme Corp","weight":0.9}]
-        Extract only clear, factual relationships. Skip uncertain or trivial ones.
         """;
 }

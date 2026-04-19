@@ -38,7 +38,7 @@ public sealed class TruncatingContextCompactor : IContextCompactor
         int startIndex = 0;
         for (int i = chat.Count - 1; i >= 0; i--)
         {
-            if ((chat[i].Kind & MessageKind.Summary) != 0)
+            if (chat[i].Metadata.TryGetValue("summary", out var value) && value is bool isSummary && isSummary)
             {
                 startIndex = i;
                 break;

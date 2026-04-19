@@ -10,37 +10,27 @@ public class Message
     [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents { get; set; } = Array.Empty<IContent>();
 
-    [JsonPropertyName("kind")]
-    public MessageKind Kind { get; set; } = MessageKind.Default;
+    [JsonPropertyName("metadata")]
+    public Dictionary<string, object> Metadata { get; set; } = new();
 
     [JsonConstructor]
     public Message() { }
 
-    public Message(Role role, IContent content, MessageKind kind = MessageKind.Default)
+    public Message(Role role, IContent content, Dictionary<string, object>? metadata = null)
     {
         Role = role;
         Contents = [content];
-        Kind = kind;
+        Metadata = metadata ?? new Dictionary<string, object>();
     }
 
-    public Message(Role role, IReadOnlyList<IContent> contents, MessageKind kind = MessageKind.Default)
+    public Message(Role role, IReadOnlyList<IContent> contents, Dictionary<string, object>? metadata = null)
     {
         Role = role;
         Contents = contents;
-        Kind = kind;
+        Metadata = metadata ?? new Dictionary<string, object>();
     }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
-
-
-[Flags]
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum MessageKind
-{
-    Default = 0,
-    Synthetic = 1 << 0,
-    Summary = 1 << 1,
-}
 

@@ -66,7 +66,7 @@ public sealed class MemoryEntry
     /// IDs of source entries this was consolidated from (populated by DreamAsync/ReflectAsync).
     /// Empty for raw facts. Non-empty for Observations. Enables full provenance replay.
     /// </summary>
-    public string[] SourceEntryIds { get; init; } = [];
+    public string[] SourceEntryIds { get; set; } = [];
 
     // ── Invalidation (1 field) — the "no hard-delete" mechanism ─────────────
 
@@ -102,7 +102,14 @@ public enum MemoryKind
     /// Enriched with Name, SourceEntryIds, Version. Decay multiplier: 1.0x like Facts.
     /// Rendered first during recall — highest informational density.
     /// </summary>
-    Observation
+    Observation,
+
+    /// <summary>
+    /// Reusable learned workflow/procedure. Decay multiplier: 2.0x (skills persist).
+    /// Content = JSON with {trigger, steps[{step,action,detail}]}.
+    /// OutcomeCount tracks success. RecallCount tracks usage.
+    /// </summary>
+    Skill
 }
 
 /// <summary>

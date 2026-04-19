@@ -15,14 +15,14 @@ internal static class Extensions
         int startIndex = 0;
         for (int i = messages.Count - 1; i >= 0; i--)
         {
-            if ((messages[i].Kind & MessageKind.Summary) != 0)
+            if (messages[i].Metadata.TryGetValue("summary", out var value) && value is bool isSummary && isSummary)
             {
                 startIndex = i;
                 break;
             }
         }
 
-        if (startIndex > 0 && messages[startIndex - 1].Role == Role.User && (messages[startIndex - 1].Kind & MessageKind.Synthetic) != 0)
+        if (startIndex > 0 && messages[startIndex - 1].Role == Role.User && messages[startIndex - 1].Metadata.TryGetValue("synthetic", out var synValue) && synValue is bool isSynthetic && isSynthetic)
         {
             result.Add(messages[startIndex - 1]);
         }
@@ -30,10 +30,10 @@ internal static class Extensions
         for (int i = startIndex; i < messages.Count; i++)
         {
             var msg = messages[i];
-            if (i == startIndex && (msg.Kind & MessageKind.Summary) != 0)
+            if (i == startIndex && msg.Metadata.TryGetValue("summary", out var sumValue) && sumValue is bool isMsgSummary && isMsgSummary)
             {
                 var filteredContents = msg.Contents.Where(c => c is not Reasoning).ToList();
-                result.Add(new Message(msg.Role, filteredContents, msg.Kind));
+                result.Add(new Message(msg.Role, filteredContents, msg.Metadata));
             }
             else
             {

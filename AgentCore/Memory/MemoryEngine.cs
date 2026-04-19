@@ -118,12 +118,18 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
             catch { /* non-fatal */ }
         }, CancellationToken.None);
 
-        // Render: observations first (highest density), then by kind, then recency
-        var ordered = confident
-            .OrderByDescending(e => e.Kind == MemoryKind.Observation)
-            .ThenByDescending(e => e.Kind == MemoryKind.Fact)
-            .ThenByDescending(e => e.CreatedAt)
+        // Render: primacy-recency U-shaped ordering
+        var ranked = confident
+            .OrderByDescending(e => EffectiveConfidence(e, now))
             .ToList();
+
+        if (ranked.Count > 4)
+        {
+            var top = ranked.Take(ranked.Count / 2).ToList();
+            var bottom = ranked.Skip(ranked.Count / 2).Reverse().ToList();
+            ranked = [..top, ..bottom];
+        }
+        var ordered = ranked;
 
         // Build content with token-budget cap (~4 chars/token)
         var result = new List<IContent>();
@@ -174,6 +180,9 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
 
         // Embed entries
         await EmbedEntriesAsync(extracted, ct).ConfigureAwait(false);
+
+        // Invalidate contradictions
+        await InvalidateContradictionsAsync(extracted, ct).ConfigureAwait(false);
 
         // Store
         await _store.UpsertAsync(extracted, ct).ConfigureAwait(false);
@@ -263,6 +272,94 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         _logger.LogInformation("CommitOutcome({Outcome}): adjusted confidence for {Count} entries.", outcome, affected.Count);
     }
 
+    // ── Public: Feature - Skills ─────────────────────────────────────────────
+
+    public async Task LearnSkillAsync(string name, string trigger, string stepsJson, CancellationToken ct = default)
+    {
+        var content = $"{{\"trigger\":\"{trigger}\",\"steps\":{stepsJson}}}";
+        var entry = new MemoryEntry
+        {
+            Kind = MemoryKind.Skill,
+            Name = name,
+            Content = content
+        };
+        await EmbedEntriesAsync([entry], ct).ConfigureAwait(false);
+        await InvalidateContradictionsAsync([entry], ct).ConfigureAwait(false);
+        await _store.UpsertAsync([entry], ct).ConfigureAwait(false);
+        _logger.LogInformation("Learned skill: '{Name}'", name);
+    }
+
+    public async Task ImproveSkillAsync(string name, string updatedStepsJson, CancellationToken ct = default)
+    {
+        var existing = await _store.FindAsync(text: name, kinds: [MemoryKind.Skill], limit: 5, ct: ct).ConfigureAwait(false);
+        var entry = existing.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (entry == null) throw new InvalidOperationException($"Skill '{name}' not found.");
+
+        var trigger = name;
+        try 
+        {
+            var doc = JsonDocument.Parse(entry.Content);
+            if (doc.RootElement.TryGetProperty("trigger", out var tProp))
+                trigger = tProp.GetString() ?? trigger;
+        } 
+        catch { }
+        
+        entry.Content = $"{{\"trigger\":\"{trigger}\",\"steps\":{updatedStepsJson}}}";
+        
+        await EmbedEntriesAsync([entry], ct).ConfigureAwait(false);
+        await _store.UpsertAsync([entry], ct).ConfigureAwait(false);
+        _logger.LogInformation("Improved skill: '{Name}'", name);
+    }
+
+    public async Task ReportSkillOutcomeAsync(string name, bool success, CancellationToken ct = default)
+    {
+        var existing = await _store.FindAsync(text: name, kinds: [MemoryKind.Skill], limit: 5, ct: ct).ConfigureAwait(false);
+        var entry = existing.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (entry == null) throw new InvalidOperationException($"Skill '{name}' not found.");
+
+        entry.Confidence = success 
+            ? Math.Min(1.0f, entry.Confidence * 1.1f)
+            : Math.Max(0f, entry.Confidence * 0.8f);
+
+        if (success) entry.OutcomeCount++;
+
+        await _store.UpsertAsync([entry], ct).ConfigureAwait(false);
+        _logger.LogInformation("Reported outcome for skill: '{Name}', Success: {Success}", name, success);
+    }
+
+    // ── Public: feature - profile hydration ──────────────────────────────────
+
+    /// <summary>
+    /// Populates a ScratchPad MemoryItem with a summary of top memories for the current scope.
+    /// Call once per session or on demand. Replaces mental models with zero new infrastructure.
+    /// </summary>
+    public async Task HydrateProfileAsync(MemoryItem target, CancellationToken ct = default)
+    {
+        var entries = await _store.FindAsync(
+            limit: 50, kinds: [MemoryKind.Fact, MemoryKind.Skill, MemoryKind.Observation],
+            ct: ct).ConfigureAwait(false);
+        
+        var now = DateTime.UtcNow;
+        var sorted = entries
+            .OrderByDescending(e => EffectiveConfidence(e, now))
+            .Take(25);
+        
+        var sb = new StringBuilder();
+        foreach (var e in sorted)
+        {
+            var line = e.Kind == MemoryKind.Skill
+                ? $"- [Skill] {e.Name}: knows this workflow"
+                : e.Kind == MemoryKind.Observation
+                    ? $"- [Insight] {e.Name}: {e.Content}"
+                    : $"- {e.Content}";
+            
+            if (sb.Length + line.Length > _options.RecallBudget * 4) break;
+            sb.AppendLine(line);
+        }
+        
+        target.Value = sb.Length > 0 ? sb.ToString().Trim() : "";
+    }
+
     // ── Public: set current session for read tracking ────────────────────────
     public void SetSession(string sessionId) => _currentSession = sessionId;
 
@@ -278,6 +375,7 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
             MemoryKind.Experience => 1.5,
             MemoryKind.Belief => 0.5,
             MemoryKind.Observation => 1.0,
+            MemoryKind.Skill => 2.0,
             _ => 1.0
         };
 
@@ -519,6 +617,45 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     }
 
     // ── Private: Helpers ─────────────────────────────────────────────────────
+
+    private async Task InvalidateContradictionsAsync(List<MemoryEntry> newEntries, CancellationToken ct)
+    {
+        var toInvalidate = new List<MemoryEntry>();
+        foreach (var entry in newEntries.Where(e => e.Embedding?.Length > 0))
+        {
+            var similar = await _store.FindAsync(
+                embedding: entry.Embedding, kinds: [entry.Kind],
+                limit: 5, ct: ct).ConfigureAwait(false);
+            
+            foreach (var existing in similar)
+            {
+                if (existing.Id == entry.Id || existing.Embedding == null) continue;
+                var sim = CosineSimilarity(entry.Embedding, existing.Embedding);
+                if (sim > _options.ContradictionThreshold)
+                {
+                    existing.InvalidatedAt = DateTime.UtcNow;
+                    toInvalidate.Add(existing);
+                    entry.SourceEntryIds = [..entry.SourceEntryIds, existing.Id];
+                }
+            }
+        }
+        if (toInvalidate.Count > 0)
+            await _store.UpsertAsync(toInvalidate, ct).ConfigureAwait(false);
+    }
+    
+    private static float CosineSimilarity(float[] a, float[] b)
+    {
+        if (a.Length != b.Length) return 0f;
+        float dot = 0f, magA = 0f, magB = 0f;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            magA += a[i] * a[i];
+            magB += b[i] * b[i];
+        }
+        float denominator = (float)Math.Sqrt(magA) * (float)Math.Sqrt(magB);
+        return denominator == 0 ? 0f : dot / denominator;
+    }
 
     private async Task EmbedEntriesAsync(IReadOnlyList<MemoryEntry> entries, CancellationToken ct)
     {
