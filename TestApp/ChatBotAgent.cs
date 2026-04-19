@@ -27,10 +27,10 @@ public static class ChatBotAgent
 
         var loggerFactory = ConfigureLogging();
 
-        var apiKey = "your-api-key";
-        var modelName = "gpt-4o";
-        var embedModelName = "text-embedding-3-small";
-        string? baseUrl = null;
+        var apiKey = "lmstudio";
+        var modelName = "qwen/qwen3.5-9b";
+        var embedModelName = "publisherme/bge/bge-large-en-v1.5-q4_k_m.gguf";
+        var baseUrl = new Uri("http://127.0.0.1:1234");
 
         // ─── Sub-Agent: Research Agent (demonstrates multi-agent via WithAgentTool) ───
         var researchAgent = LLMAgent.Create("researcher")
