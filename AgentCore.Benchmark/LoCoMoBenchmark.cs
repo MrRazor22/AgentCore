@@ -10,25 +10,31 @@ public sealed class LoCoMoBenchmark
     private readonly MemoryEngine _memory;
     private readonly ILLMProvider _llm;
     private readonly string _datasetPath;
+    private readonly int _sampleCount;
 
-    public LoCoMoBenchmark(MemoryEngine memory, ILLMProvider llm, string datasetPath)
+    public LoCoMoBenchmark(MemoryEngine memory, ILLMProvider llm, string datasetPath, int sampleCount = 1)
     {
         _memory = memory;
         _llm = llm;
         _datasetPath = datasetPath;
+        _sampleCount = sampleCount;
     }
 
     public async Task RunAsync()
     {
         Console.WriteLine($"Loading dataset from {_datasetPath}...");
-        var samples = LoCoMoDataset.Load(_datasetPath); // just testing first 5 or user configured number
+        var samples = LoCoMoDataset.Load(_datasetPath);
 
         Console.WriteLine($"Loaded {samples.Count} conversations.");
+
+        // Use the configured sample count (cap at total available)
+        int countToRun = Math.Min(_sampleCount, samples.Count);
+        Console.WriteLine($"Running {countToRun} sample(s)...");
 
         var scoresByCategory = new Dictionary<int, List<double>>();
         int count = 0;
 
-        foreach (var sample in samples.Take(1))
+        foreach (var sample in samples.Take(countToRun))
         {
             Console.WriteLine($"\n--- Processing Conv {sample.SampleId}: {sample.SpeakerA} & {sample.SpeakerB}");
 

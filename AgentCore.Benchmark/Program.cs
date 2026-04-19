@@ -10,6 +10,31 @@ class Program
 {
     static async Task Main(string[] args)
     {
+        // Parse --samples N argument (default: 1)
+        int sampleCount = 1;
+        var samplesArg = args.FirstOrDefault(a => a.StartsWith("--samples"));
+        if (samplesArg != null)
+        {
+            var parts = samplesArg.Split('=');
+            if (parts.Length == 2 && int.TryParse(parts[1], out var n))
+            {
+                sampleCount = n;
+            }
+        }
+
+        Console.WriteLine($"=== LoCoMo Benchmark ===");
+        Console.WriteLine($"Running {sampleCount} sample(s)");
+        if (sampleCount == 1)
+        {
+            Console.WriteLine("Quick test mode (~19 sessions)");
+            Console.WriteLine("Use --samples=N to run more samples (e.g., --samples=10 for full benchmark)");
+        }
+        else if (sampleCount >= 10)
+        {
+            Console.WriteLine("Full benchmark mode (288 sessions)");
+        }
+        Console.WriteLine();
+
         using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
         var apiKey = "lmstudio";
@@ -43,7 +68,7 @@ class Program
             return;
         }
 
-        var bench = new LoCoMoBenchmark(memory, llm, dataPath);
+        var bench = new LoCoMoBenchmark(memory, llm, dataPath, sampleCount);
         await bench.RunAsync();
     }
 }
