@@ -30,8 +30,10 @@ public sealed class AgentBuilder
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
     private IEmbeddingProvider? _embeddingProvider;
+    private AgentHooks? _hooks;
 
     private readonly List<MemoryItem> _blocks = [];
+    private readonly List<Skill> _skills = [];
 
     public AgentBuilder()
     {
@@ -86,6 +88,33 @@ public sealed class AgentBuilder
         return this;
     }
 
+    public AgentBuilder WithHooks(AgentHooks hooks)
+    {
+        _hooks = hooks;
+        return this;
+    }
+
+    public AgentBuilder WithHooks(Action<AgentHooks> configure)
+    {
+        var hooks = new AgentHooks();
+        configure(hooks);
+        _hooks = hooks;
+        return this;
+    }
+
+    public AgentBuilder WithSkill(string name, string description, string content)
+    {
+        _skills.Add(new Skill(name, description, content));
+        return this;
+    }
+
+    public AgentBuilder WithSkillsDirectory(string path)
+    {
+        var loadedSkills = SkillLoader.FromDirectory(path);
+        _skills.AddRange(loadedSkills);
+        return this;
+    }
+
     public LLMAgent Build()
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
@@ -110,6 +139,10 @@ public sealed class AgentBuilder
         if (_blocks.Count > 0)
             registry.RegisterAll(new ScratchpadTools(_blocks));
 
+        // Register skill tools if skills are provided
+        if (_skills.Count > 0)
+            registry.RegisterAll(new SkillTools(_skills));
+
         var toolExecutor = new ToolExecutor(
             registry,
             loggerFactory.CreateLogger<ToolExecutor>());
@@ -121,10 +154,11 @@ public sealed class AgentBuilder
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryItems={ItemCount} ProviderType={ProviderType}",
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryItems={ItemCount} Skills={SkillCount} ProviderType={ProviderType}",
             _config.Name,
             registry.Tools.Count,
             _blocks.Count,
+            _skills.Count,
             _provider.GetType().Name);
 
         return new LLMAgent(
@@ -136,6 +170,7 @@ public sealed class AgentBuilder
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
-            loggerFactory.CreateLogger<LLMAgent>());
+            loggerFactory.CreateLogger<LLMAgent>(),
+            _hooks);
     } 
 }

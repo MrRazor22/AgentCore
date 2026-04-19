@@ -29,6 +29,7 @@ public sealed class LLMAgent : IAgent
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
     private readonly ILogger<LLMAgent> _logger;
+    private readonly AgentHooks? _hooks;
 
     public LLMAgent(
         IChatMemory chatStore,
@@ -39,7 +40,8 @@ public sealed class LLMAgent : IAgent
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
-        ILogger<LLMAgent> logger)
+        ILogger<LLMAgent> logger,
+        AgentHooks? hooks = null)
     {
         _chatStore = chatStore;
         _memory = memory;
@@ -50,6 +52,7 @@ public sealed class LLMAgent : IAgent
         _baseOptions = baseOptions;
         _config = config;
         _logger = logger;
+        _hooks = hooks;
     }
 
     public static AgentBuilder Create(string name = "agent")
@@ -95,10 +98,17 @@ public sealed class LLMAgent : IAgent
         var chatAfter = await _chatStore.RecallAsync(sessionId);
         var turnMessages = chatAfter.Skip(startIndex).ToList();
 
-        return new AgentResponse(
+        var response = new AgentResponse(
             sessionId,
             turnMessages,
             new TokenUsage(inTokens, outTokens, reasoningTokens));
+
+        if (_hooks?.OnAgentEnd != null)
+        {
+            await _hooks.OnAgentEnd(response);
+        }
+
+        return response;
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
@@ -181,6 +191,15 @@ public sealed class LLMAgent : IAgent
         };
     }
 
+    private async Task CompactIfNeededAsync(List<Message> workingChat, int tokenCount, LLMOptions options, CancellationToken ct)
+    {
+        if (options.ContextLength.HasValue)
+        {
+            _logger.LogDebug("Context reduction check: {Tokens}/{Limit}", tokenCount, options.ContextLength.Value);
+            workingChat = await _ctxCompactor.ReduceAsync(workingChat, tokenCount, options, ct).ConfigureAwait(false);
+        }
+    }
+
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
         string sessionId,
@@ -205,6 +224,11 @@ public sealed class LLMAgent : IAgent
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
             await _chatStore.RetainAsync(sessionId, chat);
+
+            if (_hooks?.OnAgentStart != null)
+            {
+                await _hooks.OnAgentStart(input, sessionId);
+            }
 
             // Recall cognitive memory before first LLM step
             List<Message> memoryMessages = [];
@@ -250,19 +274,13 @@ public sealed class LLMAgent : IAgent
 
                 var runningTools = new List<Task<ToolResult>>();
                 
-                // Assemble context using IAgentMemory.RecallAsync
+                // Assemble context
                 var messages = new List<Message>();
 
-                // Recall memories for injection (MemoryEngine returns semantic matches)
-                if (_memory != null)
+                // Include initial memory recall (from turn start) if available
+                if (memoryMessages.Count > 0)
                 {
-                    var memoryContents = await _memory.RecallAsync(textBuffer.ToString(), ct);
-                    if (memoryContents.Count > 0)
-                    {
-                        var totalLength = memoryContents.Sum(c => c.ForLlm()?.Length ?? 0);
-                        _logger.LogDebug("Memory injection: ContentCount={Count} TotalLength={Len}", memoryContents.Count, totalLength);
-                        messages.Add(new Message(Role.System, new Text(string.Join("\n\n", memoryContents.Select(c => c.ToString())))));
-                    }
+                    messages.AddRange(memoryMessages);
                 }
 
                 var activeWindow = workingChat;
@@ -270,6 +288,11 @@ public sealed class LLMAgent : IAgent
                 
                 _logger.LogDebug("LLM step {Step}: MemoryCount={MemCount} History={HistMsgs} Tokens≈{Approx}", 
                     consecutiveToolSteps + 1, _memory != null ? 1 : 0, activeWindow.Count, lastLlmTokens);
+
+                if (_hooks?.OnLLMStart != null)
+                {
+                    await _hooks.OnLLMStart(new LLMCallContext(messages, options, consecutiveToolSteps));
+                }
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;
@@ -307,6 +330,12 @@ public sealed class LLMAgent : IAgent
                                 pendingToolCalls[tc.Call.Id] = tc.Call;
                                 var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
                                 _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
+                                
+                                if (_hooks?.OnToolStart != null)
+                                {
+                                    await _hooks.OnToolStart(tc.Call);
+                                }
+                                
                                 runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                                 break;
 
@@ -320,6 +349,11 @@ public sealed class LLMAgent : IAgent
                                 else
                                 {
                                     lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
+                                }
+
+                                if (_hooks?.OnLLMEnd != null)
+                                {
+                                    await _hooks.OnLLMEnd(new LLMCallContext(messages, options, consecutiveToolSteps), meta);
                                 }
                                 break;
                         }
@@ -376,11 +410,7 @@ public sealed class LLMAgent : IAgent
 
                 if (runningTools.Count == 0)
                 {
-                    if (options.ContextLength.HasValue)
-                    {
-                        _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                        workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                    }
+                    await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _chatStore.RetainAsync(sessionId, chat);
 
@@ -425,6 +455,12 @@ public sealed class LLMAgent : IAgent
                     }
                     
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
+                    
+                    if (_hooks?.OnToolEnd != null)
+                    {
+                        await _hooks.OnToolEnd(pendingToolCalls[result.CallId], result);
+                    }
+                    
                     workingChat.Add(new Message(Role.Tool, result));
                     chat.Add(new Message(Role.Tool, result));
                     yield return new AgentToolResultEvent(result);
@@ -440,11 +476,7 @@ public sealed class LLMAgent : IAgent
 
                 pendingToolCalls.Clear();
 
-                if (options.ContextLength.HasValue)
-                {
-                    _logger.LogDebug("Context reduction requested: {Tokens}/{Limit}", lastLlmTokens, options.ContextLength.Value);
-                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, lastLlmTokens, options, ct).ConfigureAwait(false);
-                }
+                await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
 
                 await _chatStore.RetainAsync(sessionId, chat);
             }
