@@ -417,7 +417,10 @@ public sealed class LLMAgent : IAgent
                     // Fire-and-forget: retain knowledge from this turn
                     if (_memory != null)
                     {
-                        var turnSnapshot = new List<Message>(chat);
+                        var finalAssistantMsg = chat.LastOrDefault(m => m.Role == Role.Assistant);
+                        var turnSnapshot = new List<Message> { userMessage };
+                        if (finalAssistantMsg != null) turnSnapshot.Add(finalAssistantMsg);
+
                         _ = Task.Run(async () =>
                         {
                             try
