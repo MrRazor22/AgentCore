@@ -34,7 +34,7 @@ public static class ChatBotAgent
 
         // ─── Sub-Agent: Research Agent (demonstrates multi-agent via WithAgentTool) ───
         var researchAgent = LLMAgent.Create("researcher")
-            .AddTornadoLLMProvider(apiKey, modelName, baseUrl, new() { ContextLength = 8000 })
+            .WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl), new() { ContextLength = 20000 })
             .WithSystemPrompt("You are a research assistant. When given a topic, provide a thorough, well-structured analysis with key points and conclusions. Be concise but comprehensive.")
             .WithTools<SearchTools>()
             .WithLoggerFactory(loggerFactory)
@@ -42,12 +42,12 @@ public static class ChatBotAgent
 
         // ─── Main Agent ───
         var chatStore = new ChatFileStore(@"D:\AgentCore\chat-history");
+        var embeddingProvider = TornadoProvider.CreateEmbeddingProvider(apiKey, embedModelName, baseUrl);
 
         var agent = LLMAgent.Create("chatbot")
-            .AddTornadoLLMProvider(apiKey, modelName, baseUrl, new() { ContextLength = 8000, ReasoningEffort = ReasoningEffort.Low })
-            .AddTornadoEmbeddingProvider(embedModelName, apiKey, baseUrl)
+            .WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl), new() { ContextLength = 50000, ReasoningEffort = ReasoningEffort.Low })
             .WithChatHistory(chatStore)
-            .WithMemory(new FileStore(@"D:\AgentCore\memory", "chatbot"))
+            .WithMemory(new FileStore(@"D:\AgentCore\memory", "chatbot"), embeddingProvider: embeddingProvider)
 
             // Instructions (editable scratchpad — agent can update persona at runtime)
             .WithInstructions("role", "You are an AI agent with long-term memory, specialized skills, and a research sub-agent. Execute all user requests faithfully.")

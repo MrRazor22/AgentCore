@@ -29,7 +29,6 @@ public sealed class AgentBuilder
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
-    private IEmbeddingProvider? _embeddingProvider;
     private AgentHooks? _hooks;
 
     private readonly List<MemoryItem> _blocks = [];
@@ -48,14 +47,18 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
-    public AgentBuilder WithMemory(IMemoryStore store, MemoryEngineOptions? options = null)
+    public AgentBuilder WithMemory(
+        IMemoryStore store, 
+        MemoryEngineOptions? options = null,
+        ILLMProvider? llmProvider = null,
+        IEmbeddingProvider? embeddingProvider = null)
     {
-        if (_provider == null)
-            throw new InvalidOperationException("Cannot create MemoryEngine without LLM provider. Call AddTornadoLLMProvider or WithProvider first.");
-        if (_embeddingProvider == null)
-            throw new InvalidOperationException("Cannot create MemoryEngine without embedding provider. Call AddTornadoEmbeddingProvider or WithEmbeddingProvider first.");
+        var effectiveLlm = llmProvider ?? _provider 
+            ?? throw new InvalidOperationException("No LLM provider available. Call WithProvider() or pass llmProvider to WithMemory().");
+        var effectiveEmbedding = embeddingProvider 
+            ?? throw new InvalidOperationException("Embedding provider required for memory. Pass embeddingProvider to WithMemory().");
         
-        _memory = new MemoryEngine(store, _provider, _embeddingProvider, options, _loggerFactory?.CreateLogger<MemoryEngine>());
+        _memory = new MemoryEngine(store, effectiveLlm, effectiveEmbedding, options, _loggerFactory?.CreateLogger<MemoryEngine>());
         return this;
     }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
@@ -79,12 +82,6 @@ public sealed class AgentBuilder
     {
         _provider = provider;
         if (options != null) _providerOptions = options;
-        return this;
-    }
-
-    public AgentBuilder WithEmbeddingProvider(IEmbeddingProvider provider)
-    {
-        _embeddingProvider = provider;
         return this;
     }
 
