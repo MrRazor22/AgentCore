@@ -265,7 +265,7 @@ public sealed class LLMAgent : IAgent
                     }
                 }
 
-                var activeWindow = workingChat.GetActiveWindow();
+                var activeWindow = workingChat;
                 messages.AddRange(activeWindow);
                 
                 _logger.LogDebug("LLM step {Step}: MemoryCount={MemCount} History={HistMsgs} Tokens≈{Approx}", 
@@ -313,7 +313,8 @@ public sealed class LLMAgent : IAgent
                             case LLMMetaEvent meta:
                                 if (meta.Usage.IsEmpty)
                                 {
-                                    lastLlmTokens = await _tokenCounter.CountAsync(workingChat.GetActiveWindow(), ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
+                                    var currentWindow = workingChat;
+                                    lastLlmTokens = await _tokenCounter.CountAsync(currentWindow, ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
                                     _logger.LogDebug("LLM Provider did not report tokens. Counted {TokenCount} natively (including {ToolSchemaTokens} tool schemas).", lastLlmTokens, meta.ToolSchemaTokens);
                                 }
                                 else
