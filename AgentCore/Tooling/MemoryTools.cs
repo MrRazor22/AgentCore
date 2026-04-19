@@ -117,10 +117,11 @@ public sealed class MemoryTools(IAgentMemory memory, ILogger<MemoryTools>? logge
         }
     }
 
-    [Description("Report whether a skill execution succeeded or failed. Adjusts the skill's confidence for future reuse.")]
+    [Description("Report whether a skill execution succeeded or failed. On failure with context, the skill is automatically evolved using LLM to prevent the same failure.")]
     public async Task<string> ReportSkillOutcome(
         [Description("Name of the skill")] string name,
         [Description("true if succeeded, false if failed")] bool success,
+        [Description("Optional failure context explaining what went wrong (e.g., 'OOM error on step 3'). When provided on failure, the skill steps are automatically rewritten to prevent recurrence.")] string? failureContext = null,
         CancellationToken ct = default)
     {
         _logger.LogInformation("Agent invoked ReportSkillOutcome: {Name}, Success={Success}", name, success);
@@ -130,8 +131,9 @@ public sealed class MemoryTools(IAgentMemory memory, ILogger<MemoryTools>? logge
 
         try
         {
-            await engine.ReportSkillOutcomeAsync(name, success, ct).ConfigureAwait(false);
-            return $"Success: Reported outcome for skill '{name}'.";
+            await engine.ReportSkillOutcomeAsync(name, success, failureContext, ct).ConfigureAwait(false);
+            var evolved = !success && !string.IsNullOrWhiteSpace(failureContext) ? " Steps auto-evolved." : "";
+            return $"Success: Reported outcome for skill '{name}'.{evolved}";
         }
         catch (Exception ex)
         {

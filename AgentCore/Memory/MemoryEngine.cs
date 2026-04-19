@@ -75,20 +75,25 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
             _logger.LogDebug(ex, "Embedding failed for recall query — falling back to keyword only.");
         }
 
-        // 2 strategies in parallel
+        // 3 strategies in parallel: semantic, keyword, temporal
         var semanticTask = queryEmbedding != null
             ? _store.FindAsync(embedding: queryEmbedding, limit: 20, ct: ct)
             : Task.FromResult<IReadOnlyList<MemoryEntry>>([]);
 
         var keywordTask = _store.FindAsync(text: query, limit: 20, ct: ct);
 
-        await Task.WhenAll(semanticTask, keywordTask).ConfigureAwait(false);
+        // Temporal: recent memories are more likely relevant (recency bias)
+        var temporalTask = _store.FindAsync(
+            after: DateTime.UtcNow.AddDays(-7), limit: 20, ct: ct);
+
+        await Task.WhenAll(semanticTask, keywordTask, temporalTask).ConfigureAwait(false);
 
         var semantic = semanticTask.Result;
         var keyword = keywordTask.Result;
+        var temporal = temporalTask.Result;
 
-        // RRF fusion
-        var fused = FuseRRF(semantic, keyword);
+        // RRF fusion across all 3 strategies
+        var fused = FuseRRF(semantic, keyword, temporal);
 
         // Apply AMFS confidence decay filter
         var now = DateTime.UtcNow;
@@ -311,7 +316,7 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         _logger.LogInformation("Improved skill: '{Name}'", name);
     }
 
-    public async Task ReportSkillOutcomeAsync(string name, bool success, CancellationToken ct = default)
+    public async Task ReportSkillOutcomeAsync(string name, bool success, string? failureContext = null, CancellationToken ct = default)
     {
         var existing = await _store.FindAsync(text: name, kinds: [MemoryKind.Skill], limit: 5, ct: ct).ConfigureAwait(false);
         var entry = existing.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -321,10 +326,111 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
             ? Math.Min(1.0f, entry.Confidence * 1.1f)
             : Math.Max(0f, entry.Confidence * 0.8f);
 
-        if (success) entry.OutcomeCount++;
+        if (success)
+        {
+            entry.OutcomeCount++;
+        }
+        else if (!string.IsNullOrWhiteSpace(failureContext))
+        {
+            // Auto-evolve: on failure with context, ask LLM to improve the procedure
+            try
+            {
+                var evolved = await EvolveSkillAsync(entry, failureContext, ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(evolved))
+                {
+                    entry.Content = evolved;
+                    await EmbedEntriesAsync([entry], ct).ConfigureAwait(false);
+                    _logger.LogInformation("Auto-evolved skill '{Name}' after failure.", name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Skill auto-evolution failed for '{Name}' — confidence adjusted only.", name);
+            }
+        }
 
         await _store.UpsertAsync([entry], ct).ConfigureAwait(false);
         _logger.LogInformation("Reported outcome for skill: '{Name}', Success: {Success}", name, success);
+    }
+
+    // ── Public: MCP Skill Support ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Retrieves all skills in MCP-compliant format.
+    /// </summary>
+    public async Task<IReadOnlyList<McpSkill>> GetSkillsAsMcpAsync(CancellationToken ct = default)
+    {
+        var skillEntries = await _store.FindAsync(
+            limit: 100,
+            kinds: [MemoryKind.Skill],
+            ct: ct).ConfigureAwait(false);
+
+        var now = DateTime.UtcNow;
+        var skills = skillEntries
+            .Where(e => e.InvalidatedAt == null && EffectiveConfidence(e, now) >= _options.MinConfidence)
+            .Select(McpSkill.FromMemoryEntry)
+            .Where(s => s != null)
+            .Cast<McpSkill>()
+            .OrderByDescending(s => s.Confidence)
+            .ToList();
+
+        return skills;
+    }
+
+    /// <summary>
+    /// Retrieves a specific skill by name in MCP-compliant format.
+    /// </summary>
+    public async Task<McpSkill?> GetSkillAsMcpAsync(string name, CancellationToken ct = default)
+    {
+        var skillEntries = await _store.FindAsync(
+            text: name,
+            limit: 5,
+            kinds: [MemoryKind.Skill],
+            ct: ct).ConfigureAwait(false);
+
+        var now = DateTime.UtcNow;
+        var entry = skillEntries
+            .FirstOrDefault(e =>
+                e.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                e.InvalidatedAt == null &&
+                EffectiveConfidence(e, now) >= _options.MinConfidence);
+
+        return McpSkill.FromMemoryEntry(entry);
+    }
+
+    /// <summary>
+    /// Executes a learned skill by name with optional context.
+    /// Returns the skill steps as a formatted string for the LLM to follow.
+    /// </summary>
+    public async Task<string> ExecuteSkillAsync(string name, string? context = null, CancellationToken ct = default)
+    {
+        var skill = await GetSkillAsMcpAsync(name, ct);
+        if (skill == null)
+            throw new InvalidOperationException($"Skill '{name}' not found or confidence too low.");
+
+        var stepsDoc = JsonDocument.Parse(skill.StepsJson);
+        var steps = stepsDoc.RootElement.EnumerateArray();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"## Skill: {skill.Name}");
+        sb.AppendLine($"**Description**: {skill.Description}");
+        sb.AppendLine($"**Confidence**: {skill.Confidence:P2}");
+        if (!string.IsNullOrWhiteSpace(context))
+            sb.AppendLine($"**Context**: {context}");
+        sb.AppendLine("**Steps**:");
+        
+        foreach (var step in steps)
+        {
+            var stepNum = step.TryGetProperty("step", out var s) ? s.GetInt32() : 0;
+            var action = step.TryGetProperty("action", out var a) ? a.GetString() : "";
+            var detail = step.TryGetProperty("detail", out var d) ? d.GetString() : "";
+            
+            sb.AppendLine($"{stepNum}. {action}");
+            if (!string.IsNullOrWhiteSpace(detail))
+                sb.AppendLine($"   {detail}");
+        }
+
+        return sb.ToString();
     }
 
     // ── Public: feature - profile hydration ──────────────────────────────────
@@ -396,6 +502,7 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     private static List<MemoryEntry> FuseRRF(
         IReadOnlyList<MemoryEntry> semantic,
         IReadOnlyList<MemoryEntry> keyword,
+        IReadOnlyList<MemoryEntry>? temporal = null,
         int k = 60)
     {
         var scores = new Dictionary<string, (MemoryEntry Entry, float Score)>();
@@ -415,6 +522,7 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
 
         AddRanked(semantic);
         AddRanked(keyword);
+        if (temporal is { Count: > 0 }) AddRanked(temporal);
 
         return scores.Values
             .OrderByDescending(x => x.Score)
@@ -617,6 +725,22 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
     }
 
     // ── Private: Helpers ─────────────────────────────────────────────────────
+
+    private async Task<string?> EvolveSkillAsync(MemoryEntry skill, string failureContext, CancellationToken ct)
+    {
+        var messages = new List<Message>
+        {
+            new(Role.System, new Text(MemoryEngineOptions.DefaultSkillEvolutionPrompt)),
+            new(Role.User, new Text(
+                $"CURRENT PROCEDURE:\n{skill.Content}\n\nFAILURE CONTEXT:\n{failureContext}"))
+        };
+
+        var result = await CompleteLLMAsync(messages, ct).ConfigureAwait(false);
+
+        // Validate it's still JSON
+        if (result.TrimStart().StartsWith("{")) return result.Trim();
+        return null;
+    }
 
     private async Task InvalidateContradictionsAsync(List<MemoryEntry> newEntries, CancellationToken ct)
     {

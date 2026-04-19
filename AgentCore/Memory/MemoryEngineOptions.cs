@@ -66,13 +66,22 @@ public sealed class MemoryEngineOptions
         - "content": the knowledge to store (1-3 sentences, self-contained)
         
         KIND RULES:
-        - Fact: verified knowledge. ("User prefers dark mode.")
-        - Experience: event that happened. ("Deployment failed due missing env vars on Jan 15.")
-        - Belief: uncertain/hypothetical. ("User might prefer TypeScript over JavaScript.")
+        - Fact: verified knowledge, entity relationships, preferences. Always use canonical names.
+          For entity relationships, embed them naturally: "Alice works at Google as a backend engineer."
+          For preferences: "User prefers dark mode."
+        - Experience: event that happened with context and outcome. "Deployment failed due to missing env vars on Jan 15."
+        - Belief: uncertain/hypothetical. "User might prefer TypeScript over JavaScript."
         - Skill: repeatable workflow with 2+ steps. Content = JSON: {"trigger":"...", "steps":[{"step":1,"action":"...","detail":"..."}]}
 
+        IMPORTANT:
+        - Extract entity relationships AS Facts. If someone says "I work at Google" extract:
+          {"kind":"Fact","name":"user_employer","content":"User works at Google."}
+        - Use canonical entity names consistently (e.g., always "Google" not "google" or "Alphabet").
+        - Extract causal relationships as Facts: "Scheduling conflicts on Tuesdays have caused stress."
+
         Return ONLY a valid JSON array. No markdown fences, no explanation. Example:
-        [{"kind":"Fact","name":"user_preference","content":"User prefers concise responses without markdown."},
+        [{"kind":"Fact","name":"user_employer","content":"User works at Google as a backend engineer."},
+         {"kind":"Fact","name":"google_stack","content":"Google's backend uses Kubernetes and Go."},
          {"kind":"Experience","name":"deploy_issue","content":"Deployment to prod failed due to missing env vars on 2025-01-15."}]
         
         Extract Fact/Experience/Belief normally. Only extract Skill when someone describes
@@ -90,6 +99,20 @@ public sealed class MemoryEngineOptions
         synthesize them into a concise, enriched observation that captures the core insight.
         The observation should be more valuable than any individual fact — identify patterns,
         draw conclusions, and surface non-obvious connections.
+        If you see entity relationships (e.g., "Alice works at Google", "Google uses Kubernetes"),
+        synthesize across them: "Alice likely works with Kubernetes through her role at Google."
         Return ONLY the synthesized observation text (1-4 sentences). No JSON, no markdown.
+        """;
+
+    internal const string DefaultSkillEvolutionPrompt = """
+        You are a procedure improvement assistant. Given a failed procedure and the failure context,
+        output an IMPROVED version of the procedure that addresses the failure.
+        
+        Rules:
+        - Keep the same JSON format: {"trigger":"...", "steps":[{"step":N,"action":"...","detail":"..."}]}
+        - Add, modify, or reorder steps to prevent the same failure
+        - Keep the trigger description accurate
+        - Be specific about what changed and why
+        - Return ONLY the JSON object. No explanation.
         """;
 }
