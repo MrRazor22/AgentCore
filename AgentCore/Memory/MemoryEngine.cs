@@ -516,9 +516,14 @@ public sealed class MemoryEngine : IAgentMemory, IDisposable
         var results = new List<MemoryEntry>();
         try
         {
-            // Strip markdown fences if LLM wrapped them
+            // Strip markdown fences and find JSON array boundaries
             var cleaned = json.Trim();
-            if (cleaned.StartsWith("```")) cleaned = cleaned.Split('\n').Skip(1).SkipLast(1).Aggregate((a, b) => a + "\n" + b);
+            var startIdx = cleaned.IndexOf('[');
+            var endIdx = cleaned.LastIndexOf(']');
+            if (startIdx >= 0 && endIdx > startIdx)
+            {
+                cleaned = cleaned.Substring(startIdx, endIdx - startIdx + 1);
+            }
 
             var items = JsonSerializer.Deserialize<List<ExtractedFact>>(cleaned, new JsonSerializerOptions
             {

@@ -165,8 +165,24 @@ public sealed class FileStore : IMemoryStore
         if (embedding is { Length: > 0 } && entry.Embedding is { Length: > 0 })
             vectorScore = CosineSimilarity(embedding, entry.Embedding);
 
-        if (!string.IsNullOrEmpty(text) && entry.Content.Contains(text, StringComparison.OrdinalIgnoreCase))
-            textScore = 1.0f;
+        if (!string.IsNullOrEmpty(text))
+        {
+            var textTokens = text.Split(new[] { ' ', '.', ',', '?', '!' }, StringSplitOptions.RemoveEmptyEntries)
+                                 .Where(t => t.Length > 2) // Ignore stop words intuitively
+                                 .Select(t => t.ToLowerInvariant())
+                                 .ToList();
+
+            if (textTokens.Count > 0)
+            {
+                var contentLower = entry.Content.ToLowerInvariant();
+                int matches = textTokens.Count(t => contentLower.Contains(t));
+                textScore = (float)matches / textTokens.Count;
+            }
+            else if (entry.Content.Contains(text, StringComparison.OrdinalIgnoreCase))
+            {
+                textScore = 1.0f;
+            }
+        }
 
         if (embedding != null && text != null) return 0.7f * vectorScore + 0.3f * textScore;
         if (embedding != null) return vectorScore;
