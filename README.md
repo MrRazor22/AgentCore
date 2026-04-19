@@ -40,7 +40,11 @@ AgentCore avoids this by default:
 - **Zero Middleware Overhead**: Direct method calls throughout the codebase — no pipeline abstractions, no middleware chains. Maximum performance and full control.
 - **Streaming-First Architecture**: All operations stream asynchronously — LLM responses, tool execution, context summarization. No blocking, minimal latency.
 - **Built-in Tool Approval**: Two-phase approval workflow for sensitive tool execution. Register requests, wait for human decision, execute or reject.
-- **AMFS-Style Memory**: Advanced Memory for Semantic Search with confidence decay, inspired by state-of-the-art agent memory systems.
+-   **Cognitive Memory V2**: Multi-kind memory (`Fact`, `Experience`, `Belief`, `Observation`, `Skill`) with AMFS-style confidence decay and outcome-driven persistence.
+-   **Autonomous Skill Learning**: Agents can learn, refine, and reuse multi-step workflows via built-in `LearnSkill` and `ImproveSkill` tools.
+-   **U-Shaped (Primacy/Recency) Recall**: Automatically organizes recalled context to place the most critical knowledge where LLMs pay the most attention.
+-   **Active Contradiction Management**: Vector-based detection of conflicting knowledge to supersede old "facts" without expensive graph-LLM loops.
+-   **Background Dreaming & Pruning**: Nightly consolidation of raw facts into high-density insights and soft-deletion of low-confidence noise.
 - **Parallel Context Summarization**: When context limits are exceeded, chunks are summarized in parallel for maximum speed.
 - **Dynamic Token Calibration**: ApproximateTokenCounter self-corrects based on actual network responses, remaining fast while accurate.
 - **Perfect Crash Recovery**: File-based chat persistence enables stateless crash recovery per session ID without lifecycle management.
@@ -112,6 +116,32 @@ await agent.InvokeAsync("Search for flights to Tokyo", sessionId: "session-abc")
 // After crash/restart — AgentCore loads the transcript and resumes:
 await agent.InvokeAsync("Now book the cheapest one", sessionId: "session-abc");
 ```
+
+### Cognitive Memory V2
+
+AgentCore provides a high-performance, minimalist memory layer that matches the power of specialized frameworks (Hindsight, TinkerClaw, Letta) with 1/100th the code.
+
+```csharp
+// 1. Enable Advanced Memory Engine
+var engine = new MemoryEngine(store, llm, embeddings, new() { 
+    Scope = "user_123",
+    AutoDreamEnabled = true 
+});
+
+// 2. Hydrate Profile (inject top memories into a ScratchPad)
+await engine.HydrateProfileAsync(personaBlock); 
+
+// 3. Spaced Repetition & Outcome Feedback
+// After a successful task, boost the confidence of all memories used:
+await engine.CommitOutcomeAsync(OutcomeType.Success);
+```
+
+**Key Cognitive Innovations:**
+- **The Abstraction Ladder**: Background "Dream" cycles consolidate raw facts into stable `Observation` entries.
+- **Skill Learning**: Give your agent procedural autonomy—it can call `LearnSkill` to record a new workflow it just figured out.
+- **U-Shaped Recall**: Don't let your memories get "lost in the middle." Recalled facts are sorted to capture both primary and recency attention effects.
+- **Automatic Superseding**: When the agent learns "I moved to NYC," it automatically invalidates the old "I live in SF" entry via high-confidence vector contradiction detection.
+
 
 ### Tool Approval Workflow
 
@@ -228,7 +258,9 @@ mcpTools.RegisterTools(agent.Tools);
 |-----------|-------------|
 | `Agent.cs` | `IAgent` interface + `LLMAgent` implementation |
 | `AgentBuilder.cs` | Fluent builder for agent composition |
-| `Memory/CoreMemory.cs` | Core memory with scratchpad tools |
+| `Memory/CoreMemory.cs` | Lightweight session memory + scratchpad tools |
+| `Memory/MemoryEngine.cs` | Cognitive V2: Skills, Dreams, Contradictions, U-Recall |
+| `Memory/MemoryEntry.cs` | Unified schema for Facts, Skills, Beliefs, etc. |
 | `Tooling/` | `[Tool]` attribute, `ToolRegistry`, `ToolExecutor`, ApprovalService |
 | `LLM/` | `ILLMExecutor`, `ILLMProvider`, LLM events streaming |
 | `Tokens/` | Token counting, context management, summarization |
@@ -304,9 +336,12 @@ AgentCore/                          # Core framework (~2,000 lines)
 ├── Agent.cs                        # IAgent, LLMAgent
 ├── AgentBuilder.cs                 # Fluent builder
 ├── Memory/
-│   ├── CoreMemory.cs              # Core memory with scratchpad tools
-│   ├── MemoryEngine.cs            # AMFS-style memory with embeddings
-│   └── ScratchpadTools.cs         # Built-in scratchpad tools
+│   ├── CoreMemory.cs              # Session context persistence
+│   ├── MemoryEngine.cs            # Cognitive V2 Brain (~800 lines)
+│   ├── MemoryEntry.cs             # Unified knowledge schema
+│   ├── MemoryStore.cs             # IMemoryStore interface
+│   ├── FileStore.cs               # Scoped JSON persistence
+│   └── ScratchpadTools.cs         # Core memory management tools 
 ├── LLM/
 │   ├── LLMExecutor.cs              # Direct event streaming
 │   ├── ILLMProvider.cs            # Raw provider interface
