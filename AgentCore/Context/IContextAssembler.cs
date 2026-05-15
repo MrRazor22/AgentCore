@@ -1,6 +1,6 @@
 using AgentCore.Conversation;
 
-namespace AgentCore;
+namespace AgentCore.Memory;
 
 public interface IContextAssembler
 {

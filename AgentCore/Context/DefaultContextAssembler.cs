@@ -1,7 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.Tokens;
 
-namespace AgentCore;
+namespace AgentCore.Memory;
 
 public sealed class DefaultContextAssembler : IContextAssembler
 {
