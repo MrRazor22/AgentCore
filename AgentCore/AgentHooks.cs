@@ -14,22 +14,40 @@ public sealed class AgentHooks
     public Func<ToolCall, ToolResult, Task>? OnToolEnd;
 
     public Task RaiseAgentStartAsync(IContent input, string sessionId)
-        => OnAgentStart?.Invoke(input, sessionId) ?? Task.CompletedTask;
+    {
+        var handler = OnAgentStart;
+        return handler != null ? handler.Invoke(input, sessionId) : Task.CompletedTask;
+    }
 
     public Task RaiseAgentEndAsync(AgentResponse response)
-        => OnAgentEnd?.Invoke(response) ?? Task.CompletedTask;
+    {
+        var handler = OnAgentEnd;
+        return handler != null ? handler.Invoke(response) : Task.CompletedTask;
+    }
 
     public Task RaiseLLMStartAsync(LLMCallContext context)
-        => OnLLMStart?.Invoke(context) ?? Task.CompletedTask;
+    {
+        var handler = OnLLMStart;
+        return handler != null ? handler.Invoke(context) : Task.CompletedTask;
+    }
 
     public Task RaiseLLMEndAsync(LLMCallContext context, LLMMetaEvent meta)
-        => OnLLMEnd?.Invoke(context, meta) ?? Task.CompletedTask;
+    {
+        var handler = OnLLMEnd;
+        return handler != null ? handler.Invoke(context, meta) : Task.CompletedTask;
+    }
 
     public Task RaiseToolStartAsync(ToolCall toolCall)
-        => OnToolStart?.Invoke(toolCall) ?? Task.CompletedTask;
+    {
+        var handler = OnToolStart;
+        return handler != null ? handler.Invoke(toolCall) : Task.CompletedTask;
+    }
 
     public Task RaiseToolEndAsync(ToolCall toolCall, ToolResult result)
-        => OnToolEnd?.Invoke(toolCall, result) ?? Task.CompletedTask;
+    {
+        var handler = OnToolEnd;
+        return handler != null ? handler.Invoke(toolCall, result) : Task.CompletedTask;
+    }
 }
 
 public sealed record LLMCallContext(IReadOnlyList<Message> Messages, LLMOptions Options, int StepIndex);
