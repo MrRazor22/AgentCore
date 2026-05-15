@@ -21,6 +21,7 @@ public sealed class RollingWindowMemory : IAgentMemory
     private readonly ITokenCounter _tokenCounter;
     private readonly RollingWindowMemoryOptions _options;
     private readonly ILogger<RollingWindowMemory> _logger;
+    private readonly object _gate = new();
 
     private readonly List<Message> _history = [];
     private string _summary = "";
@@ -60,20 +61,24 @@ public sealed class RollingWindowMemory : IAgentMemory
 
     public async Task RetainAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
     {
-        _history.AddRange(messages);
-
-        if (_history.Count > _options.WindowSize && _options.EnableSummarization)
+        List<Message> toSummarize;
+        lock (_gate)
         {
-            var toSummarize = _history.Take(_history.Count - _options.WindowSize).ToList();
-            if (toSummarize.Count >= _options.SummaryThreshold)
-            {
-                _summary = await SummarizeAsync(toSummarize, ct).ConfigureAwait(false);
-                var keptCount = _options.WindowSize;
-                if (_history.Count > keptCount)
-                {
-                    _history.RemoveRange(0, _history.Count - keptCount);
-                }
-            }
+            _history.AddRange(messages);
+            if (_history.Count <= _options.WindowSize || !_options.EnableSummarization)
+                return;
+            toSummarize = _history.Take(_history.Count - _options.WindowSize).ToList();
+            if (toSummarize.Count < _options.SummaryThreshold)
+                return;
+        }
+
+        var newSummary = await SummarizeAsync(toSummarize, ct).ConfigureAwait(false);
+
+        lock (_gate)
+        {
+            _summary = newSummary;
+            if (_history.Count > _options.WindowSize)
+                _history.RemoveRange(0, _history.Count - _options.WindowSize);
         }
     }
 
