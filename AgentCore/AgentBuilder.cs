@@ -31,7 +31,6 @@ public sealed class AgentBuilder
     private LLMOptions? _providerOptions;
     private AgentHooks? _hooks;
 
-    private readonly List<MemoryItem> _blocks = [];
     private readonly List<Skill> _skills = [];
 
     public AgentBuilder()
@@ -47,28 +46,7 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
-    public AgentBuilder WithMemory(
-        IMemoryStore store, 
-        MemoryEngineOptions? options = null,
-        ILLMProvider? llmProvider = null,
-        IEmbeddingProvider? embeddingProvider = null)
-    {
-        var effectiveLlm = llmProvider ?? _provider 
-            ?? throw new InvalidOperationException("No LLM provider available. Call WithProvider() or pass llmProvider to WithMemory().");
-        var effectiveEmbedding = embeddingProvider 
-            ?? throw new InvalidOperationException("Embedding provider required for memory. Pass embeddingProvider to WithMemory().");
-        
-        _memory = new MemoryEngine(store, effectiveLlm, effectiveEmbedding, options, _loggerFactory?.CreateLogger<MemoryEngine>());
-        return this;
-    }
     public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
-
-    /// <summary>Adds a memory item with instructions or working memory.</summary>
-    public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System, bool readOnly = true)
-    {
-        _blocks.Add(new MemoryItem(label, value, role, limit, readOnly));
-        return this;
-    } 
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -172,10 +150,6 @@ public sealed class AgentBuilder
 
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
 
-        // Register scratchpad tools if memory items are provided
-        if (_blocks.Count > 0)
-            registry.RegisterAll(new ScratchpadTools(_blocks));
-
         // Register skill tools if skills are provided
         if (_skills.Count > 0)
             registry.RegisterAll(new SkillTools(_skills));
@@ -191,10 +165,9 @@ public sealed class AgentBuilder
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} MemoryItems={ItemCount} Skills={SkillCount} ProviderType={ProviderType}",
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} Skills={SkillCount} ProviderType={ProviderType}",
             _config.Name,
             registry.Tools.Count,
-            _blocks.Count,
             _skills.Count,
             _provider.GetType().Name);
 

@@ -30,22 +30,23 @@ public static class McpTestAgent
         // Conversation history (IChat) - stores chat messages per session
         var chatStore = new ChatFileStore(@"D:\AgentCore\mcp-history");
         
-        // Semantic memory (IAgentMemory) - AMFS-style memory with confidence decay
-        var memoryStore = new FileStore(@"D:\AgentCore\memory", "mcp");
         var loggerFactory = ConfigureLogging();
         
         var api = new TornadoApi(new Uri("http://localhost"), "dummy");
         var modelName = "model";
-        var embedModel = new EmbeddingModel("text-embedding-3-small");
-        var embeddings = new TornadoEmbeddingProvider(api, embedModel);
-        
-        // Manual construction of the memory engine for clarity
-        var memoryEngine = new MemoryEngine(memoryStore, new TornadoLLMProvider(api, new ChatModel(modelName)), embeddings, null, loggerFactory.CreateLogger<MemoryEngine>());
+
+        // Use RollingWindowMemory as default - conversation summarization + rolling window
+        // For advanced semantic memory, implement a custom IAgentMemory
+        var tokenCounter = new ApproximateTokenCounter();
+        var memory = new RollingWindowMemory(
+            new TornadoLLMProvider(api, new ChatModel(modelName)),
+            tokenCounter,
+            new RollingWindowMemoryOptions { WindowSize = 10, EnableSummarization = true },
+            loggerFactory.CreateLogger<RollingWindowMemory>());
 
         var builder = LLMAgent.Create("mcp-agent")
             .WithChatHistory(chatStore)
-            .WithMemory(memoryEngine)
-            .WithInstructions("role", "You are a helpful AI assistant with access to various tools.")
+            .WithMemory(memory)
             .AddTornado(api, modelName, null, new LLMOptions { ContextLength = 8000 })
             
             .WithTools<GeoTools>()

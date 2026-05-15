@@ -236,11 +236,11 @@ public sealed class LLMAgent : IAgent
             {
                 try
                 {
-                    var recalled = await _memory.RecallAsync(input.ForLlm(), ct);
+                    var recalled = await _memory.RecallAsync(chat, ct);
                     if (recalled.Count > 0)
                     {
-                        memoryMessages = [new Message(Role.System, recalled)];
-                        var recalledText = string.Join("\n\n", recalled.Select(c => c.ForLlm()));
+                        memoryMessages.AddRange(recalled);
+                        var recalledText = string.Join("\n\n", recalled.Select(m => string.Join("", m.Contents.Select(c => c.ForLlm()))));
                         _logger.LogDebug("Memory recall result: ContentCount={Count} ContentPreview={Preview}",
                             recalled.Count, recalledText.Length > 200 ? recalledText[..200] + "..." : recalledText);
                     }

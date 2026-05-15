@@ -42,16 +42,22 @@ public static class ChatBotAgent
 
         // ─── Main Agent ───
         var chatStore = new ChatFileStore(@"D:\AgentCore\chat-history");
-        var embeddingProvider = TornadoProvider.CreateEmbeddingProvider(apiKey, embedModelName, baseUrl);
+
+        var llmProvider = TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl);
+        var tokenCounter = new ApproximateTokenCounter();
+        
+        // Use RollingWindowMemory as default - conversation summarization + rolling window
+        // For advanced semantic memory, implement a custom IAgentMemory
+        var memory = new RollingWindowMemory(
+            llmProvider,
+            tokenCounter,
+            new RollingWindowMemoryOptions { WindowSize = 10, EnableSummarization = true },
+            loggerFactory.CreateLogger<RollingWindowMemory>());
 
         var agent = LLMAgent.Create("chatbot")
-            .WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl), new() { ContextLength = 50000, ReasoningEffort = ReasoningEffort.Low })
+            .WithProvider(llmProvider, new() { ContextLength = 50000, ReasoningEffort = ReasoningEffort.Low })
             .WithChatHistory(chatStore)
-            .WithMemory(new FileStore(@"D:\AgentCore\memory", "chatbot"), embeddingProvider: embeddingProvider)
-
-            // Instructions (editable scratchpad — agent can update persona at runtime)
-            .WithInstructions("role", "You are an AI agent with long-term memory, specialized skills, and a research sub-agent. Execute all user requests faithfully.")
-            .WithInstructions("persona", "helpful, concise, technical", readOnly: false)
+            .WithMemory(memory)
 
             // Skills — authored skills the agent can load on demand
             .WithSkill("code_review", "Review code for bugs, style, and performance issues",
