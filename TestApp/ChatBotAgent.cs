@@ -29,7 +29,6 @@ public static class ChatBotAgent
 
         var apiKey = "lmstudio";
         var modelName = "qwen/qwen3.5-9b";
-        var embedModelName = "publisherme/bge/bge-large-en-v1.5-q4_k_m.gguf";
         var baseUrl = new Uri("http://127.0.0.1:1234");
 
         // ─── Sub-Agent: Research Agent (demonstrates multi-agent via WithAgentTool) ───
@@ -58,25 +57,6 @@ public static class ChatBotAgent
             .WithProvider(llmProvider, new() { ContextLength = 50000, ReasoningEffort = ReasoningEffort.Low })
             .WithChatHistory(chatStore)
             .WithMemory(memory)
-
-            // Skills — authored skills the agent can load on demand
-            .WithSkill("code_review", "Review code for bugs, style, and performance issues",
-                """
-                ## Code Review Skill
-
-                When reviewing code, follow this checklist:
-
-                1. **Correctness**: Does the code do what it claims? Look for off-by-one errors, null references, race conditions.
-                2. **Style**: Does it follow the project's conventions? Check naming, spacing, method length.
-                3. **Performance**: Any obvious N+1 queries, unnecessary allocations, or blocking calls?
-                4. **Security**: SQL injection, XSS, path traversal, credential exposure?
-                5. **Testability**: Can the code be unit tested? Are dependencies injectable?
-
-                Format your review as:
-                - 🔴 **Critical**: Must fix before merge
-                - 🟡 **Warning**: Should fix, but not blocking
-                - 🟢 **Suggestion**: Nice to have improvements
-                """)
 
             // Multi-agent: research agent as a callable tool
             .WithAgentTool(researchAgent, "deep_research",

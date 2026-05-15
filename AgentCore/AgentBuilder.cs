@@ -23,7 +23,7 @@ public sealed class AgentBuilder
 
     private IChatMemory? _chatStore;
     private IAgentMemory? _memory;
-    private IContextCompactor? _contextCompactor;
+    private IContextAssembler? _contextAssembler;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
@@ -31,7 +31,7 @@ public sealed class AgentBuilder
     private LLMOptions? _providerOptions;
     private AgentHooks? _hooks;
 
-    private readonly List<Skill> _skills = [];
+    
 
     public AgentBuilder()
     {
@@ -46,7 +46,7 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
-    public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
+    public AgentBuilder WithContextAssembler(IContextAssembler assembler) { _contextAssembler = assembler; return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -74,19 +74,6 @@ public sealed class AgentBuilder
         var hooks = new AgentHooks();
         configure(hooks);
         _hooks = hooks;
-        return this;
-    }
-
-    public AgentBuilder WithSkill(string name, string description, string content)
-    {
-        _skills.Add(new Skill(name, description, content));
-        return this;
-    }
-
-    public AgentBuilder WithSkillsDirectory(string path)
-    {
-        var loadedSkills = SkillLoader.FromDirectory(path);
-        _skills.AddRange(loadedSkills);
         return this;
     }
 
@@ -140,7 +127,7 @@ public sealed class AgentBuilder
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
-        var contextCompactor = _contextCompactor ?? new TruncatingContextCompactor(tokenCounter, loggerFactory.CreateLogger<TruncatingContextCompactor>());
+        var contextAssembler = _contextAssembler ?? new DefaultContextAssembler(tokenCounter);
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var memory = _memory; // Memory is optional - if null, no semantic memory
@@ -149,10 +136,6 @@ public sealed class AgentBuilder
         foreach (var init in _toolRegistrations) init(registry);
 
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
-
-        // Register skill tools if skills are provided
-        if (_skills.Count > 0)
-            registry.RegisterAll(new SkillTools(_skills));
 
         var toolExecutor = new ToolExecutor(
             registry,
@@ -165,17 +148,16 @@ public sealed class AgentBuilder
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} Skills={SkillCount} ProviderType={ProviderType}",
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
             _config.Name,
             registry.Tools.Count,
-            _skills.Count,
             _provider.GetType().Name);
 
         return new LLMAgent(
             chatStore,
             llmExecutor,
             toolExecutor,
-            contextCompactor,
+            contextAssembler,
             memory,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),

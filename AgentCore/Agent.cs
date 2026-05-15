@@ -24,7 +24,7 @@ public sealed class LLMAgent : IAgent
     private readonly IAgentMemory? _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
-    private readonly IContextCompactor _ctxCompactor;
+    private readonly IContextAssembler _contextAssembler;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -35,7 +35,7 @@ public sealed class LLMAgent : IAgent
         IChatMemory chatStore,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
-        IContextCompactor contextCompactor,
+        IContextAssembler contextAssembler,
         IAgentMemory? memory,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
@@ -47,7 +47,7 @@ public sealed class LLMAgent : IAgent
         _memory = memory;
         _llm = llm;
         _toolRuntime = toolRuntime;
-        _ctxCompactor = contextCompactor;
+        _contextAssembler = contextAssembler;
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -189,15 +189,6 @@ public sealed class LLMAgent : IAgent
             ToolCallMode = ToolCallMode.Auto,
             ResponseSchema = outputType?.GetSchemaForType()
         };
-    }
-
-    private async Task CompactIfNeededAsync(List<Message> workingChat, int tokenCount, LLMOptions options, CancellationToken ct)
-    {
-        if (options.ContextLength.HasValue)
-        {
-            _logger.LogDebug("Context reduction check: {Tokens}/{Limit}", tokenCount, options.ContextLength.Value);
-            workingChat = await _ctxCompactor.ReduceAsync(workingChat, tokenCount, options, ct).ConfigureAwait(false);
-        }
     }
 
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
@@ -369,10 +360,23 @@ public sealed class LLMAgent : IAgent
                 if (limitsExceeded)
                 {
                     int currentTokensCount = await _tokenCounter.CountAsync(messages, ct);
-                    int limit = options.ContextLength ?? (int)(currentTokensCount * 0.75);
-                    _logger.LogWarning("Context limit exceeded: CurrentTokens={Current} Limit={Limit} Forcing proactive summarization and retrying.", currentTokensCount, limit);
+                    int budget = options.ContextLength.HasValue 
+                        ? options.ContextLength.Value - 1024  // Reserve for response
+                        : (int)(currentTokensCount * 0.7);
                     
-                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
+                    _logger.LogWarning("Context limit exceeded: CurrentTokens={Current} Budget={Budget} Retrying with assembled context.", currentTokensCount, budget);
+
+                    // Get memory messages for retry
+                    List<Message> recalledMemory = [];
+                    if (_memory != null)
+                    {
+                        var recalled = await _memory.RecallAsync(chat, ct);
+                        recalledMemory = [.. recalled];
+                    }
+                    
+                    // Use IContextAssembler to build reduced context
+                    var reduced = _contextAssembler.Assemble(recalledMemory, chat, budget);
+                    workingChat = [.. reduced];
                     
                     chat.Clear();
                     chat.AddRange(workingChat);
@@ -410,7 +414,7 @@ public sealed class LLMAgent : IAgent
 
                 if (runningTools.Count == 0)
                 {
-                    await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
+                    
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _chatStore.RetainAsync(sessionId, chat);
 
@@ -479,7 +483,7 @@ public sealed class LLMAgent : IAgent
 
                 pendingToolCalls.Clear();
 
-                await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
+                
 
                 await _chatStore.RetainAsync(sessionId, chat);
             }

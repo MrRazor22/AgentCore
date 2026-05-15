@@ -8,7 +8,7 @@ namespace AgentCore.Providers.Tornado;
 
 public static class TornadoAgentBuilderExtensions
 {
-    public static AgentBuilder AddTornado(this AgentBuilder builder, TornadoApi api, string modelName, string? embeddingModelName = null, LLMOptions? options = null)
+    public static AgentBuilder AddTornado(this AgentBuilder builder, TornadoApi api, string modelName, LLMOptions? options = null)
     {
         var model = new ChatModel(modelName);
         var provider = new TornadoLLMProvider(api, model);

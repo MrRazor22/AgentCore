@@ -10,7 +10,6 @@ using AgentCore.Tokens;
 using LlmTornado;
 using LlmTornado.Code;
 using LlmTornado.Chat.Models;
-using LlmTornado.Embedding.Models;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
@@ -47,7 +46,7 @@ public static class McpTestAgent
         var builder = LLMAgent.Create("mcp-agent")
             .WithChatHistory(chatStore)
             .WithMemory(memory)
-            .AddTornado(api, modelName, null, new LLMOptions { ContextLength = 8000 })
+            .AddTornado(api, modelName, new LLMOptions { ContextLength = 8000 })
             
             .WithTools<GeoTools>()
             .WithTools<WeatherTool>()
