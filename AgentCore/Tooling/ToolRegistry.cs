@@ -207,5 +207,5 @@ public sealed class ToolRegistry : IToolRegistry
         return true;
     }
 
-    private static string FormatMethod(MethodInfo m) => $"{m.DeclaringType?.Name}.{m.Name}";
+    private static string FormatMethod(MethodInfo? m) => m == null ? "null" : $"{m.DeclaringType?.Name}.{m.Name}";
 }

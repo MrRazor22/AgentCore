@@ -129,7 +129,7 @@ public sealed class LLMExecutor : ILLMExecutor
         yield return new LLMMetaEvent(
             effectiveUsage,
             finishReason ?? FinishReason.Stop,
-            options.Model,
+            options.Model ?? "unknown",
             sw.Elapsed,
             toolSchemaTokens);
 

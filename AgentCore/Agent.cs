@@ -103,7 +103,7 @@ public sealed class LLMAgent : IAgent
             turnMessages,
             new TokenUsage(inTokens, outTokens, reasoningTokens));
 
-        await _hooks.RaiseAgentEndAsync(response);
+        await _hooks!.RaiseAgentEndAsync(response);
 
         return response;
     }
@@ -213,7 +213,7 @@ public sealed class LLMAgent : IAgent
             chat.Add(userMessage);
             await _chatStore.RetainAsync(sessionId, chat);
 
-            await _hooks.RaiseAgentStartAsync(input, sessionId);
+            await _hooks!.RaiseAgentStartAsync(input, sessionId);
 
             // Recall cognitive memory before first LLM step
             List<Message> memoryMessages = [];
@@ -274,7 +274,7 @@ public sealed class LLMAgent : IAgent
                 _logger.LogDebug("LLM step {Step}: MemoryCount={MemCount} History={HistMsgs} Tokens≈{Approx}", 
                     consecutiveToolSteps + 1, _memory != null ? 1 : 0, activeWindow.Count, lastLlmTokens);
 
-                await _hooks.RaiseLLMStartAsync(new LLMCallContext(messages, options, consecutiveToolSteps));
+                await _hooks!.RaiseLLMStartAsync(new LLMCallContext(messages, options, consecutiveToolSteps));
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
                 bool limitsExceeded = false;
@@ -313,7 +313,7 @@ public sealed class LLMAgent : IAgent
                                 var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
                                 _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
                                 
-                                await _hooks.RaiseToolStartAsync(tc.Call);
+                                await _hooks!.RaiseToolStartAsync(tc.Call);
                                 
                                 runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                                 break;
@@ -330,7 +330,7 @@ public sealed class LLMAgent : IAgent
                                     lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
                                 }
 
-                                await _hooks.RaiseLLMEndAsync(new LLMCallContext(messages, options, consecutiveToolSteps), meta);
+                                await _hooks!.RaiseLLMEndAsync(new LLMCallContext(messages, options, consecutiveToolSteps), meta);
                                 break;
                         }
 
@@ -448,7 +448,7 @@ public sealed class LLMAgent : IAgent
                     
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
                     
-                    await _hooks.RaiseToolEndAsync(pendingToolCalls[result.CallId], result);
+                    await _hooks!.RaiseToolEndAsync(pendingToolCalls[result.CallId], result);
                     
                     workingChat.Add(new Message(Role.Tool, result));
                     chat.Add(new Message(Role.Tool, result));
