@@ -13,26 +13,27 @@ namespace AgentCore.LLM;
 
 public interface ILLMExecutor
 {
-    IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions options, CancellationToken ct = default);
+    IAsyncEnumerable<LLMEvent> StreamAsync(
+        IReadOnlyList<Message> messages,
+        LLMOptions options,
+        IReadOnlyList<Tool>? tools = null,
+        CancellationToken ct = default);
 }
 
 public sealed class LLMExecutor : ILLMExecutor
 {
     private readonly ILLMProvider _provider;
-    private readonly IToolRegistry _toolRegistry;
     private readonly ITokenCounter _tokenCounter;
     private readonly ITokenManager _tokenManager;
     private readonly ILogger<LLMExecutor> _logger;
 
     public LLMExecutor(
         ILLMProvider provider,
-        IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
         ITokenManager tokenManager,
         ILogger<LLMExecutor> logger)
     {
         _provider = provider;
-        _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
         _tokenManager = tokenManager;
         _logger = logger;
@@ -41,21 +42,22 @@ public sealed class LLMExecutor : ILLMExecutor
     public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
+        IReadOnlyList<Tool>? tools = null,
         CancellationToken ct = default)
-        => StreamInternalAsync(messages, options, ct);
+        => StreamInternalAsync(messages, options, tools, ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
+        IReadOnlyList<Tool>? tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
 
-        var tools = _toolRegistry.Tools;
         var toolNames = tools?.Select(t => t.Name).ToList() ?? [];
         var toolNamesStr = string.Join(", ", toolNames);
 
-        _logger.LogTrace("LLM request: Model={Model} Tools=[{ToolNames}]", options.Model, toolNamesStr);
+        _logger.LogInformation("LLM execution started: Model={Model} AvailableTools=[{ToolNames}]", options.Model, toolNamesStr);
 
         var content = _provider.StreamAsync(messages, options, tools, ct);
 
@@ -134,8 +136,14 @@ public sealed class LLMExecutor : ILLMExecutor
             toolSchemaTokens);
 
         sw.Stop();
-        _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
-        _logger.LogTrace("Token usage: In={In} Out={Out} ToolSchemas={ToolSchemas}", effectiveUsage.InputTokens, effectiveUsage.OutputTokens, toolSchemaTokens);
+        _logger.LogInformation("LLM execution completed: Model={Model} FinishReason={Reason} Duration={Ms}ms Tokens={In}in/{Out}out (Reasoning={Reasoning} RawToolsSchema={ToolSchemas})",
+            options.Model ?? "unknown",
+            finishReason ?? FinishReason.Stop,
+            sw.ElapsedMilliseconds,
+            effectiveUsage.InputTokens,
+            effectiveUsage.OutputTokens,
+            effectiveUsage.ReasoningTokens,
+            toolSchemaTokens);
     }
 
     private static int EstimateToolSchemaTokens(IReadOnlyList<AgentCore.Tooling.Tool>? tools)

@@ -3,8 +3,12 @@ using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
+using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace AgentCore;
 
@@ -23,15 +27,18 @@ public sealed class AgentBuilder
 
     private IChatMemory? _chatStore;
     private IAgentMemory? _memory;
-    private IContextAssembler? _contextAssembler;
+    private IContextManager? _contextManager;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
-    private AgentHooks? _hooks;
+    private IAgentRuntime? _agentRuntime;
 
-    
+    private readonly List<IMiddleware<AgentRequestContext, AgentResponse>> _unaryAgentMiddlewares = new();
+    private readonly List<IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>>> _streamingAgentMiddlewares = new();
+    private readonly List<IMiddleware<LLMCallContext, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = new();
+    private readonly List<IMiddleware<ToolCall, ToolResult>> _toolMiddlewares = new();
 
     public AgentBuilder()
     {
@@ -46,7 +53,8 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
-    public AgentBuilder WithContextAssembler(IContextAssembler assembler) { _contextAssembler = assembler; return this; }
+    public AgentBuilder WithContextManager(IContextManager contextManager) { _contextManager = contextManager; return this; }
+    public AgentBuilder WithRuntime(IAgentRuntime agentRuntime) { _agentRuntime = agentRuntime; return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -63,17 +71,27 @@ public sealed class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithHooks(AgentHooks hooks)
+    public AgentBuilder UseAgentMiddleware(IMiddleware<AgentRequestContext, AgentResponse> middleware)
     {
-        _hooks = hooks;
+        if (middleware != null) _unaryAgentMiddlewares.Add(middleware);
         return this;
     }
 
-    public AgentBuilder WithHooks(Action<AgentHooks> configure)
+    public AgentBuilder UseAgentMiddleware(IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>> middleware)
     {
-        var hooks = new AgentHooks();
-        configure(hooks);
-        _hooks = hooks;
+        if (middleware != null) _streamingAgentMiddlewares.Add(middleware);
+        return this;
+    }
+
+    public AgentBuilder UseLLMMiddleware(IMiddleware<LLMCallContext, IAsyncEnumerable<LLMEvent>> middleware)
+    {
+        if (middleware != null) _llmMiddlewares.Add(middleware);
+        return this;
+    }
+
+    public AgentBuilder UseToolMiddleware(IMiddleware<ToolCall, ToolResult> middleware)
+    {
+        if (middleware != null) _toolMiddlewares.Add(middleware);
         return this;
     }
 
@@ -116,7 +134,6 @@ public sealed class AgentBuilder
         return this;
     }
 
-
     public LLMAgent Build()
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
@@ -127,7 +144,7 @@ public sealed class AgentBuilder
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
-        var contextAssembler = _contextAssembler ?? new DefaultContextAssembler(tokenCounter);
+        var contextManager = _contextManager ?? new ContextManager(tokenCounter, loggerFactory.CreateLogger<ContextManager>());
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var memory = _memory; // Memory is optional - if null, no semantic memory
@@ -143,10 +160,23 @@ public sealed class AgentBuilder
 
         var llmExecutor = new LLMExecutor(
             _provider,
-            registry,
             tokenCounter,
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
+
+        // 1. Wrap LLM and Tool executors with middleware pipelines using decorator pattern
+        var wrappedLlm = new MiddlewareLLMExecutor(llmExecutor, _llmMiddlewares);
+        var wrappedTool = new MiddlewareToolExecutor(toolExecutor, _toolMiddlewares);
+
+        // 2. Build the AgentRuntime loop orchestrator
+        var baseOptions = _providerOptions ?? new LLMOptions();
+        var agentRuntime = _agentRuntime ?? new AgentRuntime(
+            contextManager,
+            memory,
+            baseOptions,
+            tokenCounter,
+            _config,
+            loggerFactory.CreateLogger<AgentRuntime>());
 
         _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
             _config.Name,
@@ -155,14 +185,17 @@ public sealed class AgentBuilder
 
         return new LLMAgent(
             chatStore,
-            llmExecutor,
-            toolExecutor,
-            contextAssembler,
+            wrappedLlm,
+            wrappedTool,
+            contextManager,
             memory,
             tokenCounter,
-            _providerOptions ?? new LLMOptions(),
+            agentRuntime,
+            baseOptions,
+            registry.Tools,
             _config,
             loggerFactory.CreateLogger<LLMAgent>(),
-            _hooks);
+            _unaryAgentMiddlewares,
+            _streamingAgentMiddlewares);
     } 
 }

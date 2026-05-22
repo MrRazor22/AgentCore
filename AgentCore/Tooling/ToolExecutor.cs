@@ -38,7 +38,7 @@ public sealed class ToolExecutor : IToolExecutor
             return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", "Tool name cannot be empty."));
 
         var argsJson = call.Arguments?.ToString() ?? "{}";
-        _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
+        _logger.LogInformation("Tool execution started: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
 
         var sw = Stopwatch.StartNew();
 
@@ -52,14 +52,15 @@ public sealed class ToolExecutor : IToolExecutor
             if (!call.IsApproved && tool.RequiresApproval)
             {
                 sw.Stop();
-                _logger.LogInformation("Tool pending approval: {Name}", call.Name);
+                _logger.LogWarning("Tool execution blocked: {Name} requires manual user approval.", call.Name);
                 return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval"));
             }
 
             var result = await InvokeInternalAsync(call, ct).ConfigureAwait(false);
             sw.Stop();
-            _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
-            _logger.LogTrace("Tool result: {Name} Result={Content}", call.Name, result?.ForLlm()?.Length > 200 ? result.ForLlm()[..200] + "..." : result?.ForLlm());
+            var resultStr = result?.ForLlm() ?? "null";
+            _logger.LogInformation("Tool execution completed: {Name} Success=True Duration={Ms}ms ResultPreview={Res}", 
+                call.Name, sw.ElapsedMilliseconds, resultStr.Length > 200 ? resultStr[..200] + "..." : resultStr);
             return new ToolResult(call.Id, result);
         }
         catch (OperationCanceledException) { throw; }
@@ -67,7 +68,8 @@ public sealed class ToolExecutor : IToolExecutor
         {
             sw.Stop();
             var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
-            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, wrapped.Message);
+            _logger.LogError("Tool execution failed: {Name} Success=False Duration={Ms}ms Error={Message}", 
+                call.Name, sw.ElapsedMilliseconds, wrapped.Message);
             return new ToolResult(call.Id, wrapped);
         }
     }

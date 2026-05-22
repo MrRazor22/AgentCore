@@ -16,7 +16,7 @@ namespace TestApp;
 
 /// <summary>
 /// Full-featured chatbot showcasing AgentCore capabilities:
-/// Streaming, hooks (live token/tool status), skills, multi-agent sub-agents,
+/// Streaming, live event monitoring (token/tool status), skills, multi-agent sub-agents,
 /// cognitive memory with scoping, and tool approval.
 /// </summary>
 public static class ChatBotAgent
@@ -46,7 +46,6 @@ public static class ChatBotAgent
         var tokenCounter = new ApproximateTokenCounter();
         
         // Use RollingWindowMemory as default - conversation summarization + rolling window
-        // For advanced semantic memory, implement a custom IAgentMemory
         var memory = new RollingWindowMemory(
             llmProvider,
             tokenCounter,
@@ -68,9 +67,6 @@ public static class ChatBotAgent
             .WithTools<ConversionTools>()
             .WithTools<MathTools>()
             .WithTools<SearchTools>()
-
-            // Hooks — live observability in the console
-            .WithHooks(ConfigureHooks())
 
             .WithLoggerFactory(loggerFactory)
             .Build();
@@ -124,73 +120,6 @@ public static class ChatBotAgent
         }
     }
 
-    // ─── Hooks Configuration ───
-    private static AgentHooks ConfigureHooks()
-    {
-        return new AgentHooks
-        {
-            OnAgentStart = (input, sessionId) =>
-            {
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine($"  ╭─ Session: {sessionId}");
-                Console.ResetColor();
-                return Task.CompletedTask;
-            },
-
-            OnLLMStart = ctx =>
-            {
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.Write($"  │ ⏳ Thinking (step {ctx.StepIndex + 1}, {ctx.Messages.Count} msgs)...");
-                Console.ResetColor();
-                return Task.CompletedTask;
-            },
-
-            OnLLMEnd = (ctx, meta) =>
-            {
-                if (!meta.Usage.IsEmpty)
-                {
-                    Console.ForegroundColor = ConsoleColor.DarkGray;
-                    Console.WriteLine($" [{meta.Usage.InputTokens}↑ {meta.Usage.OutputTokens}↓]");
-                    Console.ResetColor();
-                }
-                else
-                {
-                    Console.WriteLine();
-                }
-                return Task.CompletedTask;
-            },
-
-            OnToolStart = tc =>
-            {
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.Write($"  │ 🔧 {tc.Name}");
-                Console.ResetColor();
-                return Task.CompletedTask;
-            },
-
-            OnToolEnd = (tc, result) =>
-            {
-                var isError = result.Result is ToolExecutionException;
-                Console.ForegroundColor = isError ? ConsoleColor.Red : ConsoleColor.Green;
-                var resultPreview = result.ForLlm();
-                var preview = resultPreview.Length > 60
-                    ? resultPreview[..60] + "..."
-                    : resultPreview;
-                Console.WriteLine($" {(isError ? "✗" : "✓")} {preview}");
-                Console.ResetColor();
-                return Task.CompletedTask;
-            },
-
-            OnAgentEnd = resp =>
-            {
-                Console.ForegroundColor = ConsoleColor.DarkGray;
-                Console.WriteLine($"  ╰─ 📊 Tokens: {resp.Usage.Total} ({resp.Usage.InputTokens}↑ {resp.Usage.OutputTokens}↓) | Messages: {resp.Messages.Count}");
-                Console.ResetColor();
-                return Task.CompletedTask;
-            }
-        };
-    }
-
     // ─── Load Previous Messages ───
     private static async Task LoadPreviousMessages(IChatMemory chatStore, string sessionId)
     {
@@ -228,10 +157,17 @@ public static class ChatBotAgent
     // ─── Stream Processing ───
     private static async Task ProcessStream(LLMAgent agent, string goal, string session, CancellationToken ct)
     {
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"  ╭─ Session: {session}");
+        Console.ResetColor();
+
         var output = new StringBuilder();
         var reasoning = new StringBuilder();
         var isReasoning = false;
         var hasOutput = false;
+
+        int inputTokens = 0;
+        int outputTokens = 0;
 
         await foreach (var evt in agent.InvokeStreamingAsync((Text)goal, session, ct))
         {
@@ -239,19 +175,16 @@ public static class ChatBotAgent
             {
                 case ReasoningEvent r:
                     reasoning.Append(r.Delta);
-                    if (!isReasoning && reasoning.Length > 50)
+                    if (!isReasoning)
                     {
                         isReasoning = true;
                         Console.ForegroundColor = ConsoleColor.Magenta;
                         Console.Write("\n  💭 ");
                         Console.ResetColor();
                     }
-                    if (isReasoning)
-                    {
-                        Console.ForegroundColor = ConsoleColor.DarkMagenta;
-                        Console.Write(r.Delta);
-                        Console.ResetColor();
-                    }
+                    Console.ForegroundColor = ConsoleColor.DarkMagenta;
+                    Console.Write(r.Delta);
+                    Console.ResetColor();
                     break;
 
                 case TextEvent t:
@@ -268,14 +201,63 @@ public static class ChatBotAgent
                     Console.Write(t.Delta);
                     output.Append(t.Delta);
                     break;
+
+                case ToolCallEvent tc:
+                    if (isReasoning)
+                    {
+                        Console.WriteLine();
+                        isReasoning = false;
+                    }
+                    Console.ForegroundColor = ConsoleColor.Blue;
+                    Console.Write($"\n  │ 🔧 Tool call: {tc.Call.Name}");
+                    var args = tc.Call.Arguments?.ToString();
+                    if (!string.IsNullOrEmpty(args))
+                    {
+                        Console.Write($" with args: {(args.Length > 80 ? args[..80] + "..." : args)}");
+                    }
+                    Console.ResetColor();
+                    break;
+
+                case AgentToolResultEvent tr:
+                    var isError = tr.Result.Result is ToolExecutionException;
+                    Console.ForegroundColor = isError ? ConsoleColor.Red : ConsoleColor.Green;
+                    var resultPreview = tr.Result.ForLlm() ?? "";
+                    var preview = resultPreview.Length > 60
+                        ? resultPreview[..60] + "..."
+                        : resultPreview;
+                    Console.WriteLine($" {(isError ? "✗" : "✓")} {preview}");
+                    Console.ResetColor();
+                    break;
+
+                case LLMMetaEvent meta:
+                    if (!meta.Usage.IsEmpty)
+                    {
+                        inputTokens += meta.Usage.InputTokens;
+                        outputTokens += meta.Usage.OutputTokens;
+                        
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.Write($" [{meta.Usage.InputTokens}↑ {meta.Usage.OutputTokens}↓]");
+                        Console.ResetColor();
+                    }
+                    break;
             }
         }
 
+        if (isReasoning)
+        {
+            Console.WriteLine();
+        }
+
         if (output.Length > 0) Console.WriteLine();
-        if (!hasOutput)
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"  ╰─ 📊 Tokens: {inputTokens + outputTokens} ({inputTokens}↑ {outputTokens}↓)");
+        Console.ResetColor();
+
+        if (!hasOutput && output.Length == 0)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("\n  ⚠️  No response");
+            Console.WriteLine("\n  ⚠️  No response text generated.");
             Console.ResetColor();
         }
     }
@@ -291,7 +273,7 @@ public static class ChatBotAgent
           ╠══════════════════════════════════════════════╣
           ║  Features:                                   ║
           ║   • Cognitive Memory (AMFS decay, skills)    ║
-          ║   • Live Hooks (tokens, tool status)         ║
+          ║   • Live Stream Events (tokens, tool status) ║
           ║   • Multi-Agent (deep_research sub-agent)    ║
           ║   • Authored Skills (code_review)            ║
           ║   • Session Persistence & Recovery           ║
