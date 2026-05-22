@@ -19,9 +19,7 @@ public sealed class ToolExecutor : IToolExecutor
     private readonly IToolRegistry _tools;
     private readonly ILogger<ToolExecutor> _logger;
 
-    public ToolExecutor(
-        IToolRegistry tools,
-        ILogger<ToolExecutor> logger)
+    public ToolExecutor(IToolRegistry tools, ILogger<ToolExecutor> logger)
     {
         _tools = tools;
         _logger = logger;

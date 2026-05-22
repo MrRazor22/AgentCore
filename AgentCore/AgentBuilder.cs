@@ -4,6 +4,7 @@ using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using AgentCore.Context;
+using AgentCore.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
@@ -33,11 +34,11 @@ public sealed class AgentBuilder
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
+    private ILLMExecutor? _customLlm;
+    private IToolExecutor? _customTools;
     private IAgentRuntime? _agentRuntime;
 
-    private readonly List<IMiddleware<AgentRequestContext, AgentResponse>> _unaryAgentMiddlewares = new();
-    private readonly List<IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>>> _streamingAgentMiddlewares = new();
-    private readonly List<IMiddleware<LLMCallContext, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = new();
+    private readonly List<IMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>>> _llmMiddlewares = new();
     private readonly List<IMiddleware<ToolCall, ToolResult>> _toolMiddlewares = new();
 
     public AgentBuilder()
@@ -55,6 +56,8 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithContextManager(IContextManager contextManager) { _contextManager = contextManager; return this; }
     public AgentBuilder WithRuntime(IAgentRuntime agentRuntime) { _agentRuntime = agentRuntime; return this; }
+    public AgentBuilder WithLLMExecutor(ILLMExecutor executor) { _customLlm = executor; return this; }
+    public AgentBuilder WithToolExecutor(IToolExecutor executor) { _customTools = executor; return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -71,19 +74,24 @@ public sealed class AgentBuilder
         return this;
     }
 
-    public AgentBuilder UseAgentMiddleware(IMiddleware<AgentRequestContext, AgentResponse> middleware)
+    public AgentBuilder WithResponseSchema<T>()
     {
-        if (middleware != null) _unaryAgentMiddlewares.Add(middleware);
+        _providerOptions ??= new LLMOptions();
+        _providerOptions.ResponseSchema = Json.JsonSchemaExtensions.GetSchemaFor<T>();
         return this;
     }
 
-    public AgentBuilder UseAgentMiddleware(IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>> middleware)
+    public AgentBuilder WithResponseSchema(Type type)
     {
-        if (middleware != null) _streamingAgentMiddlewares.Add(middleware);
+        _providerOptions ??= new LLMOptions();
+        _providerOptions.ResponseSchema = type?.GetSchemaForType();
         return this;
     }
 
-    public AgentBuilder UseLLMMiddleware(IMiddleware<LLMCallContext, IAsyncEnumerable<LLMEvent>> middleware)
+
+
+
+    public AgentBuilder UseLLMMiddleware(IMiddleware<LLMRequest, IAsyncEnumerable<LLMEvent>> middleware)
     {
         if (middleware != null) _llmMiddlewares.Add(middleware);
         return this;
@@ -138,64 +146,70 @@ public sealed class AgentBuilder
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
 
-        if (_provider == null)
-            throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
+        if (_provider == null && _customLlm == null)
+            throw new InvalidOperationException("No LLM provider or executor registered. Call WithProvider() or WithLLMExecutor().");
 
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
         var contextManager = _contextManager ?? new ContextManager(tokenCounter, loggerFactory.CreateLogger<ContextManager>());
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
-
-        var memory = _memory; // Memory is optional - if null, no semantic memory
+        var memory = _memory;
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
-
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
 
-        var toolExecutor = new ToolExecutor(
-            registry,
-            loggerFactory.CreateLogger<ToolExecutor>());
+        // Pure executors — no middleware knowledge
+        ILLMExecutor llm = _customLlm ?? new LLMExecutor(_provider!, tokenCounter, tokenManager, loggerFactory.CreateLogger<LLMExecutor>());
+        IToolExecutor tools = _customTools ?? new ToolExecutor(registry, loggerFactory.CreateLogger<ToolExecutor>());
 
-        var llmExecutor = new LLMExecutor(
-            _provider,
-            tokenCounter,
-            tokenManager,
-            loggerFactory.CreateLogger<LLMExecutor>());
+        // Builder owns middleware wiring via generic MiddlewarePipeline
+        if (_llmMiddlewares.Count > 0)
+        {
+            var p = new MiddlewarePipeline<LLMRequest, IAsyncEnumerable<LLMEvent>>(
+                (req, ct) => Task.FromResult(llm.StreamAsync(req, ct)));
+            foreach (var mw in _llmMiddlewares) p.Use(mw);
+            llm = new PipelineLLMExecutor(p);
+        }
+        if (_toolMiddlewares.Count > 0)
+        {
+            var p = new MiddlewarePipeline<ToolCall, ToolResult>(
+                (call, ct) => tools.HandleToolCallAsync(call, ct));
+            foreach (var mw in _toolMiddlewares) p.Use(mw);
+            tools = new PipelineToolExecutor(p);
+        }
 
-        // 1. Wrap LLM and Tool executors with middleware pipelines using decorator pattern
-        var wrappedLlm = new MiddlewareLLMExecutor(llmExecutor, _llmMiddlewares);
-        var wrappedTool = new MiddlewareToolExecutor(toolExecutor, _toolMiddlewares);
-
-        // 2. Build the AgentRuntime loop orchestrator
         var baseOptions = _providerOptions ?? new LLMOptions();
         var agentRuntime = _agentRuntime ?? new AgentRuntime(
-            contextManager,
-            memory,
-            baseOptions,
-            tokenCounter,
-            _config,
-            loggerFactory.CreateLogger<AgentRuntime>());
+            contextManager, memory, baseOptions, registry.Tools,
+            tokenCounter, _config, loggerFactory.CreateLogger<AgentRuntime>());
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
-            _config.Name,
-            registry.Tools.Count,
-            _provider.GetType().Name);
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount}", _config.Name, registry.Tools.Count);
 
         return new LLMAgent(
-            chatStore,
-            wrappedLlm,
-            wrappedTool,
-            contextManager,
-            memory,
-            tokenCounter,
-            agentRuntime,
-            baseOptions,
-            registry.Tools,
-            _config,
-            loggerFactory.CreateLogger<LLMAgent>(),
-            _unaryAgentMiddlewares,
-            _streamingAgentMiddlewares);
-    } 
+            chatStore, llm, tools, contextManager, memory, tokenCounter,
+            agentRuntime, baseOptions, registry.Tools, _config,
+            loggerFactory.CreateLogger<LLMAgent>());
+    }
+
+    private sealed class PipelineLLMExecutor(MiddlewarePipeline<LLMRequest, IAsyncEnumerable<LLMEvent>> pipeline) : ILLMExecutor
+    {
+        public IAsyncEnumerable<LLMEvent> StreamAsync(LLMRequest request, CancellationToken ct = default)
+            => Unwrap(pipeline.InvokeAsyncWithTerminal(request, ct), ct);
+
+        private static async IAsyncEnumerable<LLMEvent> Unwrap(
+            Task<IAsyncEnumerable<LLMEvent>> task,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            await foreach (var e in (await task.ConfigureAwait(false)).WithCancellation(ct).ConfigureAwait(false))
+                yield return e;
+        }
+    }
+
+    private sealed class PipelineToolExecutor(MiddlewarePipeline<ToolCall, ToolResult> pipeline) : IToolExecutor
+    {
+        public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
+            => pipeline.InvokeAsyncWithTerminal(call, ct);
+    }
 }

@@ -37,9 +37,6 @@ public sealed class LLMAgent : IAgent
     private readonly IReadOnlyList<Tool> _toolsCollection;
     private readonly AgentConfig _config;
     private readonly ILogger<LLMAgent> _logger;
-    private readonly IReadOnlyList<IMiddleware<AgentRequestContext, AgentResponse>> _unaryMiddlewares;
-    private readonly IReadOnlyList<IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>>> _streamingMiddlewares;
-
     public LLMAgent(
         IChatMemory chatStore,
         ILLMExecutor llm,
@@ -51,9 +48,7 @@ public sealed class LLMAgent : IAgent
         LLMOptions baseOptions,
         IReadOnlyList<Tool> toolsCollection,
         AgentConfig config,
-        ILogger<LLMAgent> logger,
-        IReadOnlyList<IMiddleware<AgentRequestContext, AgentResponse>> unaryMiddlewares,
-        IReadOnlyList<IMiddleware<AgentRequestContext, IAsyncEnumerable<AgentEvent>>> streamingMiddlewares)
+        ILogger<LLMAgent> logger)
     {
         _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
@@ -66,8 +61,6 @@ public sealed class LLMAgent : IAgent
         _toolsCollection = toolsCollection ?? throw new ArgumentNullException(nameof(toolsCollection));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _unaryMiddlewares = unaryMiddlewares ?? throw new ArgumentNullException(nameof(unaryMiddlewares));
-        _streamingMiddlewares = streamingMiddlewares ?? throw new ArgumentNullException(nameof(streamingMiddlewares));
     }
 
     public static AgentBuilder Create(string name = "agent")
@@ -76,35 +69,12 @@ public sealed class LLMAgent : IAgent
     public async Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default)
     {
         sessionId ??= Guid.NewGuid().ToString("N");
-        var chat = await _chatStore.RecallAsync(sessionId);
-        var requestContext = new AgentRequestContext(input, sessionId, chat.AsReadOnly());
-
-        var pipeline = new MiddlewarePipeline<AgentRequestContext, AgentResponse>((ctx, innerCt) =>
-            InvokeAsyncInternal(ctx.Input, ctx.SessionId, null, innerCt));
-
-        foreach (var mw in _unaryMiddlewares)
-        {
-            pipeline.Use(mw);
-        }
-
-        return await pipeline.InvokeAsyncWithTerminal(requestContext, ct);
+        return await InvokeAsyncInternal(input, sessionId, ct);
     }
 
     public async Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default)
     {
-        sessionId ??= Guid.NewGuid().ToString("N");
-        var chat = await _chatStore.RecallAsync(sessionId);
-        var requestContext = new AgentRequestContext(input, sessionId, chat.AsReadOnly());
-
-        var pipeline = new MiddlewarePipeline<AgentRequestContext, AgentResponse>((ctx, innerCt) =>
-            InvokeAsyncInternal(ctx.Input, ctx.SessionId, typeof(T), innerCt));
-
-        foreach (var mw in _unaryMiddlewares)
-        {
-            pipeline.Use(mw);
-        }
-
-        var response = await pipeline.InvokeAsyncWithTerminal(requestContext, ct);
+        var response = await InvokeAsync(input, sessionId, ct);
         var json = response.Text;
         
         if (string.IsNullOrWhiteSpace(json)) return default;
@@ -114,7 +84,6 @@ public sealed class LLMAgent : IAgent
     private async Task<AgentResponse> InvokeAsyncInternal(
         IContent input, 
         string sessionId, 
-        Type? outputType, 
         CancellationToken ct)
     {
         var chatBefore = await _chatStore.RecallAsync(sessionId);
@@ -124,7 +93,7 @@ public sealed class LLMAgent : IAgent
         int outTokens = 0;
         int reasoningTokens = 0;
 
-        await foreach (var evt in CoreStreamAsync(input, sessionId, outputType, ct))
+        await foreach (var evt in CoreStreamAsync(input, sessionId, ct))
         {
             if (evt is LLMMetaEvent meta)
             {
@@ -151,24 +120,7 @@ public sealed class LLMAgent : IAgent
         CancellationToken ct = default)
     {
         sessionId ??= Guid.NewGuid().ToString("N");
-
-        var streamTask = Task.Run(async () =>
-        {
-            var chat = await _chatStore.RecallAsync(sessionId);
-            var requestContext = new AgentRequestContext(input, sessionId, chat.AsReadOnly());
-
-            var pipeline = new MiddlewarePipeline<AgentRequestContext, IAsyncEnumerable<AgentEvent>>((ctx, innerCt) =>
-                Task.FromResult(CoreStreamAsync(ctx.Input, ctx.SessionId, null, innerCt)));
-
-            foreach (var mw in _streamingMiddlewares)
-            {
-                pipeline.Use(mw);
-            }
-
-            return await pipeline.InvokeAsyncWithTerminal(requestContext, ct);
-        });
-
-        return new AsyncEnumerableWrapper(streamTask);
+        return CoreStreamAsync(input, sessionId, ct);
     }
 
     public async Task<AgentResponse> ResumeAsync(string sessionId, string toolCallId, bool approved, CancellationToken ct = default)
@@ -217,33 +169,12 @@ public sealed class LLMAgent : IAgent
         await _chatStore.RetainAsync(sessionId, chat);
 
         // Resume execution from where we left off
-        return await InvokeAsyncInternal(new Text(""), sessionId, null, ct);
-    }
-
-    private LLMOptions BuildLLMOptions(Type? outputType)
-    {
-        return new LLMOptions
-        {
-            Model = _baseOptions.Model,
-            ApiKey = _baseOptions.ApiKey,
-            BaseUrl = _baseOptions.BaseUrl,
-            ContextLength = _baseOptions.ContextLength,
-            Temperature = _baseOptions.Temperature,
-            TopP = _baseOptions.TopP,
-            MaxOutputTokens = _baseOptions.MaxOutputTokens,
-            Seed = _baseOptions.Seed,
-            StopSequences = _baseOptions.StopSequences,
-            FrequencyPenalty = _baseOptions.FrequencyPenalty,
-            PresencePenalty = _baseOptions.PresencePenalty,
-            ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = outputType?.GetSchemaForType()
-        };
+        return await InvokeAsyncInternal(new Text(""), sessionId, ct);
     }
 
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
         string sessionId,
-        Type? outputType,
         [EnumeratorCancellation] CancellationToken ct)
     {
 
@@ -264,13 +195,11 @@ public sealed class LLMAgent : IAgent
             chat.Add(userMessage);
             await _chatStore.RetainAsync(sessionId, chat);
 
-            var options = BuildLLMOptions(outputType);
-            var boundLlm = new ConfiguredLLMExecutor(_llm, options, _toolsCollection);
 
             // Execute the pluggable orchestration runtime loop on the mutable state
             await foreach (var evt in _agentRuntime.RunAsync(
                 chat,
-                boundLlm,
+                _llm,
                 _toolRuntime,
                 ct))
             {
@@ -280,25 +209,6 @@ public sealed class LLMAgent : IAgent
 
             // Persist the final state
             await _chatStore.RetainAsync(sessionId, chat);
-        }
-    }
-
-    private sealed class AsyncEnumerableWrapper : IAsyncEnumerable<AgentEvent>
-    {
-        private readonly Task<IAsyncEnumerable<AgentEvent>> _streamTask;
-
-        public AsyncEnumerableWrapper(Task<IAsyncEnumerable<AgentEvent>> streamTask)
-        {
-            _streamTask = streamTask;
-        }
-
-        public async IAsyncEnumerator<AgentEvent> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-        {
-            var stream = await _streamTask.ConfigureAwait(false);
-            await foreach (var item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
-            {
-                yield return item;
-            }
         }
     }
 }

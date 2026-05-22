@@ -14,9 +14,7 @@ namespace AgentCore.LLM;
 public interface ILLMExecutor
 {
     IAsyncEnumerable<LLMEvent> StreamAsync(
-        IReadOnlyList<Message> messages,
-        LLMOptions options,
-        IReadOnlyList<Tool>? tools = null,
+        LLMRequest request,
         CancellationToken ct = default);
 }
 
@@ -40,11 +38,9 @@ public sealed class LLMExecutor : ILLMExecutor
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
-        IReadOnlyList<Message> messages,
-        LLMOptions options,
-        IReadOnlyList<Tool>? tools = null,
+        LLMRequest request,
         CancellationToken ct = default)
-        => StreamInternalAsync(messages, options, tools, ct);
+        => StreamInternalAsync(request.Messages, request.Options, request.Tools, ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,

@@ -23,6 +23,7 @@ public sealed class AgentRuntime : IAgentRuntime
     private readonly IContextManager _contextManager;
     private readonly IAgentMemory? _memory;
     private readonly LLMOptions _baseOptions;
+    private readonly IReadOnlyList<Tool> _tools;
     private readonly ITokenCounter _tokenCounter;
     private readonly AgentConfig _config;
     private readonly ILogger<AgentRuntime> _logger;
@@ -31,6 +32,7 @@ public sealed class AgentRuntime : IAgentRuntime
         IContextManager contextManager,
         IAgentMemory? memory,
         LLMOptions baseOptions,
+        IReadOnlyList<Tool> tools,
         ITokenCounter tokenCounter,
         AgentConfig config,
         ILogger<AgentRuntime> logger)
@@ -38,6 +40,7 @@ public sealed class AgentRuntime : IAgentRuntime
         _contextManager = contextManager ?? throw new ArgumentNullException(nameof(contextManager));
         _memory = memory;
         _baseOptions = baseOptions ?? throw new ArgumentNullException(nameof(baseOptions));
+        _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -98,9 +101,7 @@ public sealed class AgentRuntime : IAgentRuntime
             // 2. Assemble and fit context using IContextManager
             var combinedMessages = new List<Message>();
             if (memoryMessages.Count > 0)
-            {
                 combinedMessages.AddRange(memoryMessages);
-            }
             combinedMessages.AddRange(workingChat);
 
             int tokenBudget = _baseOptions.ContextLength ?? 8000;
@@ -109,7 +110,9 @@ public sealed class AgentRuntime : IAgentRuntime
             _logger.LogInformation("LLM orchestration step {Step}: MessagesCount={MsgCount} Tokens≈{Approx} Budget={Budget}",
                 consecutiveToolSteps + 1, managedMessages.Count, lastLlmTokens, tokenBudget);
 
-            var enumerator = llm.StreamAsync(managedMessages, null!, null, ct).GetAsyncEnumerator(ct);
+            // 3. Build LLMRequest — options and tools flow in from the caller per-request
+            var request = new LLMRequest(managedMessages, _baseOptions, _tools);
+            var enumerator = llm.StreamAsync(request, ct).GetAsyncEnumerator(ct);
             bool limitsExceeded = false;
 
             try
@@ -144,7 +147,7 @@ public sealed class AgentRuntime : IAgentRuntime
                             toolCallsBuffer.Add(tc.Call);
                             pendingToolCalls[tc.Call.Id] = tc.Call;
                             var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
-                            _logger.LogInformation("Tool call scheduled by LLM: {ToolName} CallId={CallId} Args={Args}", 
+                            _logger.LogInformation("Tool call scheduled by LLM: {ToolName} CallId={CallId} Args={Args}",
                                 tc.Call.Name, tc.Call.Id, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
 
                             runningTools.Add(tools.HandleToolCallAsync(tc.Call, ct));
@@ -152,13 +155,9 @@ public sealed class AgentRuntime : IAgentRuntime
 
                         case LLMMetaEvent meta:
                             if (meta.Usage.IsEmpty)
-                            {
                                 lastLlmTokens = await _tokenCounter.CountAsync(workingChat, ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
-                            }
                             else
-                            {
                                 lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
-                            }
                             break;
                     }
 
@@ -170,12 +169,12 @@ public sealed class AgentRuntime : IAgentRuntime
                 await enumerator.DisposeAsync();
             }
 
-            // 3. Handle context limits overflow recovery
+            // 4. Handle context limits overflow recovery
             if (limitsExceeded)
             {
                 int currentTokensCount = await _tokenCounter.CountAsync(combinedMessages, ct);
                 int budget = _baseOptions.ContextLength.HasValue
-                    ? _baseOptions.ContextLength.Value - 1024  // Reserve space for response
+                    ? _baseOptions.ContextLength.Value - 1024
                     : (int)(currentTokensCount * 0.7);
 
                 _logger.LogWarning("Context limit exceeded: CurrentTokens={Current} Budget={Budget}. Triggering ContextManager reduction.", currentTokensCount, budget);
@@ -195,7 +194,7 @@ public sealed class AgentRuntime : IAgentRuntime
                 continue;
             }
 
-            // 4. Evolve state: Append Assistant content
+            // 5. Evolve state: Append Assistant content
             if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
             {
                 var contents = new List<IContent>();
@@ -220,7 +219,7 @@ public sealed class AgentRuntime : IAgentRuntime
                 state.Add(assistantMessage);
             }
 
-            // 5. If no tools are executed, we are done
+            // 6. If no tools executed, we are done
             if (runningTools.Count == 0)
             {
                 _logger.LogInformation("Orchestration loop completed: TotalConsecutiveSteps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
@@ -267,11 +266,9 @@ public sealed class AgentRuntime : IAgentRuntime
                 var resultLength = result.ForLlm()?.Length ?? 0;
 
                 if (result.Result is ToolExecutionException tex && tex.Message.Contains("requires approval"))
-                {
                     pendingApprovals.Add(result.CallId);
-                }
 
-                _logger.LogInformation("Tool result received: {ToolName} CallId={CallId} Duration={Ms}ms ResultLength={Len}", 
+                _logger.LogInformation("Tool result received: {ToolName} CallId={CallId} Duration={Ms}ms ResultLength={Len}",
                     toolName, result.CallId, toolDuration, resultLength);
 
                 var toolMessage = new Message(Role.Tool, result);
@@ -280,7 +277,7 @@ public sealed class AgentRuntime : IAgentRuntime
                 yield return new AgentToolResultEvent(result);
             }
 
-            // 6. Pause execution for pending approvals
+            // 7. Pause execution for pending approvals
             if (pendingApprovals.Count > 0)
             {
                 _logger.LogWarning("Orchestration paused: {Count} tool execution(s) require manual user approval. Awaiting ResumeAsync.", pendingApprovals.Count);
