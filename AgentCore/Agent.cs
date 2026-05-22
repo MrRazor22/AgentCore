@@ -190,6 +190,11 @@ public sealed class LLMAgent : IAgent
             _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} NewSession={IsNew} MemoryType={MemType} ContextLimit={CtxLimit}",
                 sessionId, input.ForLlm().Length, isNewSession, _memory?.GetType().Name ?? "None", _baseOptions.ContextLength ?? 0);
             
+            if (isNewSession && !string.IsNullOrEmpty(_config.SystemPrompt))
+            {
+                chat.Add(new Message(Role.System, new Text(_config.SystemPrompt)));
+            }
+
             // Strictly User input is added and persisted here
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);

@@ -17,13 +17,13 @@ public sealed class AgentConfig
 {
     public string Name { get; set; } = "agent";
     public string? SystemPrompt { get; set; }
-    public int? MaxToolCalls { get; set; } = null;
 }
 
 public sealed class AgentBuilder
 {
     private readonly AgentConfig _config = new();
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
+    private int _maxIterations = 10;
     private ILogger<AgentBuilder> _logger;
 
     private IChatMemory? _chatStore;
@@ -48,6 +48,7 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithSystemPrompt(string prompt) { _config.SystemPrompt = prompt; return this; }
+    public AgentBuilder WithMaxIterations(int maxIterations) { _maxIterations = maxIterations; return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
@@ -183,7 +184,8 @@ public sealed class AgentBuilder
         var baseOptions = _providerOptions ?? new LLMOptions();
         var agentRuntime = _agentRuntime ?? new AgentRuntime(
             contextManager, memory, baseOptions, registry.Tools,
-            tokenCounter, _config, loggerFactory.CreateLogger<AgentRuntime>());
+            tokenCounter, _config, loggerFactory.CreateLogger<AgentRuntime>(),
+            _maxIterations);
 
         _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount}", _config.Name, registry.Tools.Count);
 

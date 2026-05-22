@@ -27,6 +27,7 @@ public sealed class AgentRuntime : IAgentRuntime
     private readonly ITokenCounter _tokenCounter;
     private readonly AgentConfig _config;
     private readonly ILogger<AgentRuntime> _logger;
+    private readonly int _maxIterations;
 
     public AgentRuntime(
         IContextManager contextManager,
@@ -35,7 +36,8 @@ public sealed class AgentRuntime : IAgentRuntime
         IReadOnlyList<Tool> tools,
         ITokenCounter tokenCounter,
         AgentConfig config,
-        ILogger<AgentRuntime> logger)
+        ILogger<AgentRuntime> logger,
+        int maxIterations = 10)
     {
         _contextManager = contextManager ?? throw new ArgumentNullException(nameof(contextManager));
         _memory = memory;
@@ -44,6 +46,7 @@ public sealed class AgentRuntime : IAgentRuntime
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _maxIterations = maxIterations;
     }
 
     public async IAsyncEnumerable<AgentEvent> RunAsync(
@@ -89,9 +92,9 @@ public sealed class AgentRuntime : IAgentRuntime
         {
             ct.ThrowIfCancellationRequested();
 
-            if (consecutiveToolSteps >= (_config.MaxToolCalls ?? 10))
+            if (consecutiveToolSteps >= _maxIterations)
             {
-                _logger.LogWarning("Execution halted: Exceeded consecutive tool call limit of {Limit}", _config.MaxToolCalls ?? 10);
+                _logger.LogWarning("Execution halted: Exceeded consecutive tool call limit of {Limit}", _maxIterations);
                 yield return new TextEvent("You have exceeded the maximum allowed consecutive tool calls. Stop calling tools and respond to the user immediately.");
                 break;
             }
