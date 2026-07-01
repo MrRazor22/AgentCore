@@ -160,7 +160,7 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
-        var chatStore = _chatStore ?? new ChatFileStore("./chat-history");
+        var chatStore = _chatStore ?? new ChatInMemoryStore();
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
         var contextCompactor = _contextCompactor ?? new TruncatingContextCompactor(tokenCounter, loggerFactory.CreateLogger<TruncatingContextCompactor>());
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());

@@ -33,6 +33,8 @@ public static class ChatBotAgent
             //.WithTools<ConversionTools>()
             .Build();
 
+        var sessionId = Guid.NewGuid().ToString("N");
+
         while (true)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -50,6 +52,7 @@ public static class ChatBotAgent
             if (prompt.Equals("/clear", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Clear();
+                sessionId = Guid.NewGuid().ToString("N");
                 continue;
             }
 
@@ -57,7 +60,7 @@ public static class ChatBotAgent
             _assistantStarted = false;
             _thinkingStarted = false;
 
-            await foreach (var evt in agent.InvokeStreamingAsync((Text)prompt))
+            await foreach (var evt in agent.InvokeStreamingAsync((Text)prompt, sessionId))
             {
                 Render(evt);
             }

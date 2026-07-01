@@ -123,7 +123,7 @@ public class TornadoLLMProvider : ILLMProvider
                          int idx = 0;
                          foreach(var call in calls)
                          {
-                              var argsStr = System.Text.Json.JsonSerializer.Serialize(call.Arguments);
+                              var argsStr = call.Arguments;
                               channel.Writer.TryWrite(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr));
                          }
                          return ValueTask.CompletedTask;

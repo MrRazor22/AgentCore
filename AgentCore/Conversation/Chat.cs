@@ -2,8 +2,34 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace AgentCore.Conversation;
+
+public sealed class ChatInMemoryStore : IChatMemory
+{
+    private readonly ConcurrentDictionary<string, List<Message>> _store = new();
+
+    public Task<IReadOnlyList<string>> GetAllSessionsAsync() =>
+        Task.FromResult<IReadOnlyList<string>>(_store.Keys.ToList());
+
+    public Task<List<Message>> RecallAsync(string sessionId) =>
+        Task.FromResult(_store.GetOrAdd(sessionId, _ => new List<Message>()));
+
+    public Task RetainAsync(string sessionId, List<Message> chat)
+    {
+        _store[sessionId] = chat;
+        return Task.CompletedTask;
+    }
+
+    public Task ClearAsync(string sessionId)
+    {
+        _store.TryRemove(sessionId, out _);
+        return Task.CompletedTask;
+    }
+}
 
 /// <summary>
 /// Stores and retrieves conversation history (List&lt;Message&gt;) per session.
@@ -17,149 +43,5 @@ public interface IChatMemory
     Task ClearAsync(string sessionId);
 }
 
-public sealed class ChatFileStore : IChatMemory
-{
-    private readonly string _persistDir;
-    private readonly SemaphoreSlim[] _sessionLocks = Enumerable.Range(0, 32).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
-    private readonly ILogger<ChatFileStore> _logger;
-
-    public ChatFileStore(string? persistDir = null, ILogger<ChatFileStore>? logger = null)
-    {
-        _persistDir = persistDir ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AgentCore");
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ChatFileStore>.Instance;
-    }
-
-    private SemaphoreSlim GetLock(string sessionId)
-        => _sessionLocks[Math.Abs(sessionId.GetHashCode()) % _sessionLocks.Length];
-
-    public async Task<List<Message>> RecallAsync(string sessionId)
-    {
-        _logger.LogDebug("Chat file recall: SessionId={SessionId}", sessionId);
-
-        if (_persistDir == null) return new List<Message>();
-
-        var file = Path.Combine(_persistDir, sessionId + ".json");
-        if (!File.Exists(file))
-        {
-            _logger.LogDebug("Chat file recall result: SessionId={SessionId} FileNotFound MessageCount=0", sessionId);
-            return new List<Message>();
-        }
-
-        var sessionLock = GetLock(sessionId);
-        await sessionLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _logger.LogDebug("Chat file recall: SessionId={SessionId} FilePath={FilePath}", sessionId, file);
-            var json = await File.ReadAllTextAsync(file).ConfigureAwait(false);
-            var messages = FromJson(json);
-            _logger.LogDebug("Chat file recall result: SessionId={SessionId} MessageCount={MsgCount}", sessionId, messages.Count);
-            return messages;
-        }
-        catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
-        {
-            _logger.LogWarning(ex, "Chat file recall: SessionId={SessionId} File not found", sessionId);
-            return new List<Message>();
-        }
-        finally
-        {
-            sessionLock.Release();
-        }
-    }
-
-    public async Task RetainAsync(string sessionId, List<Message> chat)
-    {
-        _logger.LogDebug("Chat file update: SessionId={SessionId} MessageCount={MsgCount}", sessionId, chat.Count);
-
-        if (_persistDir == null) return;
-
-        Directory.CreateDirectory(_persistDir);
-        var file = Path.Combine(_persistDir, sessionId + ".json");
-        var tmpFile = file + ".tmp";
-
-        var sessionLock = GetLock(sessionId);
-        await sessionLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            _logger.LogDebug("Chat file update: SessionId={SessionId} FilePath={FilePath}", sessionId, file);
-            var json = ToJson(chat);
-            await File.WriteAllTextAsync(tmpFile, json).ConfigureAwait(false);
-            File.Move(tmpFile, file, overwrite: true);
-            _logger.LogDebug("Chat file update result: SessionId={SessionId} Success", sessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Chat file update failed: SessionId={SessionId}", sessionId);
-            throw;
-        }
-        finally
-        {
-            sessionLock.Release();
-        }
-    }
-
-    public async Task ClearAsync(string sessionId)
-    {
-        _logger.LogDebug("Chat file clear: SessionId={SessionId}", sessionId);
-
-        if (_persistDir == null) return;
-
-        var file = Path.Combine(_persistDir, sessionId + ".json");
-
-        var sessionLock = GetLock(sessionId);
-        await sessionLock.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (File.Exists(file))
-            {
-                _logger.LogDebug("Chat file clear: SessionId={SessionId} FilePath={FilePath}", sessionId, file);
-                File.Delete(file);
-                _logger.LogDebug("Chat file clear result: SessionId={SessionId} Success", sessionId);
-            }
-            else
-            {
-                _logger.LogDebug("Chat file clear result: SessionId={SessionId} FileNotFound", sessionId);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Chat file clear failed: SessionId={SessionId}", sessionId);
-            throw;
-        }
-        finally
-        {
-            sessionLock.Release();
-        }
-    }
-
-    public Task<IReadOnlyList<string>> GetAllSessionsAsync()
-    {
-        if (_persistDir == null || !Directory.Exists(_persistDir))
-        {
-            _logger.LogDebug("Chat file get all sessions: SessionCount=0 (directory not configured or doesn't exist)");
-            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
-        }
-
-        var files = Directory.GetFiles(_persistDir, "*.json");
-        var sessions = files
-            .Select(f => Path.GetFileNameWithoutExtension(f))
-            .ToList();
-        _logger.LogDebug("Chat file get all sessions: SessionCount={SessionCount}", sessions.Count);
-        return Task.FromResult<IReadOnlyList<string>>(sessions);
-    }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
-    private static string ToJson(List<Message> chat) =>
-        JsonSerializer.Serialize(chat, JsonOptions);
-
-    private static List<Message> FromJson(string json) =>
-        JsonSerializer.Deserialize<List<Message>>(json, JsonOptions) ?? new List<Message>();
-
-}
 
 

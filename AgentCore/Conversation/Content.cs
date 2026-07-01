@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+
 namespace AgentCore.Conversation;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
