@@ -1,4 +1,3 @@
-// File: Program.cs 
 namespace TestApp
 {
     public class Program
@@ -6,7 +5,6 @@ namespace TestApp
         public static async Task Main(string[] args)
         {
             await ChatBotAgent.RunAsync();
-        
         }
     }
 }

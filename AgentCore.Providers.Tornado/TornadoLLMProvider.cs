@@ -7,6 +7,8 @@ using LlmTornado.Chat;
 using LlmTornado.Code;
 using LlmTornado.Chat.Models;
 using LlmTornado.Models;
+using LlmTornado.Common;
+using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;
@@ -25,13 +27,22 @@ public class TornadoLLMProvider : ILLMProvider
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions options,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<AgentCore.Tooling.Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var request = new ChatRequest
         {
             Model = _model,
         };
+
+        if (tools is { Count: > 0 })
+        {
+            request.Tools = tools.Select(t =>
+            {
+                var jsonElement = System.Text.Json.JsonSerializer.SerializeToElement(t.ParametersSchema);
+                return new LlmTornado.Common.Tool(new ToolFunction(t.Name, t.Description, jsonElement));
+            }).ToList();
+        }
 
         if (options.Temperature.HasValue) request.Temperature = options.Temperature.Value;
         if (options.TopP.HasValue) request.TopP = options.TopP.Value;
