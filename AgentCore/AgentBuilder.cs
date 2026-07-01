@@ -150,7 +150,7 @@ public sealed class AgentBuilder
     }
 
 
-    public LLMAgent Build()
+    public IAgent Build()
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
 
