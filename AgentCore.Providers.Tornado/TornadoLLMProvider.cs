@@ -37,6 +37,19 @@ public class TornadoLLMProvider : ILLMProvider
         if (options.TopP.HasValue) request.TopP = options.TopP.Value;
         if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
 
+        if (options.ReasoningEffort.HasValue)
+        {
+            request.ReasoningEffort = options.ReasoningEffort.Value switch
+            {
+                ReasoningEffort.None => LlmTornado.Code.ChatReasoningEfforts.None,
+                ReasoningEffort.Low => LlmTornado.Code.ChatReasoningEfforts.Low,
+                ReasoningEffort.Medium => LlmTornado.Code.ChatReasoningEfforts.Medium,
+                ReasoningEffort.High => LlmTornado.Code.ChatReasoningEfforts.High,
+                _ => null
+            };
+        }
+        request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
+
         var chat = _api.Chat.CreateConversation(request);
 
         foreach (var msg in messages)
@@ -73,8 +86,20 @@ public class TornadoLLMProvider : ILLMProvider
             {
                 await chat.StreamResponseRich(new ChatStreamEventHandler
                 {
+                    ReasoningTokenHandler = (reasoning) =>
+                    {
+                        if (reasoning.Content is not null)
+                        {
+                            channel.Writer.TryWrite(new ReasoningDelta(reasoning.Content));
+                        }
+                        return ValueTask.CompletedTask;
+                    },
                     MessagePartHandler = (part) =>
                     {
+                        if (part.Reasoning is not null && part.Reasoning.Content is not null)
+                        {
+                            channel.Writer.TryWrite(new ReasoningDelta(part.Reasoning.Content));
+                        }
                         if (part.Text is not null)
                         {
                             channel.Writer.TryWrite(new TextDelta(part.Text));
@@ -121,3 +146,4 @@ public class TornadoLLMProvider : ILLMProvider
         }
     }
 }
+
