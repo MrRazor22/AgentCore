@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AgentCore.Memory;
 
 /// <summary>
-/// The cognitive memory engine. Implements IAgentMemory with:
+/// The cognitive memory engine. Implements ILongTermMemory with:
 /// - 2-strategy parallel retrieval (semantic + keyword) fused via RRF
 /// - AMFS confidence decay formula with kind-based multipliers
 /// - Automatic background dream (consolidation) and prune cycles
@@ -18,7 +18,7 @@ namespace AgentCore.Memory;
 /// - Reflection for deep synthesis over memories
 /// - Full provenance via SourceEntryIds, Version, InvalidatedAt
 /// </summary>
-public sealed class MemoryEngine : IAgentMemory, IDisposable
+public sealed class MemoryEngine : ILongTermMemory, IDisposable
 {
     private readonly IMemoryStore _store;
     private readonly ILLMProvider _llm;

@@ -7,7 +7,7 @@ namespace AgentCore.Memory;
 /// Implementations provide semantic search and knowledge storage (e.g., MemoryEngine with AMFS).
 /// Memory is optional - agents can function without it.
 /// </summary>
-public interface IAgentMemory
+public interface ILongTermMemory
 {
     /// <summary>
     /// Retrieves memories for injection into prompt.

@@ -11,7 +11,7 @@ public sealed class LLMOptions
     public string? ApiKey { get; set; }
     public string? BaseUrl { get; set; }
     public ToolCallMode ToolCallMode { get; set; } = ToolCallMode.Auto;
-    public int? ContextLength { get; set; }
+    public int? ContextWindow { get; set; }
     public float? Temperature { get; set; }
     public float? TopP { get; set; }
     public int? MaxOutputTokens { get; set; }

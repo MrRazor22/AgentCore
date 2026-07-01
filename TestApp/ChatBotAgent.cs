@@ -24,7 +24,7 @@ public static class ChatBotAgent
                 TornadoProvider.CreateLLMProvider(apiKey, model, baseUrl),
                 new()
                 {
-                    ContextLength = 50000
+                    ContextWindow = 50000
                 })
             //.WithTools<MathTools>()
             //.WithTools<SearchTools>()

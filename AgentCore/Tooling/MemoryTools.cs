@@ -9,7 +9,7 @@ namespace AgentCore.Tooling;
 /// <summary>
 /// Tools for agent-driven memory operations: reflection and outcome feedback.
 /// </summary>
-public sealed class MemoryTools(IAgentMemory memory, ILogger<MemoryTools>? logger = null)
+public sealed class MemoryTools(ILongTermMemory memory, ILogger<MemoryTools>? logger = null)
 {
     private readonly ILogger<MemoryTools> _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<MemoryTools>.Instance;
 

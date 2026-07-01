@@ -5,23 +5,50 @@ using System.Text.Json.Serialization;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using AgentCore.Tokens;
 
 namespace AgentCore.Conversation;
 
-public sealed class ChatInMemoryStore : IChatMemory
+public interface IShortTermMemory
+{
+    Task<List<Message>> RecallAsync(string sessionId);
+    Task RetainAsync(string sessionId, List<Message> chat);
+    Task ClearAsync(string sessionId);
+}
+
+public sealed class InMemoryShortTermMemory : IShortTermMemory
 {
     private readonly ConcurrentDictionary<string, List<Message>> _store = new();
+    private readonly ITokenCounter _tokenCounter;
+    private readonly int? _contextLimit;
+    private readonly double _threshold;
 
-    public Task<IReadOnlyList<string>> GetAllSessionsAsync() =>
-        Task.FromResult<IReadOnlyList<string>>(_store.Keys.ToList());
+    public InMemoryShortTermMemory(ITokenCounter tokenCounter, int? contextLimit = null, double threshold = 0.75)
+    {
+        _tokenCounter = tokenCounter;
+        _contextLimit = contextLimit;
+        _threshold = threshold;
+    }
 
     public Task<List<Message>> RecallAsync(string sessionId) =>
         Task.FromResult(_store.GetOrAdd(sessionId, _ => new List<Message>()));
 
-    public Task RetainAsync(string sessionId, List<Message> chat)
+    public async Task RetainAsync(string sessionId, List<Message> chat)
     {
+        if (_contextLimit.HasValue && _contextLimit.Value > 0)
+        {
+            int totalTokens = await _tokenCounter.CountAsync(chat).ConfigureAwait(false);
+            double usage = (double)totalTokens / _contextLimit.Value;
+            if (usage >= _threshold)
+            {
+                int dropCount = Math.Max(1, chat.Count / 4);
+                if (chat.Count > dropCount)
+                {
+                    chat.RemoveRange(0, dropCount);
+                }
+            }
+        }
         _store[sessionId] = chat;
-        return Task.CompletedTask;
     }
 
     public Task ClearAsync(string sessionId)
@@ -30,18 +57,3 @@ public sealed class ChatInMemoryStore : IChatMemory
         return Task.CompletedTask;
     }
 }
-
-/// <summary>
-/// Stores and retrieves conversation history (List&lt;Message&gt;) per session.
-/// This is the chat memory layer — separate from IMemory (cognitive/knowledge memory).
-/// </summary>
-public interface IChatMemory
-{
-    Task<IReadOnlyList<string>> GetAllSessionsAsync();
-    Task<List<Message>> RecallAsync(string sessionId);
-    Task RetainAsync(string sessionId, List<Message> chat);
-    Task ClearAsync(string sessionId);
-}
-
-
-

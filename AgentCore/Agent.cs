@@ -20,11 +20,10 @@ public interface IAgent
 
 public sealed class LLMAgent : IAgent
 {
-    private readonly IChatMemory _chatStore;
-    private readonly IAgentMemory? _memory;
+    private readonly IShortTermMemory _chatStore;
+    private readonly ILongTermMemory? _memory;
     private readonly ILLMExecutor _llm;
     private readonly IToolExecutor _toolRuntime;
-    private readonly IContextCompactor _ctxCompactor;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
@@ -32,11 +31,10 @@ public sealed class LLMAgent : IAgent
     private readonly AgentHooks? _hooks;
 
     public LLMAgent(
-        IChatMemory chatStore,
+        IShortTermMemory chatStore,
         ILLMExecutor llm,
         IToolExecutor toolRuntime,
-        IContextCompactor contextCompactor,
-        IAgentMemory? memory,
+        ILongTermMemory? memory,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
@@ -47,7 +45,6 @@ public sealed class LLMAgent : IAgent
         _memory = memory;
         _llm = llm;
         _toolRuntime = toolRuntime;
-        _ctxCompactor = contextCompactor;
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -178,7 +175,7 @@ public sealed class LLMAgent : IAgent
             Model = _baseOptions.Model,
             ApiKey = _baseOptions.ApiKey,
             BaseUrl = _baseOptions.BaseUrl,
-            ContextLength = _baseOptions.ContextLength,
+            ContextWindow = _baseOptions.ContextWindow,
             Temperature = _baseOptions.Temperature,
             TopP = _baseOptions.TopP,
             MaxOutputTokens = _baseOptions.MaxOutputTokens,
@@ -191,14 +188,6 @@ public sealed class LLMAgent : IAgent
         };
     }
 
-    private async Task CompactIfNeededAsync(List<Message> workingChat, int tokenCount, LLMOptions options, CancellationToken ct)
-    {
-        if (options.ContextLength.HasValue)
-        {
-            _logger.LogDebug("Context reduction check: {Tokens}/{Limit}", tokenCount, options.ContextLength.Value);
-            workingChat = await _ctxCompactor.ReduceAsync(workingChat, tokenCount, options, ct).ConfigureAwait(false);
-        }
-    }
 
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
@@ -219,7 +208,7 @@ public sealed class LLMAgent : IAgent
             var chat = await _chatStore.RecallAsync(sessionId);
             var isNewSession = chat.Count == 0;
             _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} NewSession={IsNew} MemoryType={MemType} ContextLimit={CtxLimit}",
-                sessionId, input.ForLlm().Length, isNewSession, _memory?.GetType().Name ?? "None", _baseOptions.ContextLength ?? 0);
+                sessionId, input.ForLlm().Length, isNewSession, _memory?.GetType().Name ?? "None", _baseOptions.ContextWindow ?? 0);
             
             var userMessage = new Message(Role.User, input);
             chat.Add(userMessage);
@@ -295,25 +284,11 @@ public sealed class LLMAgent : IAgent
                 }
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
-                bool limitsExceeded = false;
 
                 try
                 {
-                    while (true)
+                    while (await enumerator.MoveNextAsync())
                     {
-                        bool hasNext = false;
-                        try
-                        {
-                            hasNext = await enumerator.MoveNextAsync();
-                        }
-                        catch (ContextLengthExceededException)
-                        {
-                            limitsExceeded = true;
-                            break;
-                        }
-
-                        if (!hasNext) break;
-
                         var evt = enumerator.Current;
                         switch (evt)
                         {
@@ -366,26 +341,6 @@ public sealed class LLMAgent : IAgent
                     await enumerator.DisposeAsync();
                 }
 
-                if (limitsExceeded)
-                {
-                    int currentTokensCount = await _tokenCounter.CountAsync(messages, ct);
-                    int limit = options.ContextLength ?? (int)(currentTokensCount * 0.75);
-                    _logger.LogWarning("Context limit exceeded: CurrentTokens={Current} Limit={Limit} Forcing proactive summarization and retrying.", currentTokensCount, limit);
-                    
-                    workingChat = await _ctxCompactor.ReduceAsync(workingChat, currentTokensCount, new LLMOptions { Model = options.Model, ContextLength = limit }, ct);
-                    
-                    chat.Clear();
-                    chat.AddRange(workingChat);
-                    
-                    textBuffer.Clear();
-                    reasoningBuffer.Clear();
-                    toolCallsBuffer.Clear();
-                    pendingToolCalls.Clear();
-                    runningTools.Clear();
-                    
-                    continue;
-                }
-
                     if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
                 {
                     var contents = new List<IContent>();
@@ -410,7 +365,6 @@ public sealed class LLMAgent : IAgent
 
                 if (runningTools.Count == 0)
                 {
-                    await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
                     _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
                     await _chatStore.RetainAsync(sessionId, chat);
 
@@ -478,8 +432,6 @@ public sealed class LLMAgent : IAgent
                 }
 
                 pendingToolCalls.Clear();
-
-                await CompactIfNeededAsync(workingChat, lastLlmTokens, options, ct);
 
                 await _chatStore.RetainAsync(sessionId, chat);
             }

@@ -21,9 +21,8 @@ public sealed class AgentBuilder
     private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
     private ILogger<AgentBuilder> _logger;
 
-    private IChatMemory? _chatStore;
-    private IAgentMemory? _memory;
-    private IContextCompactor? _contextCompactor;
+    private IShortTermMemory? _chatStore;
+    private ILongTermMemory? _memory;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
@@ -45,8 +44,8 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
 
-    public AgentBuilder WithChatHistory(IChatMemory chatStore) { _chatStore = chatStore; return this; }
-    public AgentBuilder WithMemory(IAgentMemory memory) { _memory = memory; return this; }
+    public AgentBuilder WithWorkingMemory(IShortTermMemory chatStore) { _chatStore = chatStore; return this; }
+    public AgentBuilder WithMemory(ILongTermMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithMemory(
         IMemoryStore store, 
         MemoryEngineOptions? options = null,
@@ -61,7 +60,6 @@ public sealed class AgentBuilder
         _memory = new MemoryEngine(store, effectiveLlm, effectiveEmbedding, options, _loggerFactory?.CreateLogger<MemoryEngine>());
         return this;
     }
-    public AgentBuilder WithContextCompactor(IContextCompactor compactor) { _contextCompactor = compactor; return this; }
 
     /// <summary>Adds a memory item with instructions or working memory.</summary>
     public AgentBuilder WithInstructions(string label, string value, int limit = 0, Role role = Role.System, bool readOnly = true)
@@ -160,9 +158,8 @@ public sealed class AgentBuilder
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
-        var chatStore = _chatStore ?? new ChatInMemoryStore();
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
-        var contextCompactor = _contextCompactor ?? new TruncatingContextCompactor(tokenCounter, loggerFactory.CreateLogger<TruncatingContextCompactor>());
+        var chatStore = _chatStore ?? new InMemoryShortTermMemory(tokenCounter, _providerOptions?.ContextWindow);
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
 
         var memory = _memory; // Memory is optional - if null, no semantic memory
@@ -202,7 +199,6 @@ public sealed class AgentBuilder
             chatStore,
             llmExecutor,
             toolExecutor,
-            contextCompactor,
             memory,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),

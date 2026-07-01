@@ -13,12 +13,12 @@ namespace AgentCore.Tooling;
 /// </summary>
 public sealed class ArchivalMemoryTools
 {
-    private readonly IAgentMemory _memoryEngine;
+    private readonly ILongTermMemory _memoryEngine;
     private readonly ILLMProvider _llm;
     private readonly ILogger<ArchivalMemoryTools> _logger;
 
     public ArchivalMemoryTools(
-        IAgentMemory memoryEngine,
+        ILongTermMemory memoryEngine,
         ILLMProvider llm,
         ILogger<ArchivalMemoryTools>? logger = null)
     {
