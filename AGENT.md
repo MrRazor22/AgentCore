@@ -20,19 +20,7 @@ Reducing code that introduces smell is worse than the bloat it replaced. If a si
 
 ## Architectural Decisions
 
-### Delegates Over Base Classes
 
-We use `Func<>` delegates for hooks and extensibility instead of abstract base classes or interfaces. This eliminates:
-- Empty override methods
-- Generic type parameters
-- Registration ceremony
-- Inheritance chains
-
-Users assign only what they need. No empty overrides, no base class requirements.
-
-### Fire-and-Forget Observation
-
-Hooks are observation points, not transformation points. They don't modify messages or tool results. A pipeline implies ordering, middleware chains, next-delegates—all overhead with no benefit for fire-and-forget observation.
 
 ### Data Over Behavior
 
@@ -51,7 +39,7 @@ The agent explicitly loads skills via tool calls. Skills are not silently inject
 When adding features to AgentCore:
 
 1. **Study existing patterns**—don't introduce new abstractions unless necessary
-2. **Prefer delegates** over interfaces and base classes for extensibility
+2. **Prefer simple patterns** over complex abstractions for extensibility
 3. **Keep data structures simple**—records and immutable types
 4. **Avoid ceremony**—no registration, no configuration objects unless needed
 5. **Measure against competitors**—can this be expressed in fewer lines without losing capability?
@@ -59,9 +47,7 @@ When adding features to AgentCore:
 
 ## Examples
 
-### Hooks: 30 Lines vs 176 Lines
 
-OpenAI Agents Python uses abstract base classes with generics (~176 lines). AgentCore uses a single record with nullable Func delegates (~30 lines). Same capability, zero ceremony.
 
 ### Skills: Data Over Classes
 

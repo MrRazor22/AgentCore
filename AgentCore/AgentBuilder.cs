@@ -27,7 +27,7 @@ public sealed class AgentBuilder
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
-    private AgentHooks? _hooks;
+
 
     private readonly List<Skill> _skills = [];
 
@@ -62,19 +62,7 @@ public sealed class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithHooks(AgentHooks hooks)
-    {
-        _hooks = hooks;
-        return this;
-    }
 
-    public AgentBuilder WithHooks(Action<AgentHooks> configure)
-    {
-        var hooks = new AgentHooks();
-        configure(hooks);
-        _hooks = hooks;
-        return this;
-    }
 
     public AgentBuilder WithSkill(string name, string description, string content)
     {
@@ -176,7 +164,6 @@ public sealed class AgentBuilder
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
-            loggerFactory.CreateLogger<LLMAgent>(),
-            _hooks);
+            loggerFactory.CreateLogger<LLMAgent>());
     } 
 }

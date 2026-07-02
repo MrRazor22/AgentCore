@@ -24,13 +24,13 @@ public static class ChatBotAgent
                 TornadoProvider.CreateLLMProvider(apiKey, model, baseUrl),
                 new()
                 {
-                    ContextWindow = 50000
+                    ContextWindow = 8000
                 })
-            //.WithTools<MathTools>()
-            //.WithTools<SearchTools>()
+            .WithTools<MathTools>()
+            .WithTools<SearchTools>()
             .WithTools<WeatherTool>()
-            //.WithTools<GeoTools>()
-            //.WithTools<ConversionTools>()
+            .WithTools<GeoTools>()
+            .WithTools<ConversionTools>()
             .Build();
 
         var sessionId = Guid.NewGuid().ToString("N");

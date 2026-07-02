@@ -27,7 +27,6 @@ public sealed class LLMAgent : IAgent
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
     private readonly ILogger<LLMAgent> _logger;
-    private readonly AgentHooks? _hooks;
 
     public LLMAgent(
         ILLMExecutor llm,
@@ -36,8 +35,7 @@ public sealed class LLMAgent : IAgent
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
-        ILogger<LLMAgent> logger,
-        AgentHooks? hooks = null)
+        ILogger<LLMAgent> logger)
     {
         _memory = memory;
         _llm = llm;
@@ -46,7 +44,6 @@ public sealed class LLMAgent : IAgent
         _baseOptions = baseOptions;
         _config = config;
         _logger = logger;
-        _hooks = hooks;
     }
 
     public static AgentBuilder Create(string name = "agent")
@@ -92,10 +89,7 @@ public sealed class LLMAgent : IAgent
             turnMessages,
             new TokenUsage(inTokens, outTokens, reasoningTokens));
 
-        if (_hooks?.OnAgentEnd != null)
-        {
-            await _hooks.OnAgentEnd(response);
-        }
+
 
         return response;
     }
@@ -217,10 +211,7 @@ public sealed class LLMAgent : IAgent
             _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} MemoryType={MemType} ContextLimit={CtxLimit}",
                 sessionId, input.ForLlm().Length, _memory.GetType().Name, _baseOptions.ContextWindow ?? 0);
 
-            if (_hooks?.OnAgentStart != null)
-            {
-                await _hooks.OnAgentStart(input, sessionId);
-            }
+
 
             // Current turn working context: we start with the user message unless it's a resume continuation where input is empty
             var workingChat = new List<Message>();
@@ -264,10 +255,7 @@ public sealed class LLMAgent : IAgent
                 _logger.LogDebug("LLM step {Step}: RecalledCount={RecCount} ActiveTurn={TurnMsgs} Tokens≈{Approx}", 
                     consecutiveToolSteps + 1, recalled.Count, workingChat.Count, lastLlmTokens);
 
-                if (_hooks?.OnLLMStart != null)
-                {
-                    await _hooks.OnLLMStart(new LLMCallContext(messages, options, consecutiveToolSteps));
-                }
+
 
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
 
@@ -292,10 +280,7 @@ public sealed class LLMAgent : IAgent
                                 var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
                                 _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
                                 
-                                if (_hooks?.OnToolStart != null)
-                                {
-                                    await _hooks.OnToolStart(tc.Call);
-                                }
+
                                 
                                 runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                                 break;
@@ -311,10 +296,7 @@ public sealed class LLMAgent : IAgent
                                     lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
                                 }
 
-                                if (_hooks?.OnLLMEnd != null)
-                                {
-                                    await _hooks.OnLLMEnd(new LLMCallContext(messages, options, consecutiveToolSteps), meta);
-                                }
+
                                 break;
                         }
 
@@ -386,10 +368,7 @@ public sealed class LLMAgent : IAgent
                     
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
                     
-                    if (_hooks?.OnToolEnd != null)
-                    {
-                        await _hooks.OnToolEnd(pendingToolCalls[result.CallId], result);
-                    }
+
                     
                     workingChat.Add(new Message(Role.Tool, result));
                     yield return new AgentToolResultEvent(result);
