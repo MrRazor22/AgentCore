@@ -29,6 +29,8 @@ public class Message
         Contents = contents;
         Metadata = metadata ?? new Dictionary<string, object>();
     }
+
+    public string ForLlm() => string.Join("\n\n", Contents.Select(c => c.ForLlm()));
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

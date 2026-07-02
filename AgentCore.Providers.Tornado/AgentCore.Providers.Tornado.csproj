@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
-    <ProjectReference Include="..\AgentCore.Memory\AgentCore.Memory.csproj" />
   </ItemGroup>
 
   <ItemGroup>
