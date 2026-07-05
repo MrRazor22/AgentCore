@@ -12,7 +12,7 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    Task<AgentResponse> InvokeAsync(IContent input, CancellationToken ct = default);
+    Task<IContent> InvokeAsync(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
@@ -48,41 +48,30 @@ public sealed class LLMAgent : IAgent
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
 
-    public Task<AgentResponse> InvokeAsync(IContent input, CancellationToken ct = default)
+    public Task<IContent> InvokeAsync(IContent input, CancellationToken ct = default)
         => InvokeAsyncInternal(input, null, ct);
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
         var response = await InvokeAsyncInternal(input, typeof(T), ct);
-        var json = response.Text;
+        var json = response.ForLlm();
         
         if (string.IsNullOrWhiteSpace(json)) return default;
         return System.Text.Json.JsonSerializer.Deserialize<T>(json);
     }
 
-    private async Task<AgentResponse> InvokeAsyncInternal(
+    private async Task<IContent> InvokeAsyncInternal(
         IContent input, 
         Type? outputType, 
         CancellationToken ct)
     {
         var turnMessages = new List<Message>();
 
-        int inTokens = 0;
-        int outTokens = 0;
-        int reasoningTokens = 0;
-
         await foreach (var evt in CoreStreamAsync(input, outputType, turnMessages, ct))
         {
             if (evt is AgentErrorEvent error)
             {
                 throw error.Error;
-            }
-
-            if (evt is LLMMetaEvent meta)
-            {
-                inTokens += meta.Usage.InputTokens;
-                outTokens += meta.Usage.OutputTokens;
-                reasoningTokens += meta.Usage.ReasoningTokens;
             }
         }
 
@@ -93,11 +82,7 @@ public sealed class LLMAgent : IAgent
         IContent content = lastAssistantMsg?.Contents.OfType<Text>().LastOrDefault()
             ?? (lastAssistantMsg?.Contents.LastOrDefault() ?? new Text(""));
 
-        var response = new AgentResponse(
-            content,
-            new TokenUsage(inTokens, outTokens, reasoningTokens));
-
-        return response;
+        return content;
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(

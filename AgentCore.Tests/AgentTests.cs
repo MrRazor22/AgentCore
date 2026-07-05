@@ -56,9 +56,7 @@ public class AgentTests
         var response = await agent.InvokeAsync(new Text("Hello"));
 
         // Assert
-        Assert.Equal("Model response content", response.Text);
-        Assert.Equal(15, response.Usage.InputTokens);
-        Assert.Equal(10, response.Usage.OutputTokens);
+        Assert.Equal("Model response content", response.ForLlm());
     }
 
     [Fact]

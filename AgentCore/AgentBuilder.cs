@@ -119,7 +119,7 @@ public sealed class AgentBuilder
                 {
                     var task = args.Length > 0 ? args[0]?.ToString() ?? "" : "";
                     var response = await agent.InvokeAsync(new Conversation.Text(task));
-                    return new Conversation.Text(response.Text ?? "");
+                    return new Conversation.Text(response.ForLlm());
                 }
             });
         });

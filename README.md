@@ -63,7 +63,7 @@ var agent = LLMAgent.Create("my-agent")
 
 // Direct, fast, unopinionated
 var response = await agent.InvokeAsync("Summarize my system status.");
-Console.WriteLine(response.Text);
+Console.WriteLine(response.ForLlm());
 ```
 
 ### Pure Tool Definition

@@ -73,7 +73,7 @@ public sealed class AgentMcpServer
             : "";
 
         var response = await _agent.InvokeAsync(new Text(input), ct);
-        var json = JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize<IContent>(response, new JsonSerializerOptions { WriteIndented = true });
 
         return new CallToolResult
         {

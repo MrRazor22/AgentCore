@@ -238,15 +238,11 @@ public class StreamingTests
         }
 
         // Assert text consistency
-        Assert.Equal("Hello world", invokeResponse.Text);
+        Assert.Equal("Hello world", invokeResponse.ForLlm());
         
         var streamTextEvents = streamEvents.OfType<TextEvent>().Select(e => e.Delta);
         var aggregatedStreamText = string.Join("", streamTextEvents);
         Assert.Equal("Hello world", aggregatedStreamText);
-
-        // Assert usage consistency
-        Assert.Equal(10, invokeResponse.Usage.InputTokens);
-        Assert.Equal(5, invokeResponse.Usage.OutputTokens);
 
         var meta = streamEvents.OfType<LLMMetaEvent>().Single();
         Assert.Equal(10, meta.Usage.InputTokens);
