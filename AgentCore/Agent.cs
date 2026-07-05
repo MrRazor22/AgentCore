@@ -135,9 +135,6 @@ public sealed class LLMAgent : IAgent
         List<Message> turnMessages,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        using var activity = AgentDiagnosticSource.Source.StartActivity("AgentCore.Invoke");
-        activity?.SetTag("agent.name", _config.Name);
-
         using (_logger.BeginScope(new Dictionary<string, object>
         {
             ["Agent"] = _config.Name
