@@ -46,7 +46,7 @@ public class TornadoLLMProvider : ILLMProvider
 
         if (options.Temperature.HasValue) request.Temperature = options.Temperature.Value;
         if (options.TopP.HasValue) request.TopP = options.TopP.Value;
-        if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
+        if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value.Tokens;
 
         if (options.ReasoningEffort.HasValue)
         {

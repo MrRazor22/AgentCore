@@ -127,7 +127,7 @@ public sealed class LLMAgent : IAgent
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             _logger.LogInformation("Agent invoked. InputLength={InputLength} ContextLimit={ContextLimit}",
-                input.ForLlm().Length, _baseOptions.ContextWindow ?? 0);
+                input.ForLlm().Length, _baseOptions.ContextWindow?.Tokens ?? 0);
 
             var enumerator = CoreStreamInternalAsync(input, outputType, turnMessages, ct)
                 .ConfigureAwait(false)
@@ -180,7 +180,7 @@ public sealed class LLMAgent : IAgent
         // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
         IReadOnlyList<Message> recalled = await _memory.RecallAsync(
             userMessage, 
-            new TokenBudget(_baseOptions.ContextWindow ?? 0), 
+            _baseOptions.ContextWindow ?? new TokenBudget(0), 
             ct).ConfigureAwait(false);
 
         var options = BuildLLMOptions(outputType);
@@ -200,9 +200,9 @@ public sealed class LLMAgent : IAgent
             
             // Assemble complete LLM prompt: System Identity Prompt + Recalled Context + Current Turn Messages
             var messages = new List<Message>();
-            if (!string.IsNullOrEmpty(_config.SystemPrompt))
+            if (_config.SystemPrompt != null)
             {
-                messages.Add(new Message(Role.System, new Text(_config.SystemPrompt)));
+                messages.Add(new Message(Role.System, _config.SystemPrompt));
             }
 
             messages.AddRange(recalled);

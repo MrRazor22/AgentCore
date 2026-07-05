@@ -49,7 +49,7 @@ internal sealed class ChatMemory : IMemory
         int historyTokens = await _tokenCounter.CountAsync(workingHistory, ct).ConfigureAwait(false);
         int totalTokens = currentInputTokens + historyTokens;
 
-        int maxLimit = budget.MaxTokens;
+        int maxLimit = budget.Tokens;
 
         // If context budget is 0 or unconfigured, we do not summarize, just return history
         if (maxLimit <= 0)
