@@ -34,8 +34,6 @@ public sealed class AgentBuilder
     private readonly List<Func<IToolExecutor, IToolExecutor>> _toolExecutorLayers = [];
     private readonly List<Func<ILLMExecutor, ILLMExecutor>> _llmExecutorLayers = [];
 
-    private readonly List<Skill> _skills = [];
-
     public AgentBuilder()
     {
         _logger = NullLogger<AgentBuilder>.Instance;
@@ -69,21 +67,6 @@ public sealed class AgentBuilder
     {
         _provider = provider;
         if (options != null) _providerOptions = options;
-        return this;
-    }
-
-
-
-    public AgentBuilder WithSkill(string name, string description, string content)
-    {
-        _skills.Add(new Skill(name, description, content));
-        return this;
-    }
-
-    public AgentBuilder WithSkillsDirectory(string path)
-    {
-        var loadedSkills = SkillLoader.FromDirectory(path);
-        _skills.AddRange(loadedSkills);
         return this;
     }
 
@@ -151,10 +134,6 @@ public sealed class AgentBuilder
 
 
 
-        // Register skill tools if skills are provided
-        if (_skills.Count > 0)
-            registry.RegisterAll(new SkillTools(_skills));
-
         IToolExecutor toolExecutor = _toolExecutor ?? new ToolExecutor(
             registry,
             loggerFactory.CreateLogger<ToolExecutor>());
@@ -174,10 +153,9 @@ public sealed class AgentBuilder
             llmExecutor = layer(llmExecutor);
         }
 
-        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} Skills={SkillCount} ProviderType={ProviderType}",
+        _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
             _config.Name,
             registry.Tools.Count,
-            _skills.Count,
             _provider.GetType().Name);
 
         return new LLMAgent(

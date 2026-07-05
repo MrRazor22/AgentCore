@@ -30,25 +30,44 @@ internal sealed class ToolExecutor : IToolExecutor
     public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
         => HandleInternalAsync(call, ct);
 
+    private static ToolResult Failed(string callId, string toolName, string message)
+        => new(callId, new Text($"Error calling tool '{toolName}': {message}"));
+
     private async Task<ToolResult> HandleInternalAsync(ToolCall call, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(call.Name))
-            return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", "Tool name cannot be empty."));
+        {
+            _logger.LogWarning("Tool validation failed: Tool name cannot be empty.");
+            return Failed(call.Id, "Unknown", "Tool name cannot be empty.");
+        }
 
         var argsJson = call.Arguments?.ToString() ?? "{}";
         _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
+
+        var tool = _tools.TryGet(call.Name);
+        if (tool == null)
+        {
+            _logger.LogWarning("Tool validation failed: Tool '{Name}' not registered.", call.Name);
+            return Failed(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
+        }
+
+        var method = tool.Method!;
+        if (!TryParseToolParams(method, call.Arguments, out var values, out var errorMessage))
+        {
+            _logger.LogWarning("Tool validation failed: {Name} Error={Message}", call.Name, errorMessage);
+            return Failed(call.Id, call.Name, errorMessage!);
+        }
 
         var sw = Stopwatch.StartNew();
 
         try
         {
-            var tool = _tools.TryGet(call.Name);
-            if (tool == null)
-                return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", $"Tool '{call.Name}' not registered"));
+            var finalArgs = InjectCancellationToken(values!, method, ct);
+            var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
+            IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
 
-            var result = await InvokeInternalAsync(call, ct).ConfigureAwait(false);
             sw.Stop();
             _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
             _logger.LogTrace("Tool result: {Name} Result={Content}", call.Name, result?.ForLlm()?.Length > 200 ? result.ForLlm()[..200] + "..." : result?.ForLlm());
@@ -58,27 +77,12 @@ internal sealed class ToolExecutor : IToolExecutor
         catch (Exception ex)
         {
             sw.Stop();
-            var wrapped = ex is ToolExecutionException tex ? tex : new ToolExecutionException(call.Name, ex.Message, ex);
-            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, wrapped.Message);
-            return new ToolResult(call.Id, wrapped);
+            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, ex.Message);
+            return Failed(call.Id, call.Name, ex.Message);
         }
     }
 
-    private async Task<IContent?> InvokeInternalAsync(ToolCall toolCall, CancellationToken ct)
-    {
-        var tool = _tools.TryGet(toolCall.Name) ?? throw new ToolExecutionException(toolCall.Name, $"Tool '{toolCall.Name}' not registered.", new InvalidOperationException());
-
-        var method = tool.Method!;
-        var toolParams = ParseToolParams(tool.Name, method, toolCall.Arguments);
-        var finalArgs = InjectCancellationToken(toolParams, method, ct);
-
-        var rawResult = await tool.Invoker!(finalArgs).ConfigureAwait(false);
-        IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
-
-        return result;
-    }
-
-    private static object?[] ParseToolParams(string toolName, MethodInfo method, JsonObject arguments)
+    private static bool TryParseToolParams(MethodInfo method, JsonObject arguments, out object?[]? values, out string? errorMessage)
     {
         var parameters = method.GetParameters();
         var argsObj = arguments;
@@ -95,11 +99,13 @@ internal sealed class ToolExecutor : IToolExecutor
             .ToList();
         if (unknownKeys.Count > 0)
         {
-            throw new ToolValidationException(toolName, unknownKeys[0],
-                $"Unknown parameter(s): [{string.Join(", ", unknownKeys)}]. Expected: [{FormatExpectedParams(parameters)}].");
+            values = null;
+            errorMessage = $"Unknown parameter(s): [{string.Join(", ", unknownKeys)}]. Expected: [{FormatExpectedParams(parameters)}].";
+            return false;
         }
 
-        var values = new List<object?>();
+        var valuesList = new List<object?>();
+        errorMessage = null;
 
         foreach (var p in parameters)
         {
@@ -110,21 +116,45 @@ internal sealed class ToolExecutor : IToolExecutor
 
             if (node == null)
             {
-                if (p.HasDefaultValue) values.Add(p.DefaultValue);
-                else throw new ToolValidationException(toolName, p.Name!, 
-                    $"Missing required parameter '{p.Name}' (type: {p.ParameterType.MapClrTypeToJsonType()}). Expected parameters: [{FormatExpectedParams(parameters)}].");
+                if (p.HasDefaultValue)
+                {
+                    valuesList.Add(p.DefaultValue);
+                }
+                else
+                {
+                    errorMessage = $"parameter '{p.Name}': Missing required parameter '{p.Name}' (type: {p.ParameterType.MapClrTypeToJsonType()}). Expected parameters: [{FormatExpectedParams(parameters)}].";
+                    break;
+                }
                 continue;
             }
 
             var schema = p.ParameterType.GetSchemaForType();
             var errors = schema.Validate(node, p.Name!);
-            if (errors.Any()) throw new ToolValidationAggregateException(toolName, errors);
+            if (errors.Any())
+            {
+                errorMessage = $"parameter '{p.Name}': {string.Join("; ", errors.Select(e => e.Message))}";
+                break;
+            }
 
-            try { values.Add(DeserializeNode(node, p.ParameterType)); }
-            catch (Exception ex) { throw new ToolValidationException(toolName, p.Name!, ex.Message); }
+            try
+            {
+                valuesList.Add(DeserializeNode(node, p.ParameterType));
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"parameter '{p.Name}': {ex.Message}";
+                break;
+            }
         }
 
-        return values.ToArray();
+        if (errorMessage != null)
+        {
+            values = null;
+            return false;
+        }
+
+        values = valuesList.ToArray();
+        return true;
     }
 
     private static string FormatExpectedParams(ParameterInfo[] parameters)
@@ -167,43 +197,4 @@ internal sealed class ToolExecutor : IToolExecutor
 
         return args;
     }
-}
-
-public abstract class ToolException : Exception, IContent
-{
-    public string ToolName { get; }
-    protected ToolException(string toolName, string message, Exception? inner = null)
-        : base(message, inner)
-    {
-        ToolName = toolName;
-    }
-    public virtual string ForLlm()
-        => $"Error calling tool '{ToolName}': {Message}";
-}
-public sealed class ToolExecutionException : ToolException
-{
-    public ToolExecutionException(string toolName, string message, Exception? inner = null)
-        : base(toolName, message, inner) { }
-}
-public sealed class ToolValidationAggregateException : ToolException
-{
-    public IReadOnlyList<SchemaValidationError> Errors { get; }
-    public ToolValidationAggregateException(string toolName, IEnumerable<SchemaValidationError> errors)
-        : base(toolName, "Tool validation failed", new ArgumentException(errors.Select(e => e.Message).ToJoinedString("; ")))
-    {
-        Errors = errors.ToList();
-    }
-    public override string ForLlm() 
-        => $"Error calling tool '{ToolName}': {string.Join("; ", Errors.Select(e => e.Message))}";
-}
-public sealed class ToolValidationException : ToolException
-{
-    public string ParamName { get; }
-    public ToolValidationException(string toolName, string paramName, string message)
-        : base(toolName, $"{paramName}: {message}") 
-    {
-        ParamName = paramName;
-    }
-    public override string ForLlm()
-        => $"Error calling tool '{ToolName}', parameter '{ParamName}': {Message}";
 }

@@ -41,32 +41,7 @@ public class BuilderTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    [Fact]
-    public void Build_WithDuplicateSkills_RegistersAndUsesFirstSkill()
-    {
-        // Arrange
-        var provider = new MockLLMProvider();
-        var builder = new AgentBuilder()
-            .WithName("dup-skill-agent")
-            .WithProvider(provider)
-            .WithSkill("DuplicateSkill", "First description", "First content")
-            .WithSkill("DuplicateSkill", "Second description", "Second content");
 
-        // Act
-        var agent = builder.Build();
-
-        // The builder should instantiate SkillTools containing both, 
-        // and calling SkillTools.LoadSkill should return the first registered one.
-        var skillTools = new SkillTools(new[]
-        {
-            new Skill("DuplicateSkill", "First description", "First content"),
-            new Skill("DuplicateSkill", "Second description", "Second content")
-        });
-
-        var loaded = skillTools.LoadSkill("DuplicateSkill");
-        Assert.Contains("First content", loaded);
-        Assert.DoesNotContain("Second content", loaded);
-    }
 
     [Fact]
     public void Build_Defaults_SetsUpFallbackInstances()

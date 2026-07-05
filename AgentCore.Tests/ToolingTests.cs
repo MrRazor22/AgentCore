@@ -60,7 +60,6 @@ public class ToolingTests
             ["items"] = new JsonArray("a", "b")
         };
         var result1 = await toolExecutor.HandleToolCallAsync(new ToolCall("call1", "complex_tool.run", args1));
-        if (result1.Result is ToolException ex1) Assert.Fail(ex1.ForLlm());
         Assert.Equal("requiredStr=hello;optionalInt=5;nullableInt=10;color=Blue;items=a,b", result1.Result?.ForLlm());
 
         // 2. Default value & Nullable parameters omitted
@@ -69,7 +68,6 @@ public class ToolingTests
             ["requiredStr"] = "world"
         };
         var result2 = await toolExecutor.HandleToolCallAsync(new ToolCall("call2", "complex_tool.run", args2));
-        Assert.False(result2.Result is ToolException);
         Assert.Equal("requiredStr=world;optionalInt=100;nullableInt=null;color=Green;items=null", result2.Result?.ForLlm());
 
         // 3. Invalid enum conversion
@@ -79,7 +77,7 @@ public class ToolingTests
             ["color"] = "Yellow" // Invalid enum option
         };
         var result3 = await toolExecutor.HandleToolCallAsync(new ToolCall("call3", "complex_tool.run", args3));
-        Assert.True(result3.Result is ToolException);
+        Assert.True(result3.Result is Text);
         Assert.Contains("ColorEnum", result3.Result?.ForLlm());
 
         // 4. Missing required parameter
@@ -88,7 +86,7 @@ public class ToolingTests
             ["optionalInt"] = 42
         };
         var result4 = await toolExecutor.HandleToolCallAsync(new ToolCall("call4", "complex_tool.run", args4));
-        Assert.True(result4.Result is ToolException);
+        Assert.True(result4.Result is Text);
         Assert.Contains("Missing required parameter 'requiredStr'", result4.Result?.ForLlm());
     }
 
@@ -137,53 +135,5 @@ public class ToolingTests
         Assert.Null(resultAfter);
     }
 
-    [Fact]
-    public void SkillLoader_ParsesYamlFrontmatter_AndFallbackCorrectly()
-    {
-        // 1. Parsing YAML frontmatter
-        var yamlMarkdown = @"---
-name: YAML_Skill
-description: Skill using YAML frontmatter
----
-# Instructions
-Step 1: Do task";
-        var skillYaml = SkillLoader.FromMarkdownContent(yamlMarkdown);
-        Assert.NotNull(skillYaml);
-        Assert.Equal("YAML_Skill", skillYaml.Name);
-        Assert.Equal("Skill using YAML frontmatter", skillYaml.Description);
-        Assert.Equal("# Instructions\r\nStep 1: Do task", skillYaml.Content.Replace("\n", "\r\n").Replace("\r\r\n", "\r\n"));
 
-        // 2. Parsing Fallback (no frontmatter)
-        var fallbackMarkdown = @"Fallback_Skill
-Simple fallback description
-Body contents";
-        var skillFallback = SkillLoader.FromMarkdownContent(fallbackMarkdown);
-        Assert.NotNull(skillFallback);
-        Assert.Equal("Fallback_Skill", skillFallback.Name);
-        Assert.Equal("Simple fallback description", skillFallback.Description);
-        Assert.Contains("Body contents", skillFallback.Content);
-    }
-
-    [Fact]
-    public void SkillTools_InvocationAndLoadSuccessAndFailure()
-    {
-        // Arrange
-        var skills = new List<Skill>
-        {
-            new Skill("CustomSkill", "A helper skill", "Instructions for custom skill")
-        };
-        var skillTools = new SkillTools(skills);
-
-        // Act - Success
-        var successResult = skillTools.LoadSkill("CustomSkill");
-        // Act - Failure
-        var failureResult = skillTools.LoadSkill("NonExistent");
-
-        // Assert
-        Assert.Contains("<skill_content name=\"CustomSkill\">", successResult);
-        Assert.Contains("Instructions for custom skill", successResult);
-
-        Assert.Contains("Error: Skill 'NonExistent' not found", failureResult);
-        Assert.Contains("CustomSkill", failureResult);
-    }
 }
