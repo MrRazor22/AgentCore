@@ -21,4 +21,5 @@ public sealed class LLMOptions
     public float? PresencePenalty { get; set; }
     public JsonObject? ResponseSchema { get; set; }
     public ReasoningEffort? ReasoningEffort { get; set; }
+    public int MaxRetries { get; set; } = 3;
 }

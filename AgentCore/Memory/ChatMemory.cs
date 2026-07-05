@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -11,40 +10,38 @@ using AgentCore.Tokens;
 
 namespace AgentCore.Memory;
 
-public sealed class SessionMemoryOptions
+public sealed class ChatMemoryOptions
 {
     public double CompressionTarget { get; set; } = 0.70;
     public int MinRecentTokens { get; set; } = 2000;
 }
 
-public sealed class SessionMemory : IMemory
+internal sealed class ChatMemory : IMemory
 {
-    private readonly ConcurrentDictionary<string, List<Message>> _store = new();
+    private readonly List<Message> _history = new();
     private readonly ITokenCounter _tokenCounter;
     private readonly ILLMProvider _llmProvider;
-    private readonly SessionMemoryOptions _options;
+    private readonly ChatMemoryOptions _options;
 
-    public SessionMemory(
+    public ChatMemory(
         ITokenCounter tokenCounter,
         ILLMProvider llmProvider,
-        SessionMemoryOptions? options = null)
+        ChatMemoryOptions? options = null)
     {
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
         _llmProvider = llmProvider ?? throw new ArgumentNullException(nameof(llmProvider));
-        _options = options ?? new SessionMemoryOptions();
+        _options = options ?? new ChatMemoryOptions();
     }
 
     public async Task<IReadOnlyList<Message>> RecallAsync(
-        string sessionId,
         Message currentInput,
         TokenBudget budget,
         CancellationToken ct = default)
     {
-        var history = _store.GetOrAdd(sessionId, _ => new List<Message>());
         List<Message> workingHistory;
-        lock (history)
+        lock (_history)
         {
-            workingHistory = history.ToList();
+            workingHistory = _history.ToList();
         }
 
         // Measure total tokens of current history + current input
@@ -156,10 +153,10 @@ public sealed class SessionMemory : IMemory
 
             if (historyModified)
             {
-                lock (history)
+                lock (_history)
                 {
-                    history.Clear();
-                    history.AddRange(workingHistory);
+                    _history.Clear();
+                    _history.AddRange(workingHistory);
                 }
             }
         }
@@ -168,23 +165,24 @@ public sealed class SessionMemory : IMemory
     }
 
     public async Task RememberAsync(
-        string sessionId,
         IReadOnlyList<Message> completedTurn,
         CancellationToken ct = default)
     {
         if (completedTurn == null || completedTurn.Count == 0) return;
 
-        var history = _store.GetOrAdd(sessionId, _ => new List<Message>());
-        lock (history)
+        lock (_history)
         {
-            history.AddRange(completedTurn);
+            _history.AddRange(completedTurn);
         }
         await Task.CompletedTask;
     }
 
-    public Task ClearAsync(string sessionId, CancellationToken ct = default)
+    public Task ClearAsync(CancellationToken ct = default)
     {
-        _store.TryRemove(sessionId, out _);
+        lock (_history)
+        {
+            _history.Clear();
+        }
         return Task.CompletedTask;
     }
 

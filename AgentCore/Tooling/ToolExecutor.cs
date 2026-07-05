@@ -14,7 +14,7 @@ public interface IToolExecutor
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-public sealed class ToolExecutor : IToolExecutor
+internal sealed class ToolExecutor : IToolExecutor
 {
     private readonly IToolRegistry _tools;
     private readonly ILogger<ToolExecutor> _logger;
@@ -44,17 +44,9 @@ public sealed class ToolExecutor : IToolExecutor
 
         try
         {
-            // If not approved and tool requires approval, don't execute - agent should pause
             var tool = _tools.TryGet(call.Name);
             if (tool == null)
                 return new ToolResult(call.Id, new ToolValidationException("Unknown", "Name", $"Tool '{call.Name}' not registered"));
-
-            if (!call.IsApproved && tool.RequiresApproval)
-            {
-                sw.Stop();
-                _logger.LogInformation("Tool pending approval: {Name}", call.Name);
-                return new ToolResult(call.Id, new ToolExecutionException(call.Name, $"Tool '{call.Name}' requires approval"));
-            }
 
             var result = await InvokeInternalAsync(call, ct).ConfigureAwait(false);
             sw.Stop();

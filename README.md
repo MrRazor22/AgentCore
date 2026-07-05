@@ -82,29 +82,30 @@ public class SystemTools
 }
 ```
 
-### Crash Recovery in 3 Lines
+### Pipeline Customization & Layering
 
-Every invocation can be tied to a `sessionId`. With `FileMemory`, if your process crashes mid-invocation, you can instantiate the exact same code, pass the same ID, and resume the conversation perfectly.
+AgentCore exposes three fundamental execution pipelines that can be customized or wrapped using layers: Memory, LLM Executor, and Tool Executor. This allows you to plug in custom behaviors (such as logging, approval workflows, caching, or durable persistence) without modifying the agent implementation.
 
 ```csharp
-var memory = new FileMemory(new() { PersistDir = @"./memory" });
-
 var agent = LLMAgent.Create("my-agent")
-    .WithMemory(memory)
+    .UseMemory(new ChatMemory())
+    .AddMemoryLayer(m => new LoggingMemory(m))
+    .AddToolExecutorLayer(t => new ApprovalToolExecutor(t))
     .Build();
-
-// After a system crash:
-await agent.InvokeAsync("Continue where we left off.", sessionId: "session-123");
 ```
 
 ---
+
+## Architectural Boundary
+
+> [!NOTE]
+> **Execution Boundary:** AgentCore executes an agent to completion. Long-running orchestration (human approval, timers, workflows, durable pauses) belongs outside the core framework and can be implemented by decorating executors (via layers) or orchestrating multiple agent invocations.
 
 ## Advanced Capabilities (Out of the Box)
 
 - **Cognitive Memory V2 (`MemoryEngine`)**: Implements AMFS-style confidence decay, allowing agents to "forget" irrelevant noise, track `Fact` vs `Belief`, and evolve `Skills`.
 - **Active Contradiction Management**: Vector-based detection of conflicting knowledge automatically supersedes old "facts" without expensive graph-LLM loops.
 - **Background Dreaming & Pruning**: Nightly or background consolidation of raw facts into high-density insights.
-- **Built-in Tool Approval**: Two-phase approval workflow for sensitive operational tools. Register requests, wait for human decision, execute or reject seamlessly.
 - **Code Execution Sandbox (`AgentCore.CodingAgent`)**: Let your agent write and execute C# code dynamically using Roslyn (in-process) or isolated cross-process execution.
 - **Model Context Protocol (MCP)**: Native integration for MCP tools and clients.
 

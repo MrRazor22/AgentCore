@@ -49,8 +49,7 @@ public sealed class AgentMcpServer
                 {
                     "type": "object",
                     "properties": {
-                        "input":      { "type": "string", "description": "The task or question for the agent" },
-                        "session_id": { "type": "string", "description": "Optional session ID for conversation continuity" }
+                        "input":      { "type": "string", "description": "The task or question for the agent" }
                     },
                     "required": ["input"]
                 }
@@ -73,11 +72,7 @@ public sealed class AgentMcpServer
             ? inp.GetString() ?? ""
             : "";
 
-        string? sessionId = args.TryGetValue("session_id", out var sid) && sid.ValueKind == JsonValueKind.String
-            ? sid.GetString()
-            : null;
-
-        var response = await _agent.InvokeAsync(new Text(input), sessionId, ct);
+        var response = await _agent.InvokeAsync(new Text(input), ct);
         var json = JsonSerializer.Serialize(response, new JsonSerializerOptions { WriteIndented = true });
 
         return new CallToolResult

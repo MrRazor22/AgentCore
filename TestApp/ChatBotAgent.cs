@@ -19,7 +19,7 @@ public static class ChatBotAgent
         var model = "qwen/qwen3.5-9b";
         var baseUrl = new Uri("http://127.0.0.1:1234");
 
-        var agent = LLMAgent.Create("chat")
+        IAgent BuildAgent() => LLMAgent.Create("chat")
             .WithProvider(
                 TornadoProvider.CreateLLMProvider(apiKey, model, baseUrl),
                 new()
@@ -33,7 +33,7 @@ public static class ChatBotAgent
             .WithTools<ConversionTools>()
             .Build();
 
-        var sessionId = Guid.NewGuid().ToString("N");
+        var agent = BuildAgent();
 
         while (true)
         {
@@ -52,7 +52,7 @@ public static class ChatBotAgent
             if (prompt.Equals("/clear", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Clear();
-                sessionId = Guid.NewGuid().ToString("N");
+                agent = BuildAgent();
                 continue;
             }
 
@@ -60,7 +60,7 @@ public static class ChatBotAgent
             _assistantStarted = false;
             _thinkingStarted = false;
 
-            await foreach (var evt in agent.InvokeStreamingAsync((Text)prompt, sessionId))
+            await foreach (var evt in agent.InvokeStreamingAsync((Text)prompt))
             {
                 Render(evt);
             }
@@ -125,6 +125,12 @@ public static class ChatBotAgent
                 }
 
                 Console.Write(t.Delta);
+                break;
+
+            case AgentErrorEvent e:
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"\n❌ Error: {e.Error.Message}");
+                Console.ResetColor();
                 break;
         }
     }

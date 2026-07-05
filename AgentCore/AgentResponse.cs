@@ -6,23 +6,17 @@ namespace AgentCore;
 /// <summary>
 /// Represents the complete result of an agent invocation "turn".
 /// </summary>
-/// <param name="SessionId">The session identifier.</param>
-/// <param name="Messages">The list of messages added during this turn (User, Assistant steps, Tool steps).</param>
+/// <param name="Content">The final content produced during this turn.</param>
 /// <param name="Usage">Aggregated token usage for all LLM calls in this turn.</param>
 public sealed record AgentResponse(
-    string SessionId,
-    IReadOnlyList<Message> Messages,
+    IContent Content,
     TokenUsage Usage
 )
 {
     /// <summary>
-    /// Gets the text from the final assistant message in the turn, if any.
+    /// Gets the text representation of the response content.
     /// </summary>
-    public string Text => Messages
-        .Where(m => m.Role == Role.Assistant)
-        .LastOrDefault()?.Contents
-        .OfType<Text>()
-        .LastOrDefault()?.Value ?? "";
+    public string Text => Content is Text text ? text.Value : "";
 
-    public override string ToString() => Text;
+    public override string ToString() => Content.ForLlm();
 }

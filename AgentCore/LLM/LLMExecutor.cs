@@ -1,3 +1,4 @@
+using System;
 using AgentCore.Conversation;
 using AgentCore.Json;
 using AgentCore.Tokens;
@@ -16,7 +17,7 @@ public interface ILLMExecutor
     IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions options, CancellationToken ct = default);
 }
 
-public sealed class LLMExecutor : ILLMExecutor
+internal sealed class LLMExecutor : ILLMExecutor
 {
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
@@ -57,50 +58,96 @@ public sealed class LLMExecutor : ILLMExecutor
 
         _logger.LogTrace("LLM request: Model={Model} Tools=[{ToolNames}]", options.Model, toolNamesStr);
 
-        var content = _provider.StreamAsync(messages, options, tools, ct);
-
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
         int currentToolIndex = -1;
 
-        await foreach (var delta in content.WithCancellation(ct))
+        int maxRetries = options.MaxRetries;
+        int attempt = 0;
+        IAsyncEnumerator<IContentDelta>? enumerator = null;
+        bool hasYielded = false;
+
+        while (true)
         {
-            switch (delta)
+            attempt++;
+            try
             {
-                case TextDelta t:
-                    yield return new TextEvent(t.Value);
-                    break;
-
-                case ReasoningDelta r:
-                    yield return new ReasoningEvent(r.Value);
-                    break;
-
-                case ToolCallDelta tc:
-                    if (tc.Index != currentToolIndex && currentToolIndex != -1)
+                bool hasMore = false;
+                try
+                {
+                    var content = _provider.StreamAsync(messages, options, tools, ct);
+                    enumerator = content.GetAsyncEnumerator(ct);
+                    hasMore = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                }
+                catch (RetryableException ex) when (attempt <= maxRetries && !hasYielded)
+                {
+                    if (enumerator != null)
                     {
-                        if (toolCalls.TryGetValue(currentToolIndex, out var prev))
-                        {
-                            var evt = ParseToolCall(prev.id, prev.name, prev.args.ToString());
-                            if (evt != null) yield return evt;
-                            toolCalls.Remove(currentToolIndex);
-                        }
+                        await enumerator.DisposeAsync().ConfigureAwait(false);
+                        enumerator = null;
                     }
-                    
-                    currentToolIndex = tc.Index;
 
-                    if (!toolCalls.TryGetValue(tc.Index, out var entry))
-                        entry = ("", "", new StringBuilder());
-                    if (!string.IsNullOrEmpty(tc.Id)) entry.id = tc.Id;
-                    if (!string.IsNullOrEmpty(tc.Name)) entry.name = tc.Name;
-                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
-                    toolCalls[tc.Index] = entry;
-                    break;
+                    int delayMs = (int)(Math.Pow(2, attempt) * 500) + new Random().Next(0, 200);
+                    _logger.LogWarning(ex, "Transient error starting LLM stream. Retrying in {DelayMs}ms (Attempt {Attempt}/{MaxRetries}).", delayMs, attempt, maxRetries);
+                    await Task.Delay(delayMs, ct).ConfigureAwait(false);
+                    continue;
+                }
 
-                case MetaDelta m:
-                    tokenUsage = m.TokenUsage;
-                    finishReason = m.FinishReason;
-                    break;
+                while (hasMore)
+                {
+                    var delta = enumerator.Current;
+                    hasYielded = true;
+
+                    switch (delta)
+                    {
+                        case TextDelta t:
+                            yield return new TextEvent(t.Value);
+                            break;
+
+                        case ReasoningDelta r:
+                            yield return new ReasoningEvent(r.Value);
+                            break;
+
+                        case ToolCallDelta tc:
+                            if (tc.Index != currentToolIndex && currentToolIndex != -1)
+                            {
+                                if (toolCalls.TryGetValue(currentToolIndex, out var prev))
+                                {
+                                    var evt = ParseToolCall(prev.id, prev.name, prev.args.ToString());
+                                    if (evt != null) yield return evt;
+                                    toolCalls.Remove(currentToolIndex);
+                                }
+                            }
+                            
+                            currentToolIndex = tc.Index;
+
+                            if (!toolCalls.TryGetValue(tc.Index, out var entry))
+                                entry = ("", "", new StringBuilder());
+                            if (!string.IsNullOrEmpty(tc.Id)) entry.id = tc.Id;
+                            if (!string.IsNullOrEmpty(tc.Name)) entry.name = tc.Name;
+                            if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
+                            toolCalls[tc.Index] = entry;
+                            break;
+
+                        case MetaDelta m:
+                            tokenUsage = m.TokenUsage;
+                            finishReason = m.FinishReason;
+                            break;
+                    }
+
+                    hasMore = await enumerator.MoveNextAsync().ConfigureAwait(false);
+                }
+
+                break;
+            }
+            finally
+            {
+                if (enumerator != null)
+                {
+                    await enumerator.DisposeAsync().ConfigureAwait(false);
+                    enumerator = null;
+                }
             }
         }
 

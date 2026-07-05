@@ -140,7 +140,17 @@ public class TornadoLLMProvider : ILLMProvider
             }
             catch (Exception ex)
             {
-                channel.Writer.TryComplete(ex);
+                var translated = ex;
+                if (IsContextLimitError(ex))
+                {
+                    translated = new ContextLengthExceededException();
+                }
+                else if (IsTransientError(ex))
+                {
+                    translated = new RetryableException(ex.Message, ex);
+                }
+
+                channel.Writer.TryComplete(translated);
             }
             finally
             {
@@ -155,6 +165,50 @@ public class TornadoLLMProvider : ILLMProvider
                 yield return item;
             }
         }
+    }
+
+    private static bool IsContextLimitError(Exception ex)
+    {
+        var msg = ex.ToString();
+        return msg.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("maximum context length", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("token limit exceeded", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("context window limit", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTransientError(Exception ex)
+    {
+        if (ex is System.TimeoutException || 
+            ex is System.IO.IOException || 
+            ex is System.Net.Sockets.SocketException)
+        {
+            return true;
+        }
+
+        if (ex is System.Net.Http.HttpRequestException httpEx)
+        {
+            if (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
+                httpEx.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
+                httpEx.StatusCode == System.Net.HttpStatusCode.GatewayTimeout ||
+                httpEx.StatusCode == System.Net.HttpStatusCode.BadGateway ||
+                httpEx.StatusCode == System.Net.HttpStatusCode.InternalServerError)
+            {
+                return true;
+            }
+        }
+
+        var msg = ex.ToString();
+        return msg.Contains("429", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("503", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("504", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("502", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("500", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("HttpRequestException", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("SocketException", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("TimeoutException", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+               msg.Contains("overloaded", StringComparison.OrdinalIgnoreCase);
     }
 }
 

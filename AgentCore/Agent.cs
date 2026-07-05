@@ -12,10 +12,9 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
-    Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default);
-    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, string? sessionId = null, CancellationToken ct = default);
-    Task<AgentResponse> ResumeAsync(string sessionId, string toolCallId, bool approved, CancellationToken ct = default);
+    Task<AgentResponse> InvokeAsync(IContent input, CancellationToken ct = default);
+    Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
 
 public sealed class LLMAgent : IAgent
@@ -49,12 +48,12 @@ public sealed class LLMAgent : IAgent
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
 
-    public Task<AgentResponse> InvokeAsync(IContent input, string? sessionId = null, CancellationToken ct = default)
-        => InvokeAsyncInternal(input, sessionId, null, ct);
+    public Task<AgentResponse> InvokeAsync(IContent input, CancellationToken ct = default)
+        => InvokeAsyncInternal(input, null, ct);
 
-    public async Task<T?> InvokeAsync<T>(IContent input, string? sessionId = null, CancellationToken ct = default)
+    public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
-        var response = await InvokeAsyncInternal(input, sessionId, typeof(T), ct);
+        var response = await InvokeAsyncInternal(input, typeof(T), ct);
         var json = response.Text;
         
         if (string.IsNullOrWhiteSpace(json)) return default;
@@ -63,19 +62,22 @@ public sealed class LLMAgent : IAgent
 
     private async Task<AgentResponse> InvokeAsyncInternal(
         IContent input, 
-        string? sessionId, 
         Type? outputType, 
         CancellationToken ct)
     {
-        sessionId ??= Guid.NewGuid().ToString("N");
         var turnMessages = new List<Message>();
 
         int inTokens = 0;
         int outTokens = 0;
         int reasoningTokens = 0;
 
-        await foreach (var evt in CoreStreamAsync(input, sessionId, outputType, turnMessages, ct))
+        await foreach (var evt in CoreStreamAsync(input, outputType, turnMessages, ct))
         {
+            if (evt is AgentErrorEvent error)
+            {
+                throw error.Error;
+            }
+
             if (evt is LLMMetaEvent meta)
             {
                 inTokens += meta.Usage.InputTokens;
@@ -84,72 +86,26 @@ public sealed class LLMAgent : IAgent
             }
         }
 
+        var lastAssistantMsg = turnMessages
+            .Where(m => m.Role == Role.Assistant)
+            .LastOrDefault();
+
+        IContent content = lastAssistantMsg?.Contents.OfType<Text>().LastOrDefault()
+            ?? (lastAssistantMsg?.Contents.LastOrDefault() ?? new Text(""));
+
         var response = new AgentResponse(
-            sessionId,
-            turnMessages,
+            content,
             new TokenUsage(inTokens, outTokens, reasoningTokens));
-
-
 
         return response;
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
         IContent input,
-        string? sessionId = null,
         CancellationToken ct = default)
     {
-        sessionId ??= Guid.NewGuid().ToString("N");
         var turnMessages = new List<Message>();
-        return CoreStreamAsync(input, sessionId, null, turnMessages, ct);
-    }
-
-    public async Task<AgentResponse> ResumeAsync(string sessionId, string toolCallId, bool approved, CancellationToken ct = default)
-    {
-        _logger.LogInformation("Resume called: Session={SessionId} ToolCallId={ToolCallId} Approved={Approved}", sessionId, toolCallId, approved);
-
-        // Recall the session history which contains the paused turn
-        var history = await _memory.RecallAsync(sessionId, new Message(Role.User, new Text("")), new TokenBudget(0), ct).ConfigureAwait(false);
-
-        // Find the pending tool call
-        ToolCall? pendingCall = null;
-        foreach (var message in history)
-        {
-            if (message.Role == Role.Assistant)
-            {
-                foreach (var content in message.Contents)
-                {
-                    if (content is ToolCall tc && tc.Id == toolCallId)
-                    {
-                        pendingCall = tc;
-                        break;
-                    }
-                }
-            }
-            if (pendingCall != null) break;
-        }
-
-        if (pendingCall == null)
-        {
-            throw new InvalidOperationException($"ToolCall with ID '{toolCallId}' not found in session '{sessionId}'");
-        }
-
-        ToolResult result;
-        if (approved)
-        {
-            result = await _toolRuntime.HandleToolCallAsync(pendingCall, ct);
-        }
-        else
-        {
-            result = new ToolResult(toolCallId, new Text("Tool execution rejected by user"));
-        }
-
-        // Save the tool result to memory directly (append-only)
-        var toolResultMsg = new Message(Role.Tool, result);
-        await _memory.RememberAsync(sessionId, new[] { toolResultMsg }, ct).ConfigureAwait(false);
-
-        // Resume execution by invoking with an empty text input (continuation of the active session)
-        return await InvokeAsyncInternal(new Text(""), sessionId, null, ct);
+        return CoreStreamAsync(input, null, turnMessages, ct);
     }
 
     private LLMOptions BuildLLMOptions(Type? outputType)
@@ -168,37 +124,32 @@ public sealed class LLMAgent : IAgent
             FrequencyPenalty = _baseOptions.FrequencyPenalty,
             PresencePenalty = _baseOptions.PresencePenalty,
             ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = outputType?.GetSchemaForType()
+            ResponseSchema = outputType?.GetSchemaForType(),
+            MaxRetries = _baseOptions.MaxRetries
         };
     }
 
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
-        string sessionId,
         Type? outputType,
         List<Message> turnMessages,
         [EnumeratorCancellation] CancellationToken ct)
     {
         using var activity = AgentDiagnosticSource.Source.StartActivity("AgentCore.Invoke");
         activity?.SetTag("agent.name", _config.Name);
-        activity?.SetTag("agent.session", sessionId);
 
         using (_logger.BeginScope(new Dictionary<string, object>
         {
-            ["Agent"] = _config.Name,
-            ["Session"] = sessionId
+            ["Agent"] = _config.Name
         }))
         {
             var userMessage = new Message(Role.User, input);
-            var isContinuation = string.IsNullOrEmpty(input.ForLlm());
 
             // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
             IReadOnlyList<Message> recalled = [];
             try
             {
-                // If it is an empty resume input, we don't query memory with empty string, we query with userMessage representing continuation.
                 recalled = await _memory.RecallAsync(
-                    sessionId, 
                     userMessage, 
                     new TokenBudget(_baseOptions.ContextWindow ?? 0), 
                     ct).ConfigureAwait(false);
@@ -208,17 +159,11 @@ public sealed class LLMAgent : IAgent
                 _logger.LogDebug(ex, "Memory recall failed — continuing with empty context.");
             }
 
-            _logger.LogInformation("Agent invoked: Session={SessionId} InputLength={Len} MemoryType={MemType} ContextLimit={CtxLimit}",
-                sessionId, input.ForLlm().Length, _memory.GetType().Name, _baseOptions.ContextWindow ?? 0);
+            _logger.LogInformation("Agent invoked: InputLength={Len} MemoryType={MemType} ContextLimit={CtxLimit}",
+                input.ForLlm().Length, _memory.GetType().Name, _baseOptions.ContextWindow ?? 0);
 
-
-
-            // Current turn working context: we start with the user message unless it's a resume continuation where input is empty
-            var workingChat = new List<Message>();
-            if (!isContinuation)
-            {
-                workingChat.Add(userMessage);
-            }
+            // Current turn working context: we start with the user message
+            var workingChat = new List<Message> { userMessage };
 
             var pendingToolCalls = new Dictionary<string, ToolCall>();
             var textBuffer = new StringBuilder();
@@ -254,16 +199,29 @@ public sealed class LLMAgent : IAgent
                 
                 _logger.LogDebug("LLM step {Step}: RecalledCount={RecCount} ActiveTurn={TurnMsgs} Tokens≈{Approx}", 
                     consecutiveToolSteps + 1, recalled.Count, workingChat.Count, lastLlmTokens);
-
-
-
+                
                 var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
+                bool hasContextError = false;
+                ContextLengthExceededException? capturedEx = null;
 
                 try
                 {
-                    while (await enumerator.MoveNextAsync())
+                    while (true)
                     {
-                        var evt = enumerator.Current;
+                        LLMEvent evt;
+                        try
+                        {
+                            if (!await enumerator.MoveNextAsync())
+                                break;
+                            evt = enumerator.Current;
+                        }
+                        catch (ContextLengthExceededException ex)
+                        {
+                            hasContextError = true;
+                            capturedEx = ex;
+                            break;
+                        }
+
                         switch (evt)
                         {
                             case TextEvent t:
@@ -280,8 +238,6 @@ public sealed class LLMAgent : IAgent
                                 var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
                                 _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
                                 
-
-                                
                                 runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
                                 break;
 
@@ -296,7 +252,6 @@ public sealed class LLMAgent : IAgent
                                     lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
                                 }
 
-
                                 break;
                         }
 
@@ -306,6 +261,12 @@ public sealed class LLMAgent : IAgent
                 finally
                 {
                     await enumerator.DisposeAsync();
+                }
+
+                if (hasContextError && capturedEx != null)
+                {
+                    yield return new AgentErrorEvent(capturedEx);
+                    yield break;
                 }
 
                 if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
@@ -336,7 +297,7 @@ public sealed class LLMAgent : IAgent
                     // Turn is complete, record the turn's experience in memory
                     try
                     {
-                        await _memory.RememberAsync(sessionId, workingChat, ct).ConfigureAwait(false);
+                        await _memory.RememberAsync(workingChat, ct).ConfigureAwait(false);
                         _logger.LogDebug("Memory saved: Success MessageCount={Count}", workingChat.Count);
                     }
                     catch (Exception ex)
@@ -354,42 +315,15 @@ public sealed class LLMAgent : IAgent
                 var results = await Task.WhenAll(runningTools);
                 var toolDuration = (DateTime.UtcNow - toolStartTime).TotalMilliseconds;
 
-                var pendingApprovals = new List<string>();
                 foreach (var result in results)
                 {
                     var toolName = pendingToolCalls.TryGetValue(result.CallId, out var tc) ? tc.Name : "unknown";
                     var resultLength = result.ForLlm()?.Length ?? 0;
                     
-                    if (result.Result is ToolExecutionException tex && tex.Message.Contains("requires approval"))
-                    {
-                        pendingApprovals.Add(result.CallId);
-                        _logger.LogInformation("Tool pending approval: {ToolName} CallId={CallId}", toolName, result.CallId);
-                    }
-                    
                     _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
-                    
-
                     
                     workingChat.Add(new Message(Role.Tool, result));
                     yield return new AgentToolResultEvent(result);
-                }
-
-                if (pendingApprovals.Count > 0)
-                {
-                    _logger.LogInformation("Pausing execution: {Count} tools pending approval", pendingApprovals.Count);
-                    
-                    // Save active turn context up to this point so it can be resumed later
-                    try
-                    {
-                        await _memory.RememberAsync(sessionId, workingChat, ct).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Memory save on pause: Failed");
-                    }
-
-                    turnMessages.AddRange(workingChat);
-                    break;
                 }
 
                 pendingToolCalls.Clear();

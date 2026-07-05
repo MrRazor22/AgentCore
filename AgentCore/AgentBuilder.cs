@@ -22,12 +22,17 @@ public sealed class AgentBuilder
     private ILogger<AgentBuilder> _logger;
 
     private IMemory? _memory;
+    private IToolExecutor? _toolExecutor;
+    private ILLMExecutor? _llmExecutor;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
 
+    private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
+    private readonly List<Func<IToolExecutor, IToolExecutor>> _toolExecutorLayers = [];
+    private readonly List<Func<ILLMExecutor, ILLMExecutor>> _llmExecutorLayers = [];
 
     private readonly List<Skill> _skills = [];
 
@@ -42,10 +47,15 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
 
-    public AgentBuilder WithMemory(IMemory memory) { _memory = memory; return this; }
+    public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; }
+    public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);
+    public AgentBuilder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
 
+    public AgentBuilder UseToolExecutor(IToolExecutor toolExecutor) { _toolExecutor = toolExecutor; return this; }
+    public AgentBuilder AddToolExecutorLayer(Func<IToolExecutor, IToolExecutor> layer) { _toolExecutorLayers.Add(layer); return this; }
 
-
+    public AgentBuilder UseLlmExecutor(ILLMExecutor llmExecutor) { _llmExecutor = llmExecutor; return this; }
+    public AgentBuilder AddLlmExecutorLayer(Func<ILLMExecutor, ILLMExecutor> layer) { _llmExecutorLayers.Add(layer); return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -127,7 +137,12 @@ public sealed class AgentBuilder
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
         var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
-        var memory = _memory ?? new SessionMemory(tokenCounter, _provider);
+        
+        IMemory memory = _memory ?? new ChatMemory(tokenCounter, _provider);
+        foreach (var layer in _memoryLayers)
+        {
+            memory = layer(memory);
+        }
 
         var registry = new ToolRegistry();
         foreach (var init in _toolRegistrations) init(registry);
@@ -140,16 +155,24 @@ public sealed class AgentBuilder
         if (_skills.Count > 0)
             registry.RegisterAll(new SkillTools(_skills));
 
-        var toolExecutor = new ToolExecutor(
+        IToolExecutor toolExecutor = _toolExecutor ?? new ToolExecutor(
             registry,
             loggerFactory.CreateLogger<ToolExecutor>());
+        foreach (var layer in _toolExecutorLayers)
+        {
+            toolExecutor = layer(toolExecutor);
+        }
 
-        var llmExecutor = new LLMExecutor(
+        ILLMExecutor llmExecutor = _llmExecutor ?? new LLMExecutor(
             _provider,
             registry,
             tokenCounter,
             tokenManager,
             loggerFactory.CreateLogger<LLMExecutor>());
+        foreach (var layer in _llmExecutorLayers)
+        {
+            llmExecutor = layer(llmExecutor);
+        }
 
         _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} Skills={SkillCount} ProviderType={ProviderType}",
             _config.Name,
