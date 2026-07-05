@@ -11,7 +11,7 @@ namespace AgentCore;
 public sealed class AgentConfig
 {
     public string Name { get; set; } = "agent";
-    public IContent? SystemPrompt { get; set; }
+    public IContent? Instructions { get; set; }
     public int? MaxToolCalls { get; set; } = null;
 }
 
@@ -40,8 +40,7 @@ public sealed class AgentBuilder
     }
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
-    public AgentBuilder WithSystemPrompt(IContent prompt) { _config.SystemPrompt = prompt; return this; }
-    public AgentBuilder WithSystemPrompt(string prompt) { _config.SystemPrompt = new Text(prompt); return this; }
+    public AgentBuilder WithInstructions(string prompt) { _config.Instructions = new Text(prompt); return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
     public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }

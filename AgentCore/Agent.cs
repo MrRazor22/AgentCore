@@ -200,9 +200,9 @@ public sealed class LLMAgent : IAgent
             
             // Assemble complete LLM prompt: System Identity Prompt + Recalled Context + Current Turn Messages
             var messages = new List<Message>();
-            if (_config.SystemPrompt != null)
+            if (_config.Instructions != null)
             {
-                messages.Add(new Message(Role.System, _config.SystemPrompt));
+                messages.Add(new Message(Role.System, _config.Instructions));
             }
 
             messages.AddRange(recalled);
