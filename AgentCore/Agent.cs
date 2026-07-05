@@ -135,195 +135,196 @@ public sealed class LLMAgent : IAgent
         List<Message> turnMessages,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        using (_logger.BeginScope(new Dictionary<string, object>
+        using var scope = _logger.BeginScope(new[]
         {
-            ["Agent"] = _config.Name
-        }))
+            new KeyValuePair<string, object?>("Agent", _config.Name)
+        });
         {
-            var userMessage = new Message(Role.User, input);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogInformation("Agent invoked. InputLength={InputLength} ContextLimit={ContextLimit}",
+                input.ForLlm().Length, _baseOptions.ContextWindow ?? 0);
 
-            // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
-            IReadOnlyList<Message> recalled = [];
+            var enumerator = CoreStreamInternalAsync(input, outputType, turnMessages, ct)
+                .ConfigureAwait(false)
+                .GetAsyncEnumerator();
+
             try
             {
-                recalled = await _memory.RecallAsync(
-                    userMessage, 
-                    new TokenBudget(_baseOptions.ContextWindow ?? 0), 
-                    ct).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Memory recall failed — continuing with empty context.");
-            }
-
-            _logger.LogInformation("Agent invoked: InputLength={Len} MemoryType={MemType} ContextLimit={CtxLimit}",
-                input.ForLlm().Length, _memory.GetType().Name, _baseOptions.ContextWindow ?? 0);
-
-            // Current turn working context: we start with the user message
-            var workingChat = new List<Message> { userMessage };
-
-            var pendingToolCalls = new Dictionary<string, ToolCall>();
-            var textBuffer = new StringBuilder();
-            var reasoningBuffer = new StringBuilder();
-            var toolCallsBuffer = new List<ToolCall>();
-
-            var options = BuildLLMOptions(outputType);
-            int consecutiveToolSteps = 0;
-            int totalToolCalls = 0;
-            int lastLlmTokens = 0;
-
-            while (true)
-            {
-                ct.ThrowIfCancellationRequested();
-
-                if (consecutiveToolSteps >= _config.MaxToolCalls)
+                while (true)
                 {
-                    yield return new TextEvent("You have exceeded the maximum allowed consecutive tool calls. Stop calling tools and respond to the user immediately.");
-                    break;
-                }
-
-                var runningTools = new List<Task<ToolResult>>();
-                
-                // Assemble complete LLM prompt: System Identity Prompt + Recalled Context + Current Turn Messages
-                var messages = new List<Message>();
-                if (!string.IsNullOrEmpty(_config.SystemPrompt))
-                {
-                    messages.Add(new Message(Role.System, new Text(_config.SystemPrompt)));
-                }
-
-                messages.AddRange(recalled);
-                messages.AddRange(workingChat);
-                
-                _logger.LogDebug("LLM step {Step}: RecalledCount={RecCount} ActiveTurn={TurnMsgs} Tokens≈{Approx}", 
-                    consecutiveToolSteps + 1, recalled.Count, workingChat.Count, lastLlmTokens);
-                
-                var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
-                bool hasContextError = false;
-                ContextLengthExceededException? capturedEx = null;
-
-                try
-                {
-                    while (true)
-                    {
-                        LLMEvent evt;
-                        try
-                        {
-                            if (!await enumerator.MoveNextAsync())
-                                break;
-                            evt = enumerator.Current;
-                        }
-                        catch (ContextLengthExceededException ex)
-                        {
-                            hasContextError = true;
-                            capturedEx = ex;
-                            break;
-                        }
-
-                        switch (evt)
-                        {
-                            case TextEvent t:
-                                textBuffer.Append(t.Delta);
-                                break;
-
-                            case ReasoningEvent r:
-                                reasoningBuffer.Append(r.Delta);
-                                break;
-
-                            case ToolCallEvent tc:
-                                toolCallsBuffer.Add(tc.Call);
-                                pendingToolCalls[tc.Call.Id] = tc.Call;
-                                var argsJson = tc.Call.Arguments?.ToString() ?? "{}";
-                                _logger.LogInformation("Tool called: {ToolName} Args={Args}", tc.Call.Name, argsJson.Length > 200 ? argsJson[..200] + "..." : argsJson);
-                                
-                                runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
-                                break;
-
-                            case LLMMetaEvent meta:
-                                if (meta.Usage.IsEmpty)
-                                {
-                                    lastLlmTokens = await _tokenCounter.CountAsync(workingChat, ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
-                                    _logger.LogDebug("LLM Provider did not report tokens. Counted {TokenCount} natively (including {ToolSchemaTokens} tool schemas).", lastLlmTokens, meta.ToolSchemaTokens);
-                                }
-                                else
-                                {
-                                    lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
-                                }
-
-                                break;
-                        }
-
-                        yield return evt;
-                    }
-                }
-                finally
-                {
-                    await enumerator.DisposeAsync();
-                }
-
-                if (hasContextError && capturedEx != null)
-                {
-                    yield return new AgentErrorEvent(capturedEx);
-                    yield break;
-                }
-
-                if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
-                {
-                    var contents = new List<IContent>();
-                    if (reasoningBuffer.Length > 0)
-                    {
-                        contents.Add(new Reasoning(reasoningBuffer.ToString()));
-                        reasoningBuffer.Clear();
-                    }
-                    if (textBuffer.Length > 0)
-                    {
-                        contents.Add(new Text(textBuffer.ToString().Trim()));
-                        textBuffer.Clear();
-                    }
-                    if (toolCallsBuffer.Count > 0)
-                    {
-                        contents.AddRange(toolCallsBuffer);
-                        toolCallsBuffer.Clear();
-                    }
-                    workingChat.Add(new Message(Role.Assistant, contents));
-                }
-
-                if (runningTools.Count == 0)
-                {
-                    _logger.LogDebug("Agent completed: Steps={Steps} TotalToolCalls={Count}", consecutiveToolSteps, totalToolCalls);
-
-                    // Turn is complete, record the turn's experience in memory
+                    AgentEvent evt;
                     try
                     {
-                        await _memory.RememberAsync(workingChat, ct).ConfigureAwait(false);
-                        _logger.LogDebug("Memory saved: Success MessageCount={Count}", workingChat.Count);
+                        if (!await enumerator.MoveNextAsync())
+                            break;
+                        evt = enumerator.Current;
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Memory saved: Failed MessageCount={Count}", workingChat.Count);
+                        _logger.LogError(ex, "Agent failed. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
+                        throw;
                     }
 
-                    turnMessages.AddRange(workingChat);
-                    break;
+                    yield return evt;
                 }
 
-                consecutiveToolSteps++;
-                totalToolCalls += runningTools.Count;
-                var toolStartTime = DateTime.UtcNow;
-                var results = await Task.WhenAll(runningTools);
-                var toolDuration = (DateTime.UtcNow - toolStartTime).TotalMilliseconds;
+                _logger.LogInformation("Agent completed. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
+            }
+            finally
+            {
+                await enumerator.DisposeAsync();
+            }
+        }
+    }
 
-                foreach (var result in results)
+    private async IAsyncEnumerable<AgentEvent> CoreStreamInternalAsync(
+        IContent input,
+        Type? outputType,
+        List<Message> turnMessages,
+        [EnumeratorCancellation] CancellationToken ct)
+    {
+        var userMessage = new Message(Role.User, input);
+        var workingChat = new List<Message> { userMessage };
+
+        var textBuffer = new StringBuilder();
+        var reasoningBuffer = new StringBuilder();
+        var toolCallsBuffer = new List<ToolCall>();
+
+        int lastLlmTokens = 0;
+
+        // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
+        IReadOnlyList<Message> recalled = await _memory.RecallAsync(
+            userMessage, 
+            new TokenBudget(_baseOptions.ContextWindow ?? 0), 
+            ct).ConfigureAwait(false);
+
+        var options = BuildLLMOptions(outputType);
+        int consecutiveToolSteps = 0;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            if (consecutiveToolSteps >= _config.MaxToolCalls)
+            {
+                yield return new TextEvent("You have exceeded the maximum allowed consecutive tool calls. Stop calling tools and respond to the user immediately.");
+                break;
+            }
+
+            var runningTools = new List<Task<ToolResult>>();
+            
+            // Assemble complete LLM prompt: System Identity Prompt + Recalled Context + Current Turn Messages
+            var messages = new List<Message>();
+            if (!string.IsNullOrEmpty(_config.SystemPrompt))
+            {
+                messages.Add(new Message(Role.System, new Text(_config.SystemPrompt)));
+            }
+
+            messages.AddRange(recalled);
+            messages.AddRange(workingChat);
+            
+            var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
+            bool hasContextError = false;
+            ContextLengthExceededException? capturedEx = null;
+
+            try
+            {
+                while (true)
                 {
-                    var toolName = pendingToolCalls.TryGetValue(result.CallId, out var tc) ? tc.Name : "unknown";
-                    var resultLength = result.ForLlm()?.Length ?? 0;
-                    
-                    _logger.LogDebug("Tool result: {ToolName} Duration={Ms}ms ResultLength={Len}", toolName, toolDuration, resultLength);
-                    
-                    workingChat.Add(new Message(Role.Tool, result));
-                    yield return new AgentToolResultEvent(result);
-                }
+                    LLMEvent evt;
+                    try
+                    {
+                        if (!await enumerator.MoveNextAsync())
+                            break;
+                        evt = enumerator.Current;
+                    }
+                    catch (ContextLengthExceededException ex)
+                    {
+                        hasContextError = true;
+                        capturedEx = ex;
+                        break;
+                    }
 
-                pendingToolCalls.Clear();
+                    switch (evt)
+                    {
+                        case TextEvent t:
+                            textBuffer.Append(t.Delta);
+                            break;
+
+                        case ReasoningEvent r:
+                            reasoningBuffer.Append(r.Delta);
+                            break;
+
+                        case ToolCallEvent tc:
+                            toolCallsBuffer.Add(tc.Call);
+                            
+                            runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
+                            break;
+
+                        case LLMMetaEvent meta:
+                            if (meta.Usage.IsEmpty)
+                            {
+                                lastLlmTokens = await _tokenCounter.CountAsync(workingChat, ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
+                            }
+                            else
+                            {
+                                lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
+                            }
+
+                            break;
+                    }
+
+                    yield return evt;
+                }
+            }
+            finally
+            {
+                await enumerator.DisposeAsync();
+            }
+
+            if (hasContextError && capturedEx != null)
+            {
+                yield return new AgentErrorEvent(capturedEx);
+                yield break;
+            }
+
+            if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
+            {
+                var contents = new List<IContent>();
+                if (reasoningBuffer.Length > 0)
+                {
+                    contents.Add(new Reasoning(reasoningBuffer.ToString()));
+                    reasoningBuffer.Clear();
+                }
+                if (textBuffer.Length > 0)
+                {
+                    contents.Add(new Text(textBuffer.ToString().Trim()));
+                    textBuffer.Clear();
+                }
+                if (toolCallsBuffer.Count > 0)
+                {
+                    contents.AddRange(toolCallsBuffer);
+                    toolCallsBuffer.Clear();
+                }
+                workingChat.Add(new Message(Role.Assistant, contents));
+            }
+
+            if (runningTools.Count == 0)
+            {
+                // Turn is complete, record the turn's experience in memory
+                await _memory.RememberAsync(workingChat, ct).ConfigureAwait(false);
+
+                turnMessages.AddRange(workingChat);
+                break;
+            }
+
+            consecutiveToolSteps++;
+            var results = await Task.WhenAll(runningTools);
+
+            foreach (var result in results)
+            {
+                workingChat.Add(new Message(Role.Tool, result));
+                yield return new AgentToolResultEvent(result);
             }
         }
     }
