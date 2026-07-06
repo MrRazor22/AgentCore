@@ -1,0 +1,62 @@
+{
+  "traceId": "01a380bbb6e646e59022b6a2516d3f96",
+  "name": "Agent Stream",
+  "sessionId": "24ede651-60e0-45f4-bc15-eefc3b6a70e1",
+  "agentName": "Unknown",
+  "start": "2026-07-05T23:10:48.2442776Z",
+  "end": "2026-07-05T23:10:51.1555198Z",
+  "isSuccess": true,
+  "attributes": {},
+  "spans": [
+    {
+      "spanId": "dd20146fe0134969a4f8acdbb036bad6",
+      "traceId": "01a380bbb6e646e59022b6a2516d3f96",
+      "name": "InvokeStreaming",
+      "kind": 0,
+      "start": "2026-07-05T23:10:48.2474895Z",
+      "end": "2026-07-05T23:10:51.1551663Z",
+      "durationMs": 2907.6719,
+      "input": "Hi",
+      "status": 0,
+      "attributes": {},
+      "events": []
+    },
+    {
+      "spanId": "b7ba7e59a1e8430bbd70c120a3445669",
+      "parentSpanId": "dd20146fe0134969a4f8acdbb036bad6",
+      "traceId": "01a380bbb6e646e59022b6a2516d3f96",
+      "name": "Memory Recall",
+      "kind": 3,
+      "start": "2026-07-05T23:10:48.2558554Z",
+      "end": "2026-07-05T23:10:48.2607241Z",
+      "durationMs": 4.8678,
+      "status": 0,
+      "attributes": {
+        "memory.budget": 8000,
+        "memory.recalled_count": 0
+      },
+      "events": []
+    },
+    {
+      "spanId": "a2e392e26ea84dd7bc8cbb5a4adcd419",
+      "parentSpanId": "dd20146fe0134969a4f8acdbb036bad6",
+      "traceId": "01a380bbb6e646e59022b6a2516d3f96",
+      "name": "LLM Generate",
+      "kind": 1,
+      "start": "2026-07-05T23:10:48.2638265Z",
+      "end": "2026-07-05T23:10:51.1340354Z",
+      "durationMs": 2870.2078,
+      "status": 0,
+      "attributes": {
+        "llm.finish_reason": "Stop",
+        "llm.usage.output_tokens": 86,
+        "llm.usage.total_tokens": 1554,
+        "llm.input_messages": 1,
+        "llm.model": null,
+        "llm.usage.reasoning_tokens": 0,
+        "llm.usage.input_tokens": 1468
+      },
+      "events": []
+    }
+  ]
+}

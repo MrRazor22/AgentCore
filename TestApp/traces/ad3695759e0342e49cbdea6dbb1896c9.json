@@ -1,0 +1,62 @@
+{
+  "traceId": "ad3695759e0342e49cbdea6dbb1896c9",
+  "name": "Agent Stream",
+  "sessionId": "24ede651-60e0-45f4-bc15-eefc3b6a70e1",
+  "agentName": "Unknown",
+  "start": "2026-07-05T23:11:01.36146Z",
+  "end": "2026-07-05T23:11:09.5313528Z",
+  "isSuccess": true,
+  "attributes": {},
+  "spans": [
+    {
+      "spanId": "11d07c0c13114dbbbe76d5262d090d30",
+      "traceId": "ad3695759e0342e49cbdea6dbb1896c9",
+      "name": "InvokeStreaming",
+      "kind": 0,
+      "start": "2026-07-05T23:11:01.361517Z",
+      "end": "2026-07-05T23:11:09.5313156Z",
+      "durationMs": 8169.797,
+      "input": "what is weather in dubai?",
+      "status": 0,
+      "attributes": {},
+      "events": []
+    },
+    {
+      "spanId": "9d0d5ad76f174950b7add4fca6df5ecc",
+      "parentSpanId": "11d07c0c13114dbbbe76d5262d090d30",
+      "traceId": "ad3695759e0342e49cbdea6dbb1896c9",
+      "name": "Memory Recall",
+      "kind": 3,
+      "start": "2026-07-05T23:11:01.3616264Z",
+      "end": "2026-07-05T23:11:01.3742969Z",
+      "durationMs": 12.6702,
+      "status": 0,
+      "attributes": {
+        "memory.budget": 8000,
+        "memory.recalled_count": 2
+      },
+      "events": []
+    },
+    {
+      "spanId": "8511eaa65160449081aa4ee5b7dcffd6",
+      "parentSpanId": "11d07c0c13114dbbbe76d5262d090d30",
+      "traceId": "ad3695759e0342e49cbdea6dbb1896c9",
+      "name": "LLM Generate",
+      "kind": 1,
+      "start": "2026-07-05T23:11:01.3743906Z",
+      "end": "2026-07-05T23:11:05.1514278Z",
+      "durationMs": 3777.0366,
+      "status": 0,
+      "attributes": {
+        "llm.finish_reason": "Stop",
+        "llm.usage.output_tokens": 175,
+        "llm.usage.total_tokens": 1743,
+        "llm.input_messages": 3,
+        "llm.model": null,
+        "llm.usage.reasoning_tokens": 0,
+        "llm.usage.input_tokens": 1568
+      },
+      "events": []
+    }
+  ]
+}
