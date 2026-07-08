@@ -48,19 +48,6 @@ public class MockToolRegistry : IToolRegistry
     public List<Tool> RegisteredTools { get; } = new();
     public IReadOnlyList<Tool> Tools => RegisteredTools;
 
-    public void Register(Delegate del, string? name = null, string? description = null)
-    {
-        // Simple registration mock
-        RegisteredTools.Add(new Tool
-        {
-            Name = name ?? del.Method.Name,
-            Description = description ?? "",
-            ParametersSchema = new JsonObject(),
-            Source = "Mock",
-            Invoker = ToolRegistry.CompileInvoker(del.Method, del.Target)
-        });
-    }
-
     public void Register(Tool tool) => RegisteredTools.Add(tool);
     
     public bool Unregister(string toolName)
@@ -74,7 +61,7 @@ public class MockToolRegistry : IToolRegistry
         return false;
     }
 
-    public Tool? TryGet(string toolName) => RegisteredTools.FirstOrDefault(t => t.Name == toolName);
+    public Tool? TryGet(string name) => RegisteredTools.FirstOrDefault(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 }
 
 public class MockTokenManager : ITokenManager

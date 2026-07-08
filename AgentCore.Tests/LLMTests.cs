@@ -178,10 +178,9 @@ public class LLMTests
     private class MockToolRegistry : IToolRegistry
     {
         public IReadOnlyList<Tool> Tools => new List<Tool>();
-        public void Register(Delegate del, string? name = null, string? description = null) { }
         public void Register(Tool tool) { }
         public bool Unregister(string toolName) => false;
-        public Tool? TryGet(string toolName) => null;
+        public Tool? TryGet(string name) => null;
     }
 
     private class MockTokenManager : ITokenManager

@@ -192,8 +192,17 @@ internal sealed class LLMExecutor : ILLMExecutor
         int totalChars = 0;
         foreach (var tool in tools)
         {
-            var json = System.Text.Json.JsonSerializer.Serialize(tool);
-            totalChars += json?.Length ?? 0;
+            using var stream = new System.IO.MemoryStream();
+            using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("name", tool.Name);
+                writer.WriteString("description", tool.Description);
+                writer.WritePropertyName("parameters");
+                tool.ParametersSchema.WriteTo(writer);
+                writer.WriteEndObject();
+            }
+            totalChars += (int)stream.Length;
         }
         return (int)(totalChars / 4.0 * 1.15);
     }

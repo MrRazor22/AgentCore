@@ -67,14 +67,10 @@ public class StreamingTests
         });
 
         var mockRegistry = new MockToolRegistry();
-        mockRegistry.Register(new Tool
-        {
-            Name = "test_tool",
-            Description = "A mock tool",
-            ParametersSchema = new JsonObject(),
-            Source = "Test",
-            Invoker = (args, ct) => Task.FromResult<object?>("ToolResponse")
-        });
+        mockRegistry.Register(new DelegateTool(
+            () => "ToolResponse",
+            "test_tool",
+            "A mock tool"));
 
         var executor = new LLMExecutor(
             mockProvider,

@@ -5,6 +5,7 @@ using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json.Nodes;
 
 namespace AgentCore;
 
@@ -18,7 +19,7 @@ public sealed class AgentConfig
 public sealed class AgentBuilder
 {
     private readonly AgentConfig _config = new();
-    private readonly List<Action<ToolRegistry>> _toolRegistrations = [];
+    private readonly List<Action<IToolRegistry>> _toolRegistrations = [];
     private ILogger<AgentBuilder> _logger;
 
     private IMemory? _memory;
@@ -41,9 +42,9 @@ public sealed class AgentBuilder
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithInstructions(string prompt) { _config.Instructions = new Text(prompt); return this; }
+    public AgentBuilder WithTools(Action<IToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
     public AgentBuilder WithTools<T>() { _toolRegistrations.Add(r => r.RegisterAll<T>()); return this; }
     public AgentBuilder WithTools<T>(T instance) { _toolRegistrations.Add(r => r.RegisterAll(instance)); return this; }
-    public AgentBuilder WithTools(Action<ToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
 
     public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);
@@ -93,19 +94,12 @@ public sealed class AgentBuilder
                 ["required"] = new System.Text.Json.Nodes.JsonArray("task")
             };
 
-            registry.Register(new Tooling.Tool
-            {
-                Name = name,
-                Description = description,
-                ParametersSchema = inputSchema,
-                Source = $"AgentBuilder.Delegate.{name}",
-                Invoker = async (args, ct) =>
-                {
-                    var task = args["task"]?.ToString() ?? "";
-                    var response = await agent.InvokeAsync(new Conversation.Text(task), ct);
-                    return new Conversation.Text(response.ForLlm());
-                }
-            });
+            registry.Register(new AgentDelegationTool(
+                name,
+                description,
+                new Json.JsonSchema(inputSchema),
+                $"AgentBuilder.Delegate.{name}",
+                agent));
         });
         return this;
     }
@@ -167,5 +161,23 @@ public sealed class AgentBuilder
             _providerOptions ?? new LLMOptions(),
             _config,
             loggerFactory.CreateLogger<LLMAgent>());
-    } 
+    }
+
+    private sealed class AgentDelegationTool : Tooling.Tool
+    {
+        private readonly IAgent _agent;
+
+        public AgentDelegationTool(string name, string description, Json.JsonSchema parametersSchema, string source, IAgent agent)
+            : base(name, description, parametersSchema, false, source)
+        {
+            _agent = agent ?? throw new ArgumentNullException(nameof(agent));
+        }
+
+        public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
+        {
+            var task = arguments["task"]?.ToString() ?? "";
+            var response = await _agent.InvokeAsync(new Conversation.Text(task), ct);
+            return new Conversation.Text(response.ForLlm());
+        }
+    }
 }

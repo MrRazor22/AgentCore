@@ -65,7 +65,7 @@ internal sealed class ToolExecutor : IToolExecutor
 
         try
         {
-            var rawResult = await tool.Invoker(call.Arguments ?? new JsonObject(), ct).ConfigureAwait(false);
+            var rawResult = await tool.InvokeAsync(call.Arguments ?? new JsonObject(), ct).ConfigureAwait(false);
             IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
 
             sw.Stop();

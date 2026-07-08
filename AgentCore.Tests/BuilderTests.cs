@@ -33,8 +33,8 @@ public class BuilderTests
             .WithProvider(provider)
             .WithTools(r =>
             {
-                r.Register(() => "first", "duplicate_name");
-                r.Register(() => "second", "duplicate_name");
+                r.Register(new DelegateTool(() => "first", "duplicate_name"));
+                r.Register(new DelegateTool(() => "second", "duplicate_name"));
             });
 
         // Act & Assert

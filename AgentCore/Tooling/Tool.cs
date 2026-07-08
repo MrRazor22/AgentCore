@@ -1,6 +1,5 @@
-using System.Reflection;
+using AgentCore.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
 
 namespace AgentCore.Tooling;
 
@@ -16,26 +15,37 @@ public sealed class ToolAttribute(string? name = null, string? description = nul
     public bool RequiresApproval { get; set; } = false;
 }
 
-public class Tool
+public abstract class Tool
 {
-    public required string Name { get; set; }
-    public required string Description { get; set; }
-    public required JsonObject ParametersSchema { get; set; }
+    public string Name { get; }
+    public string Description { get; }
+    public JsonSchema ParametersSchema { get; }
+    public bool RequiresApproval { get; }
 
     /// <summary>
-    /// Whether this tool requires user approval before execution (Letta-style)
+    /// A diagnostic identifier describing where the tool originated (e.g. WeatherTools.GetWeather, mcp://filesystem/read_file).
     /// </summary>
-    public bool RequiresApproval { get; set; } = false;
+    public string Source { get; }
 
-    public required string Source { get; init; }
+    protected Tool(string name, string description, JsonSchema parametersSchema, bool requiresApproval, string source)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ArgumentNullException.ThrowIfNull(parametersSchema);
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
-    [JsonIgnore]
-    public required Func<JsonObject, CancellationToken, Task<object?>> Invoker { get; init; }
+        Name = name;
+        Description = description;
+        ParametersSchema = parametersSchema;
+        RequiresApproval = requiresApproval;
+        Source = source;
+    }
+
+    public abstract Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct);
 
     public override string ToString()
     {
-        var props = ParametersSchema?["properties"] as JsonObject;
-        var args = props != null ? string.Join(", ", props.Select(p => p.Key)) : "";
+        var args = string.Join(", ", ParametersSchema.ParameterNames);
         var argPart = args.Length > 0 ? $"({args})" : "()";
         return !string.IsNullOrWhiteSpace(Description) ? $"{Name}{argPart} => {Description}" : $"{Name}{argPart}";
     }

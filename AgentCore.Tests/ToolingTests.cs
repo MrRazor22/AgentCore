@@ -46,7 +46,7 @@ public class ToolingTests
         var registry = new ToolRegistry();
         var toolInstance = new ComplexTool();
         
-        registry.RegisterAll(toolInstance);
+        registry.Register(new DelegateTool(toolInstance.Run));
 
         var toolExecutor = new ToolExecutor(registry, NullLogger<ToolExecutor>.Instance);
 
@@ -97,17 +97,23 @@ public class ToolingTests
         var registry = new ToolRegistry();
 
         // Register synchronous delegate
-        registry.Register([Description("Sync Tool")] (string arg1) => $"Sync {arg1}", "sync_tool");
+        registry.Register(new DelegateTool([Description("Sync Tool")] (string arg1) => $"Sync {arg1}", "sync_tool"));
         
         // Register asynchronous delegate
-        registry.Register([Description("Async Tool")] async (int val) => { await Task.Yield(); return $"Async {val}"; }, "async_tool");
+        registry.Register(new DelegateTool([Description("Async Tool")] async (int val) => { await Task.Yield(); return $"Async {val}"; }, "async_tool"));
 
         // Assert sync_tool schema
         var syncTool = registry.TryGet("sync_tool");
         Assert.NotNull(syncTool);
         Assert.Equal("sync_tool", syncTool.Name);
         Assert.Equal("Sync Tool", syncTool.Description);
-        Assert.Equal("object", syncTool.ParametersSchema?["type"]?.ToString());
+        using var stream = new System.IO.MemoryStream();
+        using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+        {
+            syncTool.ParametersSchema.WriteTo(writer);
+        }
+        var json = JsonNode.Parse(stream.ToArray());
+        Assert.Equal("object", json?["type"]?.ToString());
 
         // Assert async_tool schema
         var asyncTool = registry.TryGet("async_tool");
@@ -121,7 +127,7 @@ public class ToolingTests
     {
         // Arrange
         var registry = new ToolRegistry();
-        registry.Register(() => "Value", "temp_tool");
+        registry.Register(new DelegateTool(() => "Value", "temp_tool"));
 
         // Act
         var resultBefore = registry.TryGet("temp_tool");

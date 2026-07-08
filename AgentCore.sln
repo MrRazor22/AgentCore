@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.4.11513.90
@@ -10,15 +10,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Notes.txt = Notes.txt
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestApp", "TestApp\TestApp.csproj", "{900C4078-D723-4ACF-A36E-3B91DFF648D2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Playground", "AgentCore.Playground\AgentCore.Playground.csproj", "{900C4078-D723-4ACF-A36E-3B91DFF648D2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.MCP", "AgentCore.MCP\AgentCore.MCP.csproj", "{6ED330AC-F988-4D3E-B061-CAD33757E531}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Providers.Tornado", "AgentCore.Providers.Tornado\AgentCore.Providers.Tornado.csproj", "{54E29787-FCAF-6C99-D8C9-64865C7E8BE2}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Tests", "AgentCore.Tests\AgentCore.Tests.csproj", "{5C24016F-5B3D-495B-B0A5-0EA5C5D37CFA}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentConsole", "AgentConsole\AgentConsole.csproj", "{91BC0500-ACE8-4927-A14D-28BDB7474F5A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -90,18 +88,6 @@ Global
 		{5C24016F-5B3D-495B-B0A5-0EA5C5D37CFA}.Release|x64.Build.0 = Release|Any CPU
 		{5C24016F-5B3D-495B-B0A5-0EA5C5D37CFA}.Release|x86.ActiveCfg = Release|Any CPU
 		{5C24016F-5B3D-495B-B0A5-0EA5C5D37CFA}.Release|x86.Build.0 = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|x64.Build.0 = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Debug|x86.Build.0 = Debug|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|x64.ActiveCfg = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|x64.Build.0 = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|x86.ActiveCfg = Release|Any CPU
-		{91BC0500-ACE8-4927-A14D-28BDB7474F5A}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

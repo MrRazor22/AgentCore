@@ -168,7 +168,10 @@ public static class JsonSchemaExtensions
                         if (!objNode.ContainsKey(key))
                         {
                             if (schema["required"] is JsonArray reqArr && reqArr.Any(r => r?.ToString() == key))
-                                errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), $"Missing required field '{key}'", "missing"));
+                            {
+                                var msg = string.IsNullOrEmpty(path) ? $"Missing required parameter '{key}'" : $"Missing required field '{key}'";
+                                errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), msg, "missing"));
+                            }
                         }
                         else
                         {

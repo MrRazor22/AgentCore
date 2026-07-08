@@ -39,7 +39,12 @@ public class TornadoLLMProvider : ILLMProvider
         {
             request.Tools = tools.Select(t =>
             {
-                var jsonElement = System.Text.Json.JsonSerializer.SerializeToElement(t.ParametersSchema);
+                using var stream = new System.IO.MemoryStream();
+                using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+                {
+                    t.ParametersSchema.WriteTo(writer);
+                }
+                var jsonElement = System.Text.Json.JsonDocument.Parse(stream.ToArray()).RootElement;
                 return new LlmTornado.Common.Tool(new ToolFunction(t.Name, t.Description, jsonElement));
             }).ToList();
         }
