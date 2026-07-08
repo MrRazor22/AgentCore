@@ -98,10 +98,11 @@ public sealed class AgentBuilder
                 Name = name,
                 Description = description,
                 ParametersSchema = inputSchema,
-                Invoker = async (args) =>
+                Source = $"AgentBuilder.Delegate.{name}",
+                Invoker = async (args, ct) =>
                 {
-                    var task = args.Length > 0 ? args[0]?.ToString() ?? "" : "";
-                    var response = await agent.InvokeAsync(new Conversation.Text(task));
+                    var task = args["task"]?.ToString() ?? "";
+                    var response = await agent.InvokeAsync(new Conversation.Text(task), ct);
                     return new Conversation.Text(response.ForLlm());
                 }
             });

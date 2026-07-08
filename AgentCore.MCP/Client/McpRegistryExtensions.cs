@@ -25,18 +25,11 @@ public static class McpRegistryExtensions
                 ParametersSchema = System.Text.Json.Nodes.JsonNode.Parse(
                     mcpTool.ProtocolTool.InputSchema.GetRawText()) as System.Text.Json.Nodes.JsonObject
                     ?? new System.Text.Json.Nodes.JsonObject(),
-                Invoker = async (args) =>
+                Source = $"MCP.{serverName}",
+                Invoker = async (args, ct) =>
                 {
-                    // Map positional AgentCore args to named MCP args using the schema property order
-                    var dictArgs = new Dictionary<string, object?>();
-
-                    var schema = mcpTool.ProtocolTool.InputSchema;
-                    if (schema.TryGetProperty("properties", out var propsElement))
-                    {
-                        var propNames = propsElement.EnumerateObject().Select(p => p.Name).ToList();
-                        for (int i = 0; i < System.Math.Min(args.Length, propNames.Count); i++)
-                            dictArgs[propNames[i]] = args[i];
-                    }
+                    var dictArgs = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(args)
+                        ?? new Dictionary<string, object?>();
 
                     // CallAsync takes IReadOnlyDictionary<string, object?> and returns CallToolResult
                     var result = await mcpTool.CallAsync(dictArgs);

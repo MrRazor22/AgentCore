@@ -27,11 +27,10 @@ public class Tool
     /// </summary>
     public bool RequiresApproval { get; set; } = false;
 
-    [JsonIgnore]
-    public MethodInfo? Method { get; set; }
+    public required string Source { get; init; }
 
     [JsonIgnore]
-    public Func<object?[], Task<object?>>? Invoker { get; set; }
+    public required Func<JsonObject, CancellationToken, Task<object?>> Invoker { get; init; }
 
     public override string ToString()
     {

@@ -42,14 +42,13 @@ public sealed class ToolRegistry : IToolRegistry
 
         if (_registry.ContainsKey(tool.Name))
         {
-            var existing = _registry[tool.Name].Method;
-            var current = tool.Method;
-            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate - Existing={Existing} Conflicting={Conflicting}",
-                tool.Name, FormatMethod(existing), FormatMethod(current));
+            var existing = _registry[tool.Name];
+            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate - ExistingSource={ExistingSource} ConflictingSource={ConflictingSource}",
+                tool.Name, existing.Source, tool.Source);
             throw new InvalidOperationException(
                 $"Duplicate tool name '{tool.Name}'. " +
-                $"Already registered by {existing?.DeclaringType?.FullName}.{existing?.Name}, " +
-                $"conflicts with {current?.DeclaringType?.FullName}.{current?.Name}.");
+                $"Already registered by {existing.Source}, " +
+                $"conflicts with {tool.Source}.");
         }
 
         _registry[tool.Name] = tool;
@@ -66,8 +65,9 @@ public sealed class ToolRegistry : IToolRegistry
 
         if (_registry.ContainsKey(tool.Name))
         {
-            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate", tool.Name);
-            throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'.");
+            var existing = _registry[tool.Name];
+            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate - ExistingSource={ExistingSource}", tool.Name, existing.Source);
+            throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'. Already registered by {existing.Source}.");
         }
 
         _registry[tool.Name] = tool;
@@ -130,6 +130,7 @@ public sealed class ToolRegistry : IToolRegistry
             .Type<object>()
             .Properties(properties)
             .Required(required)
+            .AdditionalProperties(false)
             .Build();
 
         return new Tool 
@@ -138,22 +139,35 @@ public sealed class ToolRegistry : IToolRegistry
             Description = description, 
             ParametersSchema = schemaObject,
             RequiresApproval = attr?.RequiresApproval ?? false,
-            Method = method,
+            Source = $"{declaringType.FullName}.{method.Name}",
             Invoker = CompileInvoker(method, func.Target)
         };
     }
 
-    private static Func<object?[], Task<object?>> CompileInvoker(MethodInfo method, object? target)
+    internal static Func<JsonObject, CancellationToken, Task<object?>> CompileInvoker(MethodInfo method, object? target)
     {
-        var argsParam = Expression.Parameter(typeof(object?[]), "args");
+        var argsParam = Expression.Parameter(typeof(JsonObject), "args");
+        var ctParam = Expression.Parameter(typeof(CancellationToken), "ct");
         var parameters = method.GetParameters();
         var argExpressions = new Expression[parameters.Length];
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            var pType = parameters[i].ParameterType;
-            var arrayAccess = Expression.ArrayIndex(argsParam, Expression.Constant(i));
-            argExpressions[i] = Expression.Convert(arrayAccess, pType);
+            var p = parameters[i];
+            if (p.ParameterType == typeof(CancellationToken))
+            {
+                argExpressions[i] = ctParam;
+                continue;
+            }
+
+            var getParamMethod = typeof(ToolRegistry).GetMethod(nameof(GetParameterValue), BindingFlags.NonPublic | BindingFlags.Static)!;
+            var pNameExpr = Expression.Constant(p.Name);
+            var pTypeExpr = Expression.Constant(p.ParameterType);
+            var pHasDefaultExpr = Expression.Constant(p.HasDefaultValue);
+            var pDefaultValueExpr = Expression.Constant(p.DefaultValue, typeof(object));
+
+            var getValueCall = Expression.Call(getParamMethod, argsParam, pNameExpr, pTypeExpr, pHasDefaultExpr, pDefaultValueExpr);
+            argExpressions[i] = Expression.Convert(getValueCall, p.ParameterType);
         }
 
         var instanceObj = target != null ? Expression.Constant(target) : null;
@@ -184,8 +198,25 @@ public sealed class ToolRegistry : IToolRegistry
             resultExpr = Expression.Call(fromResult, Expression.Convert(call, typeof(object)));
         }
 
-        return Expression.Lambda<Func<object?[], Task<object?>>>(resultExpr, argsParam).Compile();
+        return Expression.Lambda<Func<JsonObject, CancellationToken, Task<object?>>>(resultExpr, argsParam, ctParam).Compile();
     }
+
+    private static object? GetParameterValue(JsonObject obj, string name, Type targetType, bool hasDefault, object? defaultValue)
+    {
+        if (obj.TryGetPropertyValue(name, out var node) && node != null)
+        {
+            return DeserializeNode(node, targetType);
+        }
+        return hasDefault ? defaultValue : (targetType.IsValueType ? Activator.CreateInstance(targetType) : null);
+    }
+
+    private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
+    private static object? DeserializeNode(JsonNode? node, Type type)
+        => JsonSerializer.Deserialize(node, type, _jsonOptions);
 
     private static async Task<object?> CastTaskToTaskObject(Task t)
     {

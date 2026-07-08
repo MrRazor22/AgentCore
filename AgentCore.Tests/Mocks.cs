@@ -56,11 +56,8 @@ public class MockToolRegistry : IToolRegistry
             Name = name ?? del.Method.Name,
             Description = description ?? "",
             ParametersSchema = new JsonObject(),
-            Invoker = args =>
-            {
-                var result = del.DynamicInvoke(args);
-                return Task.FromResult<object?>(result?.ToString() ?? "");
-            }
+            Source = "Mock",
+            Invoker = ToolRegistry.CompileInvoker(del.Method, del.Target)
         });
     }
 

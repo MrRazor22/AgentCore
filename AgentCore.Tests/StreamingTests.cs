@@ -72,7 +72,8 @@ public class StreamingTests
             Name = "test_tool",
             Description = "A mock tool",
             ParametersSchema = new JsonObject(),
-            Invoker = args => Task.FromResult<object?>("ToolResponse")
+            Source = "Test",
+            Invoker = (args, ct) => Task.FromResult<object?>("ToolResponse")
         });
 
         var executor = new LLMExecutor(
