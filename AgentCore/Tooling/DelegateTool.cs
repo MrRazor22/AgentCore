@@ -42,7 +42,7 @@ public sealed class DelegateTool : Tool
             ? name
             : !string.IsNullOrWhiteSpace(attr?.Name)
                 ? attr.Name
-                : $"{declaringType.Name.ToSnake()}.{method.Name.ToSnake()}";
+                : $"{declaringType.Name.ToSnake()}_{method.Name.ToSnake()}";
     }
 
     private static string GetDescription(Delegate del, string? description)
@@ -77,7 +77,7 @@ public sealed class DelegateTool : Tool
         var method = del.Method;
 
         if (!IsMethodJsonCompatible(method))
-            throw new InvalidOperationException($"Method is not JSON-compatible: {FormatMethod(method)}");
+            throw new InvalidOperationException($"Method is not JSON-compatible: {GetSource(del)}");
 
         var properties = new JsonObject();
         var required = new JsonArray();
@@ -117,7 +117,6 @@ public sealed class DelegateTool : Tool
         return true;
     }
 
-    private static string FormatMethod(MethodInfo m) => $"{m.DeclaringType?.Name}.{m.Name}";
 
     internal static Func<JsonObject, CancellationToken, Task<object?>> CompileInvoker(MethodInfo method, object? target)
     {

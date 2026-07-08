@@ -59,7 +59,7 @@ public class ToolingTests
             ["color"] = "Blue",
             ["items"] = new JsonArray("a", "b")
         };
-        var result1 = await toolExecutor.HandleToolCallAsync(new ToolCall("call1", "complex_tool.run", args1));
+        var result1 = await toolExecutor.HandleToolCallAsync(new ToolCall("call1", "complex_tool_run", args1));
         Assert.Equal("requiredStr=hello;optionalInt=5;nullableInt=10;color=Blue;items=a,b", result1.Result?.ForLlm());
 
         // 2. Default value & Nullable parameters omitted
@@ -67,7 +67,7 @@ public class ToolingTests
         {
             ["requiredStr"] = "world"
         };
-        var result2 = await toolExecutor.HandleToolCallAsync(new ToolCall("call2", "complex_tool.run", args2));
+        var result2 = await toolExecutor.HandleToolCallAsync(new ToolCall("call2", "complex_tool_run", args2));
         Assert.Equal("requiredStr=world;optionalInt=100;nullableInt=null;color=Green;items=null", result2.Result?.ForLlm());
 
         // 3. Invalid enum conversion
@@ -76,7 +76,7 @@ public class ToolingTests
             ["requiredStr"] = "test",
             ["color"] = "Yellow" // Invalid enum option
         };
-        var result3 = await toolExecutor.HandleToolCallAsync(new ToolCall("call3", "complex_tool.run", args3));
+        var result3 = await toolExecutor.HandleToolCallAsync(new ToolCall("call3", "complex_tool_run", args3));
         Assert.True(result3.Result is Text);
         Assert.Contains("ColorEnum", result3.Result?.ForLlm());
 
@@ -85,7 +85,7 @@ public class ToolingTests
         {
             ["optionalInt"] = 42
         };
-        var result4 = await toolExecutor.HandleToolCallAsync(new ToolCall("call4", "complex_tool.run", args4));
+        var result4 = await toolExecutor.HandleToolCallAsync(new ToolCall("call4", "complex_tool_run", args4));
         Assert.True(result4.Result is Text);
         Assert.Contains("Missing required parameter 'requiredStr'", result4.Result?.ForLlm());
     }
