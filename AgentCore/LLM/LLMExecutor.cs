@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
+using AgentCore.LLM.Exceptions;
 
 namespace AgentCore.LLM;
 

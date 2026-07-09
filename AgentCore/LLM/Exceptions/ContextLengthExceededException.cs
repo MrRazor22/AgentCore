@@ -1,6 +1,6 @@
 using System;
 
-namespace AgentCore.LLM;
+namespace AgentCore.LLM.Exceptions;
 
 /// <summary>
 /// Thrown when the LLM provider rejects a request because the input context exceeds the model's maximum context length.

@@ -11,6 +11,7 @@ using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentCore.LLM.Exceptions;
 
 namespace AgentCore.Tests;
 

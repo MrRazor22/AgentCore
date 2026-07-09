@@ -1,6 +1,6 @@
 using System;
 
-namespace AgentCore.LLM;
+namespace AgentCore.LLM.Exceptions;
 
 /// <summary>
 /// Thrown when a transient failure occurs.

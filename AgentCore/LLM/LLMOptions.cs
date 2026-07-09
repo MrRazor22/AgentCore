@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using AgentCore.Json;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 
@@ -20,7 +21,7 @@ public sealed class LLMOptions
     public IReadOnlyList<string>? StopSequences { get; set; }
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
-    public JsonObject? ResponseSchema { get; set; }
+    public JsonSchema? ResponseSchema { get; set; }
     public ReasoningEffort? ReasoningEffort { get; set; }
     public int MaxRetries { get; set; } = 3;
 }

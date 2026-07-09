@@ -1,6 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.Json;
 using AgentCore.LLM;
+using AgentCore.LLM.Exceptions;
 using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
@@ -109,7 +110,7 @@ public sealed class LLMAgent : IAgent
             FrequencyPenalty = _baseOptions.FrequencyPenalty,
             PresencePenalty = _baseOptions.PresencePenalty,
             ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = outputType?.GetSchemaForType(),
+            ResponseSchema = outputType?.GetTopLevelSchema(),
             MaxRetries = _baseOptions.MaxRetries
         };
     }

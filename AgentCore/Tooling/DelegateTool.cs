@@ -42,9 +42,10 @@ public sealed class DelegateTool : Tool
             ? name
             : !string.IsNullOrWhiteSpace(attr?.Name)
                 ? attr.Name
-                : $"{declaringType.Name.ToSnake()}_{method.Name.ToSnake()}";
+                : $"{ToSnake(declaringType.Name)}_{ToSnake(method.Name)}";
     }
-
+    private static string ToSnake(string s)
+        => string.Concat(s.Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
     private static string GetDescription(Delegate del, string? description)
     {
         ArgumentNullException.ThrowIfNull(del);
@@ -95,14 +96,12 @@ public sealed class DelegateTool : Tool
             if (!param.IsOptional) required.Add(paramName);
         }
 
-        var schemaObject = new JsonSchemaBuilder()
+        return new JsonSchemaBuilder()
             .Type<object>()
             .Properties(properties)
             .Required(required)
             .AdditionalProperties(false)
             .Build();
-
-        return new JsonSchema(schemaObject);
     }
 
     private static bool IsMethodJsonCompatible(MethodInfo m)

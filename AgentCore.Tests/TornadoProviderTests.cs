@@ -11,6 +11,7 @@ using LlmTornado.Chat.Models;
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Providers.Tornado;
+using AgentCore.LLM.Exceptions;
 
 namespace AgentCore.Tests;
 

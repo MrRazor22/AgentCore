@@ -12,6 +12,7 @@ using AgentCore.Tokens;
 using AgentCore.Tooling;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentCore.LLM.Exceptions;
 
 namespace AgentCore.Tests;
 
