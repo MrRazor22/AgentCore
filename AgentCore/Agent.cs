@@ -110,7 +110,7 @@ public sealed class LLMAgent : IAgent
             FrequencyPenalty = _baseOptions.FrequencyPenalty,
             PresencePenalty = _baseOptions.PresencePenalty,
             ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = outputType?.GetTopLevelSchema(),
+            ResponseSchema = outputType?.GetSchemaForType(),
             MaxRetries = _baseOptions.MaxRetries
         };
     }

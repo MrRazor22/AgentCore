@@ -80,28 +80,21 @@ public sealed class DelegateTool : Tool
         if (!IsMethodJsonCompatible(method))
             throw new InvalidOperationException($"Method is not JSON-compatible: {GetSource(del)}");
 
-        var properties = new JsonObject();
-        var required = new JsonArray();
+        var builder = new JsonSchemaBuilder().Type<object>().AdditionalProperties(false);
 
         foreach (var param in method.GetParameters())
         {
             if (param.ParameterType == typeof(CancellationToken)) continue;
+            var desc = param.GetCustomAttribute<DescriptionAttribute>()?.Description ?? param.Name!;
+            var baseSchema = param.ParameterType.GetSchemaForType();
+            var parameterSchema = new JsonSchemaBuilder(baseSchema)
+                .Description(desc)
+                .Build();
 
-            var paramName = param.Name!;
-            var schema = param.ParameterType.GetSchemaForType();
-            var desc = param.GetCustomAttribute<DescriptionAttribute>()?.Description ?? paramName;
-            schema[JsonSchemaConstants.DescriptionKey] ??= desc;
-
-            properties[paramName] = schema;
-            if (!param.IsOptional) required.Add(paramName);
+            builder.AddProperty(param.Name!, parameterSchema, required: !param.IsOptional);
         }
 
-        return new JsonSchemaBuilder()
-            .Type<object>()
-            .Properties(properties)
-            .Required(required)
-            .AdditionalProperties(false)
-            .Build();
+        return builder.Build();
     }
 
     private static bool IsMethodJsonCompatible(MethodInfo m)

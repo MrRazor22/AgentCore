@@ -14,18 +14,44 @@ public static class JsonSchemaConstants
     public const string DefaultKey = "default";
 }
 
-public class JsonSchemaBuilder(JsonObject? existingSchema = null)
+public class JsonSchemaBuilder
 {
-    private readonly JsonObject _schema = existingSchema ?? new JsonObject();
+    private readonly JsonObject _schema;
+
+    public JsonSchemaBuilder()
+    {
+        _schema = new JsonObject();
+    }
+
+    public JsonSchemaBuilder(JsonSchema existingSchema)
+    {
+        ArgumentNullException.ThrowIfNull(existingSchema);
+        _schema = (JsonObject)existingSchema.ToJsonNode();
+    }
 
     public JsonSchemaBuilder Type(string type) { _schema[JsonSchemaConstants.TypeKey] = type; return this; }
     public JsonSchemaBuilder Type<T>() { _schema[JsonSchemaConstants.TypeKey] = typeof(T).MapClrTypeToJsonType(); return this; }
-    public JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
-    public JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
+
     public JsonSchemaBuilder Description(string description) { if (!string.IsNullOrWhiteSpace(description)) _schema[JsonSchemaConstants.DescriptionKey] = description; return this; }
     public JsonSchemaBuilder Enum(string[] values) { _schema[JsonSchemaConstants.EnumKey] = new JsonArray(values.Select(v => JsonValue.Create(v)).ToArray()); return this; }
     public JsonSchemaBuilder AdditionalProperties(bool allow) { _schema[JsonSchemaConstants.AdditionalPropertiesKey] = allow; return this; }
-    public JsonSchemaBuilder AdditionalProperties(JsonObject additionalProps) { _schema[JsonSchemaConstants.AdditionalPropertiesKey] = additionalProps; return this; }
-    public JsonSchemaBuilder Items(JsonNode items) { _schema[JsonSchemaConstants.ItemsKey] = items; return this; }
-    public JsonObject Build() => _schema;
+    public JsonSchemaBuilder AdditionalProperties(JsonSchema additionalProps) { _schema[JsonSchemaConstants.AdditionalPropertiesKey] = additionalProps.ToJsonNode(); return this; }
+    public JsonSchemaBuilder Items(JsonSchema items) { _schema[JsonSchemaConstants.ItemsKey] = items.ToJsonNode(); return this; }
+    public JsonSchemaBuilder AddProperty(string name, JsonSchema schema, bool required = true)
+    {
+        if (!_schema.ContainsKey(JsonSchemaConstants.PropertiesKey))
+            _schema[JsonSchemaConstants.PropertiesKey] = new JsonObject();
+        ((JsonObject)_schema[JsonSchemaConstants.PropertiesKey]!)[name] = schema.ToJsonNode();
+        if (required)
+        {
+            if (!_schema.ContainsKey(JsonSchemaConstants.RequiredKey))
+                _schema[JsonSchemaConstants.RequiredKey] = new JsonArray();
+            ((JsonArray)_schema[JsonSchemaConstants.RequiredKey]!).Add(name);
+        }
+        return this;
+    }
+    internal JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
+    internal JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
+    internal JsonObject BuildObject() => _schema;
+    public JsonSchema Build() => new JsonSchema(_schema);
 }

@@ -21,25 +21,18 @@ public static class JsonSchemaExtensions
 {
     private static readonly ConcurrentDictionary<Type, JsonObject> _schemaCache = new();
 
-    public static JsonObject GetSchemaFor<T>() => typeof(T).GetSchemaForType();
+    public static JsonSchema GetSchemaFor<T>() => typeof(T).GetSchemaForType();
 
-    public static JsonObject GetSchemaForType(this Type type, HashSet<Type>? visited = null)
+    public static JsonSchema GetSchemaForType(this Type type)
     {
-        visited ??= [];
         type = Nullable.GetUnderlyingType(type) ?? type;
-
-        if (visited.Count == 0 && _schemaCache.TryGetValue(type, out var cached))
-            return (JsonObject)cached.DeepClone();
-
-        var result = BuildSchema(type, visited);
-
-        if (visited.Count == 0)
-            _schemaCache.TryAdd(type, (JsonObject)result.DeepClone());
-
-        return result;
+        if (_schemaCache.TryGetValue(type, out var cached)) return new JsonSchema((JsonObject)cached.DeepClone());
+        var result = BuildSubSchema(type, []);
+        _schemaCache.TryAdd(type, (JsonObject)result.DeepClone());
+        return new JsonSchema(result);
     }
 
-    private static JsonObject BuildSchema(Type type, HashSet<Type> visited)
+    private static JsonObject BuildSubSchema(Type type, HashSet<Type> visited)
     {
         type = Nullable.GetUnderlyingType(type) ?? type;
 
@@ -50,19 +43,23 @@ public static class JsonSchemaExtensions
                 .Type<string>()
                 .Enum(Enum.GetNames(type))
                 .Description(typeDesc ?? $"One of: {string.Join(", ", Enum.GetNames(type))}")
-                .Build();
+                .BuildObject();
         }
 
-        if (type.IsSimpleType()) return new JsonSchemaBuilder().Type(type.MapClrTypeToJsonType()).Build();
-        if (type.IsArray) return new JsonSchemaBuilder().Type<Array>().Items(type.GetElementType()!.GetSchemaForType(visited)).Build();
+        if (type.IsSimpleType())
+            return new JsonSchemaBuilder().Type(type.MapClrTypeToJsonType()).BuildObject();
+
+        if (type.IsArray)
+            return new JsonSchemaBuilder().Type<Array>().Items(new JsonSchema(BuildSubSchema(type.GetElementType()!, visited))).BuildObject();
 
         if (typeof(IEnumerable).IsAssignableFrom(type) && type.IsGenericType)
-            return new JsonSchemaBuilder().Type<Array>().Items(type.GetGenericArguments()[0].GetSchemaForType(visited)).Build();
+            return new JsonSchemaBuilder().Type<Array>().Items(new JsonSchema(BuildSubSchema(type.GetGenericArguments()[0], visited))).BuildObject();
 
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>) && type.GetGenericArguments()[0] == typeof(string))
-            return GetDictionarySchema(type.GetGenericArguments()[1], visited);
+            return new JsonSchemaBuilder().Type<Object>().AdditionalProperties(new JsonSchema(BuildSubSchema(type.GetGenericArguments()[1], visited))).BuildObject();
 
-        if (visited.Contains(type)) return new JsonSchemaBuilder().Type<object>().Build();
+        if (visited.Contains(type))
+            return new JsonSchemaBuilder().Type<object>().BuildObject();
 
         visited.Add(type);
 
@@ -74,22 +71,25 @@ public static class JsonSchemaExtensions
             if (prop.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
 
             var propType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
-            var propSchema = propType.GetSchemaForType(visited);
+            var propSchema = BuildSubSchema(propType, visited);
 
             if (prop.GetCustomAttribute<DescriptionAttribute>() is { } descAttr && !string.IsNullOrEmpty(descAttr.Description))
                 propSchema[JsonSchemaConstants.DescriptionKey] = descAttr.Description;
 
-            if (prop.GetCustomAttribute<DefaultValueAttribute>() is { } dv) propSchema[JsonSchemaConstants.DefaultKey] = JsonSerializer.SerializeToNode(dv.Value!);
+            if (prop.GetCustomAttribute<DefaultValueAttribute>() is { } dv)
+                propSchema[JsonSchemaConstants.DefaultKey] = JsonSerializer.SerializeToNode(dv.Value!);
 
             props[prop.Name] = propSchema;
             if (!prop.IsOptional()) required.Add(prop.Name);
         }
 
-        return new JsonSchemaBuilder().Type<object>().Properties(props).Required(required).AdditionalProperties(false).Build();
+        return new JsonSchemaBuilder()
+            .Type<object>()
+            .Properties(props)
+            .Required(required)
+            .AdditionalProperties(false)
+            .BuildObject();
     }
-
-    private static JsonObject GetDictionarySchema(Type valueType, HashSet<Type> visited)
-        => new JsonSchemaBuilder().Type("object").AdditionalProperties(valueType.GetSchemaForType(visited)).Build();
 
     private static bool IsOptional(this PropertyInfo prop)
         => Nullable.GetUnderlyingType(prop.PropertyType) != null

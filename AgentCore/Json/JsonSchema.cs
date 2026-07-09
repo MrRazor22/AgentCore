@@ -29,5 +29,6 @@ public sealed class JsonSchema
         _schema.WriteTo(writer);
     }
 
+    public JsonNode ToJsonNode() => _schema.DeepClone();
     public override string ToString() => _cachedJson ??= _schema.ToString();
 }
