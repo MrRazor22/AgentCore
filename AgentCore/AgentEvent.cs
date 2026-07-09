@@ -6,6 +6,6 @@ namespace AgentCore;
 
 public abstract record AgentEvent;
 
-public sealed record AgentToolResultEvent(ToolResult Result) : AgentEvent;
+public sealed record ToolResultEvent(ToolResult Result) : AgentEvent;
 
-public sealed record AgentErrorEvent(Exception Error) : AgentEvent;
+public sealed record ErrorEvent(Exception Error) : AgentEvent;

@@ -113,7 +113,7 @@ public class LLMTests
         }
 
         // Assert
-        var errorEvents = events.OfType<AgentErrorEvent>().ToList();
+        var errorEvents = events.OfType<ErrorEvent>().ToList();
         Assert.Single(errorEvents);
         Assert.IsType<ContextLengthExceededException>(errorEvents[0].Error);
     }

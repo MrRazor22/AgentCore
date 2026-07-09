@@ -70,7 +70,7 @@ public sealed class LLMAgent : IAgent
 
         await foreach (var evt in CoreStreamAsync(input, outputType, turnMessages, ct))
         {
-            if (evt is AgentErrorEvent error)
+            if (evt is ErrorEvent error)
             {
                 throw error.Error;
             }
@@ -256,7 +256,7 @@ public sealed class LLMAgent : IAgent
 
             if (hasContextError && capturedEx != null)
             {
-                yield return new AgentErrorEvent(capturedEx);
+                yield return new ErrorEvent(capturedEx);
                 yield break;
             }
 
@@ -296,7 +296,7 @@ public sealed class LLMAgent : IAgent
             foreach (var result in results)
             {
                 workingChat.Add(new Message(Role.Tool, result));
-                yield return new AgentToolResultEvent(result);
+                yield return new ToolResultEvent(result);
             }
         }
     }

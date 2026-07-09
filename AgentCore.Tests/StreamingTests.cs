@@ -51,7 +51,7 @@ public class StreamingTests
         Assert.Equal("Hello ", textDeltas[0]);
         Assert.Equal("world!", textDeltas[1]);
 
-        var meta = events.OfType<LLMMetaEvent>().Single();
+        var meta = events.OfType<MetaDataEvent>().Single();
         Assert.Equal(10, meta.Usage.InputTokens);
         Assert.Equal(5, meta.Usage.OutputTokens);
     }
@@ -106,7 +106,7 @@ public class StreamingTests
         Assert.Equal("test_tool", toolCallEvents[0].Call.Name);
         Assert.Equal("call_1", toolCallEvents[0].Call.Id);
 
-        var toolResultEvents = events.OfType<AgentToolResultEvent>().ToList();
+        var toolResultEvents = events.OfType<ToolResultEvent>().ToList();
         Assert.Single(toolResultEvents);
         Assert.Equal("call_1", toolResultEvents[0].Result.CallId);
     }
@@ -186,7 +186,7 @@ public class StreamingTests
         }
 
         // Assert
-        var errorEvents = events.OfType<AgentErrorEvent>().ToList();
+        var errorEvents = events.OfType<ErrorEvent>().ToList();
         Assert.Single(errorEvents);
         Assert.IsType<ContextLengthExceededException>(errorEvents[0].Error);
     }
@@ -242,7 +242,7 @@ public class StreamingTests
         var aggregatedStreamText = string.Join("", streamTextEvents);
         Assert.Equal("Hello world", aggregatedStreamText);
 
-        var meta = streamEvents.OfType<LLMMetaEvent>().Single();
+        var meta = streamEvents.OfType<MetaDataEvent>().Single();
         Assert.Equal(10, meta.Usage.InputTokens);
         Assert.Equal(5, meta.Usage.OutputTokens);
     }

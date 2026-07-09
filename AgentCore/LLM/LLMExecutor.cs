@@ -170,7 +170,7 @@ internal sealed class LLMExecutor : ILLMExecutor
             _logger.LogDebug("Provider did not report token usage for FinishReason={FinishReason}", finishReason);
         }
 
-        yield return new LLMMetaEvent(
+        yield return new MetaDataEvent(
             effectiveUsage,
             finishReason ?? FinishReason.Stop,
             options.Model,
