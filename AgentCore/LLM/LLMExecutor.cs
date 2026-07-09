@@ -158,15 +158,11 @@ internal sealed class LLMExecutor : ILLMExecutor
         }
 
         var effectiveUsage = tokenUsage ?? TokenUsage.Empty;
-        var toolSchemaTokens = EstimateToolSchemaTokens(tools);
 
         if (tokenUsage != null)
         {
             _tokenManager.Record(tokenUsage);
-            if (_tokenCounter is ApproximateTokenCounter approx)
-            {
-                approx.Calibrate(messages, Math.Max(1, tokenUsage.InputTokens - toolSchemaTokens));
-            }
+            _tokenCounter.RecordActualInput(messages, tools, tokenUsage.InputTokens);
         }
         else
         {
@@ -177,34 +173,11 @@ internal sealed class LLMExecutor : ILLMExecutor
             effectiveUsage,
             finishReason ?? FinishReason.Stop,
             options.Model,
-            sw.Elapsed,
-            toolSchemaTokens);
+            sw.Elapsed);
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
-        _logger.LogTrace("Token usage: In={In} Out={Out} ToolSchemas={ToolSchemas}", effectiveUsage.InputTokens, effectiveUsage.OutputTokens, toolSchemaTokens);
-    }
-
-    private static int EstimateToolSchemaTokens(IReadOnlyList<AgentCore.Tooling.Tool>? tools)
-    {
-        if (tools == null || tools.Count == 0) return 0;
-        
-        int totalChars = 0;
-        foreach (var tool in tools)
-        {
-            using var stream = new System.IO.MemoryStream();
-            using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
-            {
-                writer.WriteStartObject();
-                writer.WriteString("name", tool.Name);
-                writer.WriteString("description", tool.Description);
-                writer.WritePropertyName("parameters");
-                tool.ParametersSchema.WriteTo(writer);
-                writer.WriteEndObject();
-            }
-            totalChars += (int)stream.Length;
-        }
-        return (int)(totalChars / 4.0 * 1.15);
+        _logger.LogTrace("Token usage: In={In} Out={Out}", effectiveUsage.InputTokens, effectiveUsage.OutputTokens);
     }
 
     private static ToolCallEvent? ParseToolCall(string id, string name, string argsStr)

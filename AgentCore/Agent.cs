@@ -175,8 +175,6 @@ public sealed class LLMAgent : IAgent
         var reasoningBuffer = new StringBuilder();
         var toolCallsBuffer = new List<ToolCall>();
 
-        int lastLlmTokens = 0;
-
         // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
         IReadOnlyList<Message> recalled = await _memory.RecallAsync(
             userMessage, 
@@ -244,18 +242,6 @@ public sealed class LLMAgent : IAgent
                             toolCallsBuffer.Add(tc.Call);
                             
                             runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
-                            break;
-
-                        case LLMMetaEvent meta:
-                            if (meta.Usage.IsEmpty)
-                            {
-                                lastLlmTokens = await _tokenCounter.CountAsync(workingChat, ct).ConfigureAwait(false) + meta.ToolSchemaTokens;
-                            }
-                            else
-                            {
-                                lastLlmTokens = meta.Usage.InputTokens + meta.Usage.OutputTokens;
-                            }
-
                             break;
                     }
 

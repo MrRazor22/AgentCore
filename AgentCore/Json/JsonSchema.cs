@@ -7,6 +7,7 @@ public sealed class JsonSchema
 {
     private readonly JsonObject _schema;
     private readonly string[] _parameterNames;
+    private string? _cachedJson;
 
     public JsonSchema(JsonObject schema)
     {
@@ -28,5 +29,5 @@ public sealed class JsonSchema
         _schema.WriteTo(writer);
     }
 
-    public override string ToString() => _schema.ToString();
+    public override string ToString() => _cachedJson ??= _schema.ToString();
 }
