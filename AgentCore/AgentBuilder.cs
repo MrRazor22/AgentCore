@@ -40,112 +40,13 @@ public sealed class AgentBuilder
     }
 
     public AgentConfig Config => _config;
-
-    public ILoggerFactory LoggerFactory
-    {
-        get => _loggerFactory ??= NullLoggerFactory.Instance;
-        set
-        {
-            _loggerFactory = value;
-            _logger = value?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
-        }
-    }
-
-    public ITokenCounter TokenCounter
-    {
-        get => _tokenCounter ??= new ApproximateTokenCounter();
-        set => _tokenCounter = value;
-    }
-
-    public ILLMProvider? LlmProvider
-    {
-        get => _provider;
-        set => _provider = value;
-    }
-
-    public LLMOptions ProviderOptions
-    {
-        get => _providerOptions ??= new LLMOptions();
-        set => _providerOptions = value;
-    }
-
-    public IMemory Memory
-    {
-        get
-        {
-            if (_memory == null)
-            {
-                if (_provider == null)
-                    throw new InvalidOperationException("No LLM provider registered. Call WithProvider() before retrieving Memory.");
-                IMemory baseMemory = new ChatMemoryService(TokenCounter, _provider);
-                foreach (var layer in _memoryLayers)
-                {
-                    baseMemory = layer(baseMemory);
-                }
-                _memory = baseMemory;
-            }
-            return _memory;
-        }
-        set => _memory = value;
-    }
-
-    public IToolRegistry ToolRegistry
-    {
-        get
-        {
-            if (_toolRegistry == null)
-            {
-                _toolRegistry = new ToolRegistry();
-                foreach (var init in _toolRegistrations) init(_toolRegistry);
-                _toolRegistrations.Clear();
-            }
-            return _toolRegistry;
-        }
-        set => _toolRegistry = value;
-    }
-    private IToolRegistry? _toolRegistry;
-
-    public ITooling Tooling
-    {
-        get
-        {
-            if (_tooling == null)
-            {
-                ITooling baseTooling = new ToolingService(ToolRegistry, LoggerFactory.CreateLogger<ToolingService>());
-                foreach (var layer in _toolingLayers)
-                {
-                    baseTooling = layer(baseTooling);
-                }
-                _tooling = baseTooling;
-            }
-            return _tooling;
-        }
-        set => _tooling = value;
-    }
-
-    public ILLM Llm
-    {
-        get
-        {
-            if (_llm == null)
-            {
-                if (LlmProvider == null)
-                    throw new InvalidOperationException("No LLM provider registered. Call WithProvider() before retrieving Llm.");
-                ILLM baseLlm = new LLMService(
-                    LlmProvider,
-                    ToolRegistry,
-                    TokenCounter,
-                    LoggerFactory.CreateLogger<LLMService>());
-                foreach (var layer in _llmLayers)
-                {
-                    baseLlm = layer(baseLlm);
-                }
-                _llm = baseLlm;
-            }
-            return _llm;
-        }
-        set => _llm = value;
-    }
+    public ILoggerFactory? LoggerFactory => _loggerFactory;
+    public ITokenCounter? TokenCounter => _tokenCounter;
+    public ILLMProvider? LlmProvider => _provider;
+    public LLMOptions? ProviderOptions => _providerOptions;
+    public IMemory? Memory => _memory;
+    public ITooling? Tooling => _tooling;
+    public ILLM? Llm => _llm;
 
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithInstructions(string prompt) { _config.Instructions = new Text(prompt); return this; }
@@ -164,7 +65,8 @@ public sealed class AgentBuilder
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
-        LoggerFactory = loggerFactory;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
         return this;
     }
     public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null)
@@ -178,27 +80,53 @@ public sealed class AgentBuilder
     {
         _logger.LogInformation("Agent build started: Name={AgentName}", _config.Name);
 
-        if (LlmProvider == null)
+        if (_provider == null)
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
-        var tokenCounter = TokenCounter;
-        var tooling = Tooling;
-        var llm = Llm;
-        var memory = Memory;
+        var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
+        
+        IMemory memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
+        foreach (var layer in _memoryLayers)
+        {
+            memory = layer(memory);
+        }
+
+        var registry = new ToolRegistry();
+        foreach (var init in _toolRegistrations) init(registry);
+
+        _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
+
+        ITooling tooling = _tooling ?? new ToolingService(
+            registry,
+            _loggerFactory?.CreateLogger<ToolingService>() ?? NullLogger<ToolingService>.Instance);
+        foreach (var layer in _toolingLayers)
+        {
+            tooling = layer(tooling);
+        }
+
+        ILLM llm = _llm ?? new LLMService(
+            _provider,
+            registry,
+            tokenCounter,
+            _loggerFactory?.CreateLogger<LLMService>() ?? NullLogger<LLMService>.Instance);
+        foreach (var layer in _llmLayers)
+        {
+            llm = layer(llm);
+        }
 
         _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
             _config.Name,
-            ToolRegistry.Tools.Count,
-            LlmProvider.GetType().Name);
+            registry.Tools.Count,
+            _provider.GetType().Name);
 
         return new LLMAgent(
             llm,
             tooling,
             memory,
             tokenCounter,
-            ProviderOptions,
+            _providerOptions ?? new LLMOptions(),
             _config,
-            LoggerFactory.CreateLogger<LLMAgent>());
+            _loggerFactory?.CreateLogger<LLMAgent>() ?? NullLogger<LLMAgent>.Instance);
     }
 
 }
