@@ -57,7 +57,9 @@ internal sealed class LLMService : ILLM
         _logger.LogTrace("LLM request: Model={Model} Tools=[{ToolNames}]", options.Model, toolNamesStr);
 
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
-        TokenUsage? tokenUsage = null;
+        int? inputTokens = null;
+        int? outputTokens = null;
+        int? reasoningTokens = null;
         FinishReason? finishReason = null;
         int currentToolIndex = -1;
 
@@ -129,7 +131,9 @@ internal sealed class LLMService : ILLM
                             break;
 
                         case MetaDelta m:
-                            tokenUsage = m.TokenUsage;
+                            if (m.InputTokens.HasValue) inputTokens = m.InputTokens;
+                            if (m.OutputTokens.HasValue) outputTokens = m.OutputTokens;
+                            if (m.ReasoningTokens.HasValue) reasoningTokens = m.ReasoningTokens;
                             finishReason = m.FinishReason;
                             break;
                     }
@@ -155,11 +159,9 @@ internal sealed class LLMService : ILLM
             if (evt != null) yield return evt;
         }
 
-        var effectiveUsage = tokenUsage ?? TokenUsage.Empty;
-
-        if (tokenUsage != null)
+        if (inputTokens.HasValue)
         {
-            _tokenCounter.RecordActualInput(messages, tools, tokenUsage.InputTokens);
+            _tokenCounter.RecordActualInput(messages, tools, inputTokens.Value);
         }
         else
         {
@@ -167,14 +169,16 @@ internal sealed class LLMService : ILLM
         }
 
         yield return new MetaDataEvent(
-            effectiveUsage,
+            inputTokens ?? 0,
+            outputTokens ?? 0,
+            reasoningTokens,
             finishReason ?? FinishReason.Stop,
             options.Model,
             sw.Elapsed);
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
-        _logger.LogTrace("Token usage: In={In} Out={Out}", effectiveUsage.InputTokens, effectiveUsage.OutputTokens);
+        _logger.LogTrace("Token usage: In={In} Out={Out} Reason={Reason}", inputTokens ?? 0, outputTokens ?? 0, reasoningTokens);
     }
 
     private static ToolCallEvent? ParseToolCall(string id, string name, string argsStr)

@@ -35,7 +35,7 @@ internal sealed class ChatMemory : IMemory
 
     public async Task<IReadOnlyList<Message>> RecallAsync(
         Message currentInput,
-        TokenBudget budget,
+        int? maxTokens,
         CancellationToken ct = default)
     {
         List<Message> workingHistory;
@@ -49,7 +49,7 @@ internal sealed class ChatMemory : IMemory
         int historyTokens = await _tokenCounter.CountAsync(workingHistory, ct).ConfigureAwait(false);
         int totalTokens = currentInputTokens + historyTokens;
 
-        int maxLimit = budget.Tokens;
+        int maxLimit = maxTokens ?? 0;
 
         // If context budget is 0 or unconfigured, we do not summarize, just return history
         if (maxLimit <= 0)

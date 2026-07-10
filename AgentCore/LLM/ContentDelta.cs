@@ -1,5 +1,3 @@
-using AgentCore.Tokens;
-
 namespace AgentCore.LLM;
 
 public interface IContentDelta { }
@@ -15,4 +13,9 @@ public sealed record ToolCallDelta(
     string? ArgumentsDelta
 ) : IContentDelta;
 
-public sealed record MetaDelta(FinishReason? FinishReason, TokenUsage? TokenUsage) : IContentDelta;
+public sealed record MetaDelta(
+    FinishReason? FinishReason,
+    int? InputTokens = null,
+    int? OutputTokens = null,
+    int? ReasoningTokens = null
+) : IContentDelta;

@@ -11,7 +11,7 @@ public interface IMemory
 
     Task<IReadOnlyList<Message>> RecallAsync(
         Message currentInput,
-        TokenBudget budget,
+        int? maxTokens,
         CancellationToken ct = default);
 
     Task ClearAsync(

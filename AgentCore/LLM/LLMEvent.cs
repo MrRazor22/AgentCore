@@ -12,7 +12,9 @@ public sealed record ReasoningEvent(string Delta) : LLMEvent;
 public sealed record ToolCallEvent(ToolCall Call) : LLMEvent;
 
 public sealed record MetaDataEvent(
-    TokenUsage Usage,
+    int InputTokens,
+    int OutputTokens,
+    int? ReasoningTokens,
     FinishReason FinishReason,
     string ModelName,
     TimeSpan? Duration = null,

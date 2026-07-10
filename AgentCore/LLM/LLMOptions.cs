@@ -13,10 +13,10 @@ public sealed class LLMOptions
     public string? ApiKey { get; set; }
     public Uri? BaseUrl { get; set; }
     public ToolCallMode ToolCallMode { get; set; } = ToolCallMode.Auto;
-    public TokenBudget? ContextWindow { get; set; }
+    public int? ContextWindow { get; set; }
     public float? Temperature { get; set; }
     public float? TopP { get; set; }
-    public TokenBudget? MaxOutputTokens { get; set; }
+    public int? MaxOutputTokens { get; set; }
     public int? Seed { get; set; }
     public IReadOnlyList<string>? StopSequences { get; set; }
     public float? FrequencyPenalty { get; set; }

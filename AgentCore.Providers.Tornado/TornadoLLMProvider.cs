@@ -1,7 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
-using AgentCore.Tokens;
 using AgentCore.Tooling;
 using LlmTornado;
 using LlmTornado.Chat;
@@ -52,7 +51,7 @@ public class TornadoLLMProvider : ILLMProvider
 
         if (options.Temperature.HasValue) request.Temperature = options.Temperature.Value;
         if (options.TopP.HasValue) request.TopP = options.TopP.Value;
-        if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value.Tokens;
+        if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
 
         if (options.ReasoningEffort.HasValue)
         {
@@ -138,7 +137,7 @@ public class TornadoLLMProvider : ILLMProvider
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            channel.Writer.TryWrite(new MetaDelta(null, new TokenUsage(usage.PromptTokens, usage.CompletionTokens, 0)));
+                            channel.Writer.TryWrite(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens));
                         }
                         return ValueTask.CompletedTask;
                     }
