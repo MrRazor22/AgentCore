@@ -204,46 +204,62 @@ public class TornadoLLMProvider : ILLMProvider
 
     private static bool IsContextLimitError(Exception ex)
     {
-        var msg = ex.ToString();
-        return msg.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("maximum context length", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("token limit exceeded", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("context window limit", StringComparison.OrdinalIgnoreCase);
+        var current = ex;
+        while (current is not null)
+        {
+            var msg = current.Message;
+            if (msg is not null && (
+                msg.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("maximum context length", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("token limit exceeded", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("context window limit", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+            current = current.InnerException;
+        }
+        return false;
     }
 
     private static bool IsTransientError(Exception ex)
     {
-        if (ex is System.TimeoutException || 
-            ex is System.IO.IOException || 
-            ex is System.Net.Sockets.SocketException)
+        var current = ex;
+        while (current is not null)
         {
-            return true;
-        }
-
-        if (ex is System.Net.Http.HttpRequestException httpEx)
-        {
-            if (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
-                httpEx.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
-                httpEx.StatusCode == System.Net.HttpStatusCode.GatewayTimeout ||
-                httpEx.StatusCode == System.Net.HttpStatusCode.BadGateway ||
-                httpEx.StatusCode == System.Net.HttpStatusCode.InternalServerError)
+            if (current is TimeoutException || 
+                current is System.IO.IOException || 
+                current is System.Net.Sockets.SocketException)
             {
                 return true;
             }
-        }
 
-        var msg = ex.ToString();
-        return msg.Contains("429", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("503", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("504", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("502", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("500", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("HttpRequestException", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("SocketException", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("TimeoutException", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
-               msg.Contains("overloaded", StringComparison.OrdinalIgnoreCase);
+            if (current is HttpRequestException httpEx && httpEx.StatusCode.HasValue)
+            {
+                var status = httpEx.StatusCode.Value;
+                if (status == System.Net.HttpStatusCode.TooManyRequests || 
+                    status >= System.Net.HttpStatusCode.InternalServerError)
+                {
+                    return true;
+                }
+            }
+
+            var msg = current.Message;
+            if (msg is not null && (
+                msg.Contains("429", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("503", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("504", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("502", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("500", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("overloaded", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            current = current.InnerException;
+        }
+        return false;
     }
 }
 
