@@ -31,9 +31,8 @@ public sealed class ToolRegistry : IToolRegistry
 
         if (_registry.ContainsKey(tool.Name))
         {
-            var existing = _registry[tool.Name];
-            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate - ExistingSource={ExistingSource}", tool.Name, existing.Source);
-            throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'. Already registered by {existing.Source}.");
+            _logger.LogWarning("Tool registration failed: ToolName={ToolName} Duplicate", tool.Name);
+            throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'.");
         }
 
         _registry[tool.Name] = tool;

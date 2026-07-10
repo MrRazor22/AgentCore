@@ -16,22 +16,15 @@ public abstract class Tool
     public string Description { get; }
     public JsonSchema ParametersSchema { get; }
 
-    /// <summary>
-    /// A diagnostic identifier describing where the tool originated (e.g. WeatherTools.GetWeather, mcp://filesystem/read_file).
-    /// </summary>
-    public string Source { get; }
-
-    protected Tool(string name, string description, JsonSchema parametersSchema, string source)
+    protected Tool(string name, string description, JsonSchema parametersSchema)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
         ArgumentNullException.ThrowIfNull(parametersSchema);
-        ArgumentException.ThrowIfNullOrWhiteSpace(source);
 
         Name = name;
         Description = description;
         ParametersSchema = parametersSchema;
-        Source = source;
     }
 
     public abstract Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct);

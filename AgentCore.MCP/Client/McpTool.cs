@@ -16,8 +16,7 @@ public sealed class McpTool : Tool
             new AgentCore.Json.JsonSchema(
                 System.Text.Json.Nodes.JsonNode.Parse(mcpTool.ProtocolTool.InputSchema.GetRawText()) as System.Text.Json.Nodes.JsonObject
                 ?? new System.Text.Json.Nodes.JsonObject()
-            ),
-            $"MCP.{serverName}")
+            ))
     {
         _mcpTool = mcpTool;
     }

@@ -19,8 +19,7 @@ public sealed class DelegateTool : Tool
         : base(
             GetName(del, name),
             GetDescription(del, description),
-            BuildSchema(del),
-            GetSource(del))
+            BuildSchema(del))
     {
         _invoker = CompileInvoker(del.Method, del.Target);
     }
@@ -57,13 +56,7 @@ public sealed class DelegateTool : Tool
             ?? GetName(del, null);
     }
 
-    private static string GetSource(Delegate del)
-    {
-        ArgumentNullException.ThrowIfNull(del);
-        var method = del.Method;
-        var declaringType = method.DeclaringType ?? throw new InvalidOperationException("Tool method has no declaring type.");
-        return $"{declaringType.FullName}.{method.Name}";
-    }
+
 
     private static JsonSchema BuildSchema(Delegate del)
     {
@@ -71,7 +64,10 @@ public sealed class DelegateTool : Tool
         var method = del.Method;
 
         if (!IsMethodJsonCompatible(method))
-            throw new InvalidOperationException($"Method is not JSON-compatible: {GetSource(del)}");
+        {
+            var declaringType = method.DeclaringType ?? throw new InvalidOperationException("Tool method has no declaring type.");
+            throw new InvalidOperationException($"Method is not JSON-compatible: {declaringType.FullName}.{method.Name}");
+        }
 
         var builder = new JsonSchemaBuilder().Type<object>().AdditionalProperties(false);
 
