@@ -69,38 +69,7 @@ public sealed class AgentBuilder
         return this;
     }
 
-    /// <summary>
-    /// Registers another agent as a tool. The LLM can call the sub-agent by name,
-    /// passing a task string and receiving the agent's response.
-    /// This enables multi-agent orchestration with zero infrastructure.
-    /// </summary>
-    public AgentBuilder WithAgentTool(IAgent agent, string name, string description)
-    {
-        _toolRegistrations.Add(registry =>
-        {
-            var inputSchema = new System.Text.Json.Nodes.JsonObject
-            {
-                ["type"] = "object",
-                ["properties"] = new System.Text.Json.Nodes.JsonObject
-                {
-                    ["task"] = new System.Text.Json.Nodes.JsonObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = "The task or question to delegate to this agent"
-                    }
-                },
-                ["required"] = new System.Text.Json.Nodes.JsonArray("task")
-            };
 
-            registry.Register(new AgentDelegationTool(
-                name,
-                description,
-                new Json.JsonSchema(inputSchema),
-                $"AgentBuilder.Delegate.{name}",
-                agent));
-        });
-        return this;
-    }
 
 
     public IAgent Build()
@@ -161,21 +130,4 @@ public sealed class AgentBuilder
             loggerFactory.CreateLogger<LLMAgent>());
     }
 
-    private sealed class AgentDelegationTool : Tooling.Tool
-    {
-        private readonly IAgent _agent;
-
-        public AgentDelegationTool(string name, string description, Json.JsonSchema parametersSchema, string source, IAgent agent)
-            : base(name, description, parametersSchema, false, source)
-        {
-            _agent = agent ?? throw new ArgumentNullException(nameof(agent));
-        }
-
-        public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
-        {
-            var task = arguments["task"]?.ToString() ?? "";
-            var response = await _agent.InvokeAsync(new Conversation.Text(task), ct);
-            return new Conversation.Text(response.ForLlm());
-        }
-    }
 }

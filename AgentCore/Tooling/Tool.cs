@@ -8,11 +8,6 @@ public sealed class ToolAttribute(string? name = null, string? description = nul
 {
     public string? Name { get; } = name;
     public string? Description { get; } = description;
-
-    /// <summary>
-    /// Whether this tool requires user approval before execution (Letta-style)
-    /// </summary>
-    public bool RequiresApproval { get; set; } = false;
 }
 
 public abstract class Tool
@@ -20,14 +15,13 @@ public abstract class Tool
     public string Name { get; }
     public string Description { get; }
     public JsonSchema ParametersSchema { get; }
-    public bool RequiresApproval { get; }
 
     /// <summary>
     /// A diagnostic identifier describing where the tool originated (e.g. WeatherTools.GetWeather, mcp://filesystem/read_file).
     /// </summary>
     public string Source { get; }
 
-    protected Tool(string name, string description, JsonSchema parametersSchema, bool requiresApproval, string source)
+    protected Tool(string name, string description, JsonSchema parametersSchema, string source)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
@@ -37,7 +31,6 @@ public abstract class Tool
         Name = name;
         Description = description;
         ParametersSchema = parametersSchema;
-        RequiresApproval = requiresApproval;
         Source = source;
     }
 

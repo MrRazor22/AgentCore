@@ -1,5 +1,6 @@
 using AgentCore.Conversation;
 using AgentCore.LLM;
+using AgentCore.LLM.Exceptions;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using LlmTornado;

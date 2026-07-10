@@ -20,7 +20,6 @@ public sealed class DelegateTool : Tool
             GetName(del, name),
             GetDescription(del, description),
             BuildSchema(del),
-            GetRequiresApproval(del),
             GetSource(del))
     {
         _invoker = CompileInvoker(del.Method, del.Target);
@@ -56,12 +55,6 @@ public sealed class DelegateTool : Tool
             ?? attr?.Description
             ?? method.GetCustomAttribute<DescriptionAttribute>()?.Description
             ?? GetName(del, null);
-    }
-
-    private static bool GetRequiresApproval(Delegate del)
-    {
-        ArgumentNullException.ThrowIfNull(del);
-        return del.Method.GetCustomAttribute<ToolAttribute>()?.RequiresApproval ?? false;
     }
 
     private static string GetSource(Delegate del)

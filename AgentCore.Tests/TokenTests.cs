@@ -14,7 +14,7 @@ public class TokenTests
     public async Task ApproximateTokenCounter_CountsAndCalibratesCorrectly()
     {
         // Arrange
-        var counter = new ApproximateTokenCounter(NullLogger<ApproximateTokenCounter>.Instance);
+        var counter = new ApproximateTokenCounter(logger: NullLogger<ApproximateTokenCounter>.Instance);
         var messages = new List<Message>
         {
             new Message(Role.User, new Text("Hello, testing tokens."))
@@ -30,7 +30,7 @@ public class TokenTests
         // Initial cpt = 5.0, let's calibrate with actualTokenCount that represents cpt = 2.0
         // CharCount of "Hello, testing tokens." with overhead is 23 (text length) + 4 (overhead) = 27 chars.
         // Let's calibrate actualTokenCount = 13 tokens. cpt ratio becomes 27/13 = 2.07
-        counter.Calibrate(messages, 13);
+        counter.RecordActualInput(messages, null, 13);
         
         var calibratedEstimate = await counter.CountAsync(messages);
 
