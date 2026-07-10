@@ -84,13 +84,13 @@ public class SystemTools
 
 ### Pipeline Customization & Layering
 
-AgentCore exposes three fundamental execution pipelines that can be customized or wrapped using layers: Memory, LLM Executor, and Tool Executor. This allows you to plug in custom behaviors (such as logging, approval workflows, caching, or durable persistence) without modifying the agent implementation.
+AgentCore exposes three fundamental execution pipelines that can be customized or wrapped using layers: Memory, LLM, and Tooling. This allows you to plug in custom behaviors (such as logging, approval workflows, caching, or durable persistence) without modifying the agent implementation.
 
 ```csharp
 var agent = LLMAgent.Create("my-agent")
     .UseMemory(new ChatMemory())
     .AddMemoryLayer(m => new LoggingMemory(m))
-    .AddToolExecutorLayer(t => new ApprovalToolExecutor(t))
+    .AddToolingLayer(t => new ApprovalTooling(t))
     .Build();
 ```
 
@@ -99,7 +99,7 @@ var agent = LLMAgent.Create("my-agent")
 ## Architectural Boundary
 
 > [!NOTE]
-> **Execution Boundary:** AgentCore executes an agent to completion. Long-running orchestration (human approval, timers, workflows, durable pauses) belongs outside the core framework and can be implemented by decorating executors (via layers) or orchestrating multiple agent invocations.
+> **Execution Boundary:** AgentCore executes an agent to completion. Long-running orchestration (human approval, timers, workflows, durable pauses) belongs outside the core framework and can be implemented by decorating layers (via decorators) or orchestrating multiple agent invocations.
 
 ## Advanced Capabilities (Out of the Box)
 

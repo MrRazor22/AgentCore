@@ -21,16 +21,16 @@ public interface IAgent
 public sealed class LLMAgent : IAgent
 {
     private readonly IMemory _memory;
-    private readonly ILLMExecutor _llm;
-    private readonly IToolExecutor _toolRuntime;
+    private readonly ILLM _llm;
+    private readonly ITooling _tooling;
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
     private readonly ILogger<LLMAgent> _logger;
 
     public LLMAgent(
-        ILLMExecutor llm,
-        IToolExecutor toolRuntime,
+        ILLM llm,
+        ITooling tooling,
         IMemory memory,
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
@@ -39,7 +39,7 @@ public sealed class LLMAgent : IAgent
     {
         _memory = memory;
         _llm = llm;
-        _toolRuntime = toolRuntime;
+        _tooling = tooling;
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
@@ -242,7 +242,7 @@ public sealed class LLMAgent : IAgent
                         case ToolCallEvent tc:
                             toolCallsBuffer.Add(tc.Call);
                             
-                            runningTools.Add(_toolRuntime.HandleToolCallAsync(tc.Call, ct));
+                            runningTools.Add(_tooling.HandleToolCallAsync(tc.Call, ct));
                             break;
                     }
 

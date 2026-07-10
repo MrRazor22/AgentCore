@@ -23,8 +23,8 @@ public sealed class AgentBuilder
     private ILogger<AgentBuilder> _logger;
 
     private IMemory? _memory;
-    private IToolExecutor? _toolExecutor;
-    private ILLMExecutor? _llmExecutor;
+    private ITooling? _tooling;
+    private ILLM? _llm;
     private ITokenCounter? _tokenCounter;
     private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
@@ -32,8 +32,8 @@ public sealed class AgentBuilder
     private LLMOptions? _providerOptions;
 
     private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
-    private readonly List<Func<IToolExecutor, IToolExecutor>> _toolExecutorLayers = [];
-    private readonly List<Func<ILLMExecutor, ILLMExecutor>> _llmExecutorLayers = [];
+    private readonly List<Func<ITooling, ITooling>> _toolingLayers = [];
+    private readonly List<Func<ILLM, ILLM>> _llmLayers = [];
 
     public AgentBuilder()
     {
@@ -48,11 +48,11 @@ public sealed class AgentBuilder
     public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);
     public AgentBuilder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
 
-    public AgentBuilder UseToolExecutor(IToolExecutor toolExecutor) { _toolExecutor = toolExecutor; return this; }
-    public AgentBuilder AddToolExecutorLayer(Func<IToolExecutor, IToolExecutor> layer) { _toolExecutorLayers.Add(layer); return this; }
+    public AgentBuilder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
+    public AgentBuilder AddToolingLayer(Func<ITooling, ITooling> layer) { _toolingLayers.Add(layer); return this; }
 
-    public AgentBuilder UseLlmExecutor(ILLMExecutor llmExecutor) { _llmExecutor = llmExecutor; return this; }
-    public AgentBuilder AddLlmExecutorLayer(Func<ILLMExecutor, ILLMExecutor> layer) { _llmExecutorLayers.Add(layer); return this; }
+    public AgentBuilder UseLlm(ILLM llm) { _llm = llm; return this; }
+    public AgentBuilder AddLlmLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
@@ -96,23 +96,23 @@ public sealed class AgentBuilder
 
 
 
-        IToolExecutor toolExecutor = _toolExecutor ?? new ToolExecutor(
+        ITooling tooling = _tooling ?? new ToolingService(
             registry,
-            loggerFactory.CreateLogger<ToolExecutor>());
-        foreach (var layer in _toolExecutorLayers)
+            loggerFactory.CreateLogger<ToolingService>());
+        foreach (var layer in _toolingLayers)
         {
-            toolExecutor = layer(toolExecutor);
+            tooling = layer(tooling);
         }
 
-        ILLMExecutor llmExecutor = _llmExecutor ?? new LLMExecutor(
+        ILLM llm = _llm ?? new LLMService(
             _provider,
             registry,
             tokenCounter,
             tokenManager,
-            loggerFactory.CreateLogger<LLMExecutor>());
-        foreach (var layer in _llmExecutorLayers)
+            loggerFactory.CreateLogger<LLMService>());
+        foreach (var layer in _llmLayers)
         {
-            llmExecutor = layer(llmExecutor);
+            llm = layer(llm);
         }
 
         _logger.LogInformation("Agent build completed: Name={AgentName} Tools={ToolCount} ProviderType={ProviderType}",
@@ -121,8 +121,8 @@ public sealed class AgentBuilder
             _provider.GetType().Name);
 
         return new LLMAgent(
-            llmExecutor,
-            toolExecutor,
+            llm,
+            tooling,
             memory,
             tokenCounter,
             _providerOptions ?? new LLMOptions(),

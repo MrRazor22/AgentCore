@@ -9,19 +9,19 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tooling;
 
-public interface IToolExecutor
+public interface ITooling
 {
     Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
 }
 
-internal sealed class ToolExecutor : IToolExecutor
+internal sealed class ToolingService : ITooling
 {
     private readonly IToolRegistry _tools;
-    private readonly ILogger<ToolExecutor> _logger;
+    private readonly ILogger<ToolingService> _logger;
 
-    public ToolExecutor(
+    public ToolingService(
         IToolRegistry tools,
-        ILogger<ToolExecutor> logger)
+        ILogger<ToolingService> logger)
     {
         _tools = tools;
         _logger = logger;

@@ -13,25 +13,25 @@ using AgentCore.LLM.Exceptions;
 
 namespace AgentCore.LLM;
 
-public interface ILLMExecutor
+public interface ILLM
 {
     IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions options, CancellationToken ct = default);
 }
 
-internal sealed class LLMExecutor : ILLMExecutor
+internal sealed class LLMService : ILLM
 {
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
     private readonly ITokenCounter _tokenCounter;
     private readonly ITokenManager _tokenManager;
-    private readonly ILogger<LLMExecutor> _logger;
+    private readonly ILogger<LLMService> _logger;
 
-    public LLMExecutor(
+    public LLMService(
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
         ITokenManager tokenManager,
-        ILogger<LLMExecutor> logger)
+        ILogger<LLMService> logger)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
