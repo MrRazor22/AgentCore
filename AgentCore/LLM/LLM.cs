@@ -23,20 +23,17 @@ internal sealed class LLMService : ILLM
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
     private readonly ITokenCounter _tokenCounter;
-    private readonly ITokenManager _tokenManager;
     private readonly ILogger<LLMService> _logger;
 
     public LLMService(
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
-        ITokenManager tokenManager,
         ILogger<LLMService> logger)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
-        _tokenManager = tokenManager;
         _logger = logger;
     }
 
@@ -162,7 +159,6 @@ internal sealed class LLMService : ILLM
 
         if (tokenUsage != null)
         {
-            _tokenManager.Record(tokenUsage);
             _tokenCounter.RecordActualInput(messages, tools, tokenUsage.InputTokens);
         }
         else

@@ -26,7 +26,6 @@ public sealed class AgentBuilder
     private ITooling? _tooling;
     private ILLM? _llm;
     private ITokenCounter? _tokenCounter;
-    private ITokenManager? _tokenManager;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
     private LLMOptions? _providerOptions;
@@ -55,7 +54,6 @@ public sealed class AgentBuilder
     public AgentBuilder AddLlmLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
-    public AgentBuilder WithTokenManager(ITokenManager tokenManager) { _tokenManager = tokenManager; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
         _loggerFactory = loggerFactory;
@@ -81,7 +79,6 @@ public sealed class AgentBuilder
 
         var loggerFactory = _loggerFactory ?? NullLoggerFactory.Instance;
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
-        var tokenManager = _tokenManager ?? new TokenManager(loggerFactory.CreateLogger<TokenManager>());
         
         IMemory memory = _memory ?? new ChatMemory(tokenCounter, _provider);
         foreach (var layer in _memoryLayers)
@@ -108,7 +105,6 @@ public sealed class AgentBuilder
             _provider,
             registry,
             tokenCounter,
-            tokenManager,
             loggerFactory.CreateLogger<LLMService>());
         foreach (var layer in _llmLayers)
         {
