@@ -17,5 +17,6 @@ public sealed record MetaDelta(
     FinishReason? FinishReason,
     int? InputTokens = null,
     int? OutputTokens = null,
-    int? ReasoningTokens = null
+    int? ReasoningTokens = null,
+    string? Model = null
 ) : IContentDelta;

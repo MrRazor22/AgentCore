@@ -105,9 +105,6 @@ public sealed class LLMAgent : IAgent
     {
         return new LLMOptions
         {
-            Model = _baseOptions.Model,
-            ApiKey = _baseOptions.ApiKey,
-            BaseUrl = _baseOptions.BaseUrl,
             ContextWindow = _baseOptions.ContextWindow,
             Temperature = _baseOptions.Temperature,
             TopP = _baseOptions.TopP,

@@ -54,12 +54,13 @@ internal sealed class LLMService : ILLM
         var toolNames = tools?.Select(t => t.Name).ToList() ?? [];
         var toolNamesStr = string.Join(", ", toolNames);
 
-        _logger.LogTrace("LLM request: Model={Model} Tools=[{ToolNames}]", options.Model, toolNamesStr);
+        _logger.LogTrace("LLM request: Provider={Provider} Tools=[{ToolNames}]", _provider.GetType().Name, toolNamesStr);
 
         var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         int? inputTokens = null;
         int? outputTokens = null;
         int? reasoningTokens = null;
+        string? modelName = null;
         FinishReason? finishReason = null;
         int currentToolIndex = -1;
 
@@ -134,6 +135,7 @@ internal sealed class LLMService : ILLM
                             if (m.InputTokens.HasValue) inputTokens = m.InputTokens;
                             if (m.OutputTokens.HasValue) outputTokens = m.OutputTokens;
                             if (m.ReasoningTokens.HasValue) reasoningTokens = m.ReasoningTokens;
+                            if (m.Model is not null) modelName = m.Model;
                             finishReason = m.FinishReason;
                             break;
                     }
@@ -173,7 +175,7 @@ internal sealed class LLMService : ILLM
             outputTokens ?? 0,
             reasoningTokens,
             finishReason ?? FinishReason.Stop,
-            options.Model,
+            modelName,
             sw.Elapsed);
 
         sw.Stop();

@@ -9,9 +9,6 @@ public enum ReasoningEffort { None, Low, Medium, High }
 
 public sealed class LLMOptions
 {
-    public string? Model { get; set; }
-    public string? ApiKey { get; set; }
-    public Uri? BaseUrl { get; set; }
     public ToolCallMode ToolCallMode { get; set; } = ToolCallMode.Auto;
     public int? ContextWindow { get; set; }
     public float? Temperature { get; set; }

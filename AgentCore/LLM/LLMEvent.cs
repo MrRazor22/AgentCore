@@ -16,7 +16,7 @@ public sealed record MetaDataEvent(
     int OutputTokens,
     int? ReasoningTokens,
     FinishReason FinishReason,
-    string ModelName,
+    string? ModelName,
     TimeSpan? Duration = null,
     Dictionary<string, object>? Extra = null
 ) : LLMEvent;

@@ -137,7 +137,7 @@ public class TornadoLLMProvider : ILLMProvider
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            channel.Writer.TryWrite(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens));
+                            channel.Writer.TryWrite(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: _model.Name));
                         }
                         return ValueTask.CompletedTask;
                     }
