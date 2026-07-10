@@ -53,14 +53,18 @@ public class TornadoLLMProvider : ILLMProvider
         if (options.TopP.HasValue) request.TopP = options.TopP.Value;
         if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
 
-        if (options.ReasoningEffort.HasValue)
+        if (!string.IsNullOrEmpty(options.ReasoningEffort))
         {
-            request.ReasoningEffort = options.ReasoningEffort.Value switch
+            request.ReasoningEffort = options.ReasoningEffort.ToLowerInvariant() switch
             {
-                ReasoningEffort.None => LlmTornado.Code.ChatReasoningEfforts.None,
-                ReasoningEffort.Low => LlmTornado.Code.ChatReasoningEfforts.Low,
-                ReasoningEffort.Medium => LlmTornado.Code.ChatReasoningEfforts.Medium,
-                ReasoningEffort.High => LlmTornado.Code.ChatReasoningEfforts.High,
+                "none" => LlmTornado.Code.ChatReasoningEfforts.None,
+                "minimal" => LlmTornado.Code.ChatReasoningEfforts.Minimal,
+                "low" => LlmTornado.Code.ChatReasoningEfforts.Low,
+                "medium" => LlmTornado.Code.ChatReasoningEfforts.Medium,
+                "high" => LlmTornado.Code.ChatReasoningEfforts.High,
+                "xhigh" => LlmTornado.Code.ChatReasoningEfforts.XHigh,
+                "max" => LlmTornado.Code.ChatReasoningEfforts.Max,
+                "default" => LlmTornado.Code.ChatReasoningEfforts.Default,
                 _ => null
             };
         }

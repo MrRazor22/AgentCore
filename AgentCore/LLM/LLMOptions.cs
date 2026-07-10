@@ -5,8 +5,6 @@ using AgentCore.Tooling;
 
 namespace AgentCore.LLM;
 
-public enum ReasoningEffort { None, Low, Medium, High }
-
 public sealed class LLMOptions
 {
     public ToolCallMode ToolCallMode { get; set; } = ToolCallMode.Auto;
@@ -19,6 +17,6 @@ public sealed class LLMOptions
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
     public JsonSchema? ResponseSchema { get; set; }
-    public ReasoningEffort? ReasoningEffort { get; set; }
+    public string? ReasoningEffort { get; set; }
     public int MaxRetries { get; set; } = 3;
 }
