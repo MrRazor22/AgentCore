@@ -70,22 +70,54 @@ public class TornadoLLMProvider : ILLMProvider
 
         foreach (var msg in messages)
         {
-            var contentStr = string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
             switch (msg.Role)
             {
                 case Role.System:
-                    chat.AppendMessage(new ChatMessage(ChatMessageRoles.System, contentStr));
+                    {
+                        var contentStr = string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
+                        chat.AppendMessage(new ChatMessage(ChatMessageRoles.System, contentStr));
+                    }
                     break;
                 case Role.User:
-                    chat.AppendMessage(new ChatMessage(ChatMessageRoles.User, contentStr));
+                    {
+                        var contentStr = string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
+                        chat.AppendMessage(new ChatMessage(ChatMessageRoles.User, contentStr));
+                    }
                     break;
                 case Role.Assistant:
-                    chat.AppendMessage(new ChatMessage(ChatMessageRoles.Assistant, contentStr));
+                    {
+                        var assistantContent = string.Join("\n", msg.Contents.Where(c => c is not AgentCore.Conversation.ToolCall).Select(c => c.ForLlm()));
+                        var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant)
+                        {
+                            Content = string.IsNullOrEmpty(assistantContent) ? null : assistantContent
+                        };
+                        var toolCalls = msg.Contents.OfType<AgentCore.Conversation.ToolCall>().ToList();
+                        if (toolCalls.Any())
+                        {
+                            assistantMsg.ToolCalls = toolCalls.Select(tc => new LlmTornado.ChatFunctions.ToolCall
+                            {
+                                Id = tc.Id,
+                                Type = "function",
+                                FunctionCall = new LlmTornado.ChatFunctions.FunctionCall
+                                {
+                                    Name = tc.Name,
+                                    Arguments = tc.Arguments.ToString()
+                                }
+                            }).ToList();
+                        }
+                        chat.AppendMessage(assistantMsg);
+                    }
                     break;
                 case Role.Tool:
-                    // Currently appending tool results as basic user text since LlmTornado 
-                    // handles native tool routing differently through its conversation block.
-                    chat.AppendMessage(new ChatMessage(ChatMessageRoles.User, $"[Tool Result]: {contentStr}"));
+                    {
+                        var toolResult = msg.Contents.OfType<AgentCore.Conversation.ToolResult>().FirstOrDefault();
+                        var contentStr = toolResult?.Result?.ForLlm() ?? string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
+                        var toolMsg = new ChatMessage(ChatMessageRoles.Tool, contentStr ?? string.Empty)
+                        {
+                            ToolCallId = toolResult?.CallId
+                        };
+                        chat.AppendMessage(toolMsg);
+                    }
                     break;
             }
         }
