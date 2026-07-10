@@ -63,6 +63,9 @@ internal sealed class LLMService : ILLM
         string? modelName = null;
         FinishReason? finishReason = null;
         int currentToolIndex = -1;
+        int lastYieldedInput = 0;
+        int lastYieldedOutput = 0;
+        int? lastYieldedReasoning = null;
 
         int maxRetries = options.MaxRetries;
         int attempt = 0;
@@ -132,11 +135,23 @@ internal sealed class LLMService : ILLM
                             break;
 
                         case MetaDelta m:
-                            if (m.InputTokens.HasValue) inputTokens = m.InputTokens;
-                            if (m.OutputTokens.HasValue) outputTokens = m.OutputTokens;
-                            if (m.ReasoningTokens.HasValue) reasoningTokens = m.ReasoningTokens;
+                            bool tokenUpdated = false;
+                            if (m.InputTokens.HasValue && m.InputTokens != inputTokens) { inputTokens = m.InputTokens; tokenUpdated = true; }
+                            if (m.OutputTokens.HasValue && m.OutputTokens != outputTokens) { outputTokens = m.OutputTokens; tokenUpdated = true; }
+                            if (m.ReasoningTokens.HasValue && m.ReasoningTokens != reasoningTokens) { reasoningTokens = m.ReasoningTokens; tokenUpdated = true; }
                             if (m.Model is not null) modelName = m.Model;
-                            finishReason = m.FinishReason;
+                            if (m.FinishReason.HasValue) finishReason = m.FinishReason;
+
+                            if (tokenUpdated)
+                            {
+                                lastYieldedInput = inputTokens ?? 0;
+                                lastYieldedOutput = outputTokens ?? 0;
+                                lastYieldedReasoning = reasoningTokens;
+                                yield return new TokenUsageEvent(
+                                    lastYieldedInput,
+                                    lastYieldedOutput,
+                                    lastYieldedReasoning);
+                            }
                             break;
                     }
 
@@ -170,10 +185,14 @@ internal sealed class LLMService : ILLM
             _logger.LogDebug("Provider did not report token usage for FinishReason={FinishReason}", finishReason);
         }
 
+        int finalInput = inputTokens ?? 0;
+        int finalOutput = outputTokens ?? 0;
+        if (finalInput != lastYieldedInput || finalOutput != lastYieldedOutput || reasoningTokens != lastYieldedReasoning)
+        {
+            yield return new TokenUsageEvent(finalInput, finalOutput, reasoningTokens);
+        }
+
         yield return new MetaDataEvent(
-            inputTokens ?? 0,
-            outputTokens ?? 0,
-            reasoningTokens,
             finishReason ?? FinishReason.Stop,
             modelName,
             sw.Elapsed);
