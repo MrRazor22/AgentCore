@@ -28,6 +28,13 @@ public sealed class LLMAgent : IAgent
     private readonly AgentConfig _config;
     private readonly ILogger<LLMAgent> _logger;
 
+    public IMemory Memory => _memory;
+    public ILLM Llm => _llm;
+    public ITooling Tooling => _tooling;
+    public ITokenCounter TokenCounter => _tokenCounter;
+    public LLMOptions Options => _baseOptions;
+    public AgentConfig Config => _config;
+
     public LLMAgent(
         ILLM llm,
         ITooling tooling,

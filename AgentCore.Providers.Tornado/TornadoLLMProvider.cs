@@ -148,7 +148,7 @@ public class TornadoLLMProvider : ILLMProvider
                 var translated = ex;
                 if (IsContextLimitError(ex))
                 {
-                    translated = new ContextLengthExceededException();
+                    translated = new ContextLengthExceededException(ex.Message, ex);
                 }
                 else if (IsTransientError(ex))
                 {
