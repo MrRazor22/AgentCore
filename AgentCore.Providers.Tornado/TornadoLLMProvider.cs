@@ -122,11 +122,13 @@ public class TornadoLLMProvider : ILLMProvider
             }
         }
 
-        // We wrap LlmTornado's streaming callbacks into an async enumerator using a channel or just basic mapping.
-        // For simplicity, we yield text and reasoning blocks as they stream.
-        // Note: LlmTornado uses custom asynchronous event handlers instead of IAsyncEnumerable natively.
-        
-        var channel = System.Threading.Channels.Channel.CreateUnbounded<IContentDelta>();
+        var channelOptions = new System.Threading.Channels.BoundedChannelOptions(1024)
+        {
+            SingleWriter = true,
+            SingleReader = true,
+            FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
+        };
+        var channel = System.Threading.Channels.Channel.CreateBounded<IContentDelta>(channelOptions);
 
         _ = Task.Run(async () =>
         {
@@ -134,44 +136,40 @@ public class TornadoLLMProvider : ILLMProvider
             {
                 await chat.StreamResponseRich(new ChatStreamEventHandler
                 {
-                    ReasoningTokenHandler = (reasoning) =>
+                    ReasoningTokenHandler = async (reasoning) =>
                     {
                         if (reasoning.Content is not null)
                         {
-                            channel.Writer.TryWrite(new ReasoningDelta(reasoning.Content));
+                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoning.Content), ct);
                         }
-                        return ValueTask.CompletedTask;
                     },
-                    MessagePartHandler = (part) =>
+                    MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            channel.Writer.TryWrite(new ReasoningDelta(part.Reasoning.Content));
+                            await channel.Writer.WriteAsync(new ReasoningDelta(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
-                            channel.Writer.TryWrite(new TextDelta(part.Text));
+                            await channel.Writer.WriteAsync(new TextDelta(part.Text), ct);
                         }
-                        return ValueTask.CompletedTask;
                     },
-                    FunctionCallHandler = (calls) =>
+                    FunctionCallHandler = async (calls) =>
                     {
                          // Emit tool calls
                          int idx = 0;
                          foreach(var call in calls)
                          {
                               var argsStr = call.Arguments;
-                              channel.Writer.TryWrite(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr));
+                              await channel.Writer.WriteAsync(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr), ct);
                          }
-                         return ValueTask.CompletedTask;
                     },
-                    OnUsageReceived = (usage) => 
+                    OnUsageReceived = async (usage) => 
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            channel.Writer.TryWrite(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: _model.Name));
+                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: _model.Name), ct);
                         }
-                        return ValueTask.CompletedTask;
                     }
                 }, ct);
             }
