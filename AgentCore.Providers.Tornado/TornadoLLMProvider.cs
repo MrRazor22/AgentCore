@@ -1,4 +1,5 @@
 using AgentCore.Conversation;
+using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
 using AgentCore.Tooling;
@@ -28,6 +29,7 @@ public class TornadoLLMProvider : ILLMProvider
         IReadOnlyList<Message> messages,
         LLMOptions options,
         IReadOnlyList<AgentCore.Tooling.Tool>? tools = null,
+        JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var request = new ChatRequest

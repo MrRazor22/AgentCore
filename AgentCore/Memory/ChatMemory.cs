@@ -201,7 +201,7 @@ internal sealed class ChatMemoryService : IMemory
         };
 
         var sb = new StringBuilder();
-        await foreach (var delta in _llmProvider.StreamAsync(messages, options, tools: null, ct).ConfigureAwait(false))
+        await foreach (var delta in _llmProvider.StreamAsync(messages, options, tools: null, ct: ct).ConfigureAwait(false))
         {
             if (delta is TextDelta td) sb.Append(td.Value);
         }

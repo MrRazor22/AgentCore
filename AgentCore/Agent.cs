@@ -98,24 +98,6 @@ public sealed class LLMAgent : IAgent
         return CoreStreamAsync(input, null, turnMessages, ct);
     }
 
-    private LLMOptions BuildLLMOptions(Type? outputType)
-    {
-        return new LLMOptions
-        {
-            ContextWindow = _baseOptions.ContextWindow,
-            Temperature = _baseOptions.Temperature,
-            TopP = _baseOptions.TopP,
-            MaxOutputTokens = _baseOptions.MaxOutputTokens,
-            Seed = _baseOptions.Seed,
-            StopSequences = _baseOptions.StopSequences,
-            FrequencyPenalty = _baseOptions.FrequencyPenalty,
-            PresencePenalty = _baseOptions.PresencePenalty,
-            ToolCallMode = ToolCallMode.Auto,
-            ResponseSchema = outputType?.GetSchemaForType(),
-            MaxRetries = _baseOptions.MaxRetries
-        };
-    }
-
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
         Type? outputType,
@@ -183,7 +165,7 @@ public sealed class LLMAgent : IAgent
             _baseOptions.ContextWindow, 
             ct).ConfigureAwait(false);
 
-        var options = BuildLLMOptions(outputType);
+        var responseSchema = outputType?.GetSchemaForType();
         int consecutiveToolSteps = 0;
 
         while (true)
@@ -206,7 +188,7 @@ public sealed class LLMAgent : IAgent
             messages.AddRange(recalled);
             messages.AddRange(workingChat);
             
-            var enumerator = _llm.StreamAsync(messages, options, ct).GetAsyncEnumerator(ct);
+            var enumerator = _llm.StreamAsync(messages, _baseOptions, responseSchema, ct).GetAsyncEnumerator(ct);
             bool hasContextError = false;
             ContextLengthExceededException? capturedEx = null;
 

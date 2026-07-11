@@ -16,7 +16,6 @@ public sealed class LLMOptions
     public IReadOnlyList<string>? StopSequences { get; set; }
     public float? FrequencyPenalty { get; set; }
     public float? PresencePenalty { get; set; }
-    public JsonSchema? ResponseSchema { get; set; }
     public string? ReasoningEffort { get; set; }
     public int MaxRetries { get; set; } = 3;
 }
