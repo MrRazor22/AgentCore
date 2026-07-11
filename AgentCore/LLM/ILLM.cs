@@ -219,10 +219,13 @@ internal sealed class LLMService : ILLM
 
     private static ToolCallEvent? ParseToolCall(string id, string name, string argsStr)
     {
-        JsonObject parsedArgs = argsStr.TryParseCompleteJson(out var parsed)
-            ? parsed ?? new JsonObject()
-            : new JsonObject();
+        JsonObject? parsedArgs = null;
+        try
+        {
+            parsedArgs = JsonNode.Parse(argsStr)?.AsObject();
+        }
+        catch { /* ignore failed parse */ }
 
-        return new ToolCallEvent(new ToolCall(id, name, parsedArgs));
+        return new ToolCallEvent(new ToolCall(id, name, parsedArgs ?? new JsonObject()));
     }
 }

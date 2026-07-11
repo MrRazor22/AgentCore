@@ -70,7 +70,14 @@ internal sealed class ToolingService : ITooling
         try
         {
             var rawResult = await tool.InvokeAsync(call.Arguments ?? new JsonObject(), ct).ConfigureAwait(false);
-            IContent? result = (rawResult is IContent c) ? c : new Text(rawResult.AsJsonString());
+            IContent result = rawResult switch
+            {
+                IContent c => c,
+                null => new Text(string.Empty),
+                string s => new Text(s),
+                Exception ex => new Text(ex.Message),
+                _ => new Text(JsonSerializer.Serialize(rawResult))
+            };
 
             sw.Stop();
             _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
