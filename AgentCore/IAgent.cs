@@ -53,7 +53,7 @@ public sealed class Agent : IAgent
             schema = typeof(T).GetSchemaForType();
         }
 
-        var textBuffer = new System.Text.StringBuilder();
+        Message? finalResponse = null;
 
         await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
         {
@@ -61,13 +61,14 @@ public sealed class Agent : IAgent
             {
                 throw error.Error;
             }
-            if (evt is TextEvent text)
+            if (evt is AgentResponseEvent resp)
             {
-                textBuffer.Append(text.Delta);
+                finalResponse = resp.Message;
             }
         }
 
-        var rawText = textBuffer.ToString().Trim();
+        var textContents = finalResponse?.Contents.OfType<Text>().Select(t => t.Value) ?? Array.Empty<string>();
+        var rawText = string.Join("\n\n", textContents);
         
         if (typeof(T) == typeof(string))
         {

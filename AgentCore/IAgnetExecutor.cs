@@ -53,73 +53,32 @@ namespace AgentCore
                     break;
                 }
 
-                Message? assistantMessage = null;
                 var textBuffer = new System.Text.StringBuilder();
                 var reasoningBuffer = new System.Text.StringBuilder();
-                var toolCallsBuffer = new List<ToolCall>();
+                var toolCalls = new List<ToolCall>();
 
-                var enumerator = _services.Llm.StreamAsync(conversation, _options, responseSchema, ct).GetAsyncEnumerator(ct);
-                bool hasContextError = false;
-                ContextLengthExceededException? capturedEx = null;
-                Exception? otherEx = null;
+                await using var enumerator = _services.Llm.StreamAsync(conversation, _options, responseSchema, ct).GetAsyncEnumerator(ct);
 
-                try
+                while (await enumerator.MoveNextAsync())
                 {
-                    while (true)
+                    var evt = enumerator.Current;
+                    switch (evt)
                     {
-                        LLMEvent evt;
-                        try
-                        {
-                            if (!await enumerator.MoveNextAsync())
-                                break;
-                            evt = enumerator.Current;
-                        }
-                        catch (ContextLengthExceededException ex)
-                        {
-                            hasContextError = true;
-                            capturedEx = ex;
+                        case TextEvent textEvt:
+                            textBuffer.Append(textEvt.Delta);
                             break;
-                        }
-                        catch (Exception ex)
-                        {
-                            otherEx = ex;
+                        case ReasoningEvent reasoningEvt:
+                            reasoningBuffer.Append(reasoningEvt.Delta);     
                             break;
-                        }
-
-                        switch (evt)
-                        {
-                            case TextEvent te: textBuffer.Append(te.Delta); break;
-                            case ReasoningEvent re: reasoningBuffer.Append(re.Delta); break;
-                            case ToolCallEvent tc: toolCallsBuffer.Add(tc.Call); break;
-                        }
-
-                        yield return evt;
+                        case ToolCallEvent toolCallEvt:
+                            toolCalls.Add(toolCallEvt.Call);
+                            break;
                     }
-                }
-                finally
-                {
-                    await enumerator.DisposeAsync();
+
+                    yield return evt;
                 }
 
-                // Reconstruct the assistant message from what we buffered
-                var contents = new List<IContent>();
-                if (reasoningBuffer.Length > 0) contents.Add(new Reasoning(reasoningBuffer.ToString()));
-                if (textBuffer.Length > 0) contents.Add(new Text(textBuffer.ToString().Trim()));
-                if (toolCallsBuffer.Count > 0) contents.AddRange(toolCallsBuffer);
-                if (contents.Count > 0)
-                    assistantMessage = new Message(Role.Assistant, contents);
-
-                if (otherEx != null)
-                {
-                    throw otherEx;
-                }
-
-                if (hasContextError && capturedEx != null)
-                {
-                    yield return new ErrorEvent(capturedEx);
-                    break;
-                }
-
+                var assistantMessage = BuildMessage(textBuffer, reasoningBuffer, toolCalls);
                 if (assistantMessage == null)
                 {
                     break;
@@ -127,23 +86,39 @@ namespace AgentCore
 
                 conversation.Add(assistantMessage);
 
-                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
-                if (toolCalls.Count == 0)
+                if (toolCalls.Count > 0)
                 {
-                    break;
+                    iterations++;
+
+                    var toolMessages = await _services.Tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
+                    conversation.AddRange(toolMessages);
+
+                    foreach (var message in toolMessages)
+                    {
+                        var result = message.Contents.OfType<ToolResult>().Single();
+                        yield return new ToolResultEvent(result);
+                    }
+
+                    continue;
                 }
 
-                iterations++;
-
-                var toolMessages = await _services.Tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
-                conversation.AddRange(toolMessages);
-
-                foreach (var message in toolMessages)
-                {
-                    var result = message.Contents.OfType<ToolResult>().Single();
-                    yield return new ToolResultEvent(result);
-                }
+                // Final assistant response.
+                yield return new AgentResponseEvent(assistantMessage);
+                break;
             }
+        }
+
+        private static Message? BuildMessage(System.Text.StringBuilder text, System.Text.StringBuilder reasoning, List<ToolCall> toolCalls)
+        {
+            var contents = new List<IContent>();
+            if (reasoning.Length > 0) contents.Add(new Reasoning(reasoning.ToString()));
+            
+            var textVal = text.ToString().Trim();
+            if (!string.IsNullOrEmpty(textVal)) contents.Add(new Text(textVal));
+            
+            if (toolCalls.Count > 0) contents.AddRange(toolCalls);
+            
+            return contents.Count == 0 ? null : new Message(Role.Assistant, contents);
         }
     }
 }
