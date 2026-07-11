@@ -2,14 +2,11 @@ using AgentCore.Conversation;
 using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
-using AgentCore.Tooling;
 using LlmTornado;
 using LlmTornado.Chat;
-using LlmTornado.Code;
 using LlmTornado.Chat.Models;
-using LlmTornado.Models;
+using LlmTornado.Code;
 using LlmTornado.Common;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;

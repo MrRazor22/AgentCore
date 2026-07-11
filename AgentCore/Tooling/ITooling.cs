@@ -1,10 +1,7 @@
 using AgentCore.Conversation;
-using AgentCore.Json;
-using AgentCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
-using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 

@@ -5,8 +5,7 @@ using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging.Abstractions; 
 
 namespace AgentCore;
 
