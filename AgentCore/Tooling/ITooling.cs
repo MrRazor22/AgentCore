@@ -12,7 +12,7 @@ namespace AgentCore.Tooling;
 
 public interface ITooling
 {
-    Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default);
+    Task<ToolResult[]> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class ToolingService : ITooling
@@ -28,8 +28,10 @@ internal sealed class ToolingService : ITooling
         _logger = logger ?? NullLogger<ToolingService>.Instance;
     }
 
-    public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
-        => HandleInternalAsync(call, ct);
+    public Task<ToolResult[]> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    {
+        return Task.WhenAll(calls.Select(c => HandleInternalAsync(c, ct)));
+    }
 
     private static ToolResult Failed(string callId, string toolName, string message)
         => new(callId, new Text($"Error calling tool '{toolName}': {message}"));

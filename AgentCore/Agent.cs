@@ -200,8 +200,6 @@ public sealed class LLMAgent : IAgent
                 break;
             }
 
-            var runningTools = new List<Task<ToolResult>>();
-            
             // Assemble complete LLM prompt: System Identity Prompt + Recalled Context + Current Turn Messages
             var messages = new List<Message>();
             if (_config.Instructions != null)
@@ -246,8 +244,6 @@ public sealed class LLMAgent : IAgent
 
                         case ToolCallEvent tc:
                             toolCallsBuffer.Add(tc.Call);
-                            
-                            runningTools.Add(_tooling.HandleToolCallAsync(tc.Call, ct));
                             break;
                     }
 
@@ -281,12 +277,11 @@ public sealed class LLMAgent : IAgent
                 if (toolCallsBuffer.Count > 0)
                 {
                     contents.AddRange(toolCallsBuffer);
-                    toolCallsBuffer.Clear();
                 }
                 workingChat.Add(new Message(Role.Assistant, contents));
             }
 
-            if (runningTools.Count == 0)
+            if (toolCallsBuffer.Count == 0)
             {
                 // Turn is complete, record the turn's experience in memory
                 await _memory.RememberAsync(workingChat, ct).ConfigureAwait(false);
@@ -296,7 +291,8 @@ public sealed class LLMAgent : IAgent
             }
 
             consecutiveToolSteps++;
-            var results = await Task.WhenAll(runningTools);
+            var results = await _tooling.ExecuteAsync(toolCallsBuffer, ct).ConfigureAwait(false);
+            toolCallsBuffer.Clear();
 
             foreach (var result in results)
             {
