@@ -74,6 +74,10 @@ internal sealed class LLMService : ILLM
         int lastYieldedOutput = 0;
         int? lastYieldedReasoning = null;
 
+        var textBuffer = new StringBuilder();
+        var reasoningBuffer = new StringBuilder();
+        var toolCallsBuffer = new List<ToolCall>();
+
         int maxRetries = options.MaxRetries;
         int attempt = 0;
         IAsyncEnumerator<IContentDelta>? enumerator = null;
@@ -113,10 +117,12 @@ internal sealed class LLMService : ILLM
                     switch (delta)
                     {
                         case TextDelta t:
+                            textBuffer.Append(t.Value);
                             yield return new TextEvent(t.Value);
                             break;
 
                         case ReasoningDelta r:
+                            reasoningBuffer.Append(r.Value);
                             yield return new ReasoningEvent(r.Value);
                             break;
 
@@ -126,7 +132,11 @@ internal sealed class LLMService : ILLM
                                 if (toolCalls.TryGetValue(currentToolIndex, out var prev))
                                 {
                                     var evt = ParseToolCall(prev.id, prev.name, prev.args.ToString());
-                                    if (evt != null) yield return evt;
+                                    if (evt != null)
+                                    {
+                                        toolCallsBuffer.Add(evt.Call);
+                                        yield return evt;
+                                    }
                                     toolCalls.Remove(currentToolIndex);
                                 }
                             }
@@ -180,7 +190,11 @@ internal sealed class LLMService : ILLM
         if (currentToolIndex != -1 && toolCalls.TryGetValue(currentToolIndex, out var lastEntry))
         {
             var evt = ParseToolCall(lastEntry.id, lastEntry.name, lastEntry.args.ToString());
-            if (evt != null) yield return evt;
+            if (evt != null)
+            {
+                toolCallsBuffer.Add(evt.Call);
+                yield return evt;
+            }
         }
 
         if (inputTokens.HasValue)
@@ -203,6 +217,24 @@ internal sealed class LLMService : ILLM
             finishReason ?? FinishReason.Stop,
             modelName,
             sw.Elapsed);
+
+        var contents = new List<IContent>();
+        if (reasoningBuffer.Length > 0)
+        {
+            contents.Add(new Reasoning(reasoningBuffer.ToString()));
+        }
+        if (textBuffer.Length > 0)
+        {
+            contents.Add(new Text(textBuffer.ToString().Trim()));
+        }
+        if (toolCallsBuffer.Count > 0)
+        {
+            contents.AddRange(toolCallsBuffer);
+        }
+        if (contents.Count > 0)
+        {
+            yield return new AssistantMessageEvent(new Message(Role.Assistant, contents));
+        }
 
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);

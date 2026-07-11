@@ -22,3 +22,6 @@ public sealed record MetaDataEvent(
     string? ModelName,
     TimeSpan? Duration = null
 ) : LLMEvent;
+
+public sealed record AssistantMessageEvent(Message Message) : LLMEvent;
+

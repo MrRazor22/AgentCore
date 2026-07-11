@@ -26,14 +26,7 @@ public sealed class LLMAgent : IAgent
     private readonly ITokenCounter _tokenCounter;
     private readonly LLMOptions _baseOptions;
     private readonly AgentConfig _config;
-    private readonly ILogger<LLMAgent> _logger;
-
-    public IMemory Memory => _memory;
-    public ILLM Llm => _llm;
-    public ITooling Tooling => _tooling;
-    public ITokenCounter TokenCounter => _tokenCounter;
-    public LLMOptions Options => _baseOptions;
-    public AgentConfig Config => _config;
+    private readonly ILogger<LLMAgent> _logger; 
 
     public LLMAgent(
         ILLM llm,
@@ -51,24 +44,9 @@ public sealed class LLMAgent : IAgent
         _baseOptions = baseOptions;
         _config = config;
         _logger = logger ?? NullLogger<LLMAgent>.Instance;
-    }
+    } 
 
-    public static AgentBuilder Create(string name = "agent")
-        => new AgentBuilder().WithName(name);
-
-    public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
-    {
-        var response = await InvokeAsyncInternal(input, typeof(T), ct);
-        var json = response.ForLlm();
-        
-        if (string.IsNullOrWhiteSpace(json)) return default;
-        return System.Text.Json.JsonSerializer.Deserialize<T>(json);
-    }
-
-    private async Task<IContent> InvokeAsyncInternal(
-        IContent input, 
-        Type? outputType, 
-        CancellationToken ct)
+    public async Task<T?> InvokeAsync<T>(IContent input, Type? outputType, CancellationToken ct = default)
     {
         var turnMessages = new List<Message>();
 
@@ -84,10 +62,13 @@ public sealed class LLMAgent : IAgent
             .Where(m => m.Role == Role.Assistant)
             .LastOrDefault();
 
-        IContent content = lastAssistantMsg?.Contents.OfType<Text>().LastOrDefault()
+        IContent response = lastAssistantMsg?.Contents.OfType<Text>().LastOrDefault()
             ?? (lastAssistantMsg?.Contents.LastOrDefault() ?? new Text(""));
-
-        return content;
+        
+        var json = response.ForLlm();
+        
+        if (string.IsNullOrWhiteSpace(json)) return default;
+        return System.Text.Json.JsonSerializer.Deserialize<T>(json);
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
@@ -153,14 +134,10 @@ public sealed class LLMAgent : IAgent
         [EnumeratorCancellation] CancellationToken ct)
     {
         var userMessage = new Message(Role.User, input);
-        var workingChat = new List<Message> { userMessage };
-
-        var textBuffer = new StringBuilder();
-        var reasoningBuffer = new StringBuilder();
-        var toolCallsBuffer = new List<ToolCall>();
+        var currentTurnChat = new List<Message> { userMessage };
 
         // Recall relevant contextual messages (which may include history, summaries, facts, etc.)
-        IReadOnlyList<Message> recalled = await _memory.RecallAsync(
+        IReadOnlyList<Message> recalledChat = await _memory.RecallAsync(
             userMessage, 
             _baseOptions.ContextWindow, 
             ct).ConfigureAwait(false);
@@ -185,9 +162,11 @@ public sealed class LLMAgent : IAgent
                 messages.Add(new Message(Role.System, _config.Instructions));
             }
 
-            messages.AddRange(recalled);
-            messages.AddRange(workingChat);
-            
+            messages.AddRange(recalledChat);
+            messages.AddRange(currentTurnChat);
+
+            Message? assistantMessage = null;
+
             var enumerator = _llm.StreamAsync(messages, _baseOptions, responseSchema, ct).GetAsyncEnumerator(ct);
             bool hasContextError = false;
             ContextLengthExceededException? capturedEx = null;
@@ -210,21 +189,10 @@ public sealed class LLMAgent : IAgent
                         break;
                     }
 
-                    switch (evt)
+                    if (evt is AssistantMessageEvent am)
                     {
-                        case TextEvent t:
-                            textBuffer.Append(t.Delta);
-                            break;
-
-                        case ReasoningEvent r:
-                            reasoningBuffer.Append(r.Delta);
-                            break;
-
-                        case ToolCallEvent tc:
-                            toolCallsBuffer.Add(tc.Call);
-                            break;
+                        assistantMessage = am.Message;
                     }
-
                     yield return evt;
                 }
             }
@@ -236,45 +204,33 @@ public sealed class LLMAgent : IAgent
             if (hasContextError && capturedEx != null)
             {
                 yield return new ErrorEvent(capturedEx);
-                yield break;
+                break;
             }
 
-            if (textBuffer.Length > 0 || reasoningBuffer.Length > 0 || toolCallsBuffer.Count > 0)
+            if (assistantMessage == null)
             {
-                var contents = new List<IContent>();
-                if (reasoningBuffer.Length > 0)
-                {
-                    contents.Add(new Reasoning(reasoningBuffer.ToString()));
-                    reasoningBuffer.Clear();
-                }
-                if (textBuffer.Length > 0)
-                {
-                    contents.Add(new Text(textBuffer.ToString().Trim()));
-                    textBuffer.Clear();
-                }
-                if (toolCallsBuffer.Count > 0)
-                {
-                    contents.AddRange(toolCallsBuffer);
-                }
-                workingChat.Add(new Message(Role.Assistant, contents));
+                break;
             }
 
-            if (toolCallsBuffer.Count == 0)
+            currentTurnChat.Add(assistantMessage);
+
+            var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
+            if (toolCalls.Count == 0)
             {
                 // Turn is complete, record the turn's experience in memory
-                await _memory.RememberAsync(workingChat, ct).ConfigureAwait(false);
+                await _memory.RememberAsync(currentTurnChat, ct).ConfigureAwait(false);
 
-                turnMessages.AddRange(workingChat);
+                turnMessages.AddRange(currentTurnChat);
                 break;
             }
 
             consecutiveToolSteps++;
-            var results = await _tooling.ExecuteAsync(toolCallsBuffer, ct).ConfigureAwait(false);
-            toolCallsBuffer.Clear();
+            var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
+            currentTurnChat.AddRange(toolMessages);
 
-            foreach (var result in results)
+            foreach (var message in toolMessages)
             {
-                workingChat.Add(new Message(Role.Tool, result));
+                var result = message.Contents.OfType<ToolResult>().Single();
                 yield return new ToolResultEvent(result);
             }
         }
