@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace AgentCore.Json;
+namespace AgentCore.Schema;
 
 public static class JsonSchemaExtensions
 {

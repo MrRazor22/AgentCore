@@ -1,5 +1,5 @@
 using AgentCore.Conversation;
-using AgentCore.Json;
+using AgentCore.Schema;
 using AgentCore.Tooling;
 
 namespace AgentCore.LLM;

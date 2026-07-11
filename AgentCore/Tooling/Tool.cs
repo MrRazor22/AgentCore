@@ -1,4 +1,4 @@
-using AgentCore.Json;
+using AgentCore.Schema;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Tooling;

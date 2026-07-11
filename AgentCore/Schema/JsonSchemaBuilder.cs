@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Json;
+namespace AgentCore.Schema;
 
 public static class JsonSchemaConstants
 {
