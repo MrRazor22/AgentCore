@@ -1,6 +1,5 @@
 using AgentCore.Schema;
 using System.ComponentModel;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -22,7 +21,12 @@ public sealed class ToolAttribute(string? name = null, string? description = nul
 /// </summary>
 public sealed class MethodTool : Tool
 {
-    private readonly Func<JsonObject, CancellationToken, Task<object?>> _invoker;
+    private readonly MethodInfo _method;
+    private readonly object? _target;
+    private readonly ParameterInfo[] _parameters;
+    private readonly bool _returnsTask;
+    private readonly bool _returnsGenericTask;
+    private readonly PropertyInfo? _taskResultProperty;
 
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null)
         : base(
@@ -31,11 +35,56 @@ public sealed class MethodTool : Tool
             BuildSchema(method))
     {
         ArgumentNullException.ThrowIfNull(method);
-        _invoker = CompileInvoker(method, target);
+        
+        if (!method.IsStatic && target == null)
+            throw new ArgumentException("Instance methods require a target instance.", nameof(target));
+
+        _method = method;
+        _target = target;
+        _parameters = method.GetParameters();
+
+        _returnsTask = method.ReturnType == typeof(Task);
+        _returnsGenericTask = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>);
+        
+        if (_returnsGenericTask)
+        {
+            _taskResultProperty = method.ReturnType.GetProperty("Result");
+        }
     }
 
-    public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
-        => _invoker(arguments, ct);
+    public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
+    {
+        var args = new object?[_parameters.Length];
+
+        for (int i = 0; i < _parameters.Length; i++)
+        {
+            var p = _parameters[i];
+            if (p.ParameterType == typeof(CancellationToken))
+            {
+                args[i] = ct;
+                continue;
+            }
+
+            args[i] = GetParameterValue(arguments, p.Name!, p.ParameterType, p.HasDefaultValue, p.DefaultValue);
+        }
+
+        var result = _method.Invoke(_target, args);
+
+        if (_returnsTask)
+        {
+            await (Task)result!;
+            return null;
+        }
+
+        if (_returnsGenericTask)
+        {
+            var task = (Task)result!;
+            await task.ConfigureAwait(false);
+            return _taskResultProperty!.GetValue(task);
+        }
+
+        return result;
+    }
 
     public static IEnumerable<MethodTool> FromType(Type type, object? instance = null)
     {
@@ -53,24 +102,17 @@ public sealed class MethodTool : Tool
         }
     }
 
-    // ── Name / description resolution ────────────────────────────────────────
-
     private static string GetName(MethodInfo method, string? name)
     {
         ArgumentNullException.ThrowIfNull(method);
-        var declaringType = method.DeclaringType
-            ?? throw new InvalidOperationException("Tool method has no declaring type.");
         var attr = method.GetCustomAttribute<ToolAttribute>();
 
         return !string.IsNullOrWhiteSpace(name)
             ? name
             : !string.IsNullOrWhiteSpace(attr?.Name)
                 ? attr.Name
-                : $"{ToSnake(declaringType.Name)}_{ToSnake(method.Name)}";
+                : method.Name;
     }
-
-    private static string ToSnake(string s)
-        => string.Concat(s.Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
     private static string GetDescription(MethodInfo method, string? description)
     {
@@ -83,18 +125,9 @@ public sealed class MethodTool : Tool
             ?? GetName(method, null);
     }
 
-    // ── Schema building ───────────────────────────────────────────────────────
-
     private static JsonSchema BuildSchema(MethodInfo method)
     {
         ArgumentNullException.ThrowIfNull(method);
-
-        if (!IsMethodJsonCompatible(method))
-        {
-            var declaringType = method.DeclaringType
-                ?? throw new InvalidOperationException("Tool method has no declaring type.");
-            throw new InvalidOperationException($"Method is not JSON-compatible: {declaringType.FullName}.{method.Name}");
-        }
 
         var builder = new JsonSchemaBuilder().Type<object>().AdditionalProperties(false);
 
@@ -112,78 +145,6 @@ public sealed class MethodTool : Tool
         return builder.Build();
     }
 
-    private static bool IsMethodJsonCompatible(MethodInfo m)
-    {
-        if (m.ContainsGenericParameters || m.ReturnType.ContainsGenericParameters) return false;
-
-        foreach (var p in m.GetParameters())
-        {
-            var t = p.ParameterType;
-            if (t.IsByRef || t.IsPointer || t.ContainsGenericParameters) return false;
-        }
-        return true;
-    }
-
-    // ── Expression-tree invoker ───────────────────────────────────────────────
-
-    internal static Func<JsonObject, CancellationToken, Task<object?>> CompileInvoker(MethodInfo method, object? target)
-    {
-        var argsParam = Expression.Parameter(typeof(JsonObject), "args");
-        var ctParam   = Expression.Parameter(typeof(CancellationToken), "ct");
-        var parameters = method.GetParameters();
-        var argExpressions = new Expression[parameters.Length];
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            if (p.ParameterType == typeof(CancellationToken))
-            {
-                argExpressions[i] = ctParam;
-                continue;
-            }
-
-            var getParamMethod = typeof(MethodTool).GetMethod(nameof(GetParameterValue), BindingFlags.NonPublic | BindingFlags.Static)!;
-            var getValueCall = Expression.Call(
-                getParamMethod,
-                argsParam,
-                Expression.Constant(p.Name),
-                Expression.Constant(p.ParameterType),
-                Expression.Constant(p.HasDefaultValue),
-                Expression.Constant(p.DefaultValue, typeof(object)));
-
-            argExpressions[i] = Expression.Convert(getValueCall, p.ParameterType);
-        }
-
-        var instanceExpr = target != null ? Expression.Constant(target) : null;
-        var call         = Expression.Call(instanceExpr, method, argExpressions);
-        var returnType   = method.ReturnType;
-
-        Expression resultExpr;
-        if (returnType == typeof(void))
-        {
-            resultExpr = Expression.Block(call, Expression.Constant(Task.FromResult<object?>(null)));
-        }
-        else if (returnType == typeof(Task))
-        {
-            var helper = typeof(MethodTool).GetMethod(nameof(CastTaskToTaskObject), BindingFlags.NonPublic | BindingFlags.Static)!;
-            resultExpr = Expression.Call(helper, call);
-        }
-        else if (typeof(Task).IsAssignableFrom(returnType) && returnType.IsGenericType)
-        {
-            var resultType = returnType.GetGenericArguments()[0];
-            var helper = typeof(MethodTool).GetMethod(nameof(CastGenericTaskToTaskObject), BindingFlags.NonPublic | BindingFlags.Static)!
-                .MakeGenericMethod(resultType);
-            resultExpr = Expression.Call(helper, call);
-        }
-        else
-        {
-            var fromResult = typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(typeof(object));
-            resultExpr = Expression.Call(fromResult, Expression.Convert(call, typeof(object)));
-        }
-
-        return Expression.Lambda<Func<JsonObject, CancellationToken, Task<object?>>>(resultExpr, argsParam, ctParam).Compile();
-    }
-
     private static object? GetParameterValue(JsonObject obj, string name, Type targetType, bool hasDefault, object? defaultValue)
     {
         if (obj.TryGetPropertyValue(name, out var node) && node != null)
@@ -199,12 +160,4 @@ public sealed class MethodTool : Tool
 
     private static object? DeserializeNode(JsonNode? node, Type type)
         => JsonSerializer.Deserialize(node, type, _jsonOptions);
-
-    private static async Task<object?> CastTaskToTaskObject(Task t)
-    {
-        await t.ConfigureAwait(false);
-        return null;
-    }
-
-    private static async Task<object?> CastGenericTaskToTaskObject<T>(Task<T> t) => await t.ConfigureAwait(false);
 }
