@@ -4,8 +4,7 @@ using System.Text.Json.Nodes;
 namespace AgentCore.Json;
 
 public static class JsonExtensions
-{
-
+{ 
     public static string AsJsonString(this object? obj) => obj switch
     {
         null => string.Empty,
@@ -13,9 +12,7 @@ public static class JsonExtensions
         AgentCore.Conversation.IContent c => c.ForLlm(),
         Exception ex => ex.Message,
         _ => JsonSerializer.Serialize(obj)
-    };
-
-
+    }; 
 
     public static bool TryParseCompleteJson(this string json, out JsonObject? result)
     {

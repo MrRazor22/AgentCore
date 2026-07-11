@@ -19,15 +19,11 @@ public sealed class JsonSchema
 
     public IReadOnlyList<string> ParameterNames => _parameterNames;
 
-    public List<SchemaValidationError> Validate(JsonNode? node, string path = "")
-    {
-        return _schema.Validate(node, path);
-    }
+    public IReadOnlyList<string> Validate(JsonNode? node, string path = "")
+        => _schema.Validate(node, path);
 
     public void WriteTo(Utf8JsonWriter writer)
-    {
-        _schema.WriteTo(writer);
-    }
+        =>_schema.WriteTo(writer); 
 
     public JsonNode ToJsonNode() => _schema.DeepClone();
     public override string ToString() => _cachedJson ??= _schema.ToString();

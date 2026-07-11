@@ -9,14 +9,6 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.Json;
 
-public sealed class SchemaValidationError(string param, string? path, string message, string errorType)
-{
-    public string Param { get; } = param;
-    public string? Path { get; } = path;
-    public string Message { get; } = message;
-    public string ErrorType { get; } = errorType;
-}
-
 public static class JsonSchemaExtensions
 {
     private static readonly ConcurrentDictionary<Type, JsonObject> _schemaCache = new();
@@ -121,14 +113,14 @@ public static class JsonSchemaExtensions
         return "object";
     }
 
-    public static List<SchemaValidationError> Validate(this JsonObject schema, JsonNode? node, string path = "")
+    public static List<string> Validate(this JsonObject schema, JsonNode? node, string path = "")
     {
-        var errors = new List<SchemaValidationError>();
+        var errors = new List<string>();
 
         if (node == null)
         {
             if (schema["required"] is JsonArray arr && arr.Count > 0)
-                errors.Add(new SchemaValidationError(path, path, "Value required but missing.", "missing"));
+                errors.Add(string.IsNullOrEmpty(path) ? "Value required but missing." : $"Value required at '{path}' but missing.");
             return errors;
         }
 
@@ -138,25 +130,31 @@ public static class JsonSchemaExtensions
         switch (type)
         {
             case "string":
-                if (kind != JsonValueKind.String) errors.Add(new SchemaValidationError(path, path, $"Expected string, got {kind}", "type_error"));
+                if (kind != JsonValueKind.String)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected string, got {kind}." : $"Expected string at '{path}', got {kind}.");
                 break;
             case "integer":
-                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, $"Expected integer, got {kind}", "type_error"));
+                if (kind != JsonValueKind.Number)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected integer, got {kind}." : $"Expected integer at '{path}', got {kind}.");
                 break;
             case "number":
-                if (kind != JsonValueKind.Number) errors.Add(new SchemaValidationError(path, path, $"Expected number, got {kind}", "type_error"));
+                if (kind != JsonValueKind.Number)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected number, got {kind}." : $"Expected number at '{path}', got {kind}.");
                 break;
             case "boolean":
-                if (kind != JsonValueKind.True && kind != JsonValueKind.False) errors.Add(new SchemaValidationError(path, path, $"Expected boolean, got {kind}", "type_error"));
+                if (kind != JsonValueKind.True && kind != JsonValueKind.False)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected boolean, got {kind}." : $"Expected boolean at '{path}', got {kind}.");
                 break;
             case "array":
-                if (kind != JsonValueKind.Array) errors.Add(new SchemaValidationError(path, path, $"Expected array, got {kind}", "type_error"));
+                if (kind != JsonValueKind.Array)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected array, got {kind}." : $"Expected array at '{path}', got {kind}.");
                 else if (schema["items"] is JsonObject itemSchema)
                     for (int i = 0; i < node.AsArray().Count; i++)
                         errors.AddRange(itemSchema.Validate(node.AsArray()[i], $"{path}[{i}]"));
                 break;
             case "object":
-                if (kind != JsonValueKind.Object) errors.Add(new SchemaValidationError(path, path, $"Expected object, got {kind}", "type_error"));
+                if (kind != JsonValueKind.Object)
+                    errors.Add(string.IsNullOrEmpty(path) ? $"Expected object, got {kind}." : $"Expected object at '{path}', got {kind}.");
                 else if (schema["properties"] is JsonObject props)
                 {
                     var objNode = node.AsObject();
@@ -169,8 +167,8 @@ public static class JsonSchemaExtensions
                         {
                             if (schema["required"] is JsonArray reqArr && reqArr.Any(r => r?.ToString() == key))
                             {
-                                var msg = string.IsNullOrEmpty(path) ? $"Missing required parameter '{key}'" : $"Missing required field '{key}'";
-                                errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), msg, "missing"));
+                                var msg = string.IsNullOrEmpty(path) ? $"Missing required parameter '{key}'." : $"Missing required field '{key}' at '{path}'.";
+                                errors.Add(msg);
                             }
                         }
                         else
@@ -187,9 +185,11 @@ public static class JsonSchemaExtensions
                         foreach (var key in objNode.Select(k => k.Key))
                         {
                             if (!schemaKeys.Contains(key))
-                                errors.Add(new SchemaValidationError(key, $"{path}.{key}".Trim('.'), 
-                                    $"Unknown property '{key}'. Expected properties: [{string.Join(", ", schemaKeys)}]", 
-                                    "unexpected_key"));
+                            {
+                                errors.Add(string.IsNullOrEmpty(path) 
+                                    ? $"Unknown parameter '{key}'. Expected parameters: [{string.Join(", ", schemaKeys)}]."
+                                    : $"Unknown property '{key}' at '{path}'. Expected properties: [{string.Join(", ", schemaKeys)}].");
+                            }
                         }
                     }
                 }

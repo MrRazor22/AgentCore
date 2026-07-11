@@ -60,7 +60,7 @@ internal sealed class ToolingService : ITooling
         var errors = tool.ParametersSchema.Validate(call.Arguments);
         if (errors.Any())
         {
-            var errorMessage = string.Join("; ", errors.Select(e => e.Message));
+            var errorMessage = string.Join("; ", errors);
             _logger.LogWarning("Tool validation failed: {Name} Error={Message}", call.Name, errorMessage);
             return Failed(call.Id, call.Name, errorMessage);
         }
