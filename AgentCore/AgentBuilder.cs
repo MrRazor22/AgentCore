@@ -122,8 +122,7 @@ public sealed class AgentBuilder
         return new LLMAgent(
             llm,
             tooling,
-            memory,
-            tokenCounter,
+            memory, 
             _providerOptions ?? new LLMOptions(),
             _config,
             _loggerFactory?.CreateLogger<LLMAgent>());
