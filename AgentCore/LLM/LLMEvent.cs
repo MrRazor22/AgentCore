@@ -1,13 +1,8 @@
 using AgentCore.Conversation;
-using AgentCore.Tooling;
 namespace AgentCore.LLM;
 
-
- 
 public enum FinishReason { Stop, ToolCall, Cancelled }
-
 public enum ToolCallMode { None, Auto, Required }
-
 
 public abstract record LLMEvent : AgentEvent;
 

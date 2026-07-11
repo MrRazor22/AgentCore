@@ -27,19 +27,16 @@ public sealed record AgentServices(
 public sealed class Agent : IAgent
 {
     private readonly AgentServices _services;
-    private readonly LLMOptions _options;
     private readonly IContent? _instructions;
     private readonly IAgentExecutor _executor;
     private readonly ILogger<Agent> _logger;
 
     public Agent(
         AgentServices services,
-        LLMOptions options,
         IContent? instructions,
         IAgentExecutor executor)
     {
         _services = services;
-        _options = options;
         _instructions = instructions;
         _executor = executor;
         _logger = services.LoggerFactory.CreateLogger<Agent>();
@@ -94,8 +91,9 @@ public sealed class Agent : IAgent
         });
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var contextWindow = _services.Provider.ContextWindow;
         _logger.LogInformation("Agent invoked. InputLength={InputLength} ContextLimit={ContextLimit}",
-            input.ForLlm().Length, _options.ContextWindow ?? 0);
+            input.ForLlm().Length, contextWindow ?? 0);
 
         var userMessage = new Message(Role.User, input);
 
@@ -104,7 +102,7 @@ public sealed class Agent : IAgent
         {
             recalledChat = await _services.Memory.RecallAsync(
                 userMessage,
-                _options.ContextWindow,
+                contextWindow,
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)

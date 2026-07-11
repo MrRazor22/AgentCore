@@ -20,18 +20,15 @@ namespace AgentCore
     public class ReActExecutor : IAgentExecutor
     {
         private readonly AgentServices _services;
-        private readonly LLMOptions _options;
         private readonly int _maxIterations;
         private readonly ILogger<ReActExecutor> _logger;
 
         public ReActExecutor(
             AgentServices services,
-            LLMOptions options,
             int maxIterations = 10,
             ILogger<ReActExecutor>? logger = null)
         {
             _services = services;
-            _options = options;
             _maxIterations = maxIterations;
             _logger = logger ?? NullLogger<ReActExecutor>.Instance;
         }
@@ -57,7 +54,7 @@ namespace AgentCore
                 var reasoningBuffer = new System.Text.StringBuilder();
                 var toolCalls = new List<ToolCall>();
 
-                await using var enumerator = _services.Llm.StreamAsync(conversation, _options, responseSchema, ct).GetAsyncEnumerator(ct);
+                await using var enumerator = _services.Llm.StreamAsync(conversation, options: null, responseSchema, ct).GetAsyncEnumerator(ct);
 
                 while (await enumerator.MoveNextAsync())
                 {

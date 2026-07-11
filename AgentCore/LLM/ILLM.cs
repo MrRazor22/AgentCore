@@ -16,7 +16,7 @@ public interface ILLM
 {
     IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions options,
+        LLMOptions? options = null,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default);
 }
@@ -26,30 +26,33 @@ internal sealed class LLMService : ILLM
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
     private readonly ITokenCounter _tokenCounter;
+    private readonly int _maxRetries;
     private readonly ILogger<LLMService> _logger;
 
     public LLMService(
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
+        int maxRetries = 3,
         ILogger<LLMService>? logger = null)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
+        _maxRetries = maxRetries;
         _logger = logger ?? NullLogger<LLMService>.Instance;
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions options,
+        LLMOptions? options = null,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default)
         => StreamInternalAsync(messages, options, responseSchema, ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions options,
+        LLMOptions? options = null,
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -74,7 +77,7 @@ internal sealed class LLMService : ILLM
 
 
 
-        int maxRetries = options.MaxRetries;
+        int maxRetries = _maxRetries;
         int attempt = 0;
         IAsyncEnumerator<IContentDelta>? enumerator = null;
         bool hasYielded = false;

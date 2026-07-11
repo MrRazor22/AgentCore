@@ -15,16 +15,20 @@ public class TornadoLLMProvider : ILLMProvider
 {
     private readonly TornadoApi _api;
     private readonly ChatModel _model;
+    private readonly LLMOptions _options;
 
-    public TornadoLLMProvider(TornadoApi api, ChatModel model)
+    public TornadoLLMProvider(TornadoApi api, ChatModel model, LLMOptions? options = null)
     {
         _api = api;
         _model = model;
+        _options = options ?? new LLMOptions();
     }
+
+    public int? ContextWindow => _model.ContextTokens;
 
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions options,
+        LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tooling.Tool>? tools = null,
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -48,25 +52,11 @@ public class TornadoLLMProvider : ILLMProvider
             }).ToList();
         }
 
-        if (options.Temperature.HasValue) request.Temperature = options.Temperature.Value;
-        if (options.TopP.HasValue) request.TopP = options.TopP.Value;
-        if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
+        var temp = options?.Temperature ?? _options.Temperature;
+        var maxTokens = options?.MaxOutputTokens ?? _options.MaxOutputTokens;
 
-        if (!string.IsNullOrEmpty(options.ReasoningEffort))
-        {
-            request.ReasoningEffort = options.ReasoningEffort.ToLowerInvariant() switch
-            {
-                "none" => LlmTornado.Code.ChatReasoningEfforts.None,
-                "minimal" => LlmTornado.Code.ChatReasoningEfforts.Minimal,
-                "low" => LlmTornado.Code.ChatReasoningEfforts.Low,
-                "medium" => LlmTornado.Code.ChatReasoningEfforts.Medium,
-                "high" => LlmTornado.Code.ChatReasoningEfforts.High,
-                "xhigh" => LlmTornado.Code.ChatReasoningEfforts.XHigh,
-                "max" => LlmTornado.Code.ChatReasoningEfforts.Max,
-                "default" => LlmTornado.Code.ChatReasoningEfforts.Default,
-                _ => null
-            };
-        }
+        if (temp.HasValue) request.Temperature = temp.Value;
+        if (maxTokens.HasValue) request.MaxTokens = maxTokens.Value;
         request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
 
         var chat = _api.Chat.CreateConversation(request);

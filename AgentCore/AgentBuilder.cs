@@ -21,7 +21,6 @@ public sealed class AgentBuilder
     private ITokenCounter? _tokenCounter;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
-    private LLMOptions? _providerOptions;
 
     private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
     private readonly List<Func<ITooling, ITooling>> _toolingLayers = [];
@@ -54,24 +53,20 @@ public sealed class AgentBuilder
         _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
         return this;
     }
-    public AgentBuilder WithProvider(ILLMProvider provider, LLMOptions? options = null)
+    public AgentBuilder WithProvider(ILLMProvider provider)
     {
         _provider = provider;
-        if (options != null) _providerOptions = options;
         return this;
     }
 
     public IAgent Build()
     {
-        var options = _providerOptions ?? new LLMOptions();
         return Build(services => 
             new Agent(
                 services,
-                options,
                 _instructions,
                 new ReActExecutor(
                     services, 
-                    options, 
                     10, 
                     _loggerFactory?.CreateLogger<ReActExecutor>())));
     }
@@ -109,7 +104,7 @@ public sealed class AgentBuilder
             _provider,
             registry,
             tokenCounter,
-            lf.CreateLogger<LLMService>());
+            logger: lf.CreateLogger<LLMService>());
         foreach (var layer in _llmLayers)
         {
             llm = layer(llm);

@@ -6,9 +6,11 @@ namespace AgentCore.LLM;
 
 public interface ILLMProvider
 {
+    int? ContextWindow { get; }
+
     IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions options,
+        LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default);
