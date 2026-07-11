@@ -6,6 +6,7 @@ using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -42,7 +43,7 @@ public sealed class LLMAgent : IAgent
         ITokenCounter tokenCounter,
         LLMOptions baseOptions,
         AgentConfig config,
-        ILogger<LLMAgent> logger)
+        ILogger<LLMAgent>? logger = null)
     {
         _memory = memory;
         _llm = llm;
@@ -50,7 +51,7 @@ public sealed class LLMAgent : IAgent
         _tokenCounter = tokenCounter;
         _baseOptions = baseOptions;
         _config = config;
-        _logger = logger;
+        _logger = logger ?? NullLogger<LLMAgent>.Instance;
     }
 
     public static AgentBuilder Create(string name = "agent")

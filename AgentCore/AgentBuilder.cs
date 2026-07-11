@@ -83,7 +83,7 @@ public sealed class AgentBuilder
         if (_provider == null)
             throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
-        var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter();
+        var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: _loggerFactory?.CreateLogger<ApproximateTokenCounter>());
         
         IMemory memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
         foreach (var layer in _memoryLayers)
@@ -91,14 +91,14 @@ public sealed class AgentBuilder
             memory = layer(memory);
         }
 
-        var registry = new ToolRegistry();
+        var registry = new ToolRegistry(logger: _loggerFactory?.CreateLogger<ToolRegistry>());
         foreach (var init in _toolRegistrations) init(registry);
 
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
 
         ITooling tooling = _tooling ?? new ToolingService(
             registry,
-            _loggerFactory?.CreateLogger<ToolingService>() ?? NullLogger<ToolingService>.Instance);
+            _loggerFactory?.CreateLogger<ToolingService>());
         foreach (var layer in _toolingLayers)
         {
             tooling = layer(tooling);
@@ -108,7 +108,7 @@ public sealed class AgentBuilder
             _provider,
             registry,
             tokenCounter,
-            _loggerFactory?.CreateLogger<LLMService>() ?? NullLogger<LLMService>.Instance);
+            _loggerFactory?.CreateLogger<LLMService>());
         foreach (var layer in _llmLayers)
         {
             llm = layer(llm);
@@ -126,7 +126,7 @@ public sealed class AgentBuilder
             tokenCounter,
             _providerOptions ?? new LLMOptions(),
             _config,
-            _loggerFactory?.CreateLogger<LLMAgent>() ?? NullLogger<LLMAgent>.Instance);
+            _loggerFactory?.CreateLogger<LLMAgent>());
     }
 
 }

@@ -1,114 +1,94 @@
 # AgentCore 🧠🚀
 
-**A radically simple, scientifically precise agentic framework for .NET.** 
+**A lightweight, high-performance agent orchestration library for .NET.**
 
-Inspired by the profound elegance of Hugging Face's `smolagents`, AgentCore brings the philosophy of "less is fundamentally better" to the C# ecosystem. But we didn't just strip away the bloat—we engineered a superior cognitive pipeline. 
+AgentCore is a minimalist, dependency-light framework designed for integrating LLMs and tool-calling capability into .NET applications. Rather than hiding execution behind opaque, rigid graph abstractions, AgentCore focuses on **pure architectural boundaries, compiled-expression performance, and developer-controlled pipeline layering.**
 
-Most contemporary agent frameworks solve problems they themselves created. They build convoluted state graphs, introduce massive external checkpointing services, and leak LLM provider parameters directly into orchestration logic. 
-
-AgentCore takes a different path: **Enterprise-grade capabilities aren't bolted on; they emerge naturally from strict architectural boundaries.**
-
-## The Philosophy: Why AgentCore?
-
-If you look at the core of AgentCore, you'll find it shockingly small. The primary agent loop is so minimal you can read the entire thing in one sitting. This isn't just about reducing lines of code; it's about reducing *interference* between the system and the intelligence.
-
-We divide the world into three inviolable layers:
-
-### 1. The Agent (Unopinionated Orchestration)
-The agent is nothing more than an asynchronous `while` loop. It streams from the LLM, reads actions, dispatches tool calls, and pauses to await completion. There are no middleware chains or bloated pipeline abstractions. It does exactly one job. Because the loop inherently pauses at `Task.WhenAll` to await tools, **durable execution is a natural byproduct, not a complex add-on**. 
-
-### 2. Tools & Interoperability
-Tools are where agents touch the world, and AgentCore handles them with extensive precision. 
-*   **Error Management**: If a tool crashes or throws an exception, it doesn't poison the application. It gracefully becomes an `IContent` error message that the LLM reads and uses to self-correct in real-time.
-*   **Multi-Agent (Agent-as-a-Tool)**: Because our interfaces are perfectly isolated, you can pass an entire `AgentCore` agent as a tool to another agent simply and natively.
-*   **Model Context Protocol (MCP)**: Full first-class support for MCP client & server integration. Connect your local agents to standard industry tools instantly.
-
-### 3. Memory & Context (True Auto-RAG)
-Context window limits and "Amnesia Agents" plague naive implementations. AgentCore handles this via a strictly decoupled, highly performant **Memory Engine**. 
-Rather than forcing the main agent to manually call `insert_memory` tools (which bloats context), or blindly feeding the entire chat history into a background extraction LLM (which creates an $O(N^2)$ token explosion), AgentCore uses **Incremental Batch Extraction**. It seamlessly isolates only the very latest conversational messages—actively filtering out massive, transient tool payloads—and passes them to a background cognitive layer. 
-You get the long-term cognitive depth of complex frameworks (like Zep, Letta, or Mengram) but with zero main-thread latency, fractional token costs, and no burden on your main orchestration loop.
-
-### The Underrated Superpower: Stateless Durability
-You do not need a massive temporal database or Redis queues to build resilient agents. AgentCore ships with perfectly engineered, minimalist primitives like `FileStore` and `FileMemory`. Using simple, robust asynchronous locks, AgentCore safely persists state to disk. If your agent crashes mid-thought, or your server restarts, AgentCore brings you perfect, stateless crash recovery per `sessionId` out of the box. 
-
-It achieves the same "durable execution" guarantees as heavily engineered distributed systems, with a fraction of the moving parts.
+It provides the necessary primitives to build robust agents without the boilerplate and dependency churn of enterprise SDKs.
 
 ---
 
-## Benchmarks: Better Design breeds Better Performance
+## 🛠️ Respect-Worthy Engineering Details
 
-When tested against the industry-standard **LoCoMo** benchmark (Long Conversation Memory), the architectural purity of AgentCore translates directly to superior results.
+What makes AgentCore distinct from naive wrappers or over-engineered frameworks is how it solves common developer friction points in .NET:
 
-| System | Single-Hop | Temporal | Multi-Hop | Overall | Footprint |
-|--------|------------|----------|-----------|---------|-----------|
-| Mem0 | ~72% | ~65% | ~61% | ~68% | Heavy (Python) |
-| Zep | ~78% | ~72% | ~70% | ~75% | Server needed |
-| **AgentCore** | **85%** | **80%** | **78%** | **82%** | **Zero deps** |
+### 1. Compiled Expression Tree Tool Invokers (No Slow Reflection)
+Most agent frameworks use slow runtime reflection (`MethodInfo.Invoke`) to execute tools. AgentCore solves this by dynamically compiling C# methods into high-performance delegates at startup using **LINQ Expression Trees** (`DelegateTool.cs`).
+* **Type-Safe Parsing**: Automatically converts `JsonObject` arguments into the target C# types.
+* **Smart Task Handling**: Seamlessly wraps sync (`void`, `T`), async (`Task`, `Task<T>`), and `CancellationToken`-aware methods under a unified execution interface.
+* **Zero Reflection Overhead**: Once built, tool execution runs at near-native compiled speed.
 
-*(Run `AgentCore.Benchmark` with standard LLM providers locally to reproduce)*
-
----
-
-## Quick Start
-
-The core framework relies on just two dependencies: `Microsoft.Extensions.Logging` and `System.ComponentModel.Annotations`. No DI container lockdowns.
+### 2. Pure Pipeline Decorators (Extensibility Without Bloat)
+Instead of forcing you into complex middleware configurations or rigid dependency injection configurations, AgentCore uses standard **Decorator Patterns** (Layers). You can intercept, log, modify, or cache LLM requests, tool invocations, or memory updates by stacking decorators:
 
 ```csharp
 var agent = LLMAgent.Create("my-agent")
-    .WithInstructions("You are a helpful assistant.")
-    // Uses the standard Microsoft.Extensions.AI abstraction
-    .AddOpenAI("gpt-4o", apiKey: Environment.GetEnvironmentVariable("OPENAI_API_KEY"))
-    .WithTools<SystemTools>()
+    .AddMemoryLayer(memory => new LoggingMemoryDecorator(memory))
+    .AddToolingLayer(tooling => new CustomApprovalDecorator(tooling))
+    .Build();
+```
+
+### 3. Context-Preserving Summarization (`ChatMemoryService`)
+Blindly summarizing history leads to context loss, while feeding everything leads to token explosion. The `ChatMemoryService` implements a smart sliding context window:
+* **Iterative Compression**: Measures history tokens asynchronously. If they exceed the limit, it compresses only the oldest part of the chat.
+* **Raw Context Buffer**: Navigates backwards to guarantee that a configurable buffer of recent raw messages (`MinRecentTokens`, e.g., 2,000 tokens) is never compressed, preserving immediate conversational memory.
+* **Summary Isolation**: Prevents summarization-loop feedback by skipping existing system summaries.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Set Up the Agent and LLM Provider
+AgentCore integrates natively with `LlmTornado` for streaming and completion.
+
+```csharp
+using AgentCore;
+using AgentCore.Conversation;
+using AgentCore.Providers.Tornado;
+using AgentCore.Tooling;
+using LlmTornado;
+
+var api = new TornadoApi("YOUR_API_KEY");
+
+var agent = LLMAgent.Create("helper")
+    .WithInstructions("You are an assistant with access to system tools.")
+    .AddTornado(api, "gpt-4o")
+    .WithTools(r => 
+    {
+        // Dynamically compiles the tool mapping
+        r.Register(new DelegateTool(SystemTools.GetStatus));
+    })
     .Build();
 
-// Direct, fast, unopinionated
-var response = await agent.InvokeAsync("Summarize my system status.");
+// Invoke and stream or return the final result
+var response = await agent.InvokeAsync(new Text("Check the status of system SR-71."));
 Console.WriteLine(response.ForLlm());
 ```
 
-### Pure Tool Definition
-
-Mark any standard C# method with `[Tool]`. AgentCore uses C# reflection to automatically infer `JsonSchema` parameters and generate JSON-compatible execution delegates. No custom structs required.
+### 2. Define a C# Method as a Tool
+No complex base classes to inherit from. Just write standard C# methods:
 
 ```csharp
+using AgentCore.Tooling;
+using System.ComponentModel;
+
 public class SystemTools
 {
-    [Tool(description: "Get the current system status")]
+    [Tool(description: "Retrieve system status data")]
     public static string GetStatus(
-        [Description("System identifier")] string systemId)
+        [Description("Unique system code name")] string systemId)
     {
-        return $"System {systemId}: Online, 99% uptime.";
+        return $"System {systemId}: Online, 100% operational.";
     }
 }
 ```
 
-### Pipeline Customization & Layering
-
-AgentCore exposes three fundamental execution pipelines that can be customized or wrapped using layers: Memory, LLM, and Tooling. This allows you to plug in custom behaviors (such as logging, approval workflows, caching, or durable persistence) without modifying the agent implementation.
-
-```csharp
-var agent = LLMAgent.Create("my-agent")
-    .UseMemory(new ChatMemory())
-    .AddMemoryLayer(m => new LoggingMemory(m))
-    .AddToolingLayer(t => new ApprovalTooling(t))
-    .Build();
-```
-
 ---
 
-## Architectural Boundary
+## 📂 Codebase Map
 
-> [!NOTE]
-> **Execution Boundary:** AgentCore executes an agent to completion. Long-running orchestration (human approval, timers, workflows, durable pauses) belongs outside the core framework and can be implemented by decorating layers (via decorators) or orchestrating multiple agent invocations.
-
-## Advanced Capabilities (Out of the Box)
-
-- **Cognitive Memory V2 (`MemoryEngine`)**: Implements AMFS-style confidence decay, allowing agents to "forget" irrelevant noise, track `Fact` vs `Belief`, and evolve `Skills`.
-- **Active Contradiction Management**: Vector-based detection of conflicting knowledge automatically supersedes old "facts" without expensive graph-LLM loops.
-- **Background Dreaming & Pruning**: Nightly or background consolidation of raw facts into high-density insights.
-- **Code Execution Sandbox (`AgentCore.CodingAgent`)**: Let your agent write and execute C# code dynamically using Roslyn (in-process) or isolated cross-process execution.
-- **Model Context Protocol (MCP)**: Native integration for MCP tools and clients.
-
-## The Bottom Line
-
-AgentCore proves that you don't need megabytes of framework code to build profoundly capable AI. By isolating concerns and respecting the natural boundaries of the agent loop, it delivers an engine that is **faster, cheaper, and fundamentally more reliable** than almost anything else available to external developers today.
+* **`Agent.cs` / `AgentBuilder.cs`**: The core execution runner (built on C# 8 `IAsyncEnumerable` streaming) and builder.
+* **`Tooling/`**: The runtime compilation engine (`DelegateTool.cs`) and schema generator.
+* **`Memory/`**: sliding window token measurement and summarization engine.
+* **`Conversation/`**: Polymorphic message payloads (`Text`, `ToolCall`, `ToolResult`, `Reasoning`).
+* **`Json/`**: Natively generates JSON Schema models for tools.

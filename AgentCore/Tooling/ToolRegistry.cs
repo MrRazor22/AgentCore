@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 
 namespace AgentCore.Tooling;
@@ -19,7 +20,7 @@ public sealed class ToolRegistry : IToolRegistry
 
     public ToolRegistry(ILogger<ToolRegistry>? logger = null)
     {
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ToolRegistry>.Instance;
+        _logger = logger ?? NullLogger<ToolRegistry>.Instance;
     }
 
     public void Register(Tool tool)

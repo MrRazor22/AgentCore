@@ -5,6 +5,7 @@ using AgentCore.Tokens;
 using AgentCore.Tooling;
 using AgentCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -29,12 +30,12 @@ internal sealed class LLMService : ILLM
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
-        ILogger<LLMService> logger)
+        ILogger<LLMService>? logger = null)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
-        _logger = logger;
+        _logger = logger ?? NullLogger<LLMService>.Instance;
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(

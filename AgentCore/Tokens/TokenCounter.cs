@@ -1,6 +1,7 @@
 using AgentCore.Conversation;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Tokens;
 
@@ -21,7 +22,7 @@ public sealed class ApproximateTokenCounter : ITokenCounter
     {
         _charsPerToken = initialCharsPerToken;
         _safetyMargin = safetyMargin;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApproximateTokenCounter>.Instance;
+        _logger = logger ?? NullLogger<ApproximateTokenCounter>.Instance;
     }
      
     public Task<int> CountAsync(IEnumerable<Message> messages, CancellationToken ct = default)

@@ -2,6 +2,7 @@ using AgentCore.Conversation;
 using AgentCore.Json;
 using AgentCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
@@ -21,10 +22,10 @@ internal sealed class ToolingService : ITooling
 
     public ToolingService(
         IToolRegistry tools,
-        ILogger<ToolingService> logger)
+        ILogger<ToolingService>? logger = null)
     {
         _tools = tools;
-        _logger = logger;
+        _logger = logger ?? NullLogger<ToolingService>.Instance;
     }
 
     public Task<ToolResult> HandleToolCallAsync(ToolCall call, CancellationToken ct = default)
