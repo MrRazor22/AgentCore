@@ -5,13 +5,13 @@ using AgentCore.Memory;
 using AgentCore.Tokens;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions; 
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore;
 
 public sealed class AgentBuilder
 {
-    private readonly List<Action<IToolRegistry>> _toolRegistrations = [];
+    private readonly ToolRegistry _registry = new();
     private ILogger<AgentBuilder> _logger;
     private IContent? _instructions;
 
@@ -34,7 +34,21 @@ public sealed class AgentBuilder
     public AgentServices? Services { get; private set; }
 
     public AgentBuilder WithInstructions(string prompt) { _instructions = new Text(prompt); return this; }
-    public AgentBuilder WithTools(Action<IToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
+
+    public AgentBuilder WithTools<T>()
+    {
+        foreach (var tool in MethodTool.FromType(typeof(T)))
+            _registry.Register(tool);
+        return this;
+    }
+
+    public AgentBuilder WithTools(object instance)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        foreach (var tool in MethodTool.FromType(instance.GetType(), instance))
+            _registry.Register(tool);
+        return this;
+    }
 
     public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);
@@ -53,21 +67,17 @@ public sealed class AgentBuilder
         _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
         return this;
     }
-    public AgentBuilder WithProvider(ILLMProvider provider)
-    {
-        _provider = provider;
-        return this;
-    }
+    public AgentBuilder WithProvider(ILLMProvider provider) { _provider = provider; return this; }
 
     public IAgent Build()
     {
-        return Build(services => 
+        return Build(services =>
             new Agent(
                 services,
                 _instructions,
                 new ReActExecutor(
-                    services, 
-                    10, 
+                    services,
+                    10,
                     _loggerFactory?.CreateLogger<ReActExecutor>())));
     }
 
@@ -80,38 +90,23 @@ public sealed class AgentBuilder
 
         var lf = _loggerFactory ?? NullLoggerFactory.Instance;
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: lf.CreateLogger<ApproximateTokenCounter>());
-        
+
         IMemory memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
         foreach (var layer in _memoryLayers)
-        {
             memory = layer(memory);
-        }
 
-        var registry = new ToolRegistry(logger: lf.CreateLogger<ToolRegistry>());
-        foreach (var init in _toolRegistrations) init(registry);
+        _logger.LogDebug("Tool registration: TotalTools={ToolCount}", _registry.Tools.Count);
 
-        _logger.LogDebug("Tool registration: TotalTools={ToolCount}", registry.Tools.Count);
-
-        ITooling tooling = _tooling ?? new ToolingService(
-            registry,
-            lf.CreateLogger<ToolingService>());
+        ITooling tooling = _tooling ?? new ToolingService(_registry, lf.CreateLogger<ToolingService>());
         foreach (var layer in _toolingLayers)
-        {
             tooling = layer(tooling);
-        }
 
-        ILLM llm = _llm ?? new LLMService(
-            _provider,
-            registry,
-            tokenCounter,
-            logger: lf.CreateLogger<LLMService>());
+        ILLM llm = _llm ?? new LLMService(_provider, _registry, tokenCounter, logger: lf.CreateLogger<LLMService>());
         foreach (var layer in _llmLayers)
-        {
             llm = layer(llm);
-        }
 
         _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
-            registry.Tools.Count,
+            _registry.Tools.Count,
             _provider.GetType().Name);
 
         var services = new AgentServices(llm, tooling, memory, tokenCounter, _provider, lf);

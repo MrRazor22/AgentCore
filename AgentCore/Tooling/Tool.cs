@@ -1,14 +1,7 @@
 using AgentCore.Schema;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tooling;
-
-[AttributeUsage(AttributeTargets.Method)]
-public sealed class ToolAttribute(string? name = null, string? description = null) : Attribute
-{
-    public string? Name { get; } = name;
-    public string? Description { get; } = description;
-}
+namespace AgentCore.Tooling; 
 
 public abstract class Tool
 {
