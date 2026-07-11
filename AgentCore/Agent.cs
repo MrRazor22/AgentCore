@@ -14,7 +14,6 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    Task<IContent> InvokeAsync(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
@@ -56,9 +55,6 @@ public sealed class LLMAgent : IAgent
 
     public static AgentBuilder Create(string name = "agent")
         => new AgentBuilder().WithName(name);
-
-    public Task<IContent> InvokeAsync(IContent input, CancellationToken ct = default)
-        => InvokeAsyncInternal(input, null, ct);
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
