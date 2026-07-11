@@ -53,7 +53,7 @@ public sealed class Agent : IAgent
             schema = typeof(T).GetSchemaForType();
         }
 
-        Message? finalResponse = null;
+        string rawText = "";
 
         await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
         {
@@ -63,12 +63,9 @@ public sealed class Agent : IAgent
             }
             if (evt is AgentResponseEvent resp)
             {
-                finalResponse = resp.Message;
+                rawText = resp.Response;
             }
         }
-
-        var textContents = finalResponse?.Contents.OfType<Text>().Select(t => t.Value) ?? Array.Empty<string>();
-        var rawText = string.Join("\n\n", textContents);
         
         if (typeof(T) == typeof(string))
         {

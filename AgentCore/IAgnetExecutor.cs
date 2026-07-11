@@ -103,7 +103,7 @@ namespace AgentCore
                 }
 
                 // Final assistant response.
-                yield return new AgentResponseEvent(assistantMessage);
+                yield return new AgentResponseEvent(textBuffer.ToString().Trim());
                 break;
             }
         }
