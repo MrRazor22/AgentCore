@@ -10,27 +10,14 @@ public class Message
     [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents { get; set; } = Array.Empty<IContent>();
 
-    [JsonPropertyName("metadata")]
-    public Dictionary<string, object> Metadata { get; set; } = new();
-
     [JsonConstructor]
-    public Message() { }
-
-    public Message(Role role, IContent content, Dictionary<string, object>? metadata = null)
-    {
-        Role = role;
-        Contents = [content];
-        Metadata = metadata ?? new Dictionary<string, object>();
-    }
-
-    public Message(Role role, IReadOnlyList<IContent> contents, Dictionary<string, object>? metadata = null)
+    public Message(Role role, IReadOnlyList<IContent> contents)
     {
         Role = role;
         Contents = contents;
-        Metadata = metadata ?? new Dictionary<string, object>();
     }
 
-    public string ForLlm() => string.Join("\n\n", Contents.Select(c => c.ForLlm()));
+    public Message(Role role, IContent content) : this(role, [content]){ }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

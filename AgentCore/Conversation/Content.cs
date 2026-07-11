@@ -22,8 +22,7 @@ public sealed record Text(string Value) : IContent
 public sealed record ToolCall(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("arguments")] JsonObject Arguments,
-    [property: JsonPropertyName("isApproved")] bool IsApproved = false
+    [property: JsonPropertyName("arguments")] JsonObject Arguments
 ) : IContent
 {
 
