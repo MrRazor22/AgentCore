@@ -1,4 +1,5 @@
 using AgentCore.Conversation;
+using AgentCore.Json;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.Tokens;
@@ -14,6 +15,7 @@ public sealed class AgentConfig
     public string Name { get; set; } = "agent";
     public IContent? Instructions { get; set; }
     public int? MaxToolCalls { get; set; } = null;
+    public JsonSchema? OutputSchema { get; set; }
 }
 
 public sealed class AgentBuilder
@@ -51,6 +53,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithName(string name) { _config.Name = name; return this; }
     public AgentBuilder WithInstructions(string prompt) { _config.Instructions = new Text(prompt); return this; }
     public AgentBuilder WithTools(Action<IToolRegistry> configure) { _toolRegistrations.Add(configure); return this; }
+    public AgentBuilder WithOutputType<T>() { _config.OutputSchema = typeof(T).GetSchemaForType(); return this; }
 
     public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; }
     public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);

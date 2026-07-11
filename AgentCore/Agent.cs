@@ -16,7 +16,6 @@ public interface IAgent
 {
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(IContent input, CancellationToken ct = default);
 }
 
 public sealed class LLMAgent : IAgent
@@ -31,7 +30,7 @@ public sealed class LLMAgent : IAgent
     public LLMAgent(
         ILLM llm,
         ITooling tooling,
-        IMemory memory, 
+        IMemory memory,
         LLMOptions baseOptions,
         AgentConfig config,
         ILogger<LLMAgent>? logger = null)
@@ -48,7 +47,7 @@ public sealed class LLMAgent : IAgent
     {
         var turnMessages = new List<Message>();
 
-        await foreach (var evt in CoreStreamAsync(input, typeof(T), turnMessages, ct))
+        await foreach (var evt in CoreStreamAsync(input, turnMessages, ct))
         {
             if (evt is ErrorEvent error)
             {
@@ -63,10 +62,15 @@ public sealed class LLMAgent : IAgent
         IContent response = lastAssistantMsg?.Contents.OfType<Text>().LastOrDefault()
             ?? (lastAssistantMsg?.Contents.LastOrDefault() ?? new Text(""));
         
-        var json = response.ForLlm();
+        var rawText = response.ForLlm();
         
-        if (string.IsNullOrWhiteSpace(json)) return default;
-        return System.Text.Json.JsonSerializer.Deserialize<T>(json);
+        if (typeof(T) == typeof(string))
+        {
+            return (T?)(object)rawText;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawText)) return default;
+        return System.Text.Json.JsonSerializer.Deserialize<T>(rawText);
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
@@ -74,20 +78,11 @@ public sealed class LLMAgent : IAgent
         CancellationToken ct = default)
     {
         var turnMessages = new List<Message>();
-        return CoreStreamAsync(input, null, turnMessages, ct);
-    }
-
-    public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(
-        IContent input,
-        CancellationToken ct = default)
-    {
-        var turnMessages = new List<Message>();
-        return CoreStreamAsync(input, typeof(T), turnMessages, ct);
+        return CoreStreamAsync(input, turnMessages, ct);
     }
 
     private async IAsyncEnumerable<AgentEvent> CoreStreamAsync(
         IContent input,
-        Type? outputType,
         List<Message> turnMessages,
         [EnumeratorCancellation] CancellationToken ct)
     {
@@ -117,7 +112,7 @@ public sealed class LLMAgent : IAgent
             throw;
         }
 
-        var responseSchema = outputType?.GetSchemaForType();
+        var responseSchema = _config.OutputSchema;
         int consecutiveToolSteps = 0;
 
         while (true)
@@ -140,6 +135,9 @@ public sealed class LLMAgent : IAgent
             messages.AddRange(currentTurnChat);
 
             Message? assistantMessage = null;
+            var textBuffer = new System.Text.StringBuilder();
+            var reasoningBuffer = new System.Text.StringBuilder();
+            var toolCallsBuffer = new List<ToolCall>();
 
             var enumerator = _llm.StreamAsync(messages, _baseOptions, responseSchema, ct).GetAsyncEnumerator(ct);
             bool hasContextError = false;
@@ -169,10 +167,13 @@ public sealed class LLMAgent : IAgent
                         break;
                     }
 
-                    if (evt is AssistantMessageEvent am)
+                    switch (evt)
                     {
-                        assistantMessage = am.Message;
+                        case TextEvent te:    textBuffer.Append(te.Delta); break;
+                        case ReasoningEvent re: reasoningBuffer.Append(re.Delta); break;
+                        case ToolCallEvent tc: toolCallsBuffer.Add(tc.Call); break;
                     }
+
                     yield return evt;
                 }
             }
@@ -180,6 +181,14 @@ public sealed class LLMAgent : IAgent
             {
                 await enumerator.DisposeAsync();
             }
+
+            // Reconstruct the assistant message from what we buffered
+            var contents = new List<IContent>();
+            if (reasoningBuffer.Length > 0) contents.Add(new Reasoning(reasoningBuffer.ToString()));
+            if (textBuffer.Length > 0)      contents.Add(new Text(textBuffer.ToString().Trim()));
+            if (toolCallsBuffer.Count > 0)  contents.AddRange(toolCallsBuffer);
+            if (contents.Count > 0)
+                assistantMessage = new Message(Role.Assistant, contents);
 
             if (otherEx != null)
             {
@@ -242,3 +251,5 @@ public sealed class LLMAgent : IAgent
         _logger.LogInformation("Agent completed. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
     }
 }
+
+

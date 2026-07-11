@@ -1,7 +1,13 @@
 using AgentCore.Conversation;
-using AgentCore.Tokens;
-
+using AgentCore.Tooling;
 namespace AgentCore.LLM;
+
+
+ 
+public enum FinishReason { Stop, ToolCall, Cancelled }
+
+public enum ToolCallMode { None, Auto, Required }
+
 
 public abstract record LLMEvent : AgentEvent;
 
@@ -23,5 +29,5 @@ public sealed record MetaDataEvent(
     TimeSpan? Duration = null
 ) : LLMEvent;
 
-public sealed record AssistantMessageEvent(Message Message) : LLMEvent;
+
 
