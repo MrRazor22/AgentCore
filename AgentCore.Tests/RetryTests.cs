@@ -98,4 +98,49 @@ public class RetryTests
         Assert.Equal(1, mockProvider.CallCount);
         Assert.Equal("Fatal error", ex.Message);
     }
+
+    [Fact]
+    public async Task StreamAsync_DoesNotRetryAfterFirstDeltaYielded()
+    {
+        var mockProvider = new MockLLMProvider();
+        
+        // Enqueue deltas directly rather than a complex delegate to avoid CS1622/return errors
+        // By throwing after the first text delta is streamed, we verify that StreamAsync handles mid-stream failure.
+        // Let's implement this by using the Func enqueue overload that is safe.
+        mockProvider.Enqueue(ct => 
+        {
+            async IAsyncEnumerable<IContentDelta> YieldAndThrow()
+            {
+                yield return new TextDelta("First delta");
+                await Task.Yield();
+                throw new RetryableException("Transient error after yield");
+            }
+            return YieldAndThrow();
+        });
+
+        var service = new LLMService(
+            mockProvider,
+            new ToolRegistry(),
+            new ApproximateTokenCounter(),
+            maxRetries: 3
+        );
+
+        var events = new List<LLMEvent>();
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<RetryableException>(async () =>
+        {
+            await foreach (var evt in service.StreamAsync(new List<Message>()))
+            {
+                events.Add(evt);
+            }
+        });
+
+        // The first text delta should have been processed
+        Assert.Contains(events, e => e is TextEvent te && te.Delta == "First delta");
+        
+        // Assert that call count is exactly 1 (no retries were attempted since hasYielded was set)
+        Assert.Equal(1, mockProvider.CallCount);
+        Assert.Equal("Transient error after yield", ex.Message);
+    }
 }

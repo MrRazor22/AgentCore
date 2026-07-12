@@ -116,4 +116,55 @@ public class AgentTests
         });
         Assert.Equal("Fatal provider error", ex.Message);
     }
+
+    [Fact]
+    public async Task InvokeStreamingAsync_StreamsEventsToCompletion()
+    {
+        var mockProvider = new MockLLMProvider();
+        mockProvider.Enqueue(
+            new TextDelta("Streaming "),
+            new TextDelta("reply"),
+            new MetaDelta(FinishReason.Stop, 10, 5)
+        );
+
+        var agent = new AgentBuilder()
+            .WithProvider(mockProvider)
+            .Build();
+
+        var events = new List<AgentEvent>();
+        await foreach (var ev in agent.InvokeStreamingAsync(new Text("Hi")))
+        {
+            events.Add(ev);
+        }
+
+        var textEvents = events.OfType<TextEvent>().ToList();
+        Assert.Equal(2, textEvents.Count);
+        Assert.Equal("Streaming ", textEvents[0].Delta);
+        Assert.Equal("reply", textEvents[1].Delta);
+
+        var responseEvent = events.OfType<AgentResponseEvent>().Single();
+        Assert.Equal("Streaming reply", responseEvent.Response);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_PrependsSystemInstructionsToHistory()
+    {
+        var mockProvider = new MockLLMProvider();
+        mockProvider.Enqueue(new TextDelta("Success"));
+
+        var agent = new AgentBuilder()
+            .WithInstructions("System instruction baseline")
+            .WithProvider(mockProvider)
+            .Build();
+
+        await agent.InvokeAsync<string>(new Text("User baseline"));
+
+        Assert.Single(mockProvider.CapturedMessages);
+        var messages = mockProvider.CapturedMessages[0];
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(Role.System, messages[0].Role);
+        Assert.Equal("System instruction baseline", messages[0].Contents[0].ForLlm());
+        Assert.Equal(Role.User, messages[1].Role);
+        Assert.Equal("User baseline", messages[1].Contents[0].ForLlm());
+    }
 }

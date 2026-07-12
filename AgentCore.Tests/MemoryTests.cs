@@ -111,4 +111,39 @@ public class MemoryTests
         Assert.Equal(Role.User, recalled[1].Role);
         Assert.Equal(new string('C', 500), recalled[1].Contents[0].ForLlm());
     }
+
+    [Fact]
+    public async Task RecallAsync_SkipsCompressionWhenNoLimitProvided()
+    {
+        var provider = new MockLLMProvider();
+        var tokenCounter = new ApproximateTokenCounter();
+        var memory = new ChatMemoryService(tokenCounter, provider);
+
+        var msg = new Message(Role.User, new Text(new string('A', 5000)));
+        await memory.RememberAsync(new[] { msg });
+
+        // maxTokens is null (no budget limit)
+        var recalled = await memory.RecallAsync(new Message(Role.User, new Text("Hello")), maxTokens: null);
+
+        // Should return unchanged history, skipping LLM compression checks
+        Assert.Single(recalled);
+        Assert.Equal(0, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task ClearAsync_FlushesHistory()
+    {
+        var provider = new MockLLMProvider();
+        var tokenCounter = new ApproximateTokenCounter();
+        var memory = new ChatMemoryService(tokenCounter, provider);
+
+        await memory.RememberAsync(new[] { new Message(Role.User, new Text("Hello")) });
+
+        // Clear history
+        await memory.ClearAsync();
+
+        // Recall should yield nothing
+        var recalled = await memory.RecallAsync(new Message(Role.User, new Text("Hello")), maxTokens: 1000);
+        Assert.Empty(recalled);
+    }
 }

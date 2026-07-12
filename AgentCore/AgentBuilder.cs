@@ -38,7 +38,7 @@ public sealed class AgentBuilder
     public AgentBuilder WithTools<T>()
     {
         foreach (var tool in MethodTool.FromType(typeof(T)))
-            _registry.Register(tool);
+            _registry.Add(tool);
         return this;
     }
 
@@ -46,19 +46,18 @@ public sealed class AgentBuilder
     {
         ArgumentNullException.ThrowIfNull(instance);
         foreach (var tool in MethodTool.FromType(instance.GetType(), instance))
-            _registry.Register(tool);
+            _registry.Add(tool);
         return this;
     }
 
-    public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; }
-    public AgentBuilder WithMemory(IMemory memory) => UseMemory(memory);
+    public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; } 
     public AgentBuilder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
 
     public AgentBuilder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
     public AgentBuilder AddToolingLayer(Func<ITooling, ITooling> layer) { _toolingLayers.Add(layer); return this; }
 
-    public AgentBuilder UseLlm(ILLM llm) { _llm = llm; return this; }
-    public AgentBuilder AddLlmLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
+    public AgentBuilder UseLLM(ILLM llm) { _llm = llm; return this; }
+    public AgentBuilder AddLLMLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)

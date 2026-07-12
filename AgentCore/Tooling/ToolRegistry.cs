@@ -7,8 +7,8 @@ namespace AgentCore.Tooling;
 public interface IToolRegistry
 {
     IReadOnlyList<Tool> Tools { get; }
-    void Register(Tool tool);
-    bool Unregister(string name);
+    void Add(Tool tool);
+    bool Remove(string name);
     Tool? TryGet(string name);
 }
 
@@ -23,7 +23,7 @@ public sealed class ToolRegistry : IToolRegistry
         _logger = logger ?? NullLogger<ToolRegistry>.Instance;
     }
 
-    public void Register(Tool tool)
+    public void Add(Tool tool)
     {
         if (tool == null) throw new ArgumentNullException(nameof(tool));
 
@@ -40,7 +40,7 @@ public sealed class ToolRegistry : IToolRegistry
         _logger.LogInformation("Tool registered: ToolName={ToolName}", tool.Name);
     }
 
-    public bool Unregister(string name)
+    public bool Remove(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Tool name is required.", nameof(name));

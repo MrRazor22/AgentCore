@@ -20,6 +20,8 @@ public class MockLLMProvider : ILLMProvider
     public int? ContextWindow { get; set; } = 2000;
     
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
+    public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();
+    public List<JsonSchema?> CapturedResponseSchemas { get; } = new();
     
     public int CallCount => CapturedMessages.Count;
 
@@ -69,6 +71,8 @@ public class MockLLMProvider : ILLMProvider
         CancellationToken ct = default)
     {
         CapturedMessages.Add(messages.ToList());
+        CapturedTools.Add(tools?.ToList());
+        CapturedResponseSchemas.Add(responseSchema);
 
         if (_responses.Count == 0)
         {
