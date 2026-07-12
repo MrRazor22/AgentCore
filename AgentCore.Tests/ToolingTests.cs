@@ -38,7 +38,7 @@ public class ToolingTests
         var tool = new MethodTool(method, new SampleTools());
         registry.Add(tool);
 
-        var tooling = new ToolingService(registry);
+        var tooling = new ToolService(registry);
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Name, args);
@@ -61,7 +61,7 @@ public class ToolingTests
         var tool = new MethodTool(method, new SampleTools());
         registry.Add(tool);
 
-        var tooling = new ToolingService(registry);
+        var tooling = new ToolService(registry);
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };

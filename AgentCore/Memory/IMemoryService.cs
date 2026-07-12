@@ -3,7 +3,7 @@ using AgentCore.Tokens;
 
 namespace AgentCore.Memory;
 
-public interface IMemory
+public interface IMemoryService
 {
     Task RememberAsync(
         IReadOnlyList<Message> completedTurn,

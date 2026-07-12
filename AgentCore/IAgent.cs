@@ -16,9 +16,9 @@ public interface IAgent
 }
 
 public sealed record AgentServices(
-    ILLM Llm,
-    ITooling Tooling,
-    IMemory Memory,
+    ILLMService Llm,
+    IToolService Tooling,
+    IMemoryService Memory,
     ITokenCounter TokenCounter,
     ILLMProvider Provider,
     ILoggerFactory LoggerFactory);

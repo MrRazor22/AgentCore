@@ -16,7 +16,7 @@ public sealed class ChatMemoryOptions
     public int MinRecentTokens { get; set; } = 2000;
 }
 
-internal sealed class ChatMemoryService : IMemory
+internal sealed class ChatMemoryService : IMemoryService
 {
     private readonly List<Message> _history = new();
     private readonly ITokenCounter _tokenCounter;

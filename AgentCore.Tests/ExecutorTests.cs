@@ -17,7 +17,7 @@ namespace AgentCore.Tests;
 
 public class ExecutorTests
 {
-    private AgentServices CreateServices(MockLLMProvider provider, ITooling tooling)
+    private AgentServices CreateServices(MockLLMProvider provider, IToolService tooling)
     {
         var tokenCounter = new ApproximateTokenCounter();
         var registry = new ToolRegistry();

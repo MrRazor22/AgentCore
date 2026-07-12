@@ -84,7 +84,7 @@ public class MockLLMProvider : ILLMProvider
     }
 }
 
-public class MockMemory : IMemory
+public class MockMemory : IMemoryService
 {
     public List<Message> History { get; } = new();
 
@@ -106,7 +106,7 @@ public class MockMemory : IMemory
     }
 }
 
-public class MockTooling : ITooling
+public class MockTooling : IToolService
 {
     public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<Message>>> Handler { get; set; } =
         (calls, ct) => Task.FromResult<IReadOnlyList<Message>>(

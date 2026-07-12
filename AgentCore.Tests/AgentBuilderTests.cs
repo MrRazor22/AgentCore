@@ -80,7 +80,7 @@ public class AgentBuilderTests
         Assert.Throws<InvalidOperationException>(() => builder.Build());
     }
 
-    private class MemoryLoggerDecorator(Memory.IMemory inner) : Memory.IMemory
+    private class MemoryLoggerDecorator(Memory.IMemoryService inner) : Memory.IMemoryService
     {
         public List<string> CallLog { get; } = new();
 

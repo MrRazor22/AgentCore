@@ -15,16 +15,16 @@ public sealed class AgentBuilder
     private ILogger<AgentBuilder> _logger;
     private IContent? _instructions;
 
-    private IMemory? _memory;
-    private ITooling? _tooling;
-    private ILLM? _llm;
+    private IMemoryService? _memory;
+    private IToolService? _tooling;
+    private ILLMService? _llm;
     private ITokenCounter? _tokenCounter;
     private ILoggerFactory? _loggerFactory;
     private ILLMProvider? _provider;
 
-    private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
-    private readonly List<Func<ITooling, ITooling>> _toolingLayers = [];
-    private readonly List<Func<ILLM, ILLM>> _llmLayers = [];
+    private readonly List<Func<IMemoryService, IMemoryService>> _memoryLayers = [];
+    private readonly List<Func<IToolService, IToolService>> _toolingLayers = [];
+    private readonly List<Func<ILLMService, ILLMService>> _llmLayers = [];
 
     public AgentBuilder()
     {
@@ -50,14 +50,14 @@ public sealed class AgentBuilder
         return this;
     }
 
-    public AgentBuilder UseMemory(IMemory memory) { _memory = memory; return this; } 
-    public AgentBuilder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
+    public AgentBuilder UseMemory(IMemoryService memory) { _memory = memory; return this; } 
+    public AgentBuilder AddMemoryLayer(Func<IMemoryService, IMemoryService> layer) { _memoryLayers.Add(layer); return this; }
 
-    public AgentBuilder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
-    public AgentBuilder AddToolingLayer(Func<ITooling, ITooling> layer) { _toolingLayers.Add(layer); return this; }
+    public AgentBuilder UseTooling(IToolService tooling) { _tooling = tooling; return this; }
+    public AgentBuilder AddToolingLayer(Func<IToolService, IToolService> layer) { _toolingLayers.Add(layer); return this; }
 
-    public AgentBuilder UseLLM(ILLM llm) { _llm = llm; return this; }
-    public AgentBuilder AddLLMLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
+    public AgentBuilder UseLLM(ILLMService llm) { _llm = llm; return this; }
+    public AgentBuilder AddLLMLayer(Func<ILLMService, ILLMService> layer) { _llmLayers.Add(layer); return this; }
 
     public AgentBuilder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
@@ -90,17 +90,17 @@ public sealed class AgentBuilder
         var lf = _loggerFactory ?? NullLoggerFactory.Instance;
         var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: lf.CreateLogger<ApproximateTokenCounter>());
 
-        IMemory memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
+        IMemoryService memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
         foreach (var layer in _memoryLayers)
             memory = layer(memory);
 
         _logger.LogDebug("Tool registration: TotalTools={ToolCount}", _registry.Tools.Count);
 
-        ITooling tooling = _tooling ?? new ToolingService(_registry, lf.CreateLogger<ToolingService>());
+        IToolService tooling = _tooling ?? new ToolService(_registry, lf.CreateLogger<ToolService>());
         foreach (var layer in _toolingLayers)
             tooling = layer(tooling);
 
-        ILLM llm = _llm ?? new LLMService(_provider, _registry, tokenCounter, logger: lf.CreateLogger<LLMService>());
+        ILLMService llm = _llm ?? new LLMService(_provider, _registry, tokenCounter, logger: lf.CreateLogger<LLMService>());
         foreach (var layer in _llmLayers)
             llm = layer(llm);
 

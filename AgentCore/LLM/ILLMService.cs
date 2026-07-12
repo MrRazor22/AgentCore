@@ -12,7 +12,7 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.LLM;
 
-public interface ILLM
+public interface ILLMService
 {
     IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -21,7 +21,7 @@ public interface ILLM
         CancellationToken ct = default);
 }
 
-internal sealed class LLMService : ILLM
+internal sealed class LLMService : ILLMService
 {
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
