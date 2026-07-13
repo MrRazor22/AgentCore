@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.Conversation;
 using AgentCore.LLM;
-using AgentCore.Tokens;
+using AgentCore.LLM;
 
 namespace AgentCore.Memory;
 

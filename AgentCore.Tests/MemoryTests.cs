@@ -7,7 +7,7 @@ using AgentCore;
 using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.Tokens;
+using AgentCore.LLM;
 
 namespace AgentCore.Tests;
 

@@ -3,7 +3,7 @@ using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace AgentCore.Tokens;
+namespace AgentCore.LLM;
 
 public interface ITokenCounter
 {
