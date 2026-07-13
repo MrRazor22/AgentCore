@@ -97,12 +97,6 @@ public class MockMemory : IMemoryService
         History.AddRange(completedTurn);
         return Task.CompletedTask;
     }
-
-    public Task ClearAsync(CancellationToken ct = default)
-    {
-        History.Clear();
-        return Task.CompletedTask;
-    }
 }
 
 public class MockTooling : IToolService

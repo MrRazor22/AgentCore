@@ -23,3 +23,11 @@ public static class TornadoProvider
         return new TornadoLLMProvider(api, model);
     }
 }
+
+
+public static class TornadoAgentBuilderExtensions
+{
+    public static Agent.Builder AddTornado(this Agent.Builder builder, string apiKey, string modelName, Uri? baseUrl = null)
+        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl));
+
+}

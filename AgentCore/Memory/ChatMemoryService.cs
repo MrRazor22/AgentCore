@@ -174,17 +174,9 @@ internal sealed class ChatMemoryService : IMemoryService
         {
             _history.AddRange(completedTurn);
         }
-        await Task.CompletedTask;
     }
 
-    public Task ClearAsync(CancellationToken ct = default)
-    {
-        lock (_history)
-        {
-            _history.Clear();
-        }
-        return Task.CompletedTask;
-    }
+
 
     private async Task<string> SummarizeChunkAsync(IReadOnlyList<Message> chunk, CancellationToken ct)
     {

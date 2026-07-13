@@ -29,7 +29,7 @@ public class AgentTests
         var memory = new MockMemory();
         memory.History.Add(new Message(Role.User, new Text("Old message")));
 
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithProvider(mockProvider)
             .UseMemory(memory)
             .Build();
@@ -60,7 +60,7 @@ public class AgentTests
         mockProvider.Enqueue(new TextDelta("Model reply"));
 
         var memory = new MockMemory();
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithProvider(mockProvider)
             .UseMemory(memory)
             .Build();
@@ -85,7 +85,7 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new TextDelta("{\"Name\":\"John Doe\",\"Age\":30}"));
 
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithProvider(mockProvider)
             .Build();
 
@@ -105,7 +105,7 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.EnqueueException(new InvalidOperationException("Fatal provider error"));
 
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithProvider(mockProvider)
             .Build();
 
@@ -127,7 +127,7 @@ public class AgentTests
             new MetaDelta(FinishReason.Stop, 10, 5)
         );
 
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithProvider(mockProvider)
             .Build();
 
@@ -152,7 +152,7 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new TextDelta("Success"));
 
-        var agent = new AgentBuilder()
+        var agent = Agent.Create()
             .WithInstructions("System instruction baseline")
             .WithProvider(mockProvider)
             .Build();

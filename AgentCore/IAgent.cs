@@ -15,28 +15,30 @@ public interface IAgent
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
 
-public sealed record AgentServices(
-    ILLMService Llm,
-    IToolService Tooling,
-    IMemoryService Memory);
- 
-
-public sealed class Agent : IAgent
+public sealed partial class Agent : IAgent
 {
-    private readonly AgentServices _services;
+    public static Builder Create() => new Builder();
+
+    private readonly ILLMService _llm;
+    private readonly IToolService _tooling;
+    private readonly IMemoryService _memory;
     private readonly IContent? _instructions;
-    private readonly IAgentExecutor _executor;
+    private readonly IAgentWorkflow _workflow;
     private readonly ILogger<Agent> _logger;
 
     public Agent(
-        AgentServices services,
+        ILLMService llm,
+        IToolService tooling,
+        IMemoryService memory,
         IContent? instructions,
-        IAgentExecutor executor,
+        IAgentWorkflow workflow,
         ILogger<Agent>? logger = null)
     {
-        _services = services;
+        _llm = llm;
+        _tooling = tooling;
+        _memory = memory;
         _instructions = instructions;
-        _executor = executor;
+        _workflow = workflow;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
     } 
 
@@ -101,11 +103,11 @@ public sealed class Agent : IAgent
         IReadOnlyList<Message> recalledChat;
         try
         {
-            int tokenBudget = await _services.Llm.GetContextBudgetAsync(fixedMessages, ct).ConfigureAwait(false);
+            int tokenBudget = await _llm.GetContextBudgetAsync(fixedMessages, ct).ConfigureAwait(false);
             _logger.LogInformation("Agent invoked. InputLength={InputLength} MemoryBudget={MemoryBudget}",
                 input.ForLlm().Length, tokenBudget);
 
-            recalledChat = await _services.Memory.RecallAsync(
+            recalledChat = await _memory.RecallAsync(
                 userMessage,
                 tokenBudget,
                 ct).ConfigureAwait(false);
@@ -127,7 +129,7 @@ public sealed class Agent : IAgent
         var rememberFrom = conversation.Count;
         conversation.Add(userMessage);
 
-        await foreach (var evt in _executor.ExecuteAsync(conversation, responseSchema, ct))
+        await foreach (var evt in _workflow.ExecuteAsync(conversation, responseSchema, ct))
         {
             yield return evt;
         }
@@ -135,7 +137,7 @@ public sealed class Agent : IAgent
         try
         {
             var newTurnMessages = conversation.Skip(rememberFrom).ToList();
-            await _services.Memory.RememberAsync(newTurnMessages, ct).ConfigureAwait(false);
+            await _memory.RememberAsync(newTurnMessages, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -146,5 +148,6 @@ public sealed class Agent : IAgent
         _logger.LogInformation("Agent completed. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
     }
 }
+
 
 

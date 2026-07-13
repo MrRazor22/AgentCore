@@ -13,7 +13,5 @@ public interface IMemoryService
         Message currentInput,
         int? maxTokens,
         CancellationToken ct = default);
-
-    Task ClearAsync(
-        CancellationToken ct = default);
 }
+

@@ -2,13 +2,14 @@ using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
 using AgentCore.Schema;
+using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore
 {
-    public interface IAgentExecutor
+    public interface IAgentWorkflow
     {
         IAsyncEnumerable<AgentEvent> ExecuteAsync(
             List<Message> conversation,
@@ -16,17 +17,19 @@ namespace AgentCore
             CancellationToken ct = default);
     }
 
-
-    public class ReActExecutor : IAgentExecutor
+    public class ReActWorkflow : IAgentWorkflow
     {
-        private readonly AgentServices _services;
+        private readonly ILLMService _llm;
+        private readonly IToolService _tooling;
         private readonly int? _maxIterations;
 
-        public ReActExecutor(
-            AgentServices services,
+        public ReActWorkflow(
+            ILLMService llm,
+            IToolService tooling,
             int? maxIterations = null)
         {
-            _services = services;
+            _llm = llm;
+            _tooling = tooling;
             _maxIterations = maxIterations;
         }
 
@@ -51,7 +54,7 @@ namespace AgentCore
                 var reasoningBuffer = new System.Text.StringBuilder();
                 var toolCalls = new List<ToolCall>();
 
-                await using var enumerator = _services.Llm.StreamAsync(conversation, responseSchema, ct).GetAsyncEnumerator(ct);
+                await using var enumerator = _llm.StreamAsync(conversation, responseSchema, ct).GetAsyncEnumerator(ct);
 
                 while (await enumerator.MoveNextAsync())
                 {
@@ -84,7 +87,7 @@ namespace AgentCore
                 {
                     iterations++;
 
-                    var toolMessages = await _services.Tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
+                    var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
                     conversation.AddRange(toolMessages);
 
                     foreach (var message in toolMessages)
@@ -116,4 +119,3 @@ namespace AgentCore
         }
     }
 }
-

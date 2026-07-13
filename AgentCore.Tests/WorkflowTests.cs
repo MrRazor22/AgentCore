@@ -15,18 +15,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Tests;
 
-public class ExecutorTests
+public class WorkflowTests
 {
-    private AgentServices CreateServices(MockLLMProvider provider, IToolService tooling)
+    private (ILLMService Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
     {
         var tokenCounter = new ApproximateTokenCounter();
         var registry = new ToolRegistry();
         var llm = new LLMService(provider, registry, tokenCounter, maxRetries: 1);
-        return new AgentServices(
-            llm,
-            tooling,
-            new MockMemory()
-        );
+        return (llm, tooling);
     }
 
     [Fact]
@@ -40,8 +36,8 @@ public class ExecutorTests
             new MetaDelta(FinishReason.Stop, 10, 10)
         );
 
-        var services = CreateServices(provider, new MockTooling());
-        var executor = new ReActExecutor(services);
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Hi")) };
 
         // Act
@@ -91,8 +87,8 @@ public class ExecutorTests
             return Task.FromResult<IReadOnlyList<Message>>(results);
         };
 
-        var services = CreateServices(provider, tooling);
-        var executor = new ReActExecutor(services);
+        var (llm, _) = CreateServices(provider, tooling);
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Weather in London?")) };
 
         // Act
@@ -136,9 +132,9 @@ public class ExecutorTests
             new MetaDelta(FinishReason.ToolCall, 15, 5)
         );
 
-        var services = CreateServices(provider, new MockTooling());
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
         // Configure maxIterations = 1
-        var executor = new ReActExecutor(services, maxIterations: 1);
+        var executor = new ReActWorkflow(llm, tooling, maxIterations: 1);
         var conversation = new List<Message> { new Message(Role.User, new Text("Loop")) };
 
         // Act
@@ -169,8 +165,8 @@ public class ExecutorTests
         var tooling = new MockTooling();
         tooling.Handler = (calls, ct) => throw new InvalidOperationException("Tool crash");
 
-        var services = CreateServices(provider, tooling);
-        var executor = new ReActExecutor(services);
+        var (llm, _) = CreateServices(provider, tooling);
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Run tool")) };
 
         // Act & Assert
@@ -190,8 +186,8 @@ public class ExecutorTests
         var provider = new MockLLMProvider();
         provider.EnqueueException(new InvalidOperationException("Provider crash"));
 
-        var services = CreateServices(provider, new MockTooling());
-        var executor = new ReActExecutor(services);
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Run")) };
 
         // Act & Assert
@@ -211,8 +207,8 @@ public class ExecutorTests
         var provider = new MockLLMProvider();
         provider.Enqueue(new TextDelta("Never streamed"));
 
-        var services = CreateServices(provider, new MockTooling());
-        var executor = new ReActExecutor(services);
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Cancel me")) };
 
         var cts = new CancellationTokenSource();
@@ -239,8 +235,8 @@ public class ExecutorTests
             new TextDelta("B")
         );
 
-        var services = CreateServices(provider, new MockTooling());
-        var executor = new ReActExecutor(services);
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
+        var executor = new ReActWorkflow(llm, tooling);
         var conversation = new List<Message> { new Message(Role.User, new Text("Stream check")) };
 
         // Act

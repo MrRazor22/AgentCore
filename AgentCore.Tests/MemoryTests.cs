@@ -129,21 +129,5 @@ public class MemoryTests
         Assert.Single(recalled);
         Assert.Equal(0, provider.CallCount);
     }
-
-    [Fact]
-    public async Task ClearAsync_FlushesHistory()
-    {
-        var provider = new MockLLMProvider();
-        var tokenCounter = new ApproximateTokenCounter();
-        var memory = new ChatMemoryService(tokenCounter, provider);
-
-        await memory.RememberAsync(new[] { new Message(Role.User, new Text("Hello")) });
-
-        // Clear history
-        await memory.ClearAsync();
-
-        // Recall should yield nothing
-        var recalled = await memory.RecallAsync(new Message(Role.User, new Text("Hello")), maxTokens: 1000);
-        Assert.Empty(recalled);
-    }
 }
+
