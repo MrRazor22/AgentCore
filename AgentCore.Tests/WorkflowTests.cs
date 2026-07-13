@@ -10,7 +10,7 @@ using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.Tokens;
-using AgentCore.Tooling;
+using AgentCore.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentCore.Tests;

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tools;
 
 public interface IToolRegistry
 {

@@ -6,7 +6,7 @@ using Xunit;
 using AgentCore.Conversation;
 using AgentCore.Tokens;
 using AgentCore.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 

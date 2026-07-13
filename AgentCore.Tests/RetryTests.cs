@@ -8,7 +8,7 @@ using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
 using AgentCore.Tokens;
-using AgentCore.Tooling;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 

@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tools;
 
 public interface IToolService
 {

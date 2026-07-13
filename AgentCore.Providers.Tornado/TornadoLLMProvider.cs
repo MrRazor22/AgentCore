@@ -29,7 +29,7 @@ public class TornadoLLMProvider : ILLMProvider
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<AgentCore.Tooling.Tool>? tools = null,
+        IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var request = new ChatRequest

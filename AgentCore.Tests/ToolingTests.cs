@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Xunit;
 using AgentCore.Conversation;
-using AgentCore.Tooling;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 

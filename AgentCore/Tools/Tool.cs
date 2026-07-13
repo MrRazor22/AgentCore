@@ -1,7 +1,7 @@
 using AgentCore.Schema;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tooling; 
+namespace AgentCore.Tools; 
 
 public abstract class Tool
 {

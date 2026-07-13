@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tools;
 
 
 [AttributeUsage(AttributeTargets.Method)]
