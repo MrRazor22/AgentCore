@@ -26,5 +26,12 @@ public sealed class JsonSchema
         =>_schema.WriteTo(writer); 
 
     public JsonNode ToJsonNode() => _schema.DeepClone();
+
+    public JsonElement ToJsonElement()
+    {
+        using var document = JsonDocument.Parse(_schema.ToJsonString());
+        return document.RootElement.Clone();
+    }
+
     public override string ToString() => _cachedJson ??= _schema.ToString();
 }

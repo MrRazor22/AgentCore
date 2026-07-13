@@ -40,15 +40,8 @@ public class TornadoLLMProvider : ILLMProvider
         if (tools is { Count: > 0 })
         {
             request.Tools = tools.Select(t =>
-            {
-                using var stream = new System.IO.MemoryStream();
-                using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
-                {
-                    t.ParametersSchema.WriteTo(writer);
-                }
-                var jsonElement = System.Text.Json.JsonDocument.Parse(stream.ToArray()).RootElement;
-                return new LlmTornado.Common.Tool(new ToolFunction(t.Name, t.Description, jsonElement));
-            }).ToList();
+                new LlmTornado.Common.Tool(new ToolFunction(t.Name, t.Description, t.ParametersSchema.ToString()))
+            ).ToList();
         }
 
         var temp = options?.Temperature ?? _options.Temperature;
@@ -60,13 +53,7 @@ public class TornadoLLMProvider : ILLMProvider
         
         if (responseSchema != null)
         {
-            using var stream = new System.IO.MemoryStream();
-            using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
-            {
-                responseSchema.WriteTo(writer);
-            }
-            var jsonElement = System.Text.Json.JsonDocument.Parse(stream.ToArray()).RootElement;
-            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", jsonElement);
+            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", responseSchema.ToJsonElement());
         }
 
         request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
