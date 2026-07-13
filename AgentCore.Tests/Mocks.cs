@@ -17,7 +17,7 @@ public class MockLLMProvider : ILLMProvider
 {
     private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IContentDelta>>> _responses = new();
     
-    public int? ContextWindow { get; set; } = 2000;
+    public int ContextWindow { get; set; } = 2000;
     
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
     public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();

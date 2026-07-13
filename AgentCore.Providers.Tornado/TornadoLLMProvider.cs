@@ -24,7 +24,7 @@ public class TornadoLLMProvider : ILLMProvider
         _options = options ?? new LLMOptions();
     }
 
-    public int? ContextWindow => _model.ContextTokens;
+    public int ContextWindow => _model.ContextTokens ?? throw new InvalidOperationException($"Model '{_model.Name}' does not expose a context window.");
 
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,

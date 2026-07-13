@@ -18,9 +18,7 @@ public interface IAgent
 public sealed record AgentServices(
     ILLMService Llm,
     IToolService Tooling,
-    IMemoryService Memory, 
-    ILLMProvider Provider,
-    ILoggerFactory LoggerFactory);
+    IMemoryService Memory);
  
 
 public sealed class Agent : IAgent
@@ -33,12 +31,13 @@ public sealed class Agent : IAgent
     public Agent(
         AgentServices services,
         IContent? instructions,
-        IAgentExecutor executor)
+        IAgentExecutor executor,
+        ILogger<Agent>? logger = null)
     {
         _services = services;
         _instructions = instructions;
         _executor = executor;
-        _logger = services.LoggerFactory.CreateLogger<Agent>();
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
     } 
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
@@ -90,18 +89,25 @@ public sealed class Agent : IAgent
         });
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var contextWindow = _services.Provider.ContextWindow;
-        _logger.LogInformation("Agent invoked. InputLength={InputLength} ContextLimit={ContextLimit}",
-            input.ForLlm().Length, contextWindow ?? 0);
-
         var userMessage = new Message(Role.User, input);
+
+        var fixedMessages = new List<Message>();
+        if (_instructions != null)
+        {
+            fixedMessages.Add(new Message(Role.System, _instructions));
+        }
+        fixedMessages.Add(userMessage);
 
         IReadOnlyList<Message> recalledChat;
         try
         {
+            int tokenBudget = await _services.Llm.GetContextBudgetAsync(fixedMessages, ct).ConfigureAwait(false);
+            _logger.LogInformation("Agent invoked. InputLength={InputLength} MemoryBudget={MemoryBudget}",
+                input.ForLlm().Length, tokenBudget);
+
             recalledChat = await _services.Memory.RecallAsync(
                 userMessage,
-                contextWindow,
+                tokenBudget,
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)

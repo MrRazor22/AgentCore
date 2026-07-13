@@ -6,7 +6,7 @@ namespace AgentCore.LLM;
 
 public interface ILLMProvider
 {
-    int? ContextWindow { get; }
+    int ContextWindow { get; }
 
     IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,

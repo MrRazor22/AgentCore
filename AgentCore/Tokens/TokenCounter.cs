@@ -7,8 +7,9 @@ namespace AgentCore.Tokens;
 
 public interface ITokenCounter
 {
-    Task<int> CountAsync(IEnumerable<Message> messages, CancellationToken ct = default);
-    void RecordActualInput(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens);
+    Task<int> EstimateAsync(IEnumerable<Message> messages, CancellationToken ct = default);
+    Task<int> EstimateAsync(IEnumerable<Tool> tools, CancellationToken ct = default);
+    void RecordActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens);
 }
 public sealed class ApproximateTokenCounter : ITokenCounter
 {
@@ -25,7 +26,7 @@ public sealed class ApproximateTokenCounter : ITokenCounter
         _logger = logger ?? NullLogger<ApproximateTokenCounter>.Instance;
     }
      
-    public Task<int> CountAsync(IEnumerable<Message> messages, CancellationToken ct = default)
+    public Task<int> EstimateAsync(IEnumerable<Message> messages, CancellationToken ct = default)
     {
         if (messages == null || !messages.Any())
             return Task.FromResult(0);
@@ -33,14 +34,34 @@ public sealed class ApproximateTokenCounter : ITokenCounter
         int tokens = EstimateTokens(GetCharCount(messages));
 
         _logger.LogDebug(
-            "Token count: MessageCount={Count} EstimatedTokens={Tokens}",
+            "Token estimation: MessageCount={Count} EstimatedTokens={Tokens}",
             messages.Count(),
             tokens);
 
         return Task.FromResult(tokens);
     }
 
-    public void RecordActualInput(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens)
+    public Task<int> EstimateAsync(IEnumerable<Tool> tools, CancellationToken ct = default)
+    {
+        if (tools == null || !tools.Any())
+            return Task.FromResult(0);
+
+        int toolChars = 0;
+        foreach (var tool in tools)
+        {
+            toolChars += GetToolCharacterCount(tool);
+        }
+
+        int tokens = EstimateTokens(toolChars);
+        return Task.FromResult(tokens);
+    }
+
+    private static int GetToolCharacterCount(Tool tool)
+    {
+        return tool.Name.Length + tool.Description.Length + tool.ParametersSchema.ToJsonNode().ToJsonString().Length;
+    }
+
+    public void RecordActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens)
     {
         if (messages == null || actualInputTokens <= 0) return;
 
@@ -48,7 +69,7 @@ public sealed class ApproximateTokenCounter : ITokenCounter
 
         if (tools != null)
             foreach (var tool in tools)
-                toolChars += tool.Name.Length + tool.Description.Length + tool.ParametersSchema.ToString().Length;
+                toolChars += GetToolCharacterCount(tool);
 
         int messageTokens = Math.Max(1, actualInputTokens - EstimateTokens(toolChars));
 

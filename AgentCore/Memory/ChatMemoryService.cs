@@ -45,8 +45,8 @@ internal sealed class ChatMemoryService : IMemoryService
         }
 
         // Measure total tokens of current history + current input
-        int currentInputTokens = await _tokenCounter.CountAsync(new[] { currentInput }, ct).ConfigureAwait(false);
-        int historyTokens = await _tokenCounter.CountAsync(workingHistory, ct).ConfigureAwait(false);
+        int currentInputTokens = await _tokenCounter.EstimateAsync(new[] { currentInput }, ct).ConfigureAwait(false);
+        int historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
         int totalTokens = currentInputTokens + historyTokens;
 
         int maxLimit = maxTokens ?? 0;
@@ -81,7 +81,7 @@ internal sealed class ChatMemoryService : IMemoryService
                         break;
                     }
 
-                    int msgTokens = await _tokenCounter.CountAsync(new[] { msg }, ct).ConfigureAwait(false);
+                    int msgTokens = await _tokenCounter.EstimateAsync(new[] { msg }, ct).ConfigureAwait(false);
                     unsummarizedTokens += msgTokens;
                     messagesToKeep++;
 
@@ -101,7 +101,7 @@ internal sealed class ChatMemoryService : IMemoryService
                     {
                         workingHistory.RemoveAt(0);
                         historyModified = true;
-                        historyTokens = await _tokenCounter.CountAsync(workingHistory, ct).ConfigureAwait(false);
+                        historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
                         totalTokens = currentInputTokens + historyTokens;
                     }
                     else
@@ -120,7 +120,7 @@ internal sealed class ChatMemoryService : IMemoryService
                 for (int i = 0; i < summarizableCount; i++)
                 {
                     var msg = workingHistory[i];
-                    int msgTokens = await _tokenCounter.CountAsync(new[] { msg }, ct).ConfigureAwait(false);
+                    int msgTokens = await _tokenCounter.EstimateAsync(new[] { msg }, ct).ConfigureAwait(false);
                     
                     if (chunkTokens + msgTokens > dynamicChunkSize && chunkToSummarize.Count > 0)
                     {
@@ -147,7 +147,7 @@ internal sealed class ChatMemoryService : IMemoryService
                 historyModified = true;
 
                 // Re-evaluate total tokens
-                historyTokens = await _tokenCounter.CountAsync(workingHistory, ct).ConfigureAwait(false);
+                historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
                 totalTokens = currentInputTokens + historyTokens;
             }
 

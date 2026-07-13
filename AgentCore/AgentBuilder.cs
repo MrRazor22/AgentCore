@@ -70,14 +70,13 @@ public sealed class AgentBuilder
 
     public IAgent Build()
     {
+        var lf = _loggerFactory ?? NullLoggerFactory.Instance;
         return Build(services =>
             new Agent(
                 services,
                 _instructions,
-                new ReActExecutor(
-                    services,
-                    10,
-                    _loggerFactory?.CreateLogger<ReActExecutor>())));
+                new ReActExecutor(services),
+                lf.CreateLogger<Agent>()));
     }
 
     public IAgent Build(Func<AgentServices, IAgent> factory)
@@ -108,7 +107,7 @@ public sealed class AgentBuilder
             _registry.Tools.Count,
             _provider.GetType().Name);
 
-        var services = new AgentServices(llm, tooling, memory, _provider, lf);
+        var services = new AgentServices(llm, tooling, memory);
         Services = services;
 
         return factory(services);

@@ -25,9 +25,7 @@ public class ExecutorTests
         return new AgentServices(
             llm,
             tooling,
-            new MockMemory(),
-            provider,
-            NullLoggerFactory.Instance
+            new MockMemory()
         );
     }
 
@@ -151,11 +149,10 @@ public class ExecutorTests
         }
 
         // Assert
-        // Verify iteration limit message was yielded
-        var textEvents = events.OfType<TextEvent>().ToList();
-        Assert.Contains(textEvents, te => te.Delta.Contains("maximum allowed iterations"));
+        var errorEvent = Assert.Single(events.OfType<ErrorEvent>());
+        Assert.IsType<InvalidOperationException>(errorEvent.Error);
+        Assert.Contains("exceeded the maximum limit", errorEvent.Error.Message);
         
-        // No final AgentResponseEvent should be yielded (since loop was forcefully terminated)
         Assert.Empty(events.OfType<AgentResponseEvent>());
     }
 

@@ -18,6 +18,10 @@ public interface ILLMService
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default);
+
+    Task<int> GetContextBudgetAsync(
+        IReadOnlyList<Message> prompt,
+        CancellationToken ct = default);
 }
 
 internal sealed class LLMService : ILLMService
@@ -25,6 +29,7 @@ internal sealed class LLMService : ILLMService
     private readonly ILLMProvider _provider;
     private readonly IToolRegistry _toolRegistry;
     private readonly ITokenCounter _tokenCounter;
+    private readonly int _reservedOutputTokens;
     private readonly int _maxRetries;
     private readonly ILogger<LLMService> _logger;
 
@@ -32,14 +37,30 @@ internal sealed class LLMService : ILLMService
         ILLMProvider provider,
         IToolRegistry toolRegistry,
         ITokenCounter tokenCounter,
+        int reservedOutputTokens = 2048,
         int maxRetries = 3,
         ILogger<LLMService>? logger = null)
     {
         _provider = provider;
         _toolRegistry = toolRegistry;
         _tokenCounter = tokenCounter;
+        _reservedOutputTokens = reservedOutputTokens;
         _maxRetries = maxRetries;
         _logger = logger ?? NullLogger<LLMService>.Instance;
+    }
+
+    public async Task<int> GetContextBudgetAsync(
+        IReadOnlyList<Message> prompt,
+        CancellationToken ct = default)
+    {
+        int totalLimit = _provider.ContextWindow;
+        int fixedTokens = await _tokenCounter.EstimateAsync(prompt, ct).ConfigureAwait(false);
+        int toolTokens = 0;
+        if (_toolRegistry.Tools != null && _toolRegistry.Tools.Count > 0)
+        {
+            toolTokens = await _tokenCounter.EstimateAsync(_toolRegistry.Tools, ct).ConfigureAwait(false);
+        }
+        return Math.Max(0, totalLimit - (fixedTokens + toolTokens + _reservedOutputTokens));
     }
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
@@ -192,7 +213,7 @@ internal sealed class LLMService : ILLMService
 
         if (inputTokens.HasValue)
         {
-            _tokenCounter.RecordActualInput(messages, tools, inputTokens.Value);
+            _tokenCounter.RecordActualCount(messages, tools, inputTokens.Value);
         }
         else
         {

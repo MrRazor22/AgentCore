@@ -20,17 +20,14 @@ namespace AgentCore
     public class ReActExecutor : IAgentExecutor
     {
         private readonly AgentServices _services;
-        private readonly int _maxIterations;
-        private readonly ILogger<ReActExecutor> _logger;
+        private readonly int? _maxIterations;
 
         public ReActExecutor(
             AgentServices services,
-            int maxIterations = 10,
-            ILogger<ReActExecutor>? logger = null)
+            int? maxIterations = null)
         {
             _services = services;
             _maxIterations = maxIterations;
-            _logger = logger ?? NullLogger<ReActExecutor>.Instance;
         }
 
         public async IAsyncEnumerable<AgentEvent> ExecuteAsync(
@@ -44,9 +41,9 @@ namespace AgentCore
             {
                 ct.ThrowIfCancellationRequested();
 
-                if (iterations >= _maxIterations)
+                if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
                 {
-                    yield return new TextEvent("You have exceeded the maximum allowed iterations. Stop calling tools and respond to the user immediately.");
+                    yield return new ErrorEvent(new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations."));
                     break;
                 }
 
