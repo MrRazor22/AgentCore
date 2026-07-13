@@ -54,7 +54,8 @@ namespace AgentCore
                 var reasoningBuffer = new System.Text.StringBuilder();
                 var toolCalls = new List<ToolCall>();
 
-                await using var enumerator = _services.Llm.StreamAsync(conversation, options: null, responseSchema, ct).GetAsyncEnumerator(ct);
+                var options = new LLMOptions { ResponseSchema = responseSchema };
+                await using var enumerator = _services.Llm.StreamAsync(conversation, options, ct).GetAsyncEnumerator(ct);
 
                 while (await enumerator.MoveNextAsync())
                 {

@@ -26,7 +26,6 @@ public class ExecutorTests
             llm,
             tooling,
             new MockMemory(),
-            tokenCounter,
             provider,
             NullLoggerFactory.Instance
         );

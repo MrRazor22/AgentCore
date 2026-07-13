@@ -108,7 +108,7 @@ public sealed class AgentBuilder
             _registry.Tools.Count,
             _provider.GetType().Name);
 
-        var services = new AgentServices(llm, tooling, memory, tokenCounter, _provider, lf);
+        var services = new AgentServices(llm, tooling, memory, _provider, lf);
         Services = services;
 
         return factory(services);

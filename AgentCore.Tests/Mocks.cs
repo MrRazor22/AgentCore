@@ -67,12 +67,11 @@ public class MockLLMProvider : ILLMProvider
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
-        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
     {
         CapturedMessages.Add(messages.ToList());
         CapturedTools.Add(tools?.ToList());
-        CapturedResponseSchemas.Add(responseSchema);
+        CapturedResponseSchemas.Add(options?.ResponseSchema);
 
         if (_responses.Count == 0)
         {

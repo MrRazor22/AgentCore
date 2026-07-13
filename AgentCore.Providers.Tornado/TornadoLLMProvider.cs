@@ -30,7 +30,6 @@ public class TornadoLLMProvider : ILLMProvider
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tooling.Tool>? tools = null,
-        JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var request = new ChatRequest

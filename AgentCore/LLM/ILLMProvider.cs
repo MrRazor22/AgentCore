@@ -12,6 +12,5 @@ public interface ILLMProvider
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
-        JsonSchema? responseSchema = null,
         CancellationToken ct = default);
 }
