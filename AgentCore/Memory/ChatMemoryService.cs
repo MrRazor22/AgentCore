@@ -196,7 +196,6 @@ internal sealed class ChatMemoryService : IMemoryService
 
         var options = new LLMOptions
         {
-            ToolCallMode = ToolCallMode.None,
             Temperature = 0.2f
         };
 

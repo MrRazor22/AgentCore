@@ -53,9 +53,22 @@ public class TornadoLLMProvider : ILLMProvider
 
         var temp = options?.Temperature ?? _options.Temperature;
         var maxTokens = options?.MaxOutputTokens ?? _options.MaxOutputTokens;
+        var responseSchema = options?.ResponseSchema ?? _options.ResponseSchema;
 
         if (temp.HasValue) request.Temperature = temp.Value;
         if (maxTokens.HasValue) request.MaxTokens = maxTokens.Value;
+        
+        if (responseSchema != null)
+        {
+            using var stream = new System.IO.MemoryStream();
+            using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+            {
+                responseSchema.WriteTo(writer);
+            }
+            var jsonElement = System.Text.Json.JsonDocument.Parse(stream.ToArray()).RootElement;
+            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", jsonElement);
+        }
+
         request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
 
         var chat = _api.Chat.CreateConversation(request);

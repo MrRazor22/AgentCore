@@ -16,7 +16,7 @@ public interface ILLMService
 {
     IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default);
 }
 
@@ -44,13 +44,13 @@ internal sealed class LLMService : ILLMService
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
-        => StreamInternalAsync(messages, options, ct);
+        => StreamInternalAsync(messages, responseSchema, ct);
 
     private async IAsyncEnumerable<LLMEvent> StreamInternalAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
@@ -87,7 +87,8 @@ internal sealed class LLMService : ILLMService
                 bool hasMore = false;
                 try
                 {
-                    var content = _provider.StreamAsync(messages, options, tools, ct);
+                    var providerOptions = new LLMOptions { ResponseSchema = responseSchema };
+                    var content = _provider.StreamAsync(messages, providerOptions, tools, ct);
                     enumerator = content.GetAsyncEnumerator(ct);
                     hasMore = await enumerator.MoveNextAsync().ConfigureAwait(false);
                 }
