@@ -100,7 +100,7 @@ namespace AgentCore
                 }
 
                 // Final assistant response.
-                yield return new AgentResponseEvent(textBuffer.ToString().Trim());
+                yield return new AgentResponseEvent<string>(textBuffer.ToString().Trim());
                 break;
             }
         }

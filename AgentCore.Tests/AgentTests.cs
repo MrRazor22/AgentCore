@@ -142,7 +142,7 @@ public class AgentTests
         Assert.Equal("Streaming ", textEvents[0].Delta);
         Assert.Equal("reply", textEvents[1].Delta);
 
-        var responseEvent = events.OfType<AgentResponseEvent>().Single();
+        var responseEvent = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("Streaming reply", responseEvent.Response);
     }
 

@@ -55,7 +55,7 @@ public class WorkflowTests
         Assert.Equal("world!", textEvents[1].Delta);
 
         // Final AgentResponseEvent
-        var finalResponse = events.OfType<AgentResponseEvent>().Single();
+        var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("Hello world!", finalResponse.Response);
 
         // Conversation history updated with Assistant response
@@ -102,7 +102,7 @@ public class WorkflowTests
         // Events check
         Assert.Contains(events, e => e is ToolCallEvent tc && tc.Call.Name == "get_weather");
         Assert.Contains(events, e => e is ToolResultEvent tr && tr.Result.ForLlm() == "Rainy");
-        var finalResponse = events.OfType<AgentResponseEvent>().Single();
+        var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Response);
 
         // Verify conversation history captured by provider on the second call
@@ -149,7 +149,7 @@ public class WorkflowTests
         Assert.IsType<InvalidOperationException>(errorEvent.Error);
         Assert.Contains("exceeded the maximum limit", errorEvent.Error.Message);
         
-        Assert.Empty(events.OfType<AgentResponseEvent>());
+        Assert.Empty(events.OfType<AgentResponseEvent<string>>());
     }
 
     [Fact]
@@ -247,11 +247,11 @@ public class WorkflowTests
         }
 
         // Assert
-        Assert.Equal(5, events.Count); // Text("A"), Reasoning("Thought"), Text("B"), MetaDataEvent, AgentResponseEvent("AB")
+        Assert.Equal(5, events.Count); // Text("A"), Reasoning("Thought"), Text("B"), MetaDataEvent, AgentResponseEvent<string>("AB")
         Assert.Equal("A", ((TextEvent)events[0]).Delta);
         Assert.Equal("Thought", ((ReasoningEvent)events[1]).Delta);
         Assert.Equal("B", ((TextEvent)events[2]).Delta);
         Assert.IsType<MetaDataEvent>(events[3]);
-        Assert.Equal("AB", ((AgentResponseEvent)events[4]).Response);
+        Assert.Equal("AB", ((AgentResponseEvent<string>)events[4]).Response);
     }
 }

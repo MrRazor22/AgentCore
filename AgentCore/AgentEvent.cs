@@ -7,4 +7,4 @@ public sealed record ToolResultEvent(ToolResult Result) : AgentEvent;
 
 public sealed record ErrorEvent(Exception Error) : AgentEvent;
 
-public sealed record AgentResponseEvent(string Response) : AgentEvent;
+public sealed record AgentResponseEvent<T>(T Response) : AgentEvent;

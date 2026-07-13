@@ -11,6 +11,8 @@ namespace AgentCore;
 
 public interface IAgent
 {
+    Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
     IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
@@ -42,35 +44,37 @@ public sealed partial class Agent : IAgent
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
     } 
 
+    private static T? Deserialize<T>(string? response)
+    {
+        if (typeof(T) == typeof(string))
+        {
+            return (T?)(object)(response ?? "");
+        }
+        if (string.IsNullOrWhiteSpace(response)) return default;
+        return System.Text.Json.JsonSerializer.Deserialize<T>(response);
+    }
+
+    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default)
+    {
+        return InvokeAsync<string>(input, ct);
+    }
+
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
-        JsonSchema? schema = null;
-        if (typeof(T) != typeof(string))
-        {
-            schema = typeof(T).GetSchemaForType();
-        }
-
-        string rawText = "";
-
-        await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
+        T? result = default;
+        await foreach (var evt in InvokeStreamingAsync<T>(input, ct))
         {
             if (evt is ErrorEvent error)
             {
                 throw error.Error;
             }
-            if (evt is AgentResponseEvent resp)
+            if (evt is AgentResponseEvent<T> resp)
             {
-                rawText = resp.Response;
+                result = resp.Response;
             }
         }
         
-        if (typeof(T) == typeof(string))
-        {
-            return (T?)(object)rawText;
-        }
-
-        if (string.IsNullOrWhiteSpace(rawText)) return default;
-        return System.Text.Json.JsonSerializer.Deserialize<T>(rawText);
+        return result;
     }
 
     public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
@@ -78,6 +82,29 @@ public sealed partial class Agent : IAgent
         CancellationToken ct = default)
     {
         return ExecuteStreamAsync(input, null, ct);
+    }
+
+    public async IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(
+        IContent input,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        JsonSchema? schema = null;
+        if (typeof(T) != typeof(string))
+        {
+            schema = typeof(T).GetSchemaForType();
+        }
+
+        await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
+        {
+            if (evt is AgentResponseEvent<string> resp)
+            {
+                yield return new AgentResponseEvent<T>(Deserialize<T>(resp.Response)!);
+            }
+            else
+            {
+                yield return evt;
+            }
+        }
     }
 
     private async IAsyncEnumerable<AgentEvent> ExecuteStreamAsync(
