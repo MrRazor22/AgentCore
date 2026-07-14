@@ -1,5 +1,5 @@
 using AgentCore.LLM;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Memory;
 

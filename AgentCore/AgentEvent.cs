@@ -1,4 +1,4 @@
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 namespace AgentCore;
 
 public abstract record AgentEvent;

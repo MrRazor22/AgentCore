@@ -1,4 +1,4 @@
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 namespace AgentCore.LLM;
 
 public enum FinishReason { Stop, ToolCall, Cancelled }

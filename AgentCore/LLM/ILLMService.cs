@@ -1,5 +1,4 @@
 using AgentCore.LLM.Exceptions;
-using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Schema;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.LLM;
 

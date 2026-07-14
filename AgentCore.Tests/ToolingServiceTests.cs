@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
-using AgentCore.Conversation;
-using AgentCore.Tools;
+using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
+using AgentCore.Tools;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
@@ -54,7 +49,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolThrowsException_ReturnsErrorMessageNotException()
     {
         var registry = new ToolRegistry();
-        var schema = new Schema.JsonSchemaBuilder().Type<object>().Build();
+        var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("crash_tool", schema)
         {
             Invoker = (args, ct) => throw new InvalidOperationException("Tool implementation crashed")
@@ -76,7 +71,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolReturnsNull_ReturnsEmptyText()
     {
         var registry = new ToolRegistry();
-        var schema = new Schema.JsonSchemaBuilder().Type<object>().Build();
+        var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("null_tool", schema) { Invoker = (args, ct) => Task.FromResult<object?>(null) };
         registry.Add(tool);
         var tooling = new ToolService(registry);
@@ -93,7 +88,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolReturnsIContent_UsedDirectly()
     {
         var registry = new ToolRegistry();
-        var schema = new Schema.JsonSchemaBuilder().Type<object>().Build();
+        var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("content_tool", schema) 
         { 
             Invoker = (args, ct) => Task.FromResult<object?>(new Text("Explicit IContent")) 
@@ -113,7 +108,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolReturnsObject_JsonSerialized()
     {
         var registry = new ToolRegistry();
-        var schema = new Schema.JsonSchemaBuilder().Type<object>().Build();
+        var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("object_tool", schema) 
         { 
             Invoker = (args, ct) => Task.FromResult<object?>(new { Key = "Val" }) 
@@ -133,7 +128,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_CanceledToken_ThrowsOperationCanceledException()
     {
         var registry = new ToolRegistry();
-        var schema = new Schema.JsonSchemaBuilder().Type<object>().Build();
+        var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("slow_tool", schema)
         {
             Invoker = async (args, ct) => { await Task.Delay(5000, ct); return "Done"; }

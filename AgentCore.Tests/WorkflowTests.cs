@@ -11,7 +11,7 @@ using AgentCore.Memory;
 using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 

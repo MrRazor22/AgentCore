@@ -6,10 +6,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.LLM;
 using AgentCore.Tools;
 using AgentCore.LLM.Schema;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 

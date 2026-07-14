@@ -1,5 +1,4 @@
-using AgentCore.LLM.Conversation;
-using AgentCore.Schema;
+using AgentCore.LLM.Chat; 
 using AgentCore.Tools;
 
 namespace AgentCore.LLM;

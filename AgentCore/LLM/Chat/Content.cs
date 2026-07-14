@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace AgentCore.LLM.Conversation;
+namespace AgentCore.LLM.Chat;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(Text), "text")]

@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Xunit;
 using AgentCore.Tools;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 
@@ -107,7 +107,7 @@ public class ToolingTests
 
     private class NullNameTool : Tool
     {
-        public NullNameTool(string name) : base(name, "desc", new Schema.JsonSchemaBuilder().Type<object>().Build()) { }
+        public NullNameTool(string name) : base(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build()) { }
         public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Task.FromResult<object?>(null);
     }
 

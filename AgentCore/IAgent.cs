@@ -5,7 +5,7 @@ using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using AgentCore.LLM.Schema;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore;
 

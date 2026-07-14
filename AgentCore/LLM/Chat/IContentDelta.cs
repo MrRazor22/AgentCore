@@ -1,4 +1,4 @@
-namespace AgentCore.LLM;
+namespace AgentCore.LLM.Chat;
 
 public interface IContentDelta { }
 

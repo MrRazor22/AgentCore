@@ -6,9 +6,8 @@ using Xunit;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
-using AgentCore.LLM;
 using AgentCore.Tools;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 

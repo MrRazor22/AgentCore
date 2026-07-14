@@ -1,8 +1,5 @@
-using AgentCore.Schema;
+using AgentCore.LLM.Chat;
 using AgentCore.Tools;
-using AgentCore.LLM;
-using Xunit;
-using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

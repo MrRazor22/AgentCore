@@ -7,7 +7,7 @@ using Xunit;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 

@@ -1,11 +1,9 @@
-using AgentCore.Schema;
 using AgentCore.LLM;
+using AgentCore.LLM.Chat;
 using AgentCore.Memory;
-using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using AgentCore.LLM.Conversation;
 
 namespace AgentCore;
 

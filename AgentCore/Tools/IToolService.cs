@@ -1,4 +1,4 @@
-using AgentCore.LLM.Conversation;
+using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
