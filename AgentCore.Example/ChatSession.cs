@@ -41,12 +41,15 @@ public class ChatSession
     public void Rebuild(List<Message> seedMessages)
     {
         Memory = new PersistentMemoryLayer(SessionFile);
+        var tokenCounter = new ApproximateTokenCounter();
 
         Agent = AgentCore.Agent.Create()
             .AddTornado(_apiKey, new[] { new LLMMetadata(_modelName, 128000) }, _baseUrl)
             .WithTools<ExampleTools>()
+            .WithTokenCounter(tokenCounter)
             .AddMemoryLayer(Memory.Initialize)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
+            .AddLLMLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter, 128000))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
