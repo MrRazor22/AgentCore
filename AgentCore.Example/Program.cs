@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Example;
@@ -26,7 +27,14 @@ internal class Program
         Console.WriteLine();
 
         // 1. Resolve LLM Configuration
-        var apiKey = Environment.GetEnvironmentVariable("LLM_API_KEY");
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        var apiKey = Environment.GetEnvironmentVariable("LLM_API_KEY") 
+                     ?? configuration["LLM:ApiKey"];
+
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -39,8 +47,14 @@ internal class Program
             }
         }
 
-        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") ?? "qwen/qwen3.5-9b";
-        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL") ?? "http://127.0.0.1:1234";
+        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") 
+                        ?? configuration["LLM:Model"] 
+                        ?? "qwen/qwen3.5-9b";
+
+        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL") 
+                         ?? configuration["LLM:BaseUrl"] 
+                         ?? "http://127.0.0.1:1234";
+
         Uri? baseUrl = null;
         if (!string.IsNullOrWhiteSpace(baseUrlStr))
         {
