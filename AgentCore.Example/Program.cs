@@ -195,25 +195,7 @@ internal class Program
                 break;
 
             case "/history":
-                var history = session.Memory.GetLocalMessages();
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("\n--- Conversation Message History ---");
-                if (history.Count == 0)
-                {
-                    Console.WriteLine("(Empty)");
-                }
-                else
-                {
-                    for (int i = 0; i < history.Count; i++)
-                    {
-                        var msg = history[i];
-                        var summary = string.Join(" ", msg.Contents.Select(c => c.ForLlm()));
-                        if (summary.Length > 80) summary = summary[..77] + "...";
-                        Console.WriteLine($"[{i}] {msg.Role}: {summary}");
-                    }
-                }
-                Console.WriteLine("------------------------------------\n");
-                Console.ResetColor();
+                PrintHistory(session);
                 break;
 
             case "/revert":
@@ -279,6 +261,7 @@ internal class Program
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine($"Session history loaded successfully from '{argument}'.");
                     Console.ResetColor();
+                    PrintHistory(session, limit: 5);
                 }
                 catch (Exception ex)
                 {
@@ -294,6 +277,34 @@ internal class Program
                 Console.ResetColor();
                 break;
         }
+    }
+
+    private static void PrintHistory(ChatSession session, int limit = int.MaxValue)
+    {
+        var history = session.Memory.GetLocalMessages();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("\n--- Conversation Message History ---");
+        if (history.Count == 0)
+        {
+            Console.WriteLine("(Empty)");
+        }
+        else
+        {
+            int start = Math.Max(0, history.Count - limit);
+            if (start > 0)
+            {
+                Console.WriteLine($"... [restored {start} older messages] ...");
+            }
+            for (int i = start; i < history.Count; i++)
+            {
+                var msg = history[i];
+                var summary = string.Join(" ", msg.Contents.Select(c => c.ForLlm()));
+                if (summary.Length > 80) summary = summary[..77] + "...";
+                Console.WriteLine($"[{i}] {msg.Role}: {summary}");
+            }
+        }
+        Console.WriteLine("------------------------------------\n");
+        Console.ResetColor();
     }
 
     private static void PrintHelp()
