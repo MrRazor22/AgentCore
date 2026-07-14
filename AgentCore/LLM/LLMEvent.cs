@@ -20,7 +20,6 @@ public sealed record TokenUsageEvent(
 
 public sealed record MetaDataEvent(
     FinishReason FinishReason,
-    string? ModelName,
     TimeSpan? Duration = null
 ) : LLMEvent;
 

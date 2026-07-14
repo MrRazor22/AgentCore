@@ -86,7 +86,6 @@ internal sealed class LLMService : ILLMService
         int? inputTokens = null;
         int? outputTokens = null;
         int? reasoningTokens = null;
-        string? modelName = null;
         FinishReason? finishReason = null;
         int currentToolIndex = -1;
         int lastYieldedInput = 0;
@@ -171,7 +170,6 @@ internal sealed class LLMService : ILLMService
                             if (m.InputTokens.HasValue && m.InputTokens != inputTokens) { inputTokens = m.InputTokens; tokenUpdated = true; }
                             if (m.OutputTokens.HasValue && m.OutputTokens != outputTokens) { outputTokens = m.OutputTokens; tokenUpdated = true; }
                             if (m.ReasoningTokens.HasValue && m.ReasoningTokens != reasoningTokens) { reasoningTokens = m.ReasoningTokens; tokenUpdated = true; }
-                            if (m.Model is not null) modelName = m.Model;
                             if (m.FinishReason.HasValue) finishReason = m.FinishReason;
 
                             if (tokenUpdated)
@@ -229,7 +227,6 @@ internal sealed class LLMService : ILLMService
 
         yield return new MetaDataEvent(
             finishReason ?? FinishReason.Stop,
-            modelName,
             sw.Elapsed);
 
         sw.Stop();
