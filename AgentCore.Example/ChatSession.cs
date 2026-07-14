@@ -46,6 +46,7 @@ public class ChatSession
             .AddTornado(_apiKey, new[] { new LLMMetadata(_modelName, 128000) }, _baseUrl)
             .WithTools<ExampleTools>()
             .AddMemoryLayer(Memory.Initialize)
+            .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
