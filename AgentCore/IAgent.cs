@@ -117,7 +117,6 @@ public sealed partial class Agent : IAgent
             new KeyValuePair<string, object?>("Agent", nameof(Agent))
         });
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var userMessage = new Message(Role.User, input);
 
         var fixedMessages = new List<Message>();
@@ -141,7 +140,7 @@ public sealed partial class Agent : IAgent
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during memory recall. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
+            _logger.LogError(ex, "Agent failed during memory recall.");
             throw;
         }
 
@@ -168,11 +167,11 @@ public sealed partial class Agent : IAgent
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during memory remember. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
+            _logger.LogError(ex, "Agent failed during memory remember.");
             throw;
         }
 
-        _logger.LogInformation("Agent completed. DurationMs={DurationMs}", stopwatch.ElapsedMilliseconds);
+        _logger.LogInformation("Agent completed.");
     }
 }
 
