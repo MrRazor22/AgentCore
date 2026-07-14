@@ -138,7 +138,7 @@ public sealed partial class Agent : IAgent
                 tokenBudget,
                 ct).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex)    
         {
             _logger.LogError(ex, "Agent failed during memory recall.");
             throw;

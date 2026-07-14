@@ -117,7 +117,7 @@ public class TornadoLLMProvider : ILLMProvider
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: activeModelName), ct);
+                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens), ct);
                         }
                     }
                 }, ct);
