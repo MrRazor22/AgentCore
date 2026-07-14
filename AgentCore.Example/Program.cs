@@ -30,21 +30,17 @@ internal class Program
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.Write("Enter LLM API Key: ");
+            Console.Write("Enter LLM API Key (Default: lm-studio): ");
             Console.ResetColor();
             apiKey = Console.ReadLine();
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                apiKey = "lm-studio";
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Error: API Key is required to run the example.");
-            Console.ResetColor();
-            return;
-        }
-
-        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") ?? "gpt-4o-mini";
-        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL");
+        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") ?? "qwen/qwen3.5-9b";
+        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL") ?? "http://127.0.0.1:1234";
         Uri? baseUrl = null;
         if (!string.IsNullOrWhiteSpace(baseUrlStr))
         {
