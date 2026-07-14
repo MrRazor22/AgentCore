@@ -4,12 +4,12 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.Schema;
 using AgentCore.LLM;
 using AgentCore.Tools;
+using AgentCore.LLM.Schema;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

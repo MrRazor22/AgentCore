@@ -1,4 +1,4 @@
-using AgentCore.Conversation;
+using AgentCore.LLM.Conversation;
 using AgentCore.Schema;
 using AgentCore.Tools;
 

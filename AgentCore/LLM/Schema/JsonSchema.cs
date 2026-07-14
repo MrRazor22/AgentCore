@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Schema;
+namespace AgentCore.LLM.Schema;
 
 public sealed class JsonSchema
 {

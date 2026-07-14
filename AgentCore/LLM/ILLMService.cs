@@ -1,5 +1,3 @@
-using AgentCore.Conversation;
-using AgentCore.Schema;
 using AgentCore.LLM.Exceptions;
 using AgentCore.LLM;
 using AgentCore.Tools;
@@ -9,6 +7,8 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
+using AgentCore.LLM.Schema;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.LLM;
 

@@ -1,5 +1,5 @@
-using AgentCore.Conversation;
 using AgentCore.LLM;
+using AgentCore.LLM.Conversation;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;

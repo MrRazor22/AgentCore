@@ -1,5 +1,5 @@
-using AgentCore.Conversation;
 using AgentCore.LLM;
+using AgentCore.LLM.Conversation;
 using AgentCore.LLM.Exceptions;
 using LlmTornado.Chat;
 using LlmTornado.Code;
@@ -95,12 +95,12 @@ internal static class TornadoAdapterExtensions
                 }
             case Role.Assistant:
                 {
-                    var assistantContent = string.Join("\n", msg.Contents.Where(c => c is not AgentCore.Conversation.ToolCall).Select(c => c.ForLlm()));
+                    var assistantContent = string.Join("\n", msg.Contents.Where(c => c is not ToolCall).Select(c => c.ForLlm()));
                     var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant)
                     {
                         Content = string.IsNullOrEmpty(assistantContent) ? null : assistantContent
                     };
-                    var toolCalls = msg.Contents.OfType<AgentCore.Conversation.ToolCall>().ToList();
+                    var toolCalls = msg.Contents.OfType<ToolCall>().ToList();
                     if (toolCalls.Any())
                     {
                         assistantMsg.ToolCalls = toolCalls.Select(tc => new LlmTornado.ChatFunctions.ToolCall
@@ -118,7 +118,7 @@ internal static class TornadoAdapterExtensions
                 }
             case Role.Tool:
                 {
-                    var toolResult = msg.Contents.OfType<AgentCore.Conversation.ToolResult>().FirstOrDefault();
+                    var toolResult = msg.Contents.OfType<ToolResult>().FirstOrDefault();
                     var contentStr = toolResult?.Result?.ForLlm() ?? string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
                     return new ChatMessage(ChatMessageRoles.Tool, contentStr ?? string.Empty)
                     {

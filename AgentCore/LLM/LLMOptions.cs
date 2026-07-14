@@ -1,4 +1,4 @@
-using AgentCore.Schema;
+using AgentCore.LLM.Schema;
 
 namespace AgentCore.LLM;
 

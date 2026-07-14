@@ -6,12 +6,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using AgentCore;
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

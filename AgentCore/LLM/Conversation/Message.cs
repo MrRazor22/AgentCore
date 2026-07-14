@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace AgentCore.Conversation;
+namespace AgentCore.LLM.Conversation;
 
 public class Message
 {

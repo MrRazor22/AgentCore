@@ -1,8 +1,8 @@
 using AgentCore.Schema;
 using AgentCore.Tools;
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using Xunit;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 
@@ -86,13 +86,13 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public Task RememberAsync(IReadOnlyList<Conversation.Message> completedTurn, CancellationToken ct = default)
+        public Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
         {
             CallLog.Add("Remember");
             return inner.RememberAsync(completedTurn, ct);
         }
 
-        public Task<IReadOnlyList<Conversation.Message>> RecallAsync(Conversation.Message currentInput, int? maxTokens, CancellationToken ct = default)
+        public Task<IReadOnlyList<Message>> RecallAsync(Message currentInput, int? maxTokens, CancellationToken ct = default)
         {
             CallLog.Add("Recall");
             return inner.RecallAsync(currentInput, maxTokens, ct);

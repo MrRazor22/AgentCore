@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Xunit;
-using AgentCore.Conversation;
 using AgentCore.LLM;
-using AgentCore.Schema;
 using AgentCore.Tools;
+using AgentCore.LLM.Schema;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

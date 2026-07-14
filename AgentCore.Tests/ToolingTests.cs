@@ -4,8 +4,8 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Xunit;
-using AgentCore.Conversation;
 using AgentCore.Tools;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

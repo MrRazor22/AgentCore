@@ -1,4 +1,4 @@
-using AgentCore.Schema;
+using AgentCore.LLM.Schema;
 using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;

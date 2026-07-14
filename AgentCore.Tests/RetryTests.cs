@@ -4,11 +4,11 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using AgentCore;
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM.Exceptions;
 using AgentCore.LLM;
 using AgentCore.Tools;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Tests;
 

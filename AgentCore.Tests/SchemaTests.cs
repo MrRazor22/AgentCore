@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 using Xunit;
-using AgentCore.Schema;
+using AgentCore.LLM.Schema;
 
 namespace AgentCore.Tests;
 

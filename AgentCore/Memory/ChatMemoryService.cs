@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.LLM;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore.Memory;
 

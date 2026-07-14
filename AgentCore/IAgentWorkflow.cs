@@ -1,7 +1,7 @@
-using AgentCore.Conversation;
 using AgentCore.LLM;
+using AgentCore.LLM.Conversation;
 using AgentCore.LLM.Exceptions;
-using AgentCore.Schema;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

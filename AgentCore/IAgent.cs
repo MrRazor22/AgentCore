@@ -1,11 +1,11 @@
-using AgentCore.Conversation;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.Schema;
 using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
+using AgentCore.LLM.Schema;
+using AgentCore.LLM.Conversation;
 
 namespace AgentCore;
 
