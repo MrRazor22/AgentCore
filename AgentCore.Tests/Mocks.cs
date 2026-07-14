@@ -19,6 +19,14 @@ public class MockLLMProvider : ILLMProvider
     
     public int ContextWindow { get; set; } = 2000;
     
+    public Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
+    {
+        return Task.FromResult(new LLMMetadata(
+            Id: modelName ?? "mock-model",
+            ContextWindow: ContextWindow
+        ));
+    }
+    
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
     public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();
     public List<JsonSchema?> CapturedResponseSchemas { get; } = new();

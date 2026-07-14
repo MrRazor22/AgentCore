@@ -16,18 +16,24 @@ public static class TornadoProvider
     /// <param name="modelName">Model name (e.g., "gpt-4o", "gpt-4o-mini")</param>
     /// <param name="baseUrl">Optional base URL for the API endpoint</param>
     /// <returns>An ILLMProvider instance</returns>
-    public static ILLMProvider CreateLLMProvider(string apiKey, string modelName, Uri? baseUrl = null)
+    public static ILLMProvider CreateLLMProvider(
+        string apiKey, 
+        IReadOnlyList<LLMMetadata> models,
+        Uri? baseUrl = null)
     {
         var api = new TornadoApi(baseUrl, apiKey);
-        var model = new ChatModel(modelName);
-        return new TornadoLLMProvider(api, model);
+        return new TornadoLLMProvider(api, models);
     }
 }
 
 
 public static class TornadoAgentBuilderExtensions
 {
-    public static Agent.Builder AddTornado(this Agent.Builder builder, string apiKey, string modelName, Uri? baseUrl = null)
-        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, baseUrl));
+    public static Agent.Builder AddTornado(
+        this Agent.Builder builder, 
+        string apiKey, 
+        IReadOnlyList<LLMMetadata> models,
+        Uri? baseUrl = null)
+        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, models, baseUrl));
 
 }

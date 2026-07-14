@@ -1,12 +1,8 @@
 using AgentCore.Conversation;
-using AgentCore.Schema;
 using AgentCore.LLM;
-using AgentCore.LLM.Exceptions;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;
-using LlmTornado.Code;
-using LlmTornado.Common;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;
@@ -14,17 +10,44 @@ namespace AgentCore.Providers.Tornado;
 public class TornadoLLMProvider : ILLMProvider
 {
     private readonly TornadoApi _api;
-    private readonly ChatModel _model;
+    private readonly ChatModel _defaultModel;
     private readonly LLMOptions _options;
 
-    public TornadoLLMProvider(TornadoApi api, ChatModel model, LLMOptions? options = null)
+    private readonly Dictionary<string, LLMMetadata> _models = new(StringComparer.OrdinalIgnoreCase);
+
+    public TornadoLLMProvider(
+        TornadoApi api, 
+        IReadOnlyList<LLMMetadata> models,
+        LLMOptions? options = null)
     {
+        if (models == null || models.Count == 0)
+        {
+            throw new ArgumentException("At least one model must be provided to the LLM provider configuration.", nameof(models));
+        }
+
         _api = api;
-        _model = model;
         _options = options ?? new LLMOptions();
+
+        foreach (var m in models)
+        {
+            _models[m.Id] = m;
+        }
+
+        var defaultMeta = models[0];
+        _defaultModel = new ChatModel(defaultMeta.Id);
     }
 
-    public int ContextWindow => _model.ContextTokens ?? throw new InvalidOperationException($"Model '{_model.Name}' does not expose a context window.");
+    public async Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
+    {
+        var name = modelName ?? _defaultModel.Name;
+
+        if (_models.TryGetValue(name, out var metadata))
+        {
+            return metadata;
+        }
+
+        throw new InvalidOperationException($"LLMMetadata for model '{name}' could not be resolved. Please supply it in the models collection passed to the provider constructor.");
+    }
 
     public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -32,86 +55,20 @@ public class TornadoLLMProvider : ILLMProvider
         IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        var activeModelName = options?.Model ?? _defaultModel.Name;
         var request = new ChatRequest
         {
-            Model = _model,
+            Model = new ChatModel(activeModelName),
         };
 
-        if (tools is { Count: > 0 })
-        {
-            request.Tools = tools.Select(t =>
-                new LlmTornado.Common.Tool(new ToolFunction(t.Name, t.Description, t.ParametersSchema.ToString()))
-            ).ToList();
-        }
-
-        var temp = options?.Temperature ?? _options.Temperature;
-        var maxTokens = options?.MaxOutputTokens ?? _options.MaxOutputTokens;
-        var responseSchema = options?.ResponseSchema ?? _options.ResponseSchema;
-
-        if (temp.HasValue) request.Temperature = temp.Value;
-        if (maxTokens.HasValue) request.MaxTokens = maxTokens.Value;
-        
-        if (responseSchema != null)
-        {
-            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", responseSchema.ToJsonElement());
-        }
-
-        request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
+        var activeOptions = options ?? _options;
+        request.ApplyOptions(activeOptions, tools);
 
         var chat = _api.Chat.CreateConversation(request);
 
         foreach (var msg in messages)
         {
-            switch (msg.Role)
-            {
-                case Role.System:
-                    {
-                        var contentStr = string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
-                        chat.AppendMessage(new ChatMessage(ChatMessageRoles.System, contentStr));
-                    }
-                    break;
-                case Role.User:
-                    {
-                        var contentStr = string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
-                        chat.AppendMessage(new ChatMessage(ChatMessageRoles.User, contentStr));
-                    }
-                    break;
-                case Role.Assistant:
-                    {
-                        var assistantContent = string.Join("\n", msg.Contents.Where(c => c is not AgentCore.Conversation.ToolCall).Select(c => c.ForLlm()));
-                        var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant)
-                        {
-                            Content = string.IsNullOrEmpty(assistantContent) ? null : assistantContent
-                        };
-                        var toolCalls = msg.Contents.OfType<AgentCore.Conversation.ToolCall>().ToList();
-                        if (toolCalls.Any())
-                        {
-                            assistantMsg.ToolCalls = toolCalls.Select(tc => new LlmTornado.ChatFunctions.ToolCall
-                            {
-                                Id = tc.Id,
-                                Type = "function",
-                                FunctionCall = new LlmTornado.ChatFunctions.FunctionCall
-                                {
-                                    Name = tc.Name,
-                                    Arguments = tc.Arguments.ToString()
-                                }
-                            }).ToList();
-                        }
-                        chat.AppendMessage(assistantMsg);
-                    }
-                    break;
-                case Role.Tool:
-                    {
-                        var toolResult = msg.Contents.OfType<AgentCore.Conversation.ToolResult>().FirstOrDefault();
-                        var contentStr = toolResult?.Result?.ForLlm() ?? string.Join("\n", msg.Contents.Select(c => c.ForLlm()));
-                        var toolMsg = new ChatMessage(ChatMessageRoles.Tool, contentStr ?? string.Empty)
-                        {
-                            ToolCallId = toolResult?.CallId
-                        };
-                        chat.AppendMessage(toolMsg);
-                    }
-                    break;
-            }
+            chat.AppendMessage(msg.ToTornadoMessage());
         }
 
         var channelOptions = new System.Threading.Channels.BoundedChannelOptions(1024)
@@ -160,24 +117,14 @@ public class TornadoLLMProvider : ILLMProvider
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: _model.Name), ct);
+                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens, Model: activeModelName), ct);
                         }
                     }
                 }, ct);
             }
             catch (Exception ex)
             {
-                var translated = ex;
-                if (IsContextLimitError(ex))
-                {
-                    translated = new ContextLengthExceededException(ex.Message, ex);
-                }
-                else if (IsTransientError(ex))
-                {
-                    translated = new RetryableException(ex.Message, ex);
-                }
-
-                channel.Writer.TryComplete(translated);
+                channel.Writer.TryComplete(ex.TranslateException());
             }
             finally
             {
@@ -192,66 +139,6 @@ public class TornadoLLMProvider : ILLMProvider
                 yield return item;
             }
         }
-    }
-
-    private static bool IsContextLimitError(Exception ex)
-    {
-        var current = ex;
-        while (current is not null)
-        {
-            var msg = current.Message;
-            if (msg is not null && (
-                msg.Contains("context_length_exceeded", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("maximum context length", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("token limit exceeded", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("context window limit", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-            current = current.InnerException;
-        }
-        return false;
-    }
-
-    private static bool IsTransientError(Exception ex)
-    {
-        var current = ex;
-        while (current is not null)
-        {
-            if (current is TimeoutException || 
-                current is System.IO.IOException || 
-                current is System.Net.Sockets.SocketException)
-            {
-                return true;
-            }
-
-            if (current is HttpRequestException httpEx && httpEx.StatusCode.HasValue)
-            {
-                var status = httpEx.StatusCode.Value;
-                if (status == System.Net.HttpStatusCode.TooManyRequests || 
-                    status >= System.Net.HttpStatusCode.InternalServerError)
-                {
-                    return true;
-                }
-            }
-
-            var msg = current.Message;
-            if (msg is not null && (
-                msg.Contains("429", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("503", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("504", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("502", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("500", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("overloaded", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-
-            current = current.InnerException;
-        }
-        return false;
     }
 }
 

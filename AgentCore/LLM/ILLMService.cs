@@ -53,7 +53,8 @@ internal sealed class LLMService : ILLMService
         IReadOnlyList<Message> prompt,
         CancellationToken ct = default)
     {
-        int totalLimit = _provider.ContextWindow;
+        var modelInfo = await _provider.GetModelInfoAsync(null, ct).ConfigureAwait(false);
+        int totalLimit = modelInfo.ContextWindow;
         int fixedTokens = await _tokenCounter.EstimateAsync(prompt, ct).ConfigureAwait(false);
         int toolTokens = 0;
         if (_toolRegistry.Tools != null && _toolRegistry.Tools.Count > 0)
