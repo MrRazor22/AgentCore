@@ -13,15 +13,15 @@ namespace AgentCore.LLM;
 
 internal sealed class LLMService : ILLMService
 {
-    private readonly ILLMProvider _provider;
+    private readonly ILLM _provider;
     private readonly ITokenCounter _tokenCounter;
     private readonly int _maxRetries;
     private readonly ILogger<LLMService> _logger;
 
-    internal ILLMProvider Provider => _provider;
+    internal ILLM Provider => _provider;
 
     public LLMService(
-        ILLMProvider provider,
+        ILLM provider,
         ITokenCounter tokenCounter, 
         int maxRetries = 3,
         ILogger<LLMService>? logger = null)

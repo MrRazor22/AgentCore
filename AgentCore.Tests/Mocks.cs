@@ -12,7 +12,7 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 
-public class MockLLMProvider : ILLMProvider
+public class MockLLMProvider : ILLM
 {
     private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IContentDelta>>> _responses = new();
     
@@ -103,7 +103,7 @@ public class MockLLMProvider : ILLMProvider
     }
 }
 
-public class MockMemoryProvider : IMemoryProvider
+public class MockMemoryProvider : IMemory
 {
     public List<string> Saved { get; } = new();
     public string RecallResult { get; set; } = "";

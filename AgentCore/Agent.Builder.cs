@@ -16,12 +16,12 @@ public sealed partial class Agent
         private IContent? _instructions;
 
         private IContextService? _contextService;
-        private IMemoryProvider? _memoryProvider;
+        private IMemory? _memoryProvider;
         private IToolService? _tooling;
         private ILLMService? _llm;
         private ITokenCounter? _tokenCounter;
         private ILoggerFactory? _loggerFactory;
-        private ILLMProvider? _provider;
+        private ILLM? _provider;
         private Func<ILLMService, IToolService, IAgentWorkflow>? _workflowFactory;
 
         private readonly List<Func<IContextService, IContextService>> _contextLayers = [];
@@ -63,7 +63,7 @@ public sealed partial class Agent
         public Builder UseContext(IContextService contextService) { _contextService = contextService; return this; } 
         public Builder AddContextLayer(Func<IContextService, IContextService> layer) { _contextLayers.Add(layer); return this; }
 
-        public Builder WithMemory(IMemoryProvider memoryProvider) { _memoryProvider = memoryProvider; return this; }
+        public Builder WithMemory(IMemory memoryProvider) { _memoryProvider = memoryProvider; return this; }
 
         public Builder UseTooling(IToolService tooling) { _tooling = tooling; return this; }
         public Builder AddToolingLayer(Func<IToolService, IToolService> layer) { _toolingLayers.Add(layer); return this; }
@@ -80,7 +80,7 @@ public sealed partial class Agent
             return this;
         }
         
-        public Builder WithProvider(ILLMProvider provider) { _provider = provider; return this; }
+        public Builder WithProvider(ILLM provider) { _provider = provider; return this; }
 
         public Builder UseWorkflow(Func<ILLMService, IToolService, IAgentWorkflow> factory)
         {
@@ -119,7 +119,7 @@ public sealed partial class Agent
             foreach (var layer in _llmLayers)
                 pipeline = layer(pipeline);
 
-            IMemoryProvider memoryProvider = _memoryProvider ?? new InMemoryMemoryProvider();
+            IMemory memoryProvider = _memoryProvider ?? new InMemoryMemoryProvider();
             IContextService contextService = _contextService;
             if (contextService == null)
             {
@@ -128,7 +128,7 @@ public sealed partial class Agent
                 {
                     throw new InvalidOperationException("Cannot resolve ILLMProvider for default context service.");
                 }
-                contextService = new ChatContextService(tokenCounter, memoryProvider, providerForContext);
+                contextService = new ContextService(tokenCounter, memoryProvider, providerForContext);
             }
             foreach (var layer in _contextLayers)
                 contextService = layer(contextService);

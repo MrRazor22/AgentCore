@@ -12,7 +12,7 @@ public static class TornadoProvider
     /// <summary>
     /// Creates an LLM provider using Tornado API.
     /// </summary>
-    public static ILLMProvider CreateLLMProvider(
+    public static ILLM CreateLLMProvider(
         string apiKey, 
         string modelName,
         LLMCapabilities? capabilities = null,

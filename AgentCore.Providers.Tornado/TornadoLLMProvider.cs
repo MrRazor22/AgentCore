@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;
 
-public class TornadoLLMProvider : ILLMProvider
+public class TornadoLLMProvider : ILLM
 {
     private readonly TornadoApi _api;
     private readonly ChatModel _defaultModel;

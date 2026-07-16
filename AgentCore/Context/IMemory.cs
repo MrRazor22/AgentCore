@@ -2,13 +2,13 @@ using System.Text;
 
 namespace AgentCore.Memory;
 
-public interface IMemoryProvider
+public interface IMemory
 {
     Task RememberAsync(string content, CancellationToken ct = default);
     Task<string> RecallAsync(string query, CancellationToken ct = default);
 }
 
-public sealed class InMemoryMemoryProvider : IMemoryProvider
+public sealed class InMemoryMemoryProvider : IMemory
 {
     private readonly StringBuilder _store = new();
 

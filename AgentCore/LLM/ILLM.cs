@@ -9,7 +9,7 @@ public sealed class LLMCapabilities
     public int ReservedTokens { get; set; } = 2048;
 }
 
-public interface ILLMProvider
+public interface ILLM
 {
     LLMCapabilities GetCapabilities();
 

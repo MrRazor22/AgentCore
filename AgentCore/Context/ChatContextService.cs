@@ -9,18 +9,18 @@ using AgentCore.Tools;
 
 namespace AgentCore.Memory;
 
-internal sealed class ChatContextService : IContextService
+internal sealed class ContextService : IContextService
 {
     private readonly List<Message> _history = new();
     private readonly ITokenCounter _tokenCounter;
-    private readonly IMemoryProvider _memoryProvider;
-    private readonly ILLMProvider _llmProvider;
+    private readonly IMemory _memoryProvider;
+    private readonly ILLM _llmProvider;
     private readonly double _compressionTarget;
 
-    public ChatContextService(
+    public ContextService(
         ITokenCounter tokenCounter,
-        IMemoryProvider memoryProvider,
-        ILLMProvider llmProvider,
+        IMemory memoryProvider,
+        ILLM llmProvider,
         double compressionTarget = 0.70)
     {
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));

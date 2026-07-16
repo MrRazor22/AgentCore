@@ -19,7 +19,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ChatContextService(tokenCounter, memoryProvider, provider);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider);
 
         var history = new List<Message>
         {
@@ -50,7 +50,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2068 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ChatContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message that will be pruned."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
