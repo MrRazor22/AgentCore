@@ -26,12 +26,12 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var memory = new MockMemory();
+        var memory = new MockContextService();
         memory.History.Add(new Message(Role.User, new Text("Old message")));
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .UseMemory(memory)
+            .UseContext(memory)
             .Build();
 
         // Act
@@ -59,10 +59,10 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Model reply"));
 
-        var memory = new MockMemory();
+        var memory = new MockContextService();
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .UseMemory(memory)
+            .UseContext(memory)
             .Build();
 
         // Act

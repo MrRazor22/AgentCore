@@ -9,11 +9,13 @@ namespace AgentCore.Tools;
 
 public interface IToolService
 {
+    IReadOnlyList<Tool> GetTools();
     Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class ToolService : IToolService
 {
+    private readonly IReadOnlyList<Tool> _toolList;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<ToolService> _logger;
 
@@ -21,9 +23,12 @@ internal sealed class ToolService : IToolService
         IReadOnlyList<Tool> tools,
         ILogger<ToolService>? logger = null)
     {
-        _tools = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        _toolList = tools ?? Array.Empty<Tool>();
+        _tools = _toolList.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
         _logger = logger ?? NullLogger<ToolService>.Instance;
     }
+
+    public IReadOnlyList<Tool> GetTools() => _toolList;
 
     public async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {

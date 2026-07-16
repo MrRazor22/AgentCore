@@ -105,7 +105,7 @@ internal class Program
 
                 await foreach (var evt in session.Agent.InvokeStreamingAsync(contentInput, ctSource.Token))
                 {
-                    if (evt is ReasoningEvent reasoning)
+                    if (evt is Reasoning reasoning)
                     {
                         if (isFirstReasoningDelta)
                         {
@@ -113,9 +113,9 @@ internal class Program
                             Console.Write("\n[Thinking: ");
                             isFirstReasoningDelta = false;
                         }
-                        Console.Write(reasoning.Delta);
+                        Console.Write(reasoning.Thought);
                     }
-                    else if (evt is TextEvent text)
+                    else if (evt is Text text)
                     {
                         if (!isFirstReasoningDelta)
                         {
@@ -130,9 +130,9 @@ internal class Program
                             Console.ResetColor();
                             isFirstTextDelta = false;
                         }
-                        Console.Write(text.Delta);
+                        Console.Write(text.Value);
                     }
-                    else if (evt is ToolCallEvent toolCall)
+                    else if (evt is ToolCall toolCall)
                     {
                         if (!isFirstReasoningDelta)
                         {
@@ -141,7 +141,7 @@ internal class Program
                         }
 
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine($"\n[Agent calling tool: {toolCall.Call.Name}({toolCall.Call.Arguments})]");
+                        Console.WriteLine($"\n[Agent calling tool: {toolCall.Name}({toolCall.Arguments})]");
                         Console.ResetColor();
                     }
                     else if (evt is ToolResultEvent toolResult)

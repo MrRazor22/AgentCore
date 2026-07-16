@@ -13,28 +13,24 @@ namespace AgentCore.LLM;
 
 internal sealed class LLMService : ILLMService
 {
-    private readonly ILLMService _provider;
-    private readonly IReadOnlyList<Tool> _tools;
+    private readonly ILLMProvider _provider;
     private readonly ITokenCounter _tokenCounter;
     private readonly int _maxRetries;
     private readonly ILogger<LLMService> _logger;
 
+    internal ILLMProvider Provider => _provider;
+
     public LLMService(
-        ILLMService provider,
-        IReadOnlyList<Tool> tools,
+        ILLMProvider provider,
         ITokenCounter tokenCounter, 
         int maxRetries = 3,
         ILogger<LLMService>? logger = null)
     {
         _provider = provider;
-        _tools = tools;
         _tokenCounter = tokenCounter; 
         _maxRetries = maxRetries;
         _logger = logger ?? NullLogger<LLMService>.Instance;
     }
-
-    public Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
-        => _provider.GetModelInfoAsync(modelName, ct);
 
     public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -51,16 +47,17 @@ internal sealed class LLMService : ILLMService
     {
         var sw = Stopwatch.StartNew();
 
-        var activeTools = tools ?? _tools;
-        var toolNames = activeTools?.Select(t => t.Name).ToList() ?? [];
+        var toolNames = tools?.Select(t => t.Name).ToList() ?? [];
         var toolNamesStr = string.Join(", ", toolNames);
 
         _logger.LogTrace("LLM request: Provider={Provider} Tools=[{ToolNames}]", _provider.GetType().Name, toolNamesStr);
 
+        var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
         int? inputTokens = null;
         int? outputTokens = null;
         int? reasoningTokens = null;
         FinishReason? finishReason = null;
+        int currentToolIndex = -1;
         int lastYieldedInput = 0;
         int lastYieldedOutput = 0;
         int? lastYieldedReasoning = null;
@@ -70,7 +67,7 @@ internal sealed class LLMService : ILLMService
 
         int maxRetries = _maxRetries;
         int attempt = 0;
-        IAsyncEnumerator<LLMEvent>? enumerator = null;
+        IAsyncEnumerator<IContentDelta>? enumerator = null;
         bool hasYielded = false;
 
         while (true)
@@ -81,7 +78,7 @@ internal sealed class LLMService : ILLMService
                 bool hasMore = false;
                 try
                 {
-                    var content = _provider.StreamAsync(messages, options, activeTools, ct);
+                    var content = _provider.StreamAsync(messages, options, tools, ct);
                     enumerator = content.GetAsyncEnumerator(ct);
                     hasMore = await enumerator.MoveNextAsync().ConfigureAwait(false);
                 }
@@ -106,22 +103,43 @@ internal sealed class LLMService : ILLMService
 
                     switch (delta)
                     {
-                        case Text text:
+                        case TextDelta text:
                             textAccumulator.Append(text.Value);
                             break;
-                        case Reasoning reasoning:
-                            reasoningAccumulator.Append(reasoning.Thought);
+
+                        case ReasoningDelta reasoning:
+                            reasoningAccumulator.Append(reasoning.Value);
                             break;
-                        case ToolCall toolCall:
-                            yield return toolCall;
+
+                        case ToolCallDelta tc:
+                            if (tc.Index != currentToolIndex && currentToolIndex != -1)
+                            {
+                                if (toolCalls.TryGetValue(currentToolIndex, out var prev))
+                                {
+                                    var call = BuildToolCall(prev.id, prev.name, prev.args.ToString());
+                                    if (call != null)
+                                    {
+                                        yield return call;
+                                    }
+                                    toolCalls.Remove(currentToolIndex);
+                                }
+                            }
+
+                            currentToolIndex = tc.Index;
+
+                            if (!toolCalls.TryGetValue(tc.Index, out var entry))
+                                entry = ("", "", new StringBuilder());
+                            if (!string.IsNullOrEmpty(tc.Id)) entry.id = tc.Id;
+                            if (!string.IsNullOrEmpty(tc.Name)) entry.name = tc.Name;
+                            if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
+                            toolCalls[tc.Index] = entry;
                             break;
-                        case TokenUsage usage:
-                            if (usage.InputTokens > 0) inputTokens = usage.InputTokens;
-                            if (usage.OutputTokens > 0) outputTokens = usage.OutputTokens;
-                            if (usage.ReasoningTokens.HasValue) reasoningTokens = usage.ReasoningTokens;
-                            break;
-                        case MetaDataEvent meta:
-                            finishReason = meta.FinishReason;
+
+                        case MetaDelta meta:
+                            if (meta.InputTokens.HasValue && meta.InputTokens > 0) inputTokens = meta.InputTokens;
+                            if (meta.OutputTokens.HasValue && meta.OutputTokens > 0) outputTokens = meta.OutputTokens;
+                            if (meta.ReasoningTokens.HasValue) reasoningTokens = meta.ReasoningTokens;
+                            if (meta.FinishReason.HasValue) finishReason = meta.FinishReason;
                             break;
                     }
 
@@ -140,6 +158,15 @@ internal sealed class LLMService : ILLMService
             }
         }
 
+        if (currentToolIndex != -1 && toolCalls.TryGetValue(currentToolIndex, out var lastEntry))
+        {
+            var call = BuildToolCall(lastEntry.id, lastEntry.name, lastEntry.args.ToString());
+            if (call != null)
+            {
+                yield return call;
+            }
+        }
+
         if (reasoningAccumulator.Length > 0)
         {
             yield return new Reasoning(reasoningAccumulator.ToString());
@@ -152,7 +179,7 @@ internal sealed class LLMService : ILLMService
 
         if (inputTokens.HasValue)
         {
-            _tokenCounter.RecordActualCount(messages, activeTools, inputTokens.Value);
+            _tokenCounter.RecordActualCount(messages, tools, inputTokens.Value);
         }
         else
         {
@@ -173,5 +200,17 @@ internal sealed class LLMService : ILLMService
         sw.Stop();
         _logger.LogDebug("LLM call finished: {FinishReason} Duration={Ms}ms", finishReason, sw.ElapsedMilliseconds);
         _logger.LogTrace("Token usage: In={In} Out={Out} Reason={Reason}", inputTokens ?? 0, outputTokens ?? 0, reasoningTokens);
+    }
+
+    private static ToolCall? BuildToolCall(string id, string name, string argsStr)
+    {
+        JsonObject? parsedArgs = null;
+        try
+        {
+            parsedArgs = JsonNode.Parse(argsStr)?.AsObject();
+        }
+        catch { /* ignore failed parse */ }
+
+        return new ToolCall(id, name, parsedArgs ?? new JsonObject());
     }
 }

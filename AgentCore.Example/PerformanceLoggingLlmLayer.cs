@@ -28,10 +28,7 @@ public class PerformanceLoggingLlmLayer : ILLMService
         _contextWindow = contextWindow;
     }
 
-    public Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
-    {
-        return _inner.GetModelInfoAsync(modelName, ct);
-    }
+
 
     public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,

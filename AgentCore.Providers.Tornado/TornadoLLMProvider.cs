@@ -7,49 +7,28 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;
 
-public class TornadoLLMProvider : ILLMService
+public class TornadoLLMProvider : ILLMProvider
 {
     private readonly TornadoApi _api;
     private readonly ChatModel _defaultModel;
     private readonly LLMOptions _options;
-
-    private readonly Dictionary<string, LLMMetadata> _models = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LLMCapabilities _capabilities;
 
     public TornadoLLMProvider(
         TornadoApi api, 
-        IReadOnlyList<LLMMetadata> models,
+        string modelName,
+        LLMCapabilities capabilities,
         LLMOptions? options = null)
     {
-        if (models == null || models.Count == 0)
-        {
-            throw new ArgumentException("At least one model must be provided to the LLM provider configuration.", nameof(models));
-        }
-
         _api = api;
+        _defaultModel = new ChatModel(modelName);
+        _capabilities = capabilities ?? new LLMCapabilities();
         _options = options ?? new LLMOptions();
-
-        foreach (var m in models)
-        {
-            _models[m.Id] = m;
-        }
-
-        var defaultMeta = models[0];
-        _defaultModel = new ChatModel(defaultMeta.Id);
     }
 
-    public async Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
-    {
-        var name = modelName ?? _defaultModel.Name;
+    public LLMCapabilities GetCapabilities() => _capabilities;
 
-        if (_models.TryGetValue(name, out var metadata))
-        {
-            return metadata;
-        }
-
-        throw new InvalidOperationException($"LLMMetadata for model '{name}' could not be resolved. Please supply it in the models collection passed to the provider constructor.");
-    }
-
-    public async IAsyncEnumerable<LLMEvent> StreamAsync(
+    public async IAsyncEnumerable<IContentDelta> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
@@ -77,7 +56,7 @@ public class TornadoLLMProvider : ILLMService
             SingleReader = true,
             FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
         };
-        var channel = System.Threading.Channels.Channel.CreateBounded<LLMEvent>(channelOptions);
+        var channel = System.Threading.Channels.Channel.CreateBounded<IContentDelta>(channelOptions);
 
         _ = Task.Run(async () =>
         {
@@ -89,41 +68,35 @@ public class TornadoLLMProvider : ILLMService
                     {
                         if (reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new Reasoning(reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoning.Content), ct);
                         }
                     },
                     MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new Reasoning(part.Reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new ReasoningDelta(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
-                            await channel.Writer.WriteAsync(new Text(part.Text), ct);
+                            await channel.Writer.WriteAsync(new TextDelta(part.Text), ct);
                         }
                     },
                     FunctionCallHandler = async (calls) =>
                     {
                          // Emit tool calls
+                         int idx = 0;
                          foreach(var call in calls)
                          {
                               var argsStr = call.Arguments;
-                              // Build a tool call object. Since we don't have ToolCallChunk, we stream ToolCall.
-                              // Since Tornado already completed the arguments buffering here, we can deserialize them into a JsonObject.
-                              System.Text.Json.Nodes.JsonObject? parsedArgs = null;
-                              if (!string.IsNullOrEmpty(argsStr))
-                              {
-                                   try { parsedArgs = System.Text.Json.Nodes.JsonNode.Parse(argsStr)?.AsObject(); } catch {}
-                              }
-                              await channel.Writer.WriteAsync(new ToolCall(call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, parsedArgs ?? new System.Text.Json.Nodes.JsonObject()), ct);
+                              await channel.Writer.WriteAsync(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr), ct);
                          }
                     },
                     OnUsageReceived = async (usage) => 
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new TokenUsage(usage.PromptTokens, usage.CompletionTokens), ct);
+                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens), ct);
                         }
                     }
                 }, ct);
@@ -147,4 +120,3 @@ public class TornadoLLMProvider : ILLMService
         }
     }
 }
-

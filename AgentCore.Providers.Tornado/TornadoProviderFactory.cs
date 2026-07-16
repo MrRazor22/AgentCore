@@ -12,28 +12,24 @@ public static class TornadoProvider
     /// <summary>
     /// Creates an LLM provider using Tornado API.
     /// </summary>
-    /// <param name="apiKey">API key for the LLM service</param>
-    /// <param name="modelName">Model name (e.g., "gpt-4o", "gpt-4o-mini")</param>
-    /// <param name="baseUrl">Optional base URL for the API endpoint</param>
-    /// <returns>An ILLMService instance</returns>
-    public static ILLMService CreateLLMProvider(
+    public static ILLMProvider CreateLLMProvider(
         string apiKey, 
-        IReadOnlyList<LLMMetadata> models,
+        string modelName,
+        LLMCapabilities? capabilities = null,
         Uri? baseUrl = null)
     {
         var api = new TornadoApi(baseUrl, apiKey);
-        return new TornadoLLMProvider(api, models);
+        return new TornadoLLMProvider(api, modelName, capabilities ?? new LLMCapabilities { ContextWindow = 128000 });
     }
 }
-
 
 public static class TornadoAgentBuilderExtensions
 {
     public static Agent.Builder AddTornado(
         this Agent.Builder builder, 
         string apiKey, 
-        IReadOnlyList<LLMMetadata> models,
+        string modelName,
+        LLMCapabilities? capabilities = null,
         Uri? baseUrl = null)
-        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, models, baseUrl));
-
+        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, capabilities, baseUrl));
 }

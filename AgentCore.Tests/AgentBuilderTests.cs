@@ -80,20 +80,24 @@ public class AgentBuilderTests
         Assert.Throws<InvalidOperationException>(() => { builder.Build(); });
     }
 
-    private class MemoryLoggerDecorator(Memory.IMemoryService inner) : Memory.IMemoryService
+    private class MemoryLoggerDecorator(Memory.IContextService inner) : Memory.IContextService
     {
         public List<string> CallLog { get; } = new();
 
-        public Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
-        {
-            CallLog.Add("Remember");
-            return inner.RememberAsync(completedTurn, ct);
-        }
-
-        public Task<IReadOnlyList<Message>> RecallAsync(Message currentInput, int? maxTokens, CancellationToken ct = default)
+        public Task<List<Message>> PrepareConversationAsync(
+            IContent? instructions,
+            Message userInput,
+            IReadOnlyList<Tool> tools,
+            CancellationToken ct = default)
         {
             CallLog.Add("Recall");
-            return inner.RecallAsync(currentInput, maxTokens, ct);
+            return inner.PrepareConversationAsync(instructions, userInput, tools, ct);
+        }
+
+        public Task UpdateHistoryAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        {
+            CallLog.Add("Remember");
+            return inner.UpdateHistoryAsync(completedTurn, ct);
         }
     }
 
@@ -102,11 +106,11 @@ public class AgentBuilderTests
     {
         MemoryLoggerDecorator? decoratorInstance = null;
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Acknowledged"));
+        mockProvider.Enqueue(new TextDelta("Acknowledged"));
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .AddMemoryLayer(inner =>
+            .AddContextLayer(inner =>
             {
                 decoratorInstance = new MemoryLoggerDecorator(inner);
                 return decoratorInstance;

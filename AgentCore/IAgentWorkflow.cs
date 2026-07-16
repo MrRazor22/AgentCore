@@ -55,7 +55,7 @@ namespace AgentCore
                 var toolCalls = new List<ToolCall>();
 
                 var options = new LLMOptions { ResponseSchema = responseSchema };
-                await using var enumerator = _llm.StreamAsync(conversation, options, null, ct).GetAsyncEnumerator(ct);
+                await using var enumerator = _llm.StreamAsync(conversation, options, _tooling.GetTools(), ct).GetAsyncEnumerator(ct);
 
                 while (await enumerator.MoveNextAsync())
                 {

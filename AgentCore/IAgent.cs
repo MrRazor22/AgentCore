@@ -1,6 +1,5 @@
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -22,8 +21,7 @@ public sealed partial class Agent : IAgent
     public static Builder Create() => new Builder();
 
     private readonly ILLMService _llm; 
-    private readonly IMemoryService _memory;
-    private readonly ITokenCounter _tokenCounter;
+    private readonly IContextService _contextService;
     private readonly IReadOnlyList<Tool> _tools;
     private readonly IContent? _instructions;
     private readonly IAgentWorkflow _workflow;
@@ -31,16 +29,14 @@ public sealed partial class Agent : IAgent
 
     public Agent(
         ILLMService llm, 
-        IMemoryService memory,
-        ITokenCounter tokenCounter,
+        IContextService contextService,
         IReadOnlyList<Tool> tools,
         IContent? instructions,
         IAgentWorkflow workflow,
         ILogger<Agent>? logger = null)
     {
         _llm = llm; 
-        _memory = memory;
-        _tokenCounter = tokenCounter;
+        _contextService = contextService;
         _tools = tools;
         _instructions = instructions;
         _workflow = workflow;
@@ -122,48 +118,22 @@ public sealed partial class Agent : IAgent
 
         var userMessage = new Message(Role.User, input);
 
-        var fixedMessages = new List<Message>();
-        if (_instructions != null)
-        {
-            fixedMessages.Add(new Message(Role.System, _instructions));
-        }
-        fixedMessages.Add(userMessage);
-
-        IReadOnlyList<Message> recalledChat;
+        List<Message> conversation;
         try
         {
-            var modelInfo = await _llm.GetModelInfoAsync(null, ct).ConfigureAwait(false);
-            int totalLimit = modelInfo.ContextWindow;
-            int fixedTokens = await _tokenCounter.EstimateAsync(fixedMessages, ct).ConfigureAwait(false);
-            int toolTokens = 0;
-            toolTokens = await _tokenCounter.EstimateAsync(_tools, ct).ConfigureAwait(false);
-            
-            int tokenBudget = Math.Max(0, totalLimit - (fixedTokens + toolTokens + 2048));
-
-            _logger.LogInformation("Agent invoked. InputLength={InputLength} MemoryBudget={MemoryBudget}",
-                input.ForLlm().Length, tokenBudget);
-
-            recalledChat = await _memory.RecallAsync(
+            conversation = await _contextService.PrepareConversationAsync(
+                _instructions,
                 userMessage,
-                tokenBudget,
+                _tools,
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)    
         {
-            _logger.LogError(ex, "Agent failed during memory recall.");
+            _logger.LogError(ex, "Agent failed during conversation preparation.");
             throw;
         }
 
-        var conversation = new List<Message>();
-        if (_instructions != null)
-        {
-            conversation.Add(new Message(Role.System, _instructions));
-        }
-
-        conversation.AddRange(recalledChat);
-
-        var rememberFrom = conversation.Count;
-        conversation.Add(userMessage);
+        int initialCount = conversation.Count;
 
         await foreach (var evt in _workflow.ExecuteAsync(conversation, responseSchema, ct))
         {
@@ -172,18 +142,15 @@ public sealed partial class Agent : IAgent
 
         try
         {
-            var newTurnMessages = conversation.Skip(rememberFrom).ToList();
-            await _memory.RememberAsync(newTurnMessages, ct).ConfigureAwait(false);
+            var newTurnMessages = conversation.Skip(initialCount - 1).ToList();
+            await _contextService.UpdateHistoryAsync(newTurnMessages, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during memory remember.");
+            _logger.LogError(ex, "Agent failed during history update.");
             throw;
         }
 
         _logger.LogInformation("Agent completed.");
     }
 }
-
-
-

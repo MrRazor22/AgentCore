@@ -1,17 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Memory;
+using AgentCore.Tools;
 
 namespace AgentCore.Example;
 
-public class PersistentMemoryLayer : IMemoryService
+public class PersistentMemoryLayer : IContextService
 {
-    private IMemoryService? _inner;
+    private IContextService? _inner;
     private readonly string _filePath;
     private List<Message> _messages = new();
 
@@ -21,34 +24,42 @@ public class PersistentMemoryLayer : IMemoryService
     }
 
     /// <summary>
-    /// Callback passed to AddMemoryLayer. Wraps the core memory service.
+    /// Callback passed to AddContextLayer. Wraps the core context service.
     /// </summary>
-    public IMemoryService Initialize(IMemoryService inner)
+    public IContextService Initialize(IContextService inner)
     {
         _inner = inner;
         return this;
     }
 
-    public async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public async Task<List<Message>> PrepareConversationAsync(
+        IContent? instructions,
+        Message userInput,
+        IReadOnlyList<Tool> tools,
+        CancellationToken ct = default)
+    {
+        if (_inner == null)
+        {
+            var list = new List<Message>();
+            if (instructions != null) list.Add(new Message(Role.System, instructions));
+            list.AddRange(_messages);
+            list.Add(userInput);
+            return list;
+        }
+        return await _inner.PrepareConversationAsync(instructions, userInput, tools, ct);
+    }
+
+    public async Task UpdateHistoryAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
         if (_inner != null)
         {
-            await _inner.RememberAsync(completedTurn, ct);
+            await _inner.UpdateHistoryAsync(completedTurn, ct);
         }
 
         _messages.AddRange(completedTurn);
 
         var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(_filePath, json, ct);
-    }
-
-    public Task<IReadOnlyList<Message>> RecallAsync(Message currentInput, int? maxTokens, CancellationToken ct = default)
-    {
-        if (_inner == null)
-        {
-            return Task.FromResult<IReadOnlyList<Message>>(_messages);
-        }
-        return _inner.RecallAsync(currentInput, maxTokens, ct);
     }
 
     public IReadOnlyList<Message> GetLocalMessages() => _messages;

@@ -44,10 +44,10 @@ public class ChatSession
         var tokenCounter = new ApproximateTokenCounter();
 
         Agent = AgentCore.Agent.Create()
-            .AddTornado(_apiKey, new[] { new LLMMetadata(_modelName, 128000) }, _baseUrl)
+            .AddTornado(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl)
             .WithTools(new ExampleTools())
             .WithTokenCounter(tokenCounter)
-            .AddMemoryLayer(Memory.Initialize)
+            .AddContextLayer(Memory.Initialize)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
             .AddLLMLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter, 128000))
             .WithLoggerFactory(_loggerFactory)
@@ -56,7 +56,7 @@ public class ChatSession
         if (seedMessages.Count > 0)
         {
             Memory.SetLocalMessages(seedMessages);
-            Memory.RememberAsync(seedMessages).GetAwaiter().GetResult();
+            Memory.UpdateHistoryAsync(seedMessages).GetAwaiter().GetResult();
         }
     }
 

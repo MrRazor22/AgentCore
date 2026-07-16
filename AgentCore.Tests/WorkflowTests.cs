@@ -20,7 +20,7 @@ public class WorkflowTests
     private (ILLMService Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
     {
         var tokenCounter = new ApproximateTokenCounter();
-        var llm = new LLMService(provider, Array.Empty<Tool>(), tokenCounter, maxRetries: 1);
+        var llm = new LLMService(provider, tokenCounter, maxRetries: 1);
         return (llm, tooling);
     }
 
