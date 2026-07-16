@@ -6,13 +6,7 @@ public enum ToolCallMode { None, Auto, Required }
 
 public abstract record LLMEvent : AgentEvent;
 
-public sealed record TextEvent(string Delta) : LLMEvent;
-
-public sealed record ReasoningEvent(string Delta) : LLMEvent;
-
-public sealed record ToolCallEvent(ToolCall Call) : LLMEvent;
-
-public sealed record TokenUsageEvent(
+public sealed record TokenUsage(
     int InputTokens,
     int OutputTokens,
     int? ReasoningTokens = null
@@ -22,6 +16,3 @@ public sealed record MetaDataEvent(
     FinishReason FinishReason,
     TimeSpan? Duration = null
 ) : LLMEvent;
-
-
-

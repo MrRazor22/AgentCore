@@ -24,7 +24,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("Acknowledged"));
+        mockProvider.Enqueue(new Text("Acknowledged"));
 
         var memory = new MockMemory();
         memory.History.Add(new Message(Role.User, new Text("Old message")));
@@ -57,7 +57,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("Model reply"));
+        mockProvider.Enqueue(new Text("Model reply"));
 
         var memory = new MockMemory();
         var agent = Agent.Create()
@@ -83,7 +83,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("{\"Name\":\"John Doe\",\"Age\":30}"));
+        mockProvider.Enqueue(new Text("{\"Name\":\"John Doe\",\"Age\":30}"));
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)
@@ -122,9 +122,9 @@ public class AgentTests
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(
-            new TextDelta("Streaming "),
-            new TextDelta("reply"),
-            new MetaDelta(FinishReason.Stop, 10, 5)
+            new Text("Streaming "),
+            new Text("reply"),
+            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
         );
 
         var agent = Agent.Create()
@@ -137,11 +137,10 @@ public class AgentTests
             events.Add(ev);
         }
 
-        var textEvents = events.OfType<TextEvent>().ToList();
-        Assert.Equal(2, textEvents.Count);
-        Assert.Equal("Streaming ", textEvents[0].Delta);
-        Assert.Equal("reply", textEvents[1].Delta);
-
+        var textEvents = events.OfType<Text>().ToList();
+        Assert.Single(textEvents);
+        Assert.Equal("Streaming reply", textEvents[0].Value);
+ 
         var responseEvent = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("Streaming reply", responseEvent.Response);
     }
@@ -150,7 +149,7 @@ public class AgentTests
     public async Task InvokeAsync_PrependsSystemInstructionsToHistory()
     {
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("Success"));
+        mockProvider.Enqueue(new Text("Success"));
 
         var agent = Agent.Create()
             .WithInstructions("System instruction baseline")

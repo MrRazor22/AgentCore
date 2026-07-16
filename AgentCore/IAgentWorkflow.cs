@@ -54,21 +54,22 @@ namespace AgentCore
                 var reasoningBuffer = new System.Text.StringBuilder();
                 var toolCalls = new List<ToolCall>();
 
-                await using var enumerator = _llm.StreamAsync(conversation, responseSchema, ct).GetAsyncEnumerator(ct);
+                var options = new LLMOptions { ResponseSchema = responseSchema };
+                await using var enumerator = _llm.StreamAsync(conversation, options, null, ct).GetAsyncEnumerator(ct);
 
                 while (await enumerator.MoveNextAsync())
                 {
                     var evt = enumerator.Current;
                     switch (evt)
                     {
-                        case TextEvent textEvt:
-                            textBuffer.Append(textEvt.Delta);
+                        case Text text:
+                            textBuffer.Append(text.Value);
                             break;
-                        case ReasoningEvent reasoningEvt:
-                            reasoningBuffer.Append(reasoningEvt.Delta);     
+                        case Reasoning reasoning:
+                            reasoningBuffer.Append(reasoning.Thought);     
                             break;
-                        case ToolCallEvent toolCallEvt:
-                            toolCalls.Add(toolCallEvt.Call);
+                        case ToolCall toolCall:
+                            toolCalls.Add(toolCall);
                             break;
                     }
 

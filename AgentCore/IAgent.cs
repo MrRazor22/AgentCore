@@ -21,24 +21,27 @@ public sealed partial class Agent : IAgent
 {
     public static Builder Create() => new Builder();
 
-    private readonly ILLMService _llm;
-    private readonly IToolService _tooling;
+    private readonly ILLMService _llm; 
     private readonly IMemoryService _memory;
+    private readonly ITokenCounter _tokenCounter;
+    private readonly IReadOnlyList<Tool> _tools;
     private readonly IContent? _instructions;
     private readonly IAgentWorkflow _workflow;
     private readonly ILogger<Agent> _logger;
 
     public Agent(
-        ILLMService llm,
-        IToolService tooling,
+        ILLMService llm, 
         IMemoryService memory,
+        ITokenCounter tokenCounter,
+        IReadOnlyList<Tool> tools,
         IContent? instructions,
         IAgentWorkflow workflow,
         ILogger<Agent>? logger = null)
     {
-        _llm = llm;
-        _tooling = tooling;
+        _llm = llm; 
         _memory = memory;
+        _tokenCounter = tokenCounter;
+        _tools = tools;
         _instructions = instructions;
         _workflow = workflow;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
@@ -129,7 +132,14 @@ public sealed partial class Agent : IAgent
         IReadOnlyList<Message> recalledChat;
         try
         {
-            int tokenBudget = await _llm.GetContextBudgetAsync(fixedMessages, ct).ConfigureAwait(false);
+            var modelInfo = await _llm.GetModelInfoAsync(null, ct).ConfigureAwait(false);
+            int totalLimit = modelInfo.ContextWindow;
+            int fixedTokens = await _tokenCounter.EstimateAsync(fixedMessages, ct).ConfigureAwait(false);
+            int toolTokens = 0;
+            toolTokens = await _tokenCounter.EstimateAsync(_tools, ct).ConfigureAwait(false);
+            
+            int tokenBudget = Math.Max(0, totalLimit - (fixedTokens + toolTokens + 2048));
+
             _logger.LogInformation("Agent invoked. InputLength={InputLength} MemoryBudget={MemoryBudget}",
                 input.ForLlm().Length, tokenBudget);
 

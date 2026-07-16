@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
+using AgentCore.Tools;
 
 namespace AgentCore.Example;
 
@@ -28,28 +28,33 @@ public class PerformanceLoggingLlmLayer : ILLMService
         _contextWindow = contextWindow;
     }
 
-    public Task<int> GetContextBudgetAsync(IReadOnlyList<Message> prompt, CancellationToken ct = default)
+    public Task<LLMMetadata> GetModelInfoAsync(string? modelName = null, CancellationToken ct = default)
     {
-        return _inner.GetContextBudgetAsync(prompt, ct);
+        return _inner.GetModelInfoAsync(modelName, ct);
     }
 
     public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
+        LLMOptions? options = null,
+        IReadOnlyList<Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
         int estimatedInputTokens = await _tokenCounter.EstimateAsync(messages, ct);
         int generatedTokens = 0;
 
-        await foreach (var evt in _inner.StreamAsync(messages, responseSchema, ct))
+        await foreach (var delta in _inner.StreamAsync(messages, options, tools, ct))
         {
-            if (evt is TokenUsageEvent usage)
+            if (delta is TokenUsage meta)
             {
-                generatedTokens = usage.OutputTokens;
+                generatedTokens = meta.OutputTokens;
+            }
+            else if (delta is TokenUsage chunk)
+            {
+                generatedTokens = chunk.OutputTokens;
             }
 
-            yield return evt;
+            yield return delta;
         }
 
         sw.Stop();

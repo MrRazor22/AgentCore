@@ -72,12 +72,12 @@ public class MemoryTests
         var provider = new MockLLMProvider();
         // We enqueue exactly 2 summary responses, which is the exact number of iterations needed.
         provider.Enqueue(
-            new TextDelta("Summary One"),
-            new MetaDelta(FinishReason.Stop, 10, 5)
+            new Text("Summary One"),
+            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
         );
         provider.Enqueue(
-            new TextDelta("Summary Two"),
-            new MetaDelta(FinishReason.Stop, 10, 5)
+            new Text("Summary Two"),
+            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
         );
 
         var tokenCounter = new ApproximateTokenCounter();

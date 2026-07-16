@@ -20,8 +20,7 @@ public class WorkflowTests
     private (ILLMService Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
     {
         var tokenCounter = new ApproximateTokenCounter();
-        var registry = new ToolRegistry();
-        var llm = new LLMService(provider, registry, tokenCounter, maxRetries: 1);
+        var llm = new LLMService(provider, Array.Empty<Tool>(), tokenCounter, maxRetries: 1);
         return (llm, tooling);
     }
 
@@ -31,9 +30,9 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new TextDelta("Hello "),
-            new TextDelta("world!"),
-            new MetaDelta(FinishReason.Stop, 10, 10)
+            new Text("Hello "),
+            new Text("world!"),
+            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
         );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
@@ -49,10 +48,9 @@ public class WorkflowTests
 
         // Assert
         // Text events
-        var textEvents = events.OfType<TextEvent>().ToList();
-        Assert.Equal(2, textEvents.Count);
-        Assert.Equal("Hello ", textEvents[0].Delta);
-        Assert.Equal("world!", textEvents[1].Delta);
+        var textEvents = events.OfType<Text>().ToList();
+        Assert.Single(textEvents);
+        Assert.Equal("Hello world!", textEvents[0].Value);
 
         // Final AgentResponseEvent
         var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
@@ -71,13 +69,13 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // First LLM call: return tool call
         provider.Enqueue(
-            new ToolCallDelta(0, "call_1", "get_weather", "{\"city\":\"London\"}"),
-            new MetaDelta(FinishReason.ToolCall, 10, 5)
+            new ToolCall("call_1", "get_weather", new JsonObject { ["city"] = "London" }),
+            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
         );
         // Second LLM call: return final text response based on tool result
         provider.Enqueue(
-            new TextDelta("It is sunny in London."),
-            new MetaDelta(FinishReason.Stop, 25, 10)
+            new Text("It is sunny in London."),
+            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
         );
 
         var tooling = new MockTooling();
@@ -100,7 +98,7 @@ public class WorkflowTests
 
         // Assert
         // Events check
-        Assert.Contains(events, e => e is ToolCallEvent tc && tc.Call.Name == "get_weather");
+        Assert.Contains(events, e => e is ToolCall tc && tc.Name == "get_weather");
         Assert.Contains(events, e => e is ToolResultEvent tr && tr.Result.ForLlm() == "Rainy");
         var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Response);
@@ -124,12 +122,12 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // Return tool call indefinitely
         provider.Enqueue(
-            new ToolCallDelta(0, "call_1", "looping_tool", "{}"),
-            new MetaDelta(FinishReason.ToolCall, 10, 5)
+            new ToolCall("call_1", "looping_tool", new JsonObject()),
+            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
         );
         provider.Enqueue(
-            new ToolCallDelta(0, "call_2", "looping_tool", "{}"),
-            new MetaDelta(FinishReason.ToolCall, 15, 5)
+            new ToolCall("call_2", "looping_tool", new JsonObject()),
+            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
         );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
@@ -158,8 +156,8 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCallDelta(0, "call_1", "broken_tool", "{}"),
-            new MetaDelta(FinishReason.ToolCall, 10, 5)
+            new ToolCall("call_1", "broken_tool", new JsonObject()),
+            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
         );
 
         var tooling = new MockTooling();
@@ -205,7 +203,7 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new TextDelta("Never streamed"));
+        provider.Enqueue(new Text("Never streamed"));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
@@ -230,9 +228,9 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new TextDelta("A"),
-            new ReasoningDelta("Thought"),
-            new TextDelta("B")
+            new Text("A"),
+            new Reasoning("Thought"),
+            new Text("B")
         );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
@@ -247,11 +245,10 @@ public class WorkflowTests
         }
 
         // Assert
-        Assert.Equal(5, events.Count); // Text("A"), Reasoning("Thought"), Text("B"), MetaDataEvent, AgentResponseEvent<string>("AB")
-        Assert.Equal("A", ((TextEvent)events[0]).Delta);
-        Assert.Equal("Thought", ((ReasoningEvent)events[1]).Delta);
-        Assert.Equal("B", ((TextEvent)events[2]).Delta);
-        Assert.IsType<MetaDataEvent>(events[3]);
-        Assert.Equal("AB", ((AgentResponseEvent<string>)events[4]).Response);
+        Assert.Equal(4, events.Count); // Reasoning("Thought"), Text("AB"), MetaDataEvent, AgentResponseEvent<string>("AB")
+        Assert.Equal("Thought", ((Reasoning)events[0]).Thought);
+        Assert.Equal("AB", ((Text)events[1]).Value);
+        Assert.IsType<MetaDataEvent>(events[2]);
+        Assert.Equal("AB", ((AgentResponseEvent<string>)events[3]).Response);
     }
 }

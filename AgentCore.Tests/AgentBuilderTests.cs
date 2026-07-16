@@ -1,5 +1,6 @@
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
+using AgentCore.LLM;
 
 namespace AgentCore.Tests;
 
@@ -101,7 +102,7 @@ public class AgentBuilderTests
     {
         MemoryLoggerDecorator? decoratorInstance = null;
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("Acknowledged"));
+        mockProvider.Enqueue(new Text("Acknowledged"));
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)

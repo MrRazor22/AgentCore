@@ -19,12 +19,12 @@ internal sealed class ChatMemoryService : IMemoryService
 {
     private readonly List<Message> _history = new();
     private readonly ITokenCounter _tokenCounter;
-    private readonly ILLMProvider _llmProvider;
+    private readonly ILLMService _llmProvider;
     private readonly ChatMemoryOptions _options;
 
     public ChatMemoryService(
         ITokenCounter tokenCounter,
-        ILLMProvider llmProvider,
+        ILLMService llmProvider,
         ChatMemoryOptions? options = null)
     {
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
@@ -193,7 +193,7 @@ internal sealed class ChatMemoryService : IMemoryService
         var sb = new StringBuilder();
         await foreach (var delta in _llmProvider.StreamAsync(messages, options, tools: null, ct: ct).ConfigureAwait(false))
         {
-            if (delta is TextDelta td) sb.Append(td.Value);
+            if (delta is Text td) sb.Append(td.Value);
         }
         return sb.ToString().Trim();
     }

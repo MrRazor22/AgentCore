@@ -12,9 +12,9 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 
-public class MockLLMProvider : ILLMProvider
+public class MockLLMProvider : ILLMService
 {
-    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IContentDelta>>> _responses = new();
+    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<LLMEvent>>> _responses = new();
     
     public int ContextWindow { get; set; } = 2000;
     
@@ -32,17 +32,17 @@ public class MockLLMProvider : ILLMProvider
     
     public int CallCount => CapturedMessages.Count;
 
-    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<IContentDelta>> generator)
+    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<LLMEvent>> generator)
     {
         _responses.Enqueue(generator);
     }
 
-    public void Enqueue(params IContentDelta[] deltas)
+    public void Enqueue(params LLMEvent[] deltas)
     {
         _responses.Enqueue(ct => ToAsyncEnumerable(deltas, ct));
     }
 
-    public void Enqueue(IEnumerable<IContentDelta> deltas)
+    public void Enqueue(IEnumerable<LLMEvent> deltas)
     {
         _responses.Enqueue(ct => ToAsyncEnumerable(deltas, ct));
     }
@@ -52,8 +52,8 @@ public class MockLLMProvider : ILLMProvider
         _responses.Enqueue(ct => ThrowException(ex));
     }
 
-    private static async IAsyncEnumerable<IContentDelta> ToAsyncEnumerable(
-        IEnumerable<IContentDelta> deltas, 
+    private static async IAsyncEnumerable<LLMEvent> ToAsyncEnumerable(
+        IEnumerable<LLMEvent> deltas, 
         [EnumeratorCancellation] CancellationToken ct)
     {
         foreach (var delta in deltas)
@@ -64,13 +64,13 @@ public class MockLLMProvider : ILLMProvider
         await Task.CompletedTask;
     }
 
-    private static async IAsyncEnumerable<IContentDelta> ThrowException(Exception ex)
+    private static async IAsyncEnumerable<LLMEvent> ThrowException(Exception ex)
     {
         if (false) yield break;
         throw ex;
     }
 
-    public IAsyncEnumerable<IContentDelta> StreamAsync(
+    public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
@@ -82,7 +82,7 @@ public class MockLLMProvider : ILLMProvider
 
         if (_responses.Count == 0)
         {
-            return ToAsyncEnumerable(Enumerable.Empty<IContentDelta>(), ct);
+            return ToAsyncEnumerable(Enumerable.Empty<LLMEvent>(), ct);
         }
 
         var generator = _responses.Dequeue();

@@ -11,7 +11,7 @@ public sealed partial class Agent
 {
     public sealed class Builder
     {
-        private readonly ToolRegistry _registry = new();
+        private readonly List<Tool> _tools = [];
         private ILogger<Builder> _logger;
         private IContent? _instructions;
 
@@ -20,7 +20,7 @@ public sealed partial class Agent
         private ILLMService? _llm;
         private ITokenCounter? _tokenCounter;
         private ILoggerFactory? _loggerFactory;
-        private ILLMProvider? _provider;
+        private ILLMService? _provider;
         private Func<ILLMService, IToolService, IAgentWorkflow>? _workflowFactory;
 
         private readonly List<Func<IMemoryService, IMemoryService>> _memoryLayers = [];
@@ -34,10 +34,20 @@ public sealed partial class Agent
 
         public Builder WithInstructions(string prompt) { _instructions = new Text(prompt); return this; }
 
+        private void AddTool(Tool tool)
+        {
+            ArgumentNullException.ThrowIfNull(tool);
+            if (_tools.Any(t => string.Equals(t.Name, tool.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'.");
+            }
+            _tools.Add(tool);
+        }
+
         public Builder WithTools<T>()
         {
             foreach (var tool in MethodTool.FromType(typeof(T)))
-                _registry.Add(tool);
+                AddTool(tool);
             return this;
         }
 
@@ -45,7 +55,7 @@ public sealed partial class Agent
         {
             ArgumentNullException.ThrowIfNull(instance);
             foreach (var tool in MethodTool.FromType(instance.GetType(), instance))
-                _registry.Add(tool);
+                AddTool(tool);
             return this;
         }
 
@@ -67,7 +77,7 @@ public sealed partial class Agent
             return this;
         }
         
-        public Builder WithProvider(ILLMProvider provider) { _provider = provider; return this; }
+        public Builder WithProvider(ILLMService provider) { _provider = provider; return this; }
 
         public Builder UseWorkflow(Func<ILLMService, IToolService, IAgentWorkflow> factory)
         {
@@ -79,35 +89,39 @@ public sealed partial class Agent
         {
             _logger.LogInformation("Agent build started");
 
-            if (_provider == null)
+            var baseLlm = _llm ?? _provider;
+            if (baseLlm == null)
                 throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.OpenAI) and call WithProvider().");
 
             var lf = _loggerFactory ?? NullLoggerFactory.Instance;
             var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: lf.CreateLogger<ApproximateTokenCounter>());
 
-            IMemoryService memory = _memory ?? new ChatMemoryService(tokenCounter, _provider);
+            IMemoryService memory = _memory ?? new ChatMemoryService(tokenCounter, baseLlm);
             foreach (var layer in _memoryLayers)
                 memory = layer(memory);
 
-            _logger.LogDebug("Tool registration: TotalTools={ToolCount}", _registry.Tools.Count);
+            var frozenTools = _tools.ToArray();
+            _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
-            IToolService tooling = _tooling ?? new ToolService(_registry, lf.CreateLogger<ToolService>());
+            IToolService tooling = _tooling ?? new ToolService(frozenTools, lf.CreateLogger<ToolService>());
             foreach (var layer in _toolingLayers)
                 tooling = layer(tooling);
 
-            ILLMService llm = _llm ?? new LLMService(_provider, _registry, tokenCounter, logger: lf.CreateLogger<LLMService>());
+            ILLMService llm = baseLlm;
             foreach (var layer in _llmLayers)
                 llm = layer(llm);
 
+            ILLMService pipeline = new LLMService(llm, frozenTools, tokenCounter, logger: lf.CreateLogger<LLMService>());
+
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
-                _registry.Tools.Count,
-                _provider.GetType().Name);
+                frozenTools.Length,
+                llm.GetType().Name);
 
             var workflow = _workflowFactory != null 
-                ? _workflowFactory(llm, tooling) 
-                : new ReActWorkflow(llm, tooling);
+                ? _workflowFactory(pipeline, tooling) 
+                : new ReActWorkflow(pipeline, tooling);
 
-            return new Agent(llm, tooling, memory, _instructions, workflow, lf.CreateLogger<Agent>());
+            return new Agent(pipeline, memory, tokenCounter, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
         }
     }
 }

@@ -18,27 +18,12 @@ public class ToolingTests
     }
 
     [Fact]
-    public void ToolRegistry_RegisterAndRetrieve_Succeeds()
-    {
-        var registry = new ToolRegistry();
-        var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
-        var tool = new MethodTool(method, new SampleTools());
-
-        registry.Add(tool);
-
-        Assert.Single(registry.Tools);
-        Assert.Same(tool, registry.TryGet(tool.Name));
-    }
-
-    [Fact]
     public async Task ToolingService_ExecuteAsync_InvokesMethodAndReturnsResult()
     {
-        var registry = new ToolRegistry();
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
-        registry.Add(tool);
 
-        var tooling = new ToolService(registry);
+        var tooling = new ToolService(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Name, args);
@@ -56,12 +41,10 @@ public class ToolingTests
     [Fact]
     public async Task ToolingService_ExecuteAsync_ValidationError_ReturnsErrorMessage()
     {
-        var registry = new ToolRegistry();
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
-        registry.Add(tool);
 
-        var tooling = new ToolService(registry);
+        var tooling = new ToolService(new[] { tool });
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
@@ -75,34 +58,28 @@ public class ToolingTests
     }
 
     [Fact]
-    public void ToolRegistry_ThrowsOnDuplicateName()
+    public void Builder_ThrowsOnDuplicateName()
     {
-        var registry = new ToolRegistry();
-        var method = typeof(SampleAddTool).GetMethod(nameof(SampleAddTool.Add))!;
-        var tool1 = new MethodTool(method, new SampleAddTool(), name: "calculator");
-        var tool2 = new MethodTool(method, new SampleAddTool(), name: "calculator");
+        var builder = Agent.Create()
+            .WithTools(new SampleAddTool());
 
-        registry.Add(tool1);
-        Assert.Throws<InvalidOperationException>(() => registry.Add(tool2));
+        Assert.Throws<InvalidOperationException>(() => builder.WithTools(new SampleAddTool()));
     }
 
     [Fact]
-    public void ToolRegistry_SupportsCaseInsensitiveLookup()
+    public async Task ToolService_SupportsCaseInsensitiveLookup()
     {
-        var registry = new ToolRegistry();
         var method = typeof(SampleAddTool).GetMethod(nameof(SampleAddTool.Add))!;
         var tool = new MethodTool(method, new SampleAddTool(), name: "weather_lookup");
-        registry.Add(tool);
+        var tooling = new ToolService(new[] { tool });
 
-        var retrieved = registry.TryGet("Weather_Lookup");
-        Assert.Same(tool, retrieved);
-    }
+        var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
+        var toolCall = new ToolCall("call_1", "Weather_Lookup", args);
+        var results = await tooling.ExecuteAsync(new[] { toolCall });
 
-    [Fact]
-    public void ToolRegistry_TryGet_EmptyName_ThrowsArgumentException()
-    {
-        var registry = new ToolRegistry();
-        Assert.Throws<ArgumentException>(() => registry.TryGet(""));
+        Assert.Single(results);
+        var toolResult = (ToolResult)results[0].Contents[0];
+        Assert.Equal("25", toolResult.Result!.ForLlm());
     }
 
     private class NullNameTool : Tool
@@ -122,6 +99,7 @@ public class ToolingTests
 
     public class SampleAddTool
     {
+        [Tool]
         public int Add(int a, int b) => a + b;
     }
 }

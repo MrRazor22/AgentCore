@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.Providers.Tornado;
 
-public class TornadoLLMProvider : ILLMProvider
+public class TornadoLLMProvider : ILLMService
 {
     private readonly TornadoApi _api;
     private readonly ChatModel _defaultModel;
@@ -49,7 +49,7 @@ public class TornadoLLMProvider : ILLMProvider
         throw new InvalidOperationException($"LLMMetadata for model '{name}' could not be resolved. Please supply it in the models collection passed to the provider constructor.");
     }
 
-    public async IAsyncEnumerable<IContentDelta> StreamAsync(
+    public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
@@ -77,7 +77,7 @@ public class TornadoLLMProvider : ILLMProvider
             SingleReader = true,
             FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
         };
-        var channel = System.Threading.Channels.Channel.CreateBounded<IContentDelta>(channelOptions);
+        var channel = System.Threading.Channels.Channel.CreateBounded<LLMEvent>(channelOptions);
 
         _ = Task.Run(async () =>
         {
@@ -89,35 +89,41 @@ public class TornadoLLMProvider : ILLMProvider
                     {
                         if (reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new Reasoning(reasoning.Content), ct);
                         }
                     },
                     MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new ReasoningDelta(part.Reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new Reasoning(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
-                            await channel.Writer.WriteAsync(new TextDelta(part.Text), ct);
+                            await channel.Writer.WriteAsync(new Text(part.Text), ct);
                         }
                     },
                     FunctionCallHandler = async (calls) =>
                     {
                          // Emit tool calls
-                         int idx = 0;
                          foreach(var call in calls)
                          {
                               var argsStr = call.Arguments;
-                              await channel.Writer.WriteAsync(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr), ct);
+                              // Build a tool call object. Since we don't have ToolCallChunk, we stream ToolCall.
+                              // Since Tornado already completed the arguments buffering here, we can deserialize them into a JsonObject.
+                              System.Text.Json.Nodes.JsonObject? parsedArgs = null;
+                              if (!string.IsNullOrEmpty(argsStr))
+                              {
+                                   try { parsedArgs = System.Text.Json.Nodes.JsonNode.Parse(argsStr)?.AsObject(); } catch {}
+                              }
+                              await channel.Writer.WriteAsync(new ToolCall(call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, parsedArgs ?? new System.Text.Json.Nodes.JsonObject()), ct);
                          }
                     },
                     OnUsageReceived = async (usage) => 
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens), ct);
+                            await channel.Writer.WriteAsync(new TokenUsage(usage.PromptTokens, usage.CompletionTokens), ct);
                         }
                     }
                 }, ct);

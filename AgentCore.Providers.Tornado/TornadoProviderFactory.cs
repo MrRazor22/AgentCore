@@ -15,8 +15,8 @@ public static class TornadoProvider
     /// <param name="apiKey">API key for the LLM service</param>
     /// <param name="modelName">Model name (e.g., "gpt-4o", "gpt-4o-mini")</param>
     /// <param name="baseUrl">Optional base URL for the API endpoint</param>
-    /// <returns>An ILLMProvider instance</returns>
-    public static ILLMProvider CreateLLMProvider(
+    /// <returns>An ILLMService instance</returns>
+    public static ILLMService CreateLLMProvider(
         string apiKey, 
         IReadOnlyList<LLMMetadata> models,
         Uri? baseUrl = null)

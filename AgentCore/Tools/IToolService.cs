@@ -14,14 +14,14 @@ public interface IToolService
 
 internal sealed class ToolService : IToolService
 {
-    private readonly IToolRegistry _tools;
+    private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<ToolService> _logger;
 
     public ToolService(
-        IToolRegistry tools,
+        IReadOnlyList<Tool> tools,
         ILogger<ToolService>? logger = null)
     {
-        _tools = tools;
+        _tools = tools.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
         _logger = logger ?? NullLogger<ToolService>.Instance;
     }
 
@@ -47,7 +47,7 @@ internal sealed class ToolService : IToolService
         var argsJson = call.Arguments?.ToString() ?? "{}";
         _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
 
-        var tool = _tools.TryGet(call.Name);
+        _tools.TryGetValue(call.Name, out var tool);
         if (tool == null)
         {
             _logger.LogWarning("Tool validation failed: Tool '{Name}' not registered.", call.Name);
