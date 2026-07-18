@@ -84,20 +84,20 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public Task<List<Message>> PrepareConversationAsync(
+        public Task<List<Message>> PrepareAsync(
             IContent? instructions,
             Message userInput,
             IReadOnlyList<Tool> tools,
             CancellationToken ct = default)
         {
             CallLog.Add("Recall");
-            return inner.PrepareConversationAsync(instructions, userInput, tools, ct);
+            return inner.PrepareAsync(instructions, userInput, tools, ct);
         }
 
-        public Task UpdateHistoryAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
         {
             CallLog.Add("Remember");
-            return inner.UpdateHistoryAsync(completedTurn, ct);
+            return inner.UpdateAsync(completedTurn, ct);
         }
     }
 

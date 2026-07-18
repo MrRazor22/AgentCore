@@ -114,22 +114,20 @@ public sealed partial class Agent : IAgent
         using var scope = _logger.BeginScope(new[]
         {
             new KeyValuePair<string, object?>("Agent", nameof(Agent))
-        });
-
-        var userMessage = new Message(Role.User, input);
+        }); 
 
         List<Message> conversation;
         try
         {
-            conversation = await _contextService.PrepareConversationAsync(
+            conversation = await _contextService.PrepareAsync(
                 _instructions,
-                userMessage,
+                new Message(Role.User, input),
                 _tools,
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)    
         {
-            _logger.LogError(ex, "Agent failed during conversation preparation.");
+            _logger.LogError(ex, "Agent failed during Context preparation.");
             throw;
         }
 
@@ -143,11 +141,11 @@ public sealed partial class Agent : IAgent
         try
         {
             var newTurnMessages = conversation.Skip(initialCount - 1).ToList();
-            await _contextService.UpdateHistoryAsync(newTurnMessages, ct).ConfigureAwait(false);
+            await _contextService.UpdateAsync(newTurnMessages, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during history update.");
+            _logger.LogError(ex, "Agent failed during Context update.");
             throw;
         }
 

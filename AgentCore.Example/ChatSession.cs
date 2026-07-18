@@ -56,7 +56,7 @@ public class ChatSession
         if (seedMessages.Count > 0)
         {
             Memory.SetLocalMessages(seedMessages);
-            Memory.UpdateHistoryAsync(seedMessages).GetAwaiter().GetResult();
+            Memory.UpdateAsync(seedMessages).GetAwaiter().GetResult();
         }
     }
 

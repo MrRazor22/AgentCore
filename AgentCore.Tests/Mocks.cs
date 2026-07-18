@@ -16,11 +16,12 @@ public class MockLLMProvider : ILLM
 {
     private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IContentDelta>>> _responses = new();
     
-    public int ContextWindow { get; set; } = 2000;
+    public int ContextWindow { get; set; } = 4096;
+    public int ReservedTokens { get; set; } = 512;
     
     public LLMCapabilities GetCapabilities()
     {
-        return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = 2048 };
+        return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = ReservedTokens };
     }
     
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
@@ -105,18 +106,18 @@ public class MockLLMProvider : ILLM
 
 public class MockMemoryProvider : IMemory
 {
-    public List<string> Saved { get; } = new();
+    public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
-    public Task RememberAsync(string content, CancellationToken ct = default)
+    public Task RememberAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
     {
-        Saved.Add(content);
+        Saved.Add(turn);
         return Task.CompletedTask;
     }
 
-    public Task<string> RecallAsync(string query, CancellationToken ct = default)
+    public Task<IContent> RecallAsync(IContent query, CancellationToken ct = default)
     {
-        return Task.FromResult(RecallResult);
+        return Task.FromResult<IContent>(new Text(RecallResult));
     }
 }
 
@@ -124,7 +125,7 @@ public class MockContextService : IContextService
 {
     public List<Message> History { get; } = new();
 
-    public Task<List<Message>> PrepareConversationAsync(
+    public Task<List<Message>> PrepareAsync(
         IContent? instructions,
         Message userInput,
         IReadOnlyList<Tool> tools,
@@ -137,7 +138,7 @@ public class MockContextService : IContextService
         return Task.FromResult(list);
     }
 
-    public Task UpdateHistoryAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
         History.AddRange(completedTurn);
         return Task.CompletedTask;

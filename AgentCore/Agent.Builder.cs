@@ -119,7 +119,7 @@ public sealed partial class Agent
             foreach (var layer in _llmLayers)
                 pipeline = layer(pipeline);
 
-            IMemory memoryProvider = _memoryProvider ?? new InMemoryMemoryProvider();
+            IMemory memoryProvider = _memoryProvider ?? new SummarizerMemory(baseProvider, tokenCounter);
             IContextService contextService = _contextService;
             if (contextService == null)
             {

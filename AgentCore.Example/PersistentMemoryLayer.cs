@@ -32,7 +32,7 @@ public class PersistentMemoryLayer : IContextService
         return this;
     }
 
-    public async Task<List<Message>> PrepareConversationAsync(
+    public async Task<List<Message>> PrepareAsync(
         IContent? instructions,
         Message userInput,
         IReadOnlyList<Tool> tools,
@@ -46,14 +46,14 @@ public class PersistentMemoryLayer : IContextService
             list.Add(userInput);
             return list;
         }
-        return await _inner.PrepareConversationAsync(instructions, userInput, tools, ct);
+        return await _inner.PrepareAsync(instructions, userInput, tools, ct);
     }
 
-    public async Task UpdateHistoryAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
         if (_inner != null)
         {
-            await _inner.UpdateHistoryAsync(completedTurn, ct);
+            await _inner.UpdateAsync(completedTurn, ct);
         }
 
         _messages.AddRange(completedTurn);
