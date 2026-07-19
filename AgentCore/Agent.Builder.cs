@@ -9,6 +9,12 @@ namespace AgentCore;
 
 public sealed partial class Agent
 {
+    /// <summary>
+    /// Builder to configure and create an Agent instance.
+    /// NOTE: Each Build() call produces mutable, stateful components (like ContextService and SummarizerMemory)
+    /// scoped to a single conversation/session. Do not share or reuse an Agent instance across concurrent,
+    /// unrelated conversations.
+    /// </summary>
     public sealed class Builder
     {
         private readonly List<Tool> _tools = [];
@@ -119,16 +125,20 @@ public sealed partial class Agent
             foreach (var layer in _llmLayers)
                 pipeline = layer(pipeline);
 
-            IMemory memoryProvider = _memoryProvider ?? new SummarizerMemory(baseProvider, tokenCounter);
+            var providerForContext = baseProvider ?? (_llm as LLMService)?.Provider;
+            var capabilities = providerForContext?.GetCapabilities() ?? new LLMCapabilities();
+
+            IMemory memoryProvider = _memoryProvider ?? new SummarizerMemory(pipeline, tokenCounter, capabilities);
             IContextService contextService = _contextService;
             if (contextService == null)
             {
-                var providerForContext = baseProvider ?? (_llm as LLMService)?.Provider;
-                if (providerForContext == null)
-                {
-                    throw new InvalidOperationException("Cannot resolve ILLMProvider for default context service.");
-                }
-                contextService = new ContextService(tokenCounter, memoryProvider, providerForContext);
+                contextService = new ContextService(
+                    tokenCounter, 
+                    memoryProvider, 
+                    capabilities, 
+                    frozenTools, 
+                    _instructions, 
+                    logger: lf.CreateLogger<ContextService>());
             }
             foreach (var layer in _contextLayers)
                 contextService = layer(contextService);

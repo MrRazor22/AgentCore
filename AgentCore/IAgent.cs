@@ -120,9 +120,7 @@ public sealed partial class Agent : IAgent
         try
         {
             conversation = await _contextService.PrepareAsync(
-                _instructions,
                 new Message(Role.User, input),
-                _tools,
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)    

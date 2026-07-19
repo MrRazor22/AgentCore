@@ -2,30 +2,42 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Text;
 
+using System.Collections.Concurrent;
+
 namespace AgentCore.Memory;
 
 public interface IMemory
 {
     Task RememberAsync(IReadOnlyList<Message> turn, CancellationToken ct = default);
+
+    /// <summary>
+    /// Recalls consolidated context information (e.g., factsheets or buffer aggregations)
+    /// to inject into the agent's chat context. 
+    /// Note: This does not guarantee or require semantic query/similarity-search relevance;
+    /// the implementation determines how the stored memory content is synthesized or retrieved.
+    /// </summary>
     Task<IContent> RecallAsync(IContent query, CancellationToken ct = default);
 }
 
 public class SummarizerMemory : IMemory
 {
-    private readonly ILLM? _llmProvider;
+    private readonly ILLMService? _llmService;
     private readonly ITokenCounter _tokenCounter;
+    private readonly LLMCapabilities? _capabilities;
     private readonly List<Message> _buffer = new();
     private string _factSheet = string.Empty;
     private readonly double _compactionFraction;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public SummarizerMemory(
-        ILLM? llmProvider = null,
+        ILLMService? llmService = null,
         ITokenCounter? tokenCounter = null,
+        LLMCapabilities? capabilities = null,
         double compactionFraction = 0.3)
     {
-        _llmProvider = llmProvider;
+        _llmService = llmService;
         _tokenCounter = tokenCounter ?? new ApproximateTokenCounter();
+        _capabilities = capabilities;
         _compactionFraction = compactionFraction;
     }
 
@@ -36,16 +48,15 @@ public class SummarizerMemory : IMemory
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            // If there's no LLM Provider configured, act as a fallback in-memory store.
-            if (_llmProvider == null)
+            // If there's no LLM Service configured, act as a fallback in-memory store.
+            if (_llmService == null || _capabilities == null)
             {
                 _buffer.AddRange(turn);
                 return;
             }
 
-            var capabilities = _llmProvider.GetCapabilities();
-            int totalLimit = capabilities.ContextWindow;
-            int reserved = capabilities.ReservedTokens;
+            int totalLimit = _capabilities.ContextWindow;
+            int reserved = _capabilities.ReservedTokens;
 
             // Base overhead for prompt template instructions in consolidation
             const int promptOverhead = 300;
@@ -64,7 +75,7 @@ public class SummarizerMemory : IMemory
             // 2. Add turn to accumulation buffer
             _buffer.AddRange(finalizedTurn);
 
-            // 3. Mathematical Compaction Trigger: check size of raw accumulated buffer only (excluding _factSheet size)
+            // 3. Mathematical Compaction Trigger: check size of raw accumulated buffer only (excluding factSheet size)
             int bufferTokens = await _tokenCounter.EstimateAsync(_buffer, ct).ConfigureAwait(false);
             int triggerThreshold = (int)(safeBudget * _compactionFraction);
 
@@ -101,7 +112,7 @@ public class SummarizerMemory : IMemory
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (_llmProvider == null)
+            if (_llmService == null)
             {
                 // In fallback mode, return a formatted text representation of all accumulated turns
                 if (_buffer.Count == 0) return new Text(string.Empty);
@@ -199,11 +210,11 @@ public class SummarizerMemory : IMemory
         var messages = new List<Message> { prompt, userContext };
         var sb = new StringBuilder();
 
-        await foreach (var delta in _llmProvider!.StreamAsync(messages, options: null, tools: null, ct: ct).ConfigureAwait(false))
+        await foreach (var evt in _llmService!.StreamAsync(messages, options: null, tools: null, ct: ct).ConfigureAwait(false))
         {
-            if (delta is TextDelta td)
+            if (evt is Text t)
             {
-                sb.Append(td.Value);
+                sb.Append(t.Value);
             }
         }
 

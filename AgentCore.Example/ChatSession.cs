@@ -21,7 +21,7 @@ public class ChatSession
     private readonly ILoggerFactory _loggerFactory;
 
     public IAgent Agent { get; private set; } = null!;
-    public PersistentMemoryLayer Memory { get; private set; } = null!;
+    public PersistentContextDecorator ContextDecorator { get; private set; } = null!;
     public string SessionFile { get; private set; }
 
     public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile)
@@ -40,14 +40,14 @@ public class ChatSession
     /// </summary>
     public void Rebuild(List<Message> seedMessages)
     {
-        Memory = new PersistentMemoryLayer(SessionFile);
+        ContextDecorator = new PersistentContextDecorator(SessionFile);
         var tokenCounter = new ApproximateTokenCounter();
 
         Agent = AgentCore.Agent.Create()
             .AddTornado(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl)
             .WithTools(new ExampleTools())
             .WithTokenCounter(tokenCounter)
-            .AddContextLayer(Memory.Initialize)
+            .AddContextLayer(ContextDecorator.Initialize)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
             .AddLLMLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter, 128000))
             .WithLoggerFactory(_loggerFactory)
@@ -55,8 +55,8 @@ public class ChatSession
 
         if (seedMessages.Count > 0)
         {
-            Memory.SetLocalMessages(seedMessages);
-            Memory.UpdateAsync(seedMessages).GetAwaiter().GetResult();
+            ContextDecorator.SetLocalMessages(seedMessages);
+            ContextDecorator.UpdateAsync(seedMessages).GetAwaiter().GetResult();
         }
     }
 
@@ -71,7 +71,7 @@ public class ChatSession
 
     public void RevertTo(int index)
     {
-        var messages = Memory.GetLocalMessages().Take(index).ToList();
+        var messages = ContextDecorator.GetLocalMessages().Take(index).ToList();
         Rebuild(messages);
     }
 

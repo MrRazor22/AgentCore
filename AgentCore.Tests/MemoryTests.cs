@@ -7,6 +7,7 @@ using AgentCore;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.LLM.Chat;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 
@@ -19,7 +20,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be helpful."));
 
         var history = new List<Message>
         {
@@ -30,9 +31,7 @@ public class MemoryTests
 
         // Act
         var result = await contextService.PrepareAsync(
-            instructions: new Text("Be helpful."),
-            userInput: new Message(Role.User, new Text("Help")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Help"))
         );
 
         // Assert
@@ -50,7 +49,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message that will be pruned."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
@@ -58,9 +57,7 @@ public class MemoryTests
 
         // Act
         var result = await contextService.PrepareAsync(
-            instructions: new Text("Be concise."),
-            userInput: new Message(Role.User, new Text("Current short input")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Current short input"))
         );
 
         // Assert
@@ -76,13 +73,11 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider { RecallResult = "User likes C# code patterns." };
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be helpful."));
 
         // Act
         var result = await contextService.PrepareAsync(
-            instructions: new Text("Be helpful."),
-            userInput: new Message(Role.User, new Text("Suggest a clean code tip")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Suggest a clean code tip"))
         );
 
         // Assert
@@ -106,7 +101,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         // Limit is 20 tokens. We add a very long message which exceeds 20 tokens.
         var msg1 = new Message(Role.User, new Text("This is a very long message that easily exceeds the limit of twenty tokens."));
@@ -118,9 +113,7 @@ public class MemoryTests
         // Assert
         // Verify that the master history has pruned msg1 because it exceeded capacity.
         var result = await contextService.PrepareAsync(
-            instructions: null,
-            userInput: new Message(Role.User, new Text("Test")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Test"))
         );
 
         Assert.DoesNotContain(result, m => m.Contents.Any(c => c.ForLlm().Contains("exceeds the limit")));
@@ -134,7 +127,7 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
@@ -142,23 +135,23 @@ public class MemoryTests
 
         // Act & Assert 1: Prepare with tight budget so msg1 gets pruned in the output
         var providerTight = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
-        var contextServiceTight = new ContextService(tokenCounter, memoryProvider, providerTight, compressionTarget: 0.5);
+        var contextServiceTight = new ContextService(tokenCounter, memoryProvider, providerTight.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
         // Copy the history from the first context service to simulate shared state
         await contextServiceTight.UpdateAsync(new[] { msg1, msg2 });
 
         var resultTight = await contextServiceTight.PrepareAsync(
-            instructions: new Text("Be concise."),
-            userInput: new Message(Role.User, new Text("Current short input")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Current short input"))
         );
 
         Assert.DoesNotContain(resultTight, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
 
         // Act & Assert 2: Prepare again with normal budget, msg1 should still be present because Prepare was side-effect-free
-        var resultNormal = await contextServiceTight.PrepareAsync(
-            instructions: null,
-            userInput: new Message(Role.User, new Text("Current short input")),
-            tools: []
+        // We recreate the service with normal budget using the same history (msg1, msg2)
+        var contextServiceNormal = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
+        await contextServiceNormal.UpdateAsync(new[] { msg1, msg2 });
+
+        var resultNormal = await contextServiceNormal.PrepareAsync(
+            userInput: new Message(Role.User, new Text("Current short input"))
         );
 
         Assert.Contains(resultNormal, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
@@ -171,16 +164,14 @@ public class MemoryTests
         var provider = new MockLLMProvider { ContextWindow = 2048, ReservedTokens = 2048 }; // budget = 0
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new MockMemoryProvider();
-        var contextService = new ContextService(tokenCounter, memoryProvider, provider, compressionTarget: 0.5);
+        var contextService = new ContextService(tokenCounter, memoryProvider, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Hello"));
         await contextService.UpdateAsync(new[] { msg1 });
 
         // Act
         var result = await contextService.PrepareAsync(
-            instructions: null,
-            userInput: new Message(Role.User, new Text("Test")),
-            tools: []
+            userInput: new Message(Role.User, new Text("Test"))
         );
 
         // Assert: History must be completely pruned
@@ -195,7 +186,8 @@ public class MemoryTests
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
         var tokenCounter = new ApproximateTokenCounter();
         // Compaction threshold is (1000 - 512) * 0.3 = 146 tokens
-        var memoryProvider = new SummarizerMemory(mockLlm, tokenCounter, compactionFraction: 0.3);
+        var llmService = new LLMService(mockLlm, tokenCounter);
+        var memoryProvider = new SummarizerMemory(llmService, tokenCounter, mockLlm.GetCapabilities(), compactionFraction: 0.3);
 
         var turn = new List<Message> { new Message(Role.User, new Text("Short content turn")) };
 
@@ -218,7 +210,8 @@ public class MemoryTests
         
         // Effective context capacity = 600 - 50 = 550
         // Compaction threshold = 550 * 0.02 = 11 tokens
-        var memoryProvider = new SummarizerMemory(mockLlm, tokenCounter, compactionFraction: 0.02);
+        var llmService = new LLMService(mockLlm, tokenCounter);
+        var memoryProvider = new SummarizerMemory(llmService, tokenCounter, mockLlm.GetCapabilities(), compactionFraction: 0.02);
 
         var turn = new List<Message> { new Message(Role.User, new Text("This is a very long string designed to cross the threshold.")) };
 
@@ -239,7 +232,8 @@ public class MemoryTests
         mockLlm.Enqueue(new Text("Summary of truncated."));
         var tokenCounter = new ApproximateTokenCounter();
         
-        var memoryProvider = new SummarizerMemory(mockLlm, tokenCounter, compactionFraction: 0.1);
+        var llmService = new LLMService(mockLlm, tokenCounter);
+        var memoryProvider = new SummarizerMemory(llmService, tokenCounter, mockLlm.GetCapabilities(), compactionFraction: 0.1);
 
         var largeResult = new string('A', 2000);
         var turn = new List<Message> 

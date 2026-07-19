@@ -85,13 +85,11 @@ public class AgentBuilderTests
         public List<string> CallLog { get; } = new();
 
         public Task<List<Message>> PrepareAsync(
-            IContent? instructions,
             Message userInput,
-            IReadOnlyList<Tool> tools,
             CancellationToken ct = default)
         {
             CallLog.Add("Recall");
-            return inner.PrepareAsync(instructions, userInput, tools, ct);
+            return inner.PrepareAsync(userInput, ct);
         }
 
         public Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)

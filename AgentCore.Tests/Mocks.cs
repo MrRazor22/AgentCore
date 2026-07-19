@@ -126,13 +126,10 @@ public class MockContextService : IContextService
     public List<Message> History { get; } = new();
 
     public Task<List<Message>> PrepareAsync(
-        IContent? instructions,
         Message userInput,
-        IReadOnlyList<Tool> tools,
         CancellationToken ct = default)
     {
         var list = new List<Message>();
-        if (instructions != null) list.Add(new Message(Role.System, instructions));
         list.AddRange(History);
         list.Add(userInput);
         return Task.FromResult(list);

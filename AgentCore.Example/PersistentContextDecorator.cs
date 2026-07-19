@@ -5,20 +5,18 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Memory;
-using AgentCore.Tools;
 
 namespace AgentCore.Example;
 
-public class PersistentMemoryLayer : IContextService
+public class PersistentContextDecorator : IContextService
 {
     private IContextService? _inner;
     private readonly string _filePath;
     private List<Message> _messages = new();
 
-    public PersistentMemoryLayer(string filePath)
+    public PersistentContextDecorator(string filePath)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
@@ -33,20 +31,17 @@ public class PersistentMemoryLayer : IContextService
     }
 
     public async Task<List<Message>> PrepareAsync(
-        IContent? instructions,
         Message userInput,
-        IReadOnlyList<Tool> tools,
         CancellationToken ct = default)
     {
         if (_inner == null)
         {
             var list = new List<Message>();
-            if (instructions != null) list.Add(new Message(Role.System, instructions));
             list.AddRange(_messages);
             list.Add(userInput);
             return list;
         }
-        return await _inner.PrepareAsync(instructions, userInput, tools, ct);
+        return await _inner.PrepareAsync(userInput, ct);
     }
 
     public async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
