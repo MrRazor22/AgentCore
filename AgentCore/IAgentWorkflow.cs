@@ -52,7 +52,7 @@ namespace AgentCore
 
                 var options = new LLMOptions { ResponseSchema = responseSchema };
                 var assistantMessage = await _llm
-                    .StreamAsync(conversation, options, _tooling.GetTools(), ct)
+                    .StreamAsync(conversation, options, _tooling.Tools, ct)
                     .AccumulateAsync(ct)
                     .ConfigureAwait(false);
 

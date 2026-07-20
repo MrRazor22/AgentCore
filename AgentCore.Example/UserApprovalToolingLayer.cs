@@ -20,7 +20,7 @@ public class UserApprovalToolingLayer : IToolService
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
 
-    public IReadOnlyList<Tool> GetTools() => _inner.GetTools();
+    public IReadOnlyList<Tool> Tools => _inner.Tools;
 
     public async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {

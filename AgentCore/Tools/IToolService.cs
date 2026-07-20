@@ -9,7 +9,7 @@ namespace AgentCore.Tools;
 
 public interface IToolService
 {
-    IReadOnlyList<Tool> GetTools();
+    IReadOnlyList<Tool> Tools { get; }
     Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
@@ -28,7 +28,7 @@ internal sealed class ToolService : IToolService
         _logger = logger ?? NullLogger<ToolService>.Instance;
     }
 
-    public IReadOnlyList<Tool> GetTools() => _toolList;
+    public IReadOnlyList<Tool> Tools => _toolList;
 
     public async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {

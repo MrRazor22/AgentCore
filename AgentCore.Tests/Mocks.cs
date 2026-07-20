@@ -124,8 +124,7 @@ public class MockMemoryProvider : IMemory
 
 public class MockTooling : IToolService
 {
-    public IReadOnlyList<Tool> ToolList { get; set; } = Array.Empty<Tool>();
-    public IReadOnlyList<Tool> GetTools() => ToolList;
+    public IReadOnlyList<Tool> Tools { get; set; } = Array.Empty<Tool>();
 
     public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<Message>>> Handler { get; set; } =
         (calls, ct) => Task.FromResult<IReadOnlyList<Message>>(

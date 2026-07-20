@@ -162,7 +162,8 @@ public class MemoryTests
 
         // Assert
         Assert.Equal(0, mockLlm.CallCount); // no LLM calls made
-        Assert.Equal(string.Empty, memoryProvider.FactSheet);
+        var prepared = await memoryProvider.PrepareAsync(new Message(Role.User, new Text("Query")));
+        Assert.All(prepared, msg => Assert.DoesNotContain("<retrieved_context>", string.Join("\n", msg.Contents.Select(c => c.ForLlm()))));
     }
 
     [Fact]
@@ -185,6 +186,7 @@ public class MemoryTests
 
         // Assert
         Assert.Equal(1, mockLlm.CallCount);
-        Assert.Equal("Consolidated fact sheet result.", memoryProvider.FactSheet);
+        var prepared = await memoryProvider.PrepareAsync(new Message(Role.User, new Text("Query")));
+        Assert.Contains(prepared, msg => msg.Contents.Any(c => c.ForLlm().Contains("Consolidated fact sheet result.")));
     }
 }

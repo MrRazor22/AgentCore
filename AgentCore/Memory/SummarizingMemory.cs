@@ -1,4 +1,4 @@
-﻿using AgentCore.LLM;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Memory;
 using System;
@@ -19,8 +19,6 @@ namespace AgentCore.Memory
         private readonly List<Message> _buffer = new();
         private string _factSheet = string.Empty;
         private readonly SemaphoreSlim _lock = new(1, 1);
-
-        public string FactSheet => _factSheet;
 
         public SummarizingMemory(
             IMemory inner,
