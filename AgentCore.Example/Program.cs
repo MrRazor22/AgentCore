@@ -100,48 +100,13 @@ internal class Program
             try
             {
                 var contentInput = new Text(input);
-                var isFirstTextDelta = true;
-                var isFirstReasoningDelta = true;
-
                 await foreach (var evt in session.Agent.InvokeStreamingAsync(contentInput, ctSource.Token))
                 {
-                    if (evt is Reasoning reasoning)
+                    if (evt is ToolCallEvent toolCallEvent)
                     {
-                        if (isFirstReasoningDelta)
-                        {
-                            Console.ForegroundColor = ConsoleColor.DarkCyan;
-                            Console.Write("\n[Thinking: ");
-                            isFirstReasoningDelta = false;
-                        }
-                        Console.Write(reasoning.Thought);
-                    }
-                    else if (evt is Text text)
-                    {
-                        if (!isFirstReasoningDelta)
-                        {
-                            Console.Write("]\n");
-                            isFirstReasoningDelta = true; 
-                        }
-
-                        if (isFirstTextDelta)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.Write("Assistant > ");
-                            Console.ResetColor();
-                            isFirstTextDelta = false;
-                        }
-                        Console.Write(text.Value);
-                    }
-                    else if (evt is ToolCall toolCall)
-                    {
-                        if (!isFirstReasoningDelta)
-                        {
-                            Console.Write("]\n");
-                            isFirstReasoningDelta = true; 
-                        }
-
+                        var toolCall = toolCallEvent.ToolCall;
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine($"\n[Agent calling tool: {toolCall.Name}({toolCall.Arguments})]");
+                        Console.WriteLine($"\n[Agent calling tool: {toolCall.Name}({toolCall.ArgumentsObject})]");
                         Console.ResetColor();
                     }
                     else if (evt is ToolResultEvent toolResult)
@@ -150,6 +115,13 @@ internal class Program
                         Console.WriteLine($"[Tool Result: {toolResult.Result.Result?.ForLlm()}]");
                         Console.ResetColor();
                     }
+                    else if (evt is AgentResponseEvent<string> response)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.Write("Assistant > ");
+                        Console.ResetColor();
+                        Console.WriteLine(response.Response);
+                    }
                     else if (evt is ErrorEvent error)
                     {
                         Console.ForegroundColor = ConsoleColor.Red;
@@ -157,7 +129,6 @@ internal class Program
                         Console.ResetColor();
                     }
                 }
-                Console.WriteLine();
             }
             catch (Exception ex)
             {
