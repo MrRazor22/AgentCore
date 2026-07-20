@@ -5,7 +5,7 @@ using LlmTornado.Chat;
 using LlmTornado.Code;
 using LlmTornado.Common;
 
-namespace AgentCore.Providers.Tornado;
+namespace AgentCore.LLM.Tornado;
 
 internal static class TornadoAdapterExtensions
 {

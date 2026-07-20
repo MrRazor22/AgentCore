@@ -2,7 +2,7 @@ using LlmTornado;
 using LlmTornado.Chat.Models;
 using AgentCore.LLM;
 
-namespace AgentCore.Providers.Tornado;
+namespace AgentCore.LLM.Tornado;
 
 /// <summary>
 /// Factory methods for creating Tornado-based LLM providers.

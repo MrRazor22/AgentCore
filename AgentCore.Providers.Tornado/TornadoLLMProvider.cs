@@ -5,7 +5,7 @@ using LlmTornado.Chat;
 using LlmTornado.Chat.Models;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore.Providers.Tornado;
+namespace AgentCore.LLM.Tornado;
 
 public class TornadoLLMProvider : ILLM
 {

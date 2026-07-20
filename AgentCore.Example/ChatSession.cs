@@ -7,7 +7,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Memory;
 using AgentCore.Tools;
-using AgentCore.Providers.Tornado;
+using AgentCore.LLM.Tornado;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Example;
