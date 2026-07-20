@@ -8,7 +8,6 @@ using Xunit;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.Memory;
-using AgentCore.LLM;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using AgentCore.LLM.Chat;
@@ -17,11 +16,9 @@ namespace AgentCore.Tests;
 
 public class WorkflowTests
 {
-    private (ILLMService Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
+    private (ILLM Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
     {
-        var tokenCounter = new ApproximateTokenCounter();
-        var llm = new LLMService(provider, tokenCounter, maxRetries: 1);
-        return (llm, tooling);
+        return (provider, tooling);
     }
 
     [Fact]
@@ -47,12 +44,7 @@ public class WorkflowTests
         }
 
         // Assert
-        // Text events
-        var textEvents = events.OfType<Text>().ToList();
-        Assert.Single(textEvents);
-        Assert.Equal("Hello world!", textEvents[0].Value);
-
-        // Final AgentResponseEvent
+        // Yields only AgentResponseEvent<string>
         var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("Hello world!", finalResponse.Response);
 
@@ -98,7 +90,7 @@ public class WorkflowTests
 
         // Assert
         // Events check
-        Assert.Contains(events, e => e is ToolCall tc && tc.Name == "get_weather");
+        Assert.Contains(events, e => e is ToolCallEvent tc && tc.ToolCall.Name == "get_weather");
         Assert.Contains(events, e => e is ToolResultEvent tr && tr.Result.ForLlm() == "Rainy");
         var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Response);
@@ -220,35 +212,5 @@ public class WorkflowTests
                 // Consume
             }
         });
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_IncrementalStreaming_YieldsEventsImmediately()
-    {
-        // Arrange
-        var provider = new MockLLMProvider();
-        provider.Enqueue(
-            new Text("A"),
-            new Reasoning("Thought"),
-            new Text("B")
-        );
-
-        var (llm, tooling) = CreateServices(provider, new MockTooling());
-        var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Stream check")) };
-
-        // Act
-        var events = new List<AgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
-        {
-            events.Add(evt);
-        }
-
-        // Assert
-        Assert.Equal(4, events.Count); // Reasoning("Thought"), Text("AB"), MetaDataEvent, AgentResponseEvent<string>("AB")
-        Assert.Equal("Thought", ((Reasoning)events[0]).Thought);
-        Assert.Equal("AB", ((Text)events[1]).Value);
-        Assert.IsType<MetaDataEvent>(events[2]);
-        Assert.Equal("AB", ((AgentResponseEvent<string>)events[3]).Response);
     }
 }

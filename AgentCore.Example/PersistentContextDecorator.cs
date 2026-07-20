@@ -10,9 +10,9 @@ using AgentCore.Memory;
 
 namespace AgentCore.Example;
 
-public class PersistentContextDecorator : IContextService
+public class PersistentContextDecorator : IMemory
 {
-    private IContextService? _inner;
+    private IMemory? _inner;
     private readonly string _filePath;
     private List<Message> _messages = new();
 
@@ -22,9 +22,9 @@ public class PersistentContextDecorator : IContextService
     }
 
     /// <summary>
-    /// Callback passed to AddContextLayer. Wraps the core context service.
+    /// Callback to wrap the core memory service.
     /// </summary>
-    public IContextService Initialize(IContextService inner)
+    public IMemory Initialize(IMemory inner)
     {
         _inner = inner;
         return this;
@@ -44,11 +44,11 @@ public class PersistentContextDecorator : IContextService
         return await _inner.PrepareAsync(userInput, ct);
     }
 
-    public async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
         if (_inner != null)
         {
-            await _inner.UpdateAsync(completedTurn, ct);
+            await _inner.RememberAsync(completedTurn, ct);
         }
 
         _messages.AddRange(completedTurn);

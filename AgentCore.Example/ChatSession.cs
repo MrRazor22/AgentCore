@@ -5,6 +5,8 @@ using System.Text.Json;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.Memory;
+using AgentCore.Tools;
 using AgentCore.Providers.Tornado;
 using Microsoft.Extensions.Logging;
 
@@ -43,20 +45,30 @@ public class ChatSession
         ContextDecorator = new PersistentContextDecorator(SessionFile);
         var tokenCounter = new ApproximateTokenCounter();
 
+        var tornadoProvider = TornadoProvider.CreateLLMProvider(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl);
+        var retryingProvider = new RetryingLLM(tornadoProvider);
+        var loggedProvider = new PerformanceLoggingLlmLayer(retryingProvider, tokenCounter, 128000);
+
+        var baseMemory = new RollingWindowMemory(
+            tokenCounter,
+            new LLMCapabilities { ContextWindow = 128000 },
+            MethodTool.FromType(typeof(ExampleTools)).Cast<Tool>().ToList(),
+            null);
+        ContextDecorator.Initialize(baseMemory);
+
         Agent = AgentCore.Agent.Create()
-            .AddTornado(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl)
+            .WithProvider(loggedProvider)
             .WithTools(new ExampleTools())
             .WithTokenCounter(tokenCounter)
-            .AddContextLayer(ContextDecorator.Initialize)
+            .WithMemory(ContextDecorator)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
-            .AddLLMLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter, 128000))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
         if (seedMessages.Count > 0)
         {
             ContextDecorator.SetLocalMessages(seedMessages);
-            ContextDecorator.UpdateAsync(seedMessages).GetAwaiter().GetResult();
+            ContextDecorator.RememberAsync(seedMessages).GetAwaiter().GetResult();
         }
     }
 

@@ -11,7 +11,7 @@ public sealed partial class Agent
 {
     /// <summary>
     /// Builder to configure and create an Agent instance.
-    /// NOTE: Each Build() call produces mutable, stateful components (like ContextService and SummarizerMemory)
+    /// NOTE: Each Build() call produces mutable, stateful components (like RollingWindowMemory)
     /// scoped to a single conversation/session. Do not share or reuse an Agent instance across concurrent,
     /// unrelated conversations.
     /// </summary>
@@ -21,18 +21,14 @@ public sealed partial class Agent
         private ILogger<Builder> _logger;
         private IContent? _instructions;
 
-        private IContextService? _contextService;
-        private IMemory? _memoryProvider;
+        private IMemory? _memory;
         private IToolService? _tooling;
-        private ILLMService? _llm;
         private ITokenCounter? _tokenCounter;
         private ILoggerFactory? _loggerFactory;
         private ILLM? _provider;
-        private Func<ILLMService, IToolService, IAgentWorkflow>? _workflowFactory;
+        private Func<ILLM, IToolService, IAgentWorkflow>? _workflowFactory;
 
-        private readonly List<Func<IContextService, IContextService>> _contextLayers = [];
         private readonly List<Func<IToolService, IToolService>> _toolingLayers = [];
-        private readonly List<Func<ILLMService, ILLMService>> _llmLayers = [];
 
         public Builder()
         {
@@ -66,16 +62,10 @@ public sealed partial class Agent
             return this;
         }
 
-        public Builder UseContext(IContextService contextService) { _contextService = contextService; return this; } 
-        public Builder AddContextLayer(Func<IContextService, IContextService> layer) { _contextLayers.Add(layer); return this; }
-
-        public Builder WithMemory(IMemory memoryProvider) { _memoryProvider = memoryProvider; return this; }
+        public Builder WithMemory(IMemory memory) { _memory = memory; return this; }
 
         public Builder UseTooling(IToolService tooling) { _tooling = tooling; return this; }
         public Builder AddToolingLayer(Func<IToolService, IToolService> layer) { _toolingLayers.Add(layer); return this; }
-
-        public Builder UseLLM(ILLMService llm) { _llm = llm; return this; }
-        public Builder AddLLMLayer(Func<ILLMService, ILLMService> layer) { _llmLayers.Add(layer); return this; }
 
         public Builder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
         
@@ -88,7 +78,7 @@ public sealed partial class Agent
         
         public Builder WithProvider(ILLM provider) { _provider = provider; return this; }
 
-        public Builder UseWorkflow(Func<ILLMService, IToolService, IAgentWorkflow> factory)
+        public Builder UseWorkflow(Func<ILLM, IToolService, IAgentWorkflow> factory)
         {
             _workflowFactory = factory;
             return this;
@@ -99,7 +89,7 @@ public sealed partial class Agent
             _logger.LogInformation("Agent build started");
 
             var baseProvider = _provider;
-            if (baseProvider == null && _llm == null)
+            if (baseProvider == null)
                 throw new InvalidOperationException("No LLM provider registered. Install a provider package (e.g., AgentCore.Providers.Tornado) and call WithProvider().");
 
             var lf = _loggerFactory ?? NullLoggerFactory.Instance;
@@ -112,46 +102,23 @@ public sealed partial class Agent
             foreach (var layer in _toolingLayers)
                 tooling = layer(tooling);
 
-            ILLMService pipeline;
-            if (_llm != null)
-            {
-                pipeline = _llm;
-            }
-            else
-            {
-                pipeline = new LLMService(baseProvider!, tokenCounter, logger: lf.CreateLogger<LLMService>());
-            }
+            var capabilities = baseProvider.GetCapabilities();
 
-            foreach (var layer in _llmLayers)
-                pipeline = layer(pipeline);
-
-            var providerForContext = baseProvider ?? (_llm as LLMService)?.Provider;
-            var capabilities = providerForContext?.GetCapabilities() ?? new LLMCapabilities();
-
-            IMemory memoryProvider = _memoryProvider ?? new SummarizerMemory(pipeline, tokenCounter, capabilities);
-            IContextService contextService = _contextService;
-            if (contextService == null)
-            {
-                contextService = new ContextService(
-                    tokenCounter, 
-                    memoryProvider, 
-                    capabilities, 
-                    frozenTools, 
-                    _instructions, 
-                    logger: lf.CreateLogger<ContextService>());
-            }
-            foreach (var layer in _contextLayers)
-                contextService = layer(contextService);
+            IMemory memory = _memory ?? new RollingWindowMemory(
+                tokenCounter,
+                capabilities,
+                frozenTools,
+                _instructions);
 
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
                 frozenTools.Length,
-                _llm != null ? _llm.GetType().Name : baseProvider!.GetType().Name);
+                baseProvider.GetType().Name);
 
             var workflow = _workflowFactory != null 
-                ? _workflowFactory(pipeline, tooling) 
-                : new ReActWorkflow(pipeline, tooling);
+                ? _workflowFactory(baseProvider, tooling) 
+                : new ReActWorkflow(baseProvider, tooling);
 
-            return new Agent(pipeline, contextService, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
+            return new Agent(baseProvider, memory, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
         }
     }
 }

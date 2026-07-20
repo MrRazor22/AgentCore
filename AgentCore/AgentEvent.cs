@@ -5,6 +5,8 @@ public abstract record AgentEvent;
 
 public sealed record ToolResultEvent(ToolResult Result) : AgentEvent;
 
+public sealed record ToolCallEvent(ToolCall ToolCall) : AgentEvent;
+
 public sealed record ErrorEvent(Exception Error) : AgentEvent;
 
 public sealed record AgentResponseEvent<T>(T Response) : AgentEvent;

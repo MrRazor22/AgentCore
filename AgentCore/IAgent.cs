@@ -20,23 +20,23 @@ public sealed partial class Agent : IAgent
 {
     public static Builder Create() => new Builder();
 
-    private readonly ILLMService _llm; 
-    private readonly IContextService _contextService;
+    private readonly ILLM _llm; 
+    private readonly IMemory _memory;
     private readonly IReadOnlyList<Tool> _tools;
     private readonly IContent? _instructions;
     private readonly IAgentWorkflow _workflow;
     private readonly ILogger<Agent> _logger;
 
     public Agent(
-        ILLMService llm, 
-        IContextService contextService,
+        ILLM llm, 
+        IMemory memory,
         IReadOnlyList<Tool> tools,
         IContent? instructions,
         IAgentWorkflow workflow,
         ILogger<Agent>? logger = null)
     {
         _llm = llm; 
-        _contextService = contextService;
+        _memory = memory;
         _tools = tools;
         _instructions = instructions;
         _workflow = workflow;
@@ -119,13 +119,13 @@ public sealed partial class Agent : IAgent
         List<Message> conversation;
         try
         {
-            conversation = await _contextService.PrepareAsync(
+            conversation = await _memory.PrepareAsync(
                 new Message(Role.User, input),
                 ct).ConfigureAwait(false);
         }
         catch (Exception ex)    
         {
-            _logger.LogError(ex, "Agent failed during Context preparation.");
+            _logger.LogError(ex, "Agent failed during Memory preparation.");
             throw;
         }
 
@@ -139,11 +139,11 @@ public sealed partial class Agent : IAgent
         try
         {
             var newTurnMessages = conversation.Skip(initialCount - 1).ToList();
-            await _contextService.UpdateAsync(newTurnMessages, ct).ConfigureAwait(false);
+            await _memory.RememberAsync(newTurnMessages, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during Context update.");
+            _logger.LogError(ex, "Agent failed during Memory update.");
             throw;
         }
 

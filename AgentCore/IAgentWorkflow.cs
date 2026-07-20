@@ -19,12 +19,12 @@ namespace AgentCore
 
     public class ReActWorkflow : IAgentWorkflow
     {
-        private readonly ILLMService _llm;
+        private readonly ILLM _llm;
         private readonly IToolService _tooling;
         private readonly int? _maxIterations;
 
         public ReActWorkflow(
-            ILLMService llm,
+            ILLM llm,
             IToolService tooling,
             int? maxIterations = null)
         {
@@ -50,33 +50,12 @@ namespace AgentCore
                     break;
                 }
 
-                var textBuffer = new System.Text.StringBuilder();
-                var reasoningBuffer = new System.Text.StringBuilder();
-                var toolCalls = new List<ToolCall>();
-
                 var options = new LLMOptions { ResponseSchema = responseSchema };
-                await using var enumerator = _llm.StreamAsync(conversation, options, _tooling.GetTools(), ct).GetAsyncEnumerator(ct);
+                var assistantMessage = await _llm
+                    .StreamAsync(conversation, options, _tooling.GetTools(), ct)
+                    .AccumulateAsync(ct)
+                    .ConfigureAwait(false);
 
-                while (await enumerator.MoveNextAsync())
-                {
-                    var evt = enumerator.Current;
-                    switch (evt)
-                    {
-                        case Text text:
-                            textBuffer.Append(text.Value);
-                            break;
-                        case Reasoning reasoning:
-                            reasoningBuffer.Append(reasoning.Thought);     
-                            break;
-                        case ToolCall toolCall:
-                            toolCalls.Add(toolCall);
-                            break;
-                    }
-
-                    yield return evt;
-                }
-
-                var assistantMessage = BuildMessage(textBuffer, reasoningBuffer, toolCalls);
                 if (assistantMessage == null)
                 {
                     break;
@@ -84,9 +63,15 @@ namespace AgentCore
 
                 conversation.Add(assistantMessage);
 
+                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
+
+                    foreach (var call in toolCalls)
+                    {
+                        yield return new ToolCallEvent(call);
+                    }
 
                     var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
                     conversation.AddRange(toolMessages);
@@ -100,23 +85,10 @@ namespace AgentCore
                     continue;
                 }
 
-                // Final assistant response.
-                yield return new AgentResponseEvent<string>(textBuffer.ToString().Trim());
+                var finalText = string.Join("\n", assistantMessage.Contents.OfType<Text>().Select(t => t.Value)).Trim();
+                yield return new AgentResponseEvent<string>(finalText);
                 break;
             }
-        }
-
-        private static Message? BuildMessage(System.Text.StringBuilder text, System.Text.StringBuilder reasoning, List<ToolCall> toolCalls)
-        {
-            var contents = new List<IContent>();
-            if (reasoning.Length > 0) contents.Add(new Reasoning(reasoning.ToString()));
-            
-            var textVal = text.ToString().Trim();
-            if (!string.IsNullOrEmpty(textVal)) contents.Add(new Text(textVal));
-            
-            if (toolCalls.Count > 0) contents.AddRange(toolCalls);
-            
-            return contents.Count == 0 ? null : new Message(Role.Assistant, contents);
         }
     }
 }

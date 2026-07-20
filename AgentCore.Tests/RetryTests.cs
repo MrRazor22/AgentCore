@@ -23,9 +23,8 @@ public class RetryTests
         // 2nd attempt: success
         mockProvider.Enqueue(new Text("Success text"));
 
-        var service = new LLMService(
+        var service = new RetryingLLM(
             mockProvider,
-            new ApproximateTokenCounter(),
             maxRetries: 1 // Allow 1 retry (2 attempts total)
         );
 
@@ -50,9 +49,8 @@ public class RetryTests
         mockProvider.EnqueueException(new RetryableException("Transient error 1"));
         mockProvider.EnqueueException(new RetryableException("Transient error 2"));
 
-        var service = new LLMService(
+        var service = new RetryingLLM(
             mockProvider,
-            new ApproximateTokenCounter(),
             maxRetries: 1 // Allow 1 retry (2 attempts total)
         );
 
@@ -76,9 +74,8 @@ public class RetryTests
         var mockProvider = new MockLLMProvider();
         mockProvider.EnqueueException(new InvalidOperationException("Fatal error"));
 
-        var service = new LLMService(
+        var service = new RetryingLLM(
             mockProvider,
-            new ApproximateTokenCounter(),
             maxRetries: 2
         );
 
@@ -102,18 +99,17 @@ public class RetryTests
         
         mockProvider.Enqueue(ct => 
         {
-            async IAsyncEnumerable<IContentDelta> YieldAndThrow()
+            async IAsyncEnumerable<LLMEvent> YieldAndThrow()
             {
-                yield return new TextDelta("First delta");
+                yield return new Text("First delta");
                 await Task.Yield();
                 throw new RetryableException("Transient error after yield");
             }
             return YieldAndThrow();
         });
 
-        var service = new LLMService(
+        var service = new RetryingLLM(
             mockProvider,
-            new ApproximateTokenCounter(),
             maxRetries: 3
         );
 

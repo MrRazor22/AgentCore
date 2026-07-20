@@ -11,24 +11,24 @@ using AgentCore.Tools;
 namespace AgentCore.Example;
 
 /// <summary>
-/// A decorator layer for ILLMService that intercepts the LLM streaming event flow
+/// A decorator layer for ILLM that intercepts the LLM streaming event flow
 /// to measure response time and display token usage statistics, including
 /// the percentage of the context window currently consumed.
 /// </summary>
-public class PerformanceLoggingLlmLayer : ILLMService
+public class PerformanceLoggingLlmLayer : ILLM
 {
-    private readonly ILLMService _inner;
+    private readonly ILLM _inner;
     private readonly ITokenCounter _tokenCounter;
     private readonly int _contextWindow;
 
-    public PerformanceLoggingLlmLayer(ILLMService inner, ITokenCounter tokenCounter, int contextWindow)
+    public PerformanceLoggingLlmLayer(ILLM inner, ITokenCounter tokenCounter, int contextWindow)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
         _contextWindow = contextWindow;
     }
 
-
+    public LLMCapabilities GetCapabilities() => _inner.GetCapabilities();
 
     public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -45,10 +45,6 @@ public class PerformanceLoggingLlmLayer : ILLMService
             if (delta is TokenUsage meta)
             {
                 generatedTokens = meta.OutputTokens;
-            }
-            else if (delta is TokenUsage chunk)
-            {
-                generatedTokens = chunk.OutputTokens;
             }
 
             yield return delta;

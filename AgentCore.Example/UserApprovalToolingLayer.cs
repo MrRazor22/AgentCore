@@ -33,7 +33,7 @@ public class UserApprovalToolingLayer : IToolService
             {
                 // Retrieve the path from JSON arguments safely
                 var path = "unknown";
-                if (call.Arguments != null && call.Arguments.TryGetPropertyValue("path", out var pathNode))
+                if (call.ArgumentsObject != null && call.ArgumentsObject.TryGetPropertyValue("path", out var pathNode))
                 {
                     path = pathNode?.ToString() ?? "unknown";
                 }

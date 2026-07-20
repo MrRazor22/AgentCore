@@ -28,7 +28,7 @@ public class TornadoLLMProvider : ILLM
 
     public LLMCapabilities GetCapabilities() => _capabilities;
 
-    public async IAsyncEnumerable<IContentDelta> StreamAsync(
+    public async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
@@ -56,7 +56,7 @@ public class TornadoLLMProvider : ILLM
             SingleReader = true,
             FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
         };
-        var channel = System.Threading.Channels.Channel.CreateBounded<IContentDelta>(channelOptions);
+        var channel = System.Threading.Channels.Channel.CreateBounded<LLMEvent>(channelOptions);
 
         _ = Task.Run(async () =>
         {
@@ -68,18 +68,18 @@ public class TornadoLLMProvider : ILLM
                     {
                         if (reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new Reasoning(reasoning.Content), ct);
                         }
                     },
                     MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new ReasoningDelta(part.Reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new Reasoning(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
-                            await channel.Writer.WriteAsync(new TextDelta(part.Text), ct);
+                            await channel.Writer.WriteAsync(new Text(part.Text), ct);
                         }
                     },
                     FunctionCallHandler = async (calls) =>
@@ -89,14 +89,14 @@ public class TornadoLLMProvider : ILLM
                          foreach(var call in calls)
                          {
                               var argsStr = call.Arguments;
-                              await channel.Writer.WriteAsync(new ToolCallDelta(idx++, call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, argsStr), ct);
+                              await channel.Writer.WriteAsync(new ToolCall(call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, System.Text.Json.Nodes.JsonValue.Create(argsStr), idx++), ct);
                          }
                     },
                     OnUsageReceived = async (usage) => 
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new MetaDelta(null, InputTokens: usage.PromptTokens, OutputTokens: usage.CompletionTokens), ct);
+                            await channel.Writer.WriteAsync(new TokenUsage(usage.PromptTokens, usage.CompletionTokens), ct);
                         }
                     }
                 }, ct);

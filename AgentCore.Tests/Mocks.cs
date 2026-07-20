@@ -14,7 +14,7 @@ namespace AgentCore.Tests;
 
 public class MockLLMProvider : ILLM
 {
-    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IContentDelta>>> _responses = new();
+    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<LLMEvent>>> _responses = new();
     
     public int ContextWindow { get; set; } = 4096;
     public int ReservedTokens { get; set; } = 512;
@@ -30,21 +30,16 @@ public class MockLLMProvider : ILLM
     
     public int CallCount => CapturedMessages.Count;
 
-    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<IContentDelta>> generator)
+    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<LLMEvent>> generator)
     {
         _responses.Enqueue(generator);
     }
 
-    private static IContentDelta ConvertToDelta(object evt)
+    private static LLMEvent ConvertToDelta(object evt)
     {
         return evt switch
         {
-            IContentDelta delta => delta,
-            Text text => new TextDelta(text.Value),
-            Reasoning reasoning => new ReasoningDelta(reasoning.Thought),
-            ToolCall toolCall => new ToolCallDelta(0, toolCall.Id, toolCall.Name, toolCall.Arguments.ToString()),
-            MetaDataEvent meta => new MetaDelta(meta.FinishReason),
-            TokenUsage usage => new MetaDelta(null, usage.InputTokens, usage.OutputTokens, usage.ReasoningTokens),
+            LLMEvent ev => ev,
             _ => throw new ArgumentException($"Unknown event type {evt.GetType()}")
         };
     }
@@ -66,8 +61,8 @@ public class MockLLMProvider : ILLM
         _responses.Enqueue(ct => ThrowException(ex));
     }
 
-    private static async IAsyncEnumerable<IContentDelta> ToAsyncEnumerable(
-        IEnumerable<IContentDelta> deltas, 
+    private static async IAsyncEnumerable<LLMEvent> ToAsyncEnumerable(
+        IEnumerable<LLMEvent> deltas, 
         [EnumeratorCancellation] CancellationToken ct)
     {
         foreach (var delta in deltas)
@@ -78,13 +73,13 @@ public class MockLLMProvider : ILLM
         await Task.CompletedTask;
     }
 
-    private static async IAsyncEnumerable<IContentDelta> ThrowException(Exception ex)
+    private static async IAsyncEnumerable<LLMEvent> ThrowException(Exception ex)
     {
         if (false) yield break;
         throw ex;
     }
 
-    public IAsyncEnumerable<IContentDelta> StreamAsync(
+    public IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
@@ -96,7 +91,7 @@ public class MockLLMProvider : ILLM
 
         if (_responses.Count == 0)
         {
-            return ToAsyncEnumerable(Enumerable.Empty<IContentDelta>(), ct);
+            return ToAsyncEnumerable(Enumerable.Empty<LLMEvent>(), ct);
         }
 
         var generator = _responses.Dequeue();
@@ -109,35 +104,20 @@ public class MockMemoryProvider : IMemory
     public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
-    public Task RememberAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
-    {
-        Saved.Add(turn);
-        return Task.CompletedTask;
-    }
-
-    public Task<IContent> RecallAsync(IContent query, CancellationToken ct = default)
-    {
-        return Task.FromResult<IContent>(new Text(RecallResult));
-    }
-}
-
-public class MockContextService : IContextService
-{
-    public List<Message> History { get; } = new();
-
-    public Task<List<Message>> PrepareAsync(
-        Message userInput,
-        CancellationToken ct = default)
+    public Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
     {
         var list = new List<Message>();
-        list.AddRange(History);
-        list.Add(userInput);
+        if (!string.IsNullOrEmpty(RecallResult))
+        {
+            list.Add(new Message(Role.System, new Text(RecallResult)));
+        }
+        list.Add(newInput);
         return Task.FromResult(list);
     }
 
-    public Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public Task RememberAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
     {
-        History.AddRange(completedTurn);
+        Saved.Add(turn);
         return Task.CompletedTask;
     }
 }

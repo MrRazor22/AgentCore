@@ -1,6 +1,11 @@
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 using AgentCore.LLM;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+using System;
 
 namespace AgentCore.Tests;
 
@@ -80,7 +85,7 @@ public class AgentBuilderTests
         Assert.Throws<InvalidOperationException>(() => { builder.Build(); });
     }
 
-    private class MemoryLoggerDecorator(Memory.IContextService inner) : Memory.IContextService
+    private class MemoryLoggerDecorator(Memory.IMemory inner) : Memory.IMemory
     {
         public List<string> CallLog { get; } = new();
 
@@ -92,10 +97,10 @@ public class AgentBuilderTests
             return inner.PrepareAsync(userInput, ct);
         }
 
-        public Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
         {
             CallLog.Add("Remember");
-            return inner.UpdateAsync(completedTurn, ct);
+            return inner.RememberAsync(completedTurn, ct);
         }
     }
 
@@ -104,15 +109,19 @@ public class AgentBuilderTests
     {
         MemoryLoggerDecorator? decoratorInstance = null;
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new TextDelta("Acknowledged"));
+        mockProvider.Enqueue(new Text("Acknowledged"));
+
+        var baseMemory = new Memory.RollingWindowMemory(
+            new ApproximateTokenCounter(),
+            new LLMCapabilities(),
+            Array.Empty<Tool>(),
+            null);
+            
+        decoratorInstance = new MemoryLoggerDecorator(baseMemory);
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .AddContextLayer(inner =>
-            {
-                decoratorInstance = new MemoryLoggerDecorator(inner);
-                return decoratorInstance;
-            })
+            .WithMemory(decoratorInstance)
             .Build();
 
         Assert.NotNull(agent);
@@ -121,4 +130,3 @@ public class AgentBuilderTests
         Assert.Contains("Recall", decoratorInstance.CallLog);
     }
 }
-

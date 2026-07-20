@@ -22,17 +22,42 @@ public sealed record Text(string Value) : LLMEvent, IContent
 public sealed record ToolCall(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("arguments")] JsonObject Arguments
+    [property: JsonPropertyName("arguments")] JsonNode Arguments,
+    [property: JsonIgnore] int? Index = null
 ) : LLMEvent, IContent
 {
+    [JsonIgnore]
+    public JsonObject ArgumentsObject
+    {
+        get
+        {
+            if (Arguments is JsonObject obj) return obj;
+            if (Arguments is JsonValue val && val.TryGetValue<string>(out var str))
+            {
+                try
+                {
+                    return JsonNode.Parse(str)?.AsObject() ?? new JsonObject();
+                }
+                catch
+                {
+                    return new JsonObject();
+                }
+            }
+            return new JsonObject();
+        }
+    }
 
     public string ForLlm()
     {
-        if (Arguments.Count == 0)
-            return Name;
+        if (Arguments is JsonObject obj)
+        {
+            if (obj.Count == 0)
+                return Name;
 
-        var args = string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"));
-        return $"{Name}({args})";
+            var args = string.Join(", ", obj.Select(p => $"{p.Key}: {p.Value}"));
+            return $"{Name}({args})";
+        }
+        return $"{Name}({Arguments})";
     }
 }
 

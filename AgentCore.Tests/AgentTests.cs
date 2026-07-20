@@ -8,6 +8,7 @@ using AgentCore;
 using AgentCore.LLM;
 using AgentCore.Memory;
 using AgentCore.LLM.Chat;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 
@@ -26,12 +27,17 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var memory = new MockContextService();
-        memory.History.Add(new Message(Role.User, new Text("Old message")));
+        var memory = new RollingWindowMemory(
+            new ApproximateTokenCounter(),
+            new LLMCapabilities(),
+            Array.Empty<Tool>(),
+            null
+        );
+        await memory.RememberAsync(new[] { new Message(Role.User, new Text("Old message")) });
 
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .UseContext(memory)
+            .WithMemory(memory)
             .Build();
 
         // Act
@@ -59,10 +65,10 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Model reply"));
 
-        var memory = new MockContextService();
+        var memory = new MockMemoryProvider();
         var agent = Agent.Create()
             .WithProvider(mockProvider)
-            .UseContext(memory)
+            .WithMemory(memory)
             .Build();
 
         // Act
@@ -70,12 +76,14 @@ public class AgentTests
 
         // Assert
         // Memory should contain: User: User input, Assistant: Model reply
-        Assert.Equal(2, memory.History.Count);
-        Assert.Equal(Role.User, memory.History[0].Role);
-        Assert.Equal("User input", memory.History[0].Contents[0].ForLlm());
+        Assert.Single(memory.Saved);
+        var savedTurn = memory.Saved[0];
+        Assert.Equal(2, savedTurn.Count);
+        Assert.Equal(Role.User, savedTurn[0].Role);
+        Assert.Equal("User input", savedTurn[0].Contents[0].ForLlm());
         
-        Assert.Equal(Role.Assistant, memory.History[1].Role);
-        Assert.Equal("Model reply", memory.History[1].Contents[0].ForLlm());
+        Assert.Equal(Role.Assistant, savedTurn[1].Role);
+        Assert.Equal("Model reply", savedTurn[1].Contents[0].ForLlm());
     }
 
     [Fact]
@@ -136,10 +144,6 @@ public class AgentTests
         {
             events.Add(ev);
         }
-
-        var textEvents = events.OfType<Text>().ToList();
-        Assert.Single(textEvents);
-        Assert.Equal("Streaming reply", textEvents[0].Value);
  
         var responseEvent = events.OfType<AgentResponseEvent<string>>().Single();
         Assert.Equal("Streaming reply", responseEvent.Response);
