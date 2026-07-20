@@ -111,7 +111,7 @@ public class AgentBuilderTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var baseMemory = new Memory.RollingWindowMemory(
+        var baseMemory = new Memory.ChatMemory(
             new ApproximateTokenCounter(),
             new LLMCapabilities(),
             Array.Empty<Tool>(),

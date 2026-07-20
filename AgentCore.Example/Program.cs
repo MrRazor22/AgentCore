@@ -172,7 +172,7 @@ internal class Program
             case "/revert":
                 if (int.TryParse(argument, out var index))
                 {
-                    var localHistory = session.ContextDecorator.GetLocalMessages();
+                    var localHistory = session.chat.GetLocalMessages();
                     if (index >= 0 && index < localHistory.Count)
                     {
                         session.RevertTo(index);
@@ -252,7 +252,7 @@ internal class Program
 
     private static void PrintHistory(ChatSession session, int limit = int.MaxValue)
     {
-        var history = session.ContextDecorator.GetLocalMessages();
+        var history = session.chat.GetLocalMessages();
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("\n--- Conversation Message History ---");
         if (history.Count == 0)

@@ -10,13 +10,13 @@ using AgentCore.Memory;
 
 namespace AgentCore.Example;
 
-public class PersistentContextDecorator : IMemory
+public class PersistentMemoryLayer : IMemory
 {
     private IMemory? _inner;
     private readonly string _filePath;
     private List<Message> _messages = new();
 
-    public PersistentContextDecorator(string filePath)
+    public PersistentMemoryLayer(string filePath)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }

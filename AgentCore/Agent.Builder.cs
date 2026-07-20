@@ -104,11 +104,12 @@ public sealed partial class Agent
 
             var capabilities = baseProvider.GetCapabilities();
 
-            IMemory memory = _memory ?? new RollingWindowMemory(
+            IMemory memory = _memory ?? new ChatMemory(
                 tokenCounter,
                 capabilities,
                 frozenTools,
-                _instructions);
+                _instructions,
+                summarizer: baseProvider);
 
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
                 frozenTools.Length,

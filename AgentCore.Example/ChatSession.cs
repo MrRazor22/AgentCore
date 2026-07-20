@@ -23,7 +23,7 @@ public class ChatSession
     private readonly ILoggerFactory _loggerFactory;
 
     public IAgent Agent { get; private set; } = null!;
-    public PersistentContextDecorator ContextDecorator { get; private set; } = null!;
+    public PersistentMemoryLayer chat { get; private set; } = null!;
     public string SessionFile { get; private set; }
 
     public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile)
@@ -42,33 +42,33 @@ public class ChatSession
     /// </summary>
     public void Rebuild(List<Message> seedMessages)
     {
-        ContextDecorator = new PersistentContextDecorator(SessionFile);
+        chat = new PersistentMemoryLayer(SessionFile);
         var tokenCounter = new ApproximateTokenCounter();
 
         var tornadoProvider = TornadoProvider.CreateLLMProvider(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl);
         var retryingProvider = new RetryingLLM(tornadoProvider);
         var loggedProvider = new PerformanceLoggingLlmLayer(retryingProvider, tokenCounter, 128000);
 
-        var baseMemory = new RollingWindowMemory(
+        var baseMemory = new ChatMemory(
             tokenCounter,
             new LLMCapabilities { ContextWindow = 128000 },
             MethodTool.FromType(typeof(ExampleTools)).Cast<Tool>().ToList(),
             null);
-        ContextDecorator.Initialize(baseMemory);
+        chat.Initialize(baseMemory);
 
         Agent = AgentCore.Agent.Create()
             .WithProvider(loggedProvider)
             .WithTools(new ExampleTools())
             .WithTokenCounter(tokenCounter)
-            .WithMemory(ContextDecorator)
+            .WithMemory(chat)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
         if (seedMessages.Count > 0)
         {
-            ContextDecorator.SetLocalMessages(seedMessages);
-            ContextDecorator.RememberAsync(seedMessages).GetAwaiter().GetResult();
+            chat.SetLocalMessages(seedMessages);
+            chat.RememberAsync(seedMessages).GetAwaiter().GetResult();
         }
     }
 
@@ -83,7 +83,7 @@ public class ChatSession
 
     public void RevertTo(int index)
     {
-        var messages = ContextDecorator.GetLocalMessages().Take(index).ToList();
+        var messages = chat.GetLocalMessages().Take(index).ToList();
         Rebuild(messages);
     }
 
