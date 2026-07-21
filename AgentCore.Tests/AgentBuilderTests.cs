@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using System;
+using AgentCore.Memory;
 
 namespace AgentCore.Tests;
 
@@ -85,94 +86,155 @@ public class AgentBuilderTests
         Assert.Throws<InvalidOperationException>(() => { builder.Build(); });
     }
 
-    private class MemoryLoggerDecorator(Memory.IMemory inner) : Memory.IMemory
+    private class MemoryLoggerDecorator : MemoryLayer
     {
         public List<string> CallLog { get; } = new();
 
-        public Task<List<Message>> PrepareAsync(
+        public override Task<List<Message>> PrepareAsync(
             Message userInput,
             CancellationToken ct = default)
         {
             CallLog.Add("Recall");
-            return inner.PrepareAsync(userInput, ct);
+            return base.PrepareAsync(userInput, ct);
         }
 
-        public Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public override Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
         {
             CallLog.Add("Remember");
-            return inner.RememberAsync(completedTurn, ct);
+            return base.RememberAsync(completedTurn, ct);
         }
 
-        public Task ClearAsync(CancellationToken ct = default)
+        public override Task ClearAsync(CancellationToken ct = default)
         {
             CallLog.Add("Clear");
-            return inner.ClearAsync(ct);
+            return base.ClearAsync(ct);
         }
 
-        public Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+        public override Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
         {
             CallLog.Add("Restore");
-            return inner.RestoreAsync(history, ct);
+            return base.RestoreAsync(history, ct);
         }
     }
 
     [Fact]
     public async Task Build_InjectsAndSequencesDecoratorsCorrectly()
     {
-        MemoryLoggerDecorator? decoratorInstance = null;
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var baseMemory = new Memory.WorkingMemory(
+        var baseMemory = new WorkingMemory(
             new ApproximateTokenCounter(),
             new LLMCapabilities(),
             Array.Empty<Tool>(),
             null);
             
-        decoratorInstance = new MemoryLoggerDecorator(baseMemory);
+        var decoratorInstance = new MemoryLoggerDecorator();
 
-        var agent = Agent.Create()
+        var builder = Agent.Create()
             .WithLLM(mockProvider)
-            .WithMemory(decoratorInstance)
-            .Build();
+            .WithMemory(baseMemory)
+            .AddMemoryLayer(decoratorInstance);
+
+        var agent = builder.Build();
 
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
-        Assert.NotNull(decoratorInstance);
         Assert.Contains("Recall", decoratorInstance.CallLog);
     }
 
+    private class TestLlmDecorator : LlmLayer
+    {
+        private readonly string _name;
+        private readonly List<string> _callOrder;
+
+        public TestLlmDecorator(string name, List<string> callOrder)
+        {
+            _name = name;
+            _callOrder = callOrder;
+        }
+
+        public override IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions? options = null, IReadOnlyList<Tool>? tools = null, CancellationToken ct = default)
+        {
+            _callOrder.Add(_name);
+            return base.StreamAsync(messages, options, tools, ct);
+        }
+    }
+
+    private class TestMemoryDecorator : MemoryLayer
+    {
+        private readonly string _name;
+        private readonly List<string> _callOrder;
+
+        public TestMemoryDecorator(string name, List<string> callOrder)
+        {
+            _name = name;
+            _callOrder = callOrder;
+        }
+
+        public override Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+        {
+            _callOrder.Add(_name);
+            return base.PrepareAsync(newInput, ct);
+        }
+    }
+
     [Fact]
-    public void Build_AppliesLlmAndMemoryLayersInPipelineOrder()
+    public async Task Build_AppliesLlmAndMemoryLayersInPipelineOrder()
     {
         var mockProvider = new MockLLMProvider();
+        mockProvider.Enqueue(new Text("Hi"));
         var callOrder = new List<string>();
 
-        var agent = Agent.Create()
+        var builder = Agent.Create()
             .WithLLM(mockProvider)
-            .AddLlmLayer(inner =>
-            {
-                callOrder.Add("LlmLayer1");
-                return inner;
-            })
-            .AddLlmLayer(inner =>
-            {
-                callOrder.Add("LlmLayer2");
-                return inner;
-            })
-            .AddMemoryLayer(inner =>
-            {
-                callOrder.Add("MemoryLayer1");
-                return inner;
-            })
-            .AddMemoryLayer(inner =>
-            {
-                callOrder.Add("MemoryLayer2");
-                return inner;
-            })
-            .Build();
+            .AddLlmLayer(new TestLlmDecorator("LlmLayer1", callOrder))
+            .AddLlmLayer(new TestLlmDecorator("LlmLayer2", callOrder))
+            .AddMemoryLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
+            .AddMemoryLayer(new TestMemoryDecorator("MemoryLayer2", callOrder));
+
+        var agent = builder.Build();
 
         Assert.NotNull(agent);
-        Assert.Equal(new[] { "LlmLayer1", "LlmLayer2", "MemoryLayer1", "MemoryLayer2" }, callOrder);
+        await agent.InvokeAsync<string>(new Text("Hello"));
+
+        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1" }, callOrder);
+    }
+
+    [Fact]
+    public void Build_ThrowsOnDecoratorReuse()
+    {
+        var mockProvider = new MockLLMProvider();
+        var decorator = new TestMemoryDecorator("Shared", new List<string>());
+
+        var builder1 = Agent.Create()
+            .WithLLM(mockProvider)
+            .AddMemoryLayer(decorator);
+
+        builder1.Build();
+
+        var builder2 = Agent.Create()
+            .WithLLM(mockProvider)
+            .AddMemoryLayer(decorator);
+
+        Assert.Throws<InvalidOperationException>(() => builder2.Build());
+    }
+
+    [Fact]
+    public void Builder_ExposesRequiredServices()
+    {
+        var mockProvider = new MockLLMProvider();
+        var builder = Agent.Create()
+            .WithLLM(mockProvider);
+
+        var agent = builder.Build();
+
+        var llm = builder.GetRequiredService<ILLM>();
+        var memory = builder.GetRequiredService<IMemory>();
+        var tooling = builder.GetRequiredService<ITooling>();
+
+        Assert.NotNull(llm);
+        Assert.NotNull(memory);
+        Assert.NotNull(tooling);
     }
 }

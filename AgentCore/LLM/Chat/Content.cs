@@ -13,7 +13,7 @@ public interface IContent
     string ForLlm();
 }
 
-public sealed record Text(string Value) : LLMEvent, IContent
+public sealed record Text([property: JsonPropertyName("Value")] string Value) : LLMEvent, IContent
 {
     public static implicit operator Text(string text) => new(text);
     public string ForLlm() => Value;
@@ -70,7 +70,7 @@ public sealed record ToolResult(
         => Result?.ForLlm() ?? "";
 }
 
-public sealed record Reasoning(string Thought) : LLMEvent, IContent
+public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : LLMEvent, IContent
 {
     public string ForLlm() => Thought;
 }

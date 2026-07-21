@@ -20,17 +20,20 @@ namespace AgentCore
     public class ReActWorkflow : IAgentWorkflow
     {
         private readonly ILLM _llm;
-        private readonly IToolService _tooling;
+        private readonly ITooling _tooling;
         private readonly int? _maxIterations;
+        private readonly ILogger<ReActWorkflow>? _logger;
 
         public ReActWorkflow(
             ILLM llm,
-            IToolService tooling,
-            int? maxIterations = null)
+            ITooling tooling,
+            int? maxIterations = null,
+            ILogger<ReActWorkflow>? logger = null)
         {
             _llm = llm;
             _tooling = tooling;
             _maxIterations = maxIterations;
+            _logger = logger;
         }
 
         public async IAsyncEnumerable<AgentEvent> ExecuteAsync(
@@ -46,11 +49,15 @@ namespace AgentCore
 
                 if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
                 {
+                    _logger?.LogError("Execution exceeded the maximum limit of {MaxIterations} iterations.", _maxIterations.Value);
                     yield return new ErrorEvent(new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations."));
                     break;
                 }
 
+                _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, conversation.Count);
+
                 var options = new LLMOptions { ResponseSchema = responseSchema };
+                _logger?.LogDebug("Calling LLM StreamAsync...");
                 var assistantMessage = await _llm
                     .StreamAsync(conversation, options, _tooling.Tools, ct)
                     .AccumulateAsync(ct)
@@ -58,12 +65,18 @@ namespace AgentCore
 
                 if (assistantMessage == null)
                 {
+                    _logger?.LogWarning("LLM returned null response.");
                     break;
                 }
 
                 conversation.Add(assistantMessage);
 
+                var texts = assistantMessage.Contents.OfType<Text>().ToList();
                 var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
+                var reasonings = assistantMessage.Contents.OfType<Reasoning>().ToList();
+
+                _logger?.LogInformation("LLM response received. Texts: {TextCount}, ToolCalls: {ToolCount}, Reasonings: {ReasoningCount}", texts.Count, toolCalls.Count, reasonings.Count);
+
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
@@ -73,6 +86,7 @@ namespace AgentCore
                         yield return new ToolCallEvent(call);
                     }
 
+                    _logger?.LogDebug("Executing {ToolCount} tool calls...", toolCalls.Count);
                     var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
                     conversation.AddRange(toolMessages);
 
@@ -85,7 +99,7 @@ namespace AgentCore
                     continue;
                 }
 
-                var finalText = string.Join("\n", assistantMessage.Contents.OfType<Text>().Select(t => t.Value)).Trim();
+                var finalText = string.Join("\n", texts.Select(t => t.Value)).Trim();
                 yield return new AgentResponseEvent<string>(finalText);
                 break;
             }

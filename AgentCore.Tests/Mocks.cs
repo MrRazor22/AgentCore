@@ -104,6 +104,8 @@ public class MockMemoryProvider : IMemory
     public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
+    public IReadOnlyList<Message> Messages => Saved.SelectMany(x => x).ToList();
+
     public Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
     {
         var list = new List<Message>();
@@ -138,7 +140,7 @@ public class MockMemoryProvider : IMemory
     }
 }
 
-public class MockTooling : IToolService
+public class MockTooling : ITooling
 {
     public IReadOnlyList<Tool> Tools { get; set; } = Array.Empty<Tool>();
 

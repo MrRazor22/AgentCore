@@ -95,11 +95,24 @@ internal static class TornadoAdapterExtensions
                 }
             case Role.Assistant:
                 {
-                    var assistantContent = string.Join("\n", msg.Contents.Where(c => c is not ToolCall).Select(c => c.ForLlm()));
-                    var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant)
+                    var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant);
+                    var parts = new List<ChatMessagePart>();
+                    foreach (var content in msg.Contents)
                     {
-                        Content = string.IsNullOrEmpty(assistantContent) ? null : assistantContent
-                    };
+                        if (content is Reasoning reasoning)
+                        {
+                            parts.Add(new ChatMessagePart(new ChatMessageReasoningData { Content = reasoning.Thought }));
+                        }
+                        else if (content is Text text)
+                        {
+                            parts.Add(new ChatMessagePart(text.Value));
+                        }
+                    }
+                    if (parts.Count > 0)
+                    {
+                        assistantMsg.Parts = parts;
+                    }
+
                     var toolCalls = msg.Contents.OfType<ToolCall>().ToList();
                     if (toolCalls.Any())
                     {

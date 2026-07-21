@@ -11,18 +11,13 @@ namespace AgentCore.Example;
 /// A decorator layer for IToolService that prompts the user in the console
 /// for permission before executing sensitive actions (e.g. WriteTextFile).
 /// </summary>
-public class UserApprovalToolLayer : IToolService
+public class UserApprovalToolLayer : ToolingLayer
 {
-    private readonly IToolService _inner;
-
-    public UserApprovalToolLayer(IToolService inner)
+    public UserApprovalToolLayer()
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
 
-    public IReadOnlyList<Tool> Tools => _inner.Tools;
-
-    public async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {
         var approvedCalls = new List<ToolCall>();
         var responses = new List<Message>();
@@ -95,7 +90,7 @@ public class UserApprovalToolLayer : IToolService
 
         if (approvedCalls.Count > 0)
         {
-            var innerResults = await _inner.ExecuteAsync(approvedCalls, ct);
+            var innerResults = await base.ExecuteAsync(approvedCalls, ct);
             responses.AddRange(innerResults);
         }
 

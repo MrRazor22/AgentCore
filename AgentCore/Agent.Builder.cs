@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Memory;
@@ -16,15 +19,17 @@ public sealed partial class Agent
         private IContent? _instructions;
 
         private IMemory? _memory;
-        private IToolService? _tooling;
+        private ITooling? _tooling;
         private ITokenCounter? _tokenCounter;
         private ILoggerFactory? _loggerFactory;
         private ILLM? _provider;
-        private Func<ILLM, IToolService, IAgentWorkflow>? _workflowFactory;
+        private Func<ILLM, ITooling, IAgentWorkflow>? _workflowFactory;
 
-        private readonly List<Func<IToolService, IToolService>> _toolingLayers = [];
-        private readonly List<Func<ILLM, ILLM>> _llmLayers = [];
-        private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
+        private readonly List<ToolingLayer> _toolingLayers = [];
+        private readonly List<LlmLayer> _llmLayers = [];
+        private readonly List<MemoryLayer> _memoryLayers = [];
+
+        private readonly List<object> _builtComponents = new();
 
         public Builder()
         {
@@ -59,10 +64,10 @@ public sealed partial class Agent
         }
 
         public Builder WithMemory(IMemory memory) { _memory = memory; return this; }
-        public Builder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
+        public Builder AddMemoryLayer(MemoryLayer layer) { _memoryLayers.Add(layer); return this; }
 
-        public Builder UseTooling(IToolService tooling) { _tooling = tooling; return this; }
-        public Builder AddToolingLayer(Func<IToolService, IToolService> layer) { _toolingLayers.Add(layer); return this; }
+        public Builder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
+        public Builder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
 
         public Builder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
         
@@ -74,17 +79,33 @@ public sealed partial class Agent
         }
         
         public Builder WithLLM(ILLM provider) { _provider = provider; return this; }
-        public Builder AddLlmLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
+        public Builder AddLlmLayer(LlmLayer layer) { _llmLayers.Add(layer); return this; }
 
-        public Builder UseWorkflow(Func<ILLM, IToolService, IAgentWorkflow> factory)
+        public Builder UseWorkflow(Func<ILLM, ITooling, IAgentWorkflow> factory)
         {
             _workflowFactory = factory;
             return this;
         }
 
+        public T? GetService<T>() where T : class
+        {
+            return _builtComponents.OfType<T>().FirstOrDefault();
+        }
+
+        public T GetRequiredService<T>() where T : class
+        {
+            var service = GetService<T>();
+            if (service == null)
+            {
+                throw new InvalidOperationException($"No built component of type '{typeof(T)}' was found.");
+            }
+            return service;
+        }
+
         public Agent Build()
         {
             _logger.LogInformation("Agent build started");
+            _builtComponents.Clear();
 
             var baseProvider = _provider;
             if (baseProvider == null)
@@ -95,14 +116,20 @@ public sealed partial class Agent
 
             ILLM provider = baseProvider;
             foreach (var layer in _llmLayers)
-                provider = layer(provider);
+            {
+                layer.Attach(provider);
+                provider = layer;
+            }
 
             var frozenTools = _tools.ToArray();
             _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
-            IToolService tooling = _tooling ?? new ToolService(frozenTools, lf.CreateLogger<ToolService>());
+            ITooling tooling = _tooling ?? new Tooling(frozenTools, lf.CreateLogger<Tooling>());
             foreach (var layer in _toolingLayers)
-                tooling = layer(tooling);
+            {
+                layer.Attach(tooling);
+                tooling = layer;
+            }
 
             var capabilities = baseProvider.GetCapabilities();
 
@@ -111,10 +138,14 @@ public sealed partial class Agent
                 capabilities,
                 frozenTools,
                 _instructions,
-                summarizer: baseProvider);
+                summarizer: baseProvider,
+                logger: lf.CreateLogger<WorkingMemory>());
 
             foreach (var layer in _memoryLayers)
-                memory = layer(memory);
+            {
+                layer.Attach(memory);
+                memory = layer;
+            }
 
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
                 frozenTools.Length,
@@ -122,7 +153,11 @@ public sealed partial class Agent
 
             var workflow = _workflowFactory != null 
                 ? _workflowFactory(provider, tooling) 
-                : new ReActWorkflow(provider, tooling);
+                : new ReActWorkflow(provider, tooling, logger: lf.CreateLogger<ReActWorkflow>());
+
+            _builtComponents.Add(provider);
+            _builtComponents.Add(tooling);
+            _builtComponents.Add(memory);
 
             return new Agent(provider, memory, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
         }

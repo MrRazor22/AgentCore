@@ -20,7 +20,7 @@ public class ToolingServiceTests
     [Fact]
     public async Task ExecuteAsync_UnregisteredToolName_ReturnsErrorMessage()
     {
-        var tooling = new ToolService(Array.Empty<Tool>());
+        var tooling = new Tooling(Array.Empty<Tool>());
         var calls = new[] { new ToolCall("call_1", "missing_tool", new JsonObject()) };
 
         var results = await tooling.ExecuteAsync(calls);
@@ -33,7 +33,7 @@ public class ToolingServiceTests
     [Fact]
     public async Task ExecuteAsync_EmptyToolName_ReturnsErrorMessage()
     {
-        var tooling = new ToolService(Array.Empty<Tool>());
+        var tooling = new Tooling(Array.Empty<Tool>());
         var calls = new[] { new ToolCall("call_1", "", new JsonObject()) };
 
         var results = await tooling.ExecuteAsync(calls);
@@ -51,7 +51,7 @@ public class ToolingServiceTests
         {
             Invoker = (args, ct) => throw new InvalidOperationException("Tool implementation crashed")
         };
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var calls = new[] { new ToolCall("call_1", "crash_tool", new JsonObject()) };
 
@@ -68,7 +68,7 @@ public class ToolingServiceTests
     {
         var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("null_tool", schema) { Invoker = (args, ct) => Task.FromResult<object?>(null) };
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var calls = new[] { new ToolCall("call_1", "null_tool", new JsonObject()) };
         var results = await tooling.ExecuteAsync(calls);
@@ -86,7 +86,7 @@ public class ToolingServiceTests
         { 
             Invoker = (args, ct) => Task.FromResult<object?>(new Text("Explicit IContent")) 
         };
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var calls = new[] { new ToolCall("call_1", "content_tool", new JsonObject()) };
         var results = await tooling.ExecuteAsync(calls);
@@ -104,7 +104,7 @@ public class ToolingServiceTests
         { 
             Invoker = (args, ct) => Task.FromResult<object?>(new { Key = "Val" }) 
         };
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var calls = new[] { new ToolCall("call_1", "object_tool", new JsonObject()) };
         var results = await tooling.ExecuteAsync(calls);
@@ -122,7 +122,7 @@ public class ToolingServiceTests
         {
             Invoker = async (args, ct) => { await Task.Delay(5000, ct); return "Done"; }
         };
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var calls = new[] { new ToolCall("call_1", "slow_tool", new JsonObject()) };
         using var cts = new CancellationTokenSource();

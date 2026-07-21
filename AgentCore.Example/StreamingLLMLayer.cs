@@ -9,26 +9,22 @@ using System.Threading;
 
 namespace AgentCore.Example;
 
-public sealed class StreamingLLMLayer : ILLM
+public sealed class StreamingLLMLayer : LlmLayer
 {
-    private readonly ILLM _inner;
     private readonly Action<LLMEvent> _onEvent;
 
-    public StreamingLLMLayer(ILLM inner, Action<LLMEvent> onEvent)
+    public StreamingLLMLayer(Action<LLMEvent> onEvent)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
     }
 
-    public LLMCapabilities GetCapabilities() => _inner.GetCapabilities();
-
-    public async IAsyncEnumerable<LLMEvent> StreamAsync(
+    public override async IAsyncEnumerable<LLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (var evt in _inner.StreamAsync(messages, options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var evt in base.StreamAsync(messages, options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             try
             {

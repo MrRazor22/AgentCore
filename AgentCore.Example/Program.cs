@@ -409,6 +409,20 @@ internal class Program
 
 public class ToggleLoggerProvider : ILoggerProvider
 {
+    private static readonly object _fileLock = new();
+    
+    public ToggleLoggerProvider()
+    {
+        try
+        {
+            if (File.Exists("agent_diagnostics.log"))
+            {
+                File.Delete("agent_diagnostics.log");
+            }
+        }
+        catch { }
+    }
+
     public bool Enabled { get; set; } = false;
 
     public ILogger CreateLogger(string categoryName) => new ToggleLogger(categoryName, this);
@@ -428,11 +442,33 @@ public class ToggleLoggerProvider : ILoggerProvider
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-        public bool IsEnabled(LogLevel logLevel) => _provider.Enabled && logLevel >= LogLevel.Information;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            if (!IsEnabled(logLevel)) return;
+            var message = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] [{logLevel}] [{_category}] {formatter(state, exception)}";
+            if (exception != null)
+            {
+                message += "\n" + exception.ToString();
+            }
+
+            if (logLevel >= LogLevel.Information)
+            {
+                lock (_fileLock)
+                {
+                    try
+                    {
+                        File.AppendAllText("agent_diagnostics.log", message + Environment.NewLine);
+                    }
+                    catch
+                    {
+                        // Ignore file write issues
+                    }
+                }
+            }
+
+            if (!_provider.Enabled) return;
+
             var originalColor = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine($"[Diag Log] [{logLevel}] [{_category}] {formatter(state, exception)}");

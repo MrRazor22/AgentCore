@@ -8,6 +8,7 @@ namespace AgentCore.Memory;
 
 public interface IMemory
 {
+    IReadOnlyList<Message> Messages { get; }
     Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default);
     Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default);
     Task ClearAsync(CancellationToken ct = default);

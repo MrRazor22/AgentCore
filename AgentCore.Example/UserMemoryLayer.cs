@@ -17,9 +17,8 @@ using AgentCore.LLM.Schema;
 
 namespace AgentCore.Example;
 
-public class UserMemoryLayer : IMemory
+public class UserMemoryLayer : MemoryLayer
 {
-    private readonly IMemory _inner;
     private readonly ILLM _extractor;
     private readonly string _filePath;
     private readonly string _extractionPrompt;
@@ -37,13 +36,11 @@ public class UserMemoryLayer : IMemory
         .Build();
 
     public UserMemoryLayer(
-        IMemory inner,
         ILLM extractor,
         string filePath,
         ILoggerFactory? loggerFactory = null,
         string? extractionPrompt = null)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _extractor = extractor ?? throw new ArgumentNullException(nameof(extractor));
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
         _logger = loggerFactory?.CreateLogger<UserMemoryLayer>() ?? NullLogger<UserMemoryLayer>.Instance;
@@ -100,9 +97,9 @@ public class UserMemoryLayer : IMemory
         await File.WriteAllTextAsync(_filePath, json, ct).ConfigureAwait(false);
     }
 
-    public async Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+    public override async Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
     {
-        var baseMessages = await _inner.PrepareAsync(newInput, ct).ConfigureAwait(false);
+        var baseMessages = await base.PrepareAsync(newInput, ct).ConfigureAwait(false);
 
         List<string> activeFacts;
         lock (_lock)
@@ -129,9 +126,9 @@ public class UserMemoryLayer : IMemory
         return baseMessages;
     }
 
-    public async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public override async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
-        await _inner.RememberAsync(completedTurn, ct).ConfigureAwait(false);
+        await base.RememberAsync(completedTurn, ct).ConfigureAwait(false);
 
         // Run background extraction asynchronously to avoid blocking the main loop
         _ = Task.Run(async () =>
@@ -147,7 +144,7 @@ public class UserMemoryLayer : IMemory
         });
     }
 
-    public async Task ClearAsync(CancellationToken ct = default)
+    public override async Task ClearAsync(CancellationToken ct = default)
     {
         lock (_lock)
         {
@@ -157,12 +154,12 @@ public class UserMemoryLayer : IMemory
         {
             File.Delete(_filePath);
         }
-        await _inner.ClearAsync(ct).ConfigureAwait(false);
+        await base.ClearAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+    public override async Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
     {
-        await _inner.RestoreAsync(history, ct).ConfigureAwait(false);
+        await base.RestoreAsync(history, ct).ConfigureAwait(false);
         LoadFacts();
     }
 

@@ -23,7 +23,7 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Name, args);
@@ -44,7 +44,7 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
@@ -71,7 +71,7 @@ public class ToolingTests
     {
         var method = typeof(SampleAddTool).GetMethod(nameof(SampleAddTool.Add))!;
         var tool = new MethodTool(method, new SampleAddTool(), name: "weather_lookup");
-        var tooling = new ToolService(new[] { tool });
+        var tooling = new Tooling(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", "Weather_Lookup", args);

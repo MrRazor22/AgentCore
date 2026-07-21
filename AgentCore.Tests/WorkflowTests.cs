@@ -16,7 +16,7 @@ namespace AgentCore.Tests;
 
 public class WorkflowTests
 {
-    private (ILLM Llm, IToolService Tooling) CreateServices(MockLLMProvider provider, IToolService tooling)
+    private (ILLM Llm, ITooling Tooling) CreateServices(MockLLMProvider provider, ITooling tooling)
     {
         return (provider, tooling);
     }

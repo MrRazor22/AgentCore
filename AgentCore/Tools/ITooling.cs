@@ -7,25 +7,25 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
-public interface IToolService
+public interface ITooling
 {
     IReadOnlyList<Tool> Tools { get; }
     Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
-internal sealed class ToolService : IToolService
+internal sealed class Tooling : ITooling
 {
     private readonly IReadOnlyList<Tool> _toolList;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
-    private readonly ILogger<ToolService> _logger;
+    private readonly ILogger<Tooling> _logger;
 
-    public ToolService(
+    public Tooling(
         IReadOnlyList<Tool> tools,
-        ILogger<ToolService>? logger = null)
+        ILogger<Tooling>? logger = null)
     {
         _toolList = tools ?? Array.Empty<Tool>();
         _tools = _toolList.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
-        _logger = logger ?? NullLogger<ToolService>.Instance;
+        _logger = logger ?? NullLogger<Tooling>.Instance;
     }
 
     public IReadOnlyList<Tool> Tools => _toolList;

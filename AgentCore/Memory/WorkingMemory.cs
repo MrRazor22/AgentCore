@@ -1,6 +1,7 @@
-﻿using AgentCore.LLM;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,7 +19,19 @@ namespace AgentCore.Memory
         private readonly IContent? _instructions;
         private readonly double _retentionTarget;
         private readonly ILLM? _summarizer;
+        private readonly ILogger<WorkingMemory>? _logger;
         private string _factSheet = string.Empty;
+
+        public IReadOnlyList<Message> Messages
+        {
+            get
+            {
+                lock (_history)
+                {
+                    return _history.ToList();
+                }
+            }
+        }
 
         public WorkingMemory(
             ITokenCounter tokenCounter,
@@ -26,7 +39,8 @@ namespace AgentCore.Memory
             IReadOnlyList<Tool> tools,
             IContent? instructions,
             double retentionTarget = 0.70,
-            ILLM? summarizer = null)
+            ILLM? summarizer = null,
+            ILogger<WorkingMemory>? logger = null)
         {
             _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
             _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
@@ -34,6 +48,7 @@ namespace AgentCore.Memory
             _instructions = instructions;
             _retentionTarget = retentionTarget;
             _summarizer = summarizer;
+            _logger = logger;
         }
 
         public async Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
@@ -64,10 +79,13 @@ namespace AgentCore.Memory
 
             int historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
 
+            _logger?.LogDebug("Preparing memory. Fixed: {FixedTokens} tokens, Tools: {ToolTokens} tokens, Budget: {Budget} tokens, History: {HistoryTokens} tokens", fixedTokens, toolTokens, budget, historyTokens);
+
             // Prune the local copy to fit the exact final budget (no mutation to master history)
             if (historyTokens > budget)
             {
                 int targetLimit = (int)(budget * _retentionTarget);
+                _logger?.LogInformation("Pruning local working history from {HistoryTokens} tokens to target {TargetLimit} tokens", historyTokens, targetLimit);
                 while (historyTokens > targetLimit && workingHistory.Count > 0)
                 {
                     workingHistory.RemoveAt(0); // prune oldest
@@ -115,6 +133,8 @@ namespace AgentCore.Memory
                 int targetLimit = (int)(budget * _retentionTarget);
                 var evicted = new List<Message>();
 
+                _logger?.LogInformation("History size ({HistoryTokens} tokens) exceeded budget ({Budget} tokens). Evicting messages to reach target {TargetLimit} tokens.", historyTokens, budget, targetLimit);
+
                 while (historyTokens > targetLimit && workingHistory.Count > 0)
                 {
                     evicted.Add(workingHistory[0]);
@@ -125,7 +145,9 @@ namespace AgentCore.Memory
                 string? newFactSheet = null;
                 if (_summarizer != null && evicted.Count > 0)
                 {
+                    _logger?.LogInformation("Summarizing {EvictedCount} evicted messages to consolidate into the fact sheet...", evicted.Count);
                     newFactSheet = await ConsolidateAsync(_factSheet, evicted, ct).ConfigureAwait(false);
+                    _logger?.LogInformation("Consolidation complete. New fact sheet length: {Length} characters.", newFactSheet.Length);
                 }
 
                 lock (_history)
