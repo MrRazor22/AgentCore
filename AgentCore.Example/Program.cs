@@ -70,19 +70,22 @@ internal class Program
 
         // 3. Initialize the Chat Session
         var sessionFile = "active_session.json";
-        var session = await ChatSession.CreateAsync(apiKey, modelName, baseUrl, loggerFactory, sessionFile);
+        Action<LLMEvent>? currentLlmEventHandler = null;
+        var session = await ChatSession.CreateAsync(
+            apiKey, 
+            modelName, 
+            baseUrl, 
+            loggerFactory, 
+            sessionFile, 
+            evt => currentLlmEventHandler?.Invoke(evt));
 
         PrintHelp();
 
-        var ctSource = new CancellationTokenSource();
-        Console.CancelKeyPress += (s, e) =>
-        {
-            e.Cancel = true;
-            ctSource.Cancel();
-        };
+        var appCts = new CancellationTokenSource();
+        CancellationTokenSource? currentInvocationCts = null;
 
         // 4. Console Interaction Loop
-        while (!ctSource.Token.IsCancellationRequested)
+        while (!appCts.Token.IsCancellationRequested)
         {
             Console.Write("\nUser > ");
             var input = Console.ReadLine();
@@ -97,16 +100,101 @@ internal class Program
                 continue;
             }
 
+            using var promptCts = CancellationTokenSource.CreateLinkedTokenSource(appCts.Token);
+            currentInvocationCts = promptCts;
+
+            using var keyListenCts = new CancellationTokenSource();
+            var keyListenTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!promptCts.Token.IsCancellationRequested && !keyListenCts.Token.IsCancellationRequested)
+                    {
+                        if (Console.KeyAvailable)
+                        {
+                            var keyInfo = Console.ReadKey(intercept: true);
+                            if (keyInfo.Key == ConsoleKey.Q && (keyInfo.Modifiers & ConsoleModifiers.Control) != 0)
+                            {
+                                Console.ForegroundColor = ConsoleColor.Yellow;
+                                Console.WriteLine("\n[Ctrl+Q: Cancelling current agent execution...]");
+                                Console.ResetColor();
+                                promptCts.Cancel();
+                                break;
+                            }
+                        }
+                        await Task.Delay(50);
+                    }
+                }
+                catch
+                {
+                    // Ignore background key listener errors
+                }
+            });
+
             try
             {
                 var contentInput = new Text(input);
-                await foreach (var evt in session.Agent.InvokeStreamingAsync(contentInput, ctSource.Token))
+                bool headerPrinted = false;
+                bool toolDeltaStarted = false;
+
+                currentLlmEventHandler = evt =>
+                {
+                    if (evt is Text t)
+                    {
+                        if (!headerPrinted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.Write("Assistant > ");
+                            Console.ResetColor();
+                            headerPrinted = true;
+                        }
+                        Console.Write(t.Value);
+                    }
+                    else if (evt is Reasoning r)
+                    {
+                        if (!headerPrinted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkGray;
+                            Console.Write("Assistant [Reasoning] > ");
+                            Console.ResetColor();
+                            headerPrinted = true;
+                        }
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.Write(r.Thought);
+                        Console.ResetColor();
+                    }
+                    else if (evt is ToolCall tc)
+                    {
+                        if (!toolDeltaStarted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkCyan;
+                            Console.Write($"\n[LLM Stream ToolCall: {tc.Name}");
+                            Console.ResetColor();
+                            toolDeltaStarted = true;
+                        }
+                        if (tc.Arguments != null)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkCyan;
+                            Console.Write(tc.Arguments.ToString());
+                            Console.ResetColor();
+                        }
+                    }
+                };
+
+                await foreach (var evt in session.Agent.InvokeStreamingAsync(contentInput, promptCts.Token))
                 {
                     if (evt is ToolCallEvent toolCallEvent)
                     {
+                        if (toolDeltaStarted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkCyan;
+                            Console.WriteLine("]");
+                            Console.ResetColor();
+                            toolDeltaStarted = false;
+                        }
                         var toolCall = toolCallEvent.ToolCall;
                         Console.ForegroundColor = ConsoleColor.Yellow;
-                        Console.WriteLine($"\n[Agent calling tool: {toolCall.Name}({toolCall.ArgumentsObject})]");
+                        Console.WriteLine($"\n[Agent executing tool: {toolCall.Name}({toolCall.ArgumentsObject})]");
                         Console.ResetColor();
                     }
                     else if (evt is ToolResultEvent toolResult)
@@ -117,24 +205,49 @@ internal class Program
                     }
                     else if (evt is AgentResponseEvent<string> response)
                     {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.Write("Assistant > ");
-                        Console.ResetColor();
-                        Console.WriteLine(response.Response);
+                        if (!headerPrinted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.Write("Assistant > ");
+                            Console.ResetColor();
+                            Console.WriteLine(response.Response);
+                        }
+                        else
+                        {
+                            Console.WriteLine(); // Just end the streamed line
+                        }
                     }
                     else if (evt is ErrorEvent error)
                     {
+                        if (toolDeltaStarted)
+                        {
+                            Console.ForegroundColor = ConsoleColor.DarkCyan;
+                            Console.WriteLine("]");
+                            Console.ResetColor();
+                            toolDeltaStarted = false;
+                        }
                         Console.ForegroundColor = ConsoleColor.Red;
                         Console.WriteLine($"\n[Error: {error.Error.Message}]");
                         Console.ResetColor();
                     }
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine("\n[Execution cancelled]");
+                Console.ResetColor();
+            }
             catch (Exception ex)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"\nException occurred: {ex.Message}");
                 Console.ResetColor();
+            }
+            finally
+            {
+                keyListenCts.Cancel();
+                currentInvocationCts = null;
             }
         }
     }

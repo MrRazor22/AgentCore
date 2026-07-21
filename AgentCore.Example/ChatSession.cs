@@ -24,17 +24,20 @@ public class ChatSession
     private FileMemory? _persistentMemory;
     private UserMemoryLayer? _profileMemory;
 
+    private readonly Action<LLMEvent> _onLlmEvent;
+
     public IAgent Agent { get; private set; } = null!;
     public string SessionFile { get; private set; }
     public IReadOnlyList<Message> Messages => _persistentMemory?.Messages ?? Array.Empty<Message>();
 
-    public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile)
+    public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile, Action<LLMEvent> onLlmEvent)
     {
         _apiKey = apiKey;
         _modelName = modelName;
         _baseUrl = baseUrl;
         _loggerFactory = loggerFactory;
         SessionFile = sessionFile;
+        _onLlmEvent = onLlmEvent ?? throw new ArgumentNullException(nameof(onLlmEvent));
     }
 
     public static async Task<ChatSession> CreateAsync(
@@ -43,9 +46,10 @@ public class ChatSession
         Uri? baseUrl, 
         ILoggerFactory loggerFactory, 
         string sessionFile, 
+        Action<LLMEvent> onLlmEvent,
         CancellationToken ct = default)
     {
-        var session = new ChatSession(apiKey, modelName, baseUrl, loggerFactory, sessionFile);
+        var session = new ChatSession(apiKey, modelName, baseUrl, loggerFactory, sessionFile, onLlmEvent);
         await session.InitializeAsync(ct);
         return session;
     }
@@ -64,8 +68,8 @@ public class ChatSession
 
         Agent = AgentCore.Agent.Create()
             .WithLLM(provider)
-            .AddLlmLayer(inner => new RetryingLLMLayer(inner))
-            .WithTools(new ExampleTools())
+            .AddLlmLayer(inner => new StreamingLLMLayer(inner, _onLlmEvent))
+            .WithTools(new WorkspaceTools())
             .AddToolingLayer(inner => new UserApprovalToolLayer(inner))
             .WithTokenCounter(tokenCounter)
             .AddMemoryLayer(inner => userMemory = new UserMemoryLayer(inner, provider, profileFile, _loggerFactory))

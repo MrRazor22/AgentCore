@@ -130,6 +130,7 @@ public sealed class MethodTool : Tool
         ArgumentNullException.ThrowIfNull(method);
 
         var builder = new JsonSchemaBuilder().Type<object>().AdditionalProperties(false);
+        builder.Properties(new JsonObject()); // Initializing "properties" to an empty object ({}) is the standard JSON Schema practice for object schemas representing zero properties.
 
         foreach (var param in method.GetParameters())
         {
