@@ -120,6 +120,22 @@ public class MockMemoryProvider : IMemory
         Saved.Add(turn);
         return Task.CompletedTask;
     }
+
+    public Task ClearAsync(CancellationToken ct = default)
+    {
+        Saved.Clear();
+        return Task.CompletedTask;
+    }
+
+    public Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+    {
+        Saved.Clear();
+        if (history != null && history.Count > 0)
+        {
+            Saved.Add(history);
+        }
+        return Task.CompletedTask;
+    }
 }
 
 public class MockTooling : IToolService

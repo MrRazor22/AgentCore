@@ -21,11 +21,11 @@ public class PerformanceLoggingLlmLayer : ILLM
     private readonly ITokenCounter _tokenCounter;
     private readonly int _contextWindow;
 
-    public PerformanceLoggingLlmLayer(ILLM inner, ITokenCounter tokenCounter, int contextWindow)
+    public PerformanceLoggingLlmLayer(ILLM inner, ITokenCounter tokenCounter, int? contextWindow = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
-        _contextWindow = contextWindow;
+        _contextWindow = contextWindow ?? inner.GetCapabilities().ContextWindow;
     }
 
     public LLMCapabilities GetCapabilities() => _inner.GetCapabilities();

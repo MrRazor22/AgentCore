@@ -27,7 +27,7 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var memory = new ChatMemory(
+        var memory = new WorkingMemory(
             new ApproximateTokenCounter(),
             new LLMCapabilities(),
             Array.Empty<Tool>(),
@@ -36,7 +36,7 @@ public class AgentTests
         await memory.RememberAsync(new[] { new Message(Role.User, new Text("Old message")) });
 
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .WithMemory(memory)
             .Build();
 
@@ -67,7 +67,7 @@ public class AgentTests
 
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .WithMemory(memory)
             .Build();
 
@@ -94,7 +94,7 @@ public class AgentTests
         mockProvider.Enqueue(new Text("{\"Name\":\"John Doe\",\"Age\":30}"));
 
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .Build();
 
         // Act
@@ -114,7 +114,7 @@ public class AgentTests
         mockProvider.EnqueueException(new InvalidOperationException("Fatal provider error"));
 
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .Build();
 
         // Act & Assert
@@ -136,7 +136,7 @@ public class AgentTests
         );
 
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .Build();
 
         var events = new List<AgentEvent>();
@@ -157,7 +157,7 @@ public class AgentTests
 
         var agent = Agent.Create()
             .WithInstructions("System instruction baseline")
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .Build();
 
         await agent.InvokeAsync<string>(new Text("User baseline"));

@@ -7,14 +7,14 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.LLM.Tornado;
 
-public class TornadoLLMProvider : ILLM
+public class TornadoLLM : ILLM
 {
     private readonly TornadoApi _api;
     private readonly ChatModel _defaultModel;
     private readonly LLMOptions _options;
     private readonly LLMCapabilities _capabilities;
 
-    public TornadoLLMProvider(
+    public TornadoLLM(
         TornadoApi api, 
         string modelName,
         LLMCapabilities capabilities,

@@ -9,12 +9,6 @@ namespace AgentCore;
 
 public sealed partial class Agent
 {
-    /// <summary>
-    /// Builder to configure and create an Agent instance.
-    /// NOTE: Each Build() call produces mutable, stateful components (like RollingWindowMemory)
-    /// scoped to a single conversation/session. Do not share or reuse an Agent instance across concurrent,
-    /// unrelated conversations.
-    /// </summary>
     public sealed class Builder
     {
         private readonly List<Tool> _tools = [];
@@ -29,6 +23,8 @@ public sealed partial class Agent
         private Func<ILLM, IToolService, IAgentWorkflow>? _workflowFactory;
 
         private readonly List<Func<IToolService, IToolService>> _toolingLayers = [];
+        private readonly List<Func<ILLM, ILLM>> _llmLayers = [];
+        private readonly List<Func<IMemory, IMemory>> _memoryLayers = [];
 
         public Builder()
         {
@@ -63,6 +59,7 @@ public sealed partial class Agent
         }
 
         public Builder WithMemory(IMemory memory) { _memory = memory; return this; }
+        public Builder AddMemoryLayer(Func<IMemory, IMemory> layer) { _memoryLayers.Add(layer); return this; }
 
         public Builder UseTooling(IToolService tooling) { _tooling = tooling; return this; }
         public Builder AddToolingLayer(Func<IToolService, IToolService> layer) { _toolingLayers.Add(layer); return this; }
@@ -76,7 +73,8 @@ public sealed partial class Agent
             return this;
         }
         
-        public Builder WithProvider(ILLM provider) { _provider = provider; return this; }
+        public Builder WithLLM(ILLM provider) { _provider = provider; return this; }
+        public Builder AddLlmLayer(Func<ILLM, ILLM> layer) { _llmLayers.Add(layer); return this; }
 
         public Builder UseWorkflow(Func<ILLM, IToolService, IAgentWorkflow> factory)
         {
@@ -95,6 +93,10 @@ public sealed partial class Agent
             var lf = _loggerFactory ?? NullLoggerFactory.Instance;
             var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: lf.CreateLogger<ApproximateTokenCounter>());
 
+            ILLM provider = baseProvider;
+            foreach (var layer in _llmLayers)
+                provider = layer(provider);
+
             var frozenTools = _tools.ToArray();
             _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
@@ -104,22 +106,25 @@ public sealed partial class Agent
 
             var capabilities = baseProvider.GetCapabilities();
 
-            IMemory memory = _memory ?? new ChatMemory(
+            IMemory memory = _memory ?? new WorkingMemory(
                 tokenCounter,
                 capabilities,
                 frozenTools,
                 _instructions,
                 summarizer: baseProvider);
 
+            foreach (var layer in _memoryLayers)
+                memory = layer(memory);
+
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
                 frozenTools.Length,
-                baseProvider.GetType().Name);
+                provider.GetType().Name);
 
             var workflow = _workflowFactory != null 
-                ? _workflowFactory(baseProvider, tooling) 
-                : new ReActWorkflow(baseProvider, tooling);
+                ? _workflowFactory(provider, tooling) 
+                : new ReActWorkflow(provider, tooling);
 
-            return new Agent(baseProvider, memory, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
+            return new Agent(provider, memory, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
         }
     }
 }

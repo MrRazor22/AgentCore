@@ -21,10 +21,11 @@ public class ChatSession
     private readonly string _modelName;
     private readonly Uri? _baseUrl;
     private readonly ILoggerFactory _loggerFactory;
+    private PersistentMemoryLayer? _persistentMemory;
 
     public IAgent Agent { get; private set; } = null!;
-    public PersistentMemoryLayer chat { get; private set; } = null!;
     public string SessionFile { get; private set; }
+    public IReadOnlyList<Message> Messages => _persistentMemory?.GetLocalMessages() ?? Array.Empty<Message>();
 
     public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile)
     {
@@ -33,70 +34,76 @@ public class ChatSession
         _baseUrl = baseUrl;
         _loggerFactory = loggerFactory;
         SessionFile = sessionFile;
+    }
 
-        Rebuild(new List<Message>());
+    public static async Task<ChatSession> CreateAsync(
+        string apiKey, 
+        string modelName, 
+        Uri? baseUrl, 
+        ILoggerFactory loggerFactory, 
+        string sessionFile, 
+        CancellationToken ct = default)
+    {
+        var session = new ChatSession(apiKey, modelName, baseUrl, loggerFactory, sessionFile);
+        await session.InitializeAsync(ct);
+        return session;
     }
 
     /// <summary>
-    /// Builds the Agent using AgentCore builder API and seeds it with messages.
+    /// Builds the Agent using AgentCore builder API and initializes session messages if available.
     /// </summary>
-    public void Rebuild(List<Message> seedMessages)
+    public async Task InitializeAsync(CancellationToken ct = default)
     {
-        chat = new PersistentMemoryLayer(SessionFile);
         var tokenCounter = new ApproximateTokenCounter();
-
-        var tornadoProvider = TornadoProvider.CreateLLMProvider(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 128000 }, _baseUrl);
-        var retryingProvider = new RetryingLLM(tornadoProvider);
-        var loggedProvider = new PerformanceLoggingLlmLayer(retryingProvider, tokenCounter, 128000);
-
-        var baseMemory = new ChatMemory(
-            tokenCounter,
-            new LLMCapabilities { ContextWindow = 128000 },
-            MethodTool.FromType(typeof(ExampleTools)).Cast<Tool>().ToList(),
-            null);
-        chat.Initialize(baseMemory);
+        PersistentMemoryLayer? persistentMemory = null;
 
         Agent = AgentCore.Agent.Create()
-            .WithProvider(loggedProvider)
+            .WithLLM(TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, null, _baseUrl))
+            .AddLlmLayer(inner => new RetryingLLM(inner))
+            .AddLlmLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter))
             .WithTools(new ExampleTools())
-            .WithTokenCounter(tokenCounter)
-            .WithMemory(chat)
             .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
+            .WithTokenCounter(tokenCounter)
+            .AddMemoryLayer(inner => persistentMemory = new PersistentMemoryLayer(inner, SessionFile))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
-        if (seedMessages.Count > 0)
+        if (persistentMemory == null)
         {
-            chat.SetLocalMessages(seedMessages);
-            chat.RememberAsync(seedMessages).GetAwaiter().GetResult();
+            throw new InvalidOperationException("PersistentMemoryLayer was not created during Build().");
+        }
+
+        _persistentMemory = persistentMemory;
+        await _persistentMemory.LoadAsync(ct);
+    }
+
+    public async Task StartNewAsync(CancellationToken ct = default)
+    {
+        if (_persistentMemory != null)
+        {
+            await _persistentMemory.ClearAsync(ct);
         }
     }
 
-    public void StartNew()
+    public async Task RevertToAsync(int index, CancellationToken ct = default)
     {
-        if (File.Exists(SessionFile))
+        var remainingMessages = Messages.Take(index).ToList();
+        if (_persistentMemory != null)
         {
-            File.Delete(SessionFile);
+            await _persistentMemory.RestoreAsync(remainingMessages, ct);
         }
-        Rebuild(new List<Message>());
     }
 
-    public void RevertTo(int index)
-    {
-        var messages = chat.GetLocalMessages().Take(index).ToList();
-        Rebuild(messages);
-    }
-
-    public void Load(string path)
+    public async Task LoadAsync(string path, CancellationToken ct = default)
     {
         if (!File.Exists(path))
         {
             throw new FileNotFoundException("Session file not found", path);
         }
-        var json = File.ReadAllText(path);
-        var messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new List<Message>();
-        SessionFile = path;
-        Rebuild(messages);
+        if (_persistentMemory != null)
+        {
+            await _persistentMemory.ReloadFromDiskAsync(path, ct);
+        }
     }
 
     public void Save(string path)

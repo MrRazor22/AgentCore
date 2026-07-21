@@ -41,7 +41,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Generic_RegistersStaticTools()
     {
-        var builder = Agent.Create().WithProvider(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(new MockLLMProvider());
         builder.WithTools<StaticTestTools>();
 
         var agent = builder.Build();
@@ -51,7 +51,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Instance_RegistersInstanceTools()
     {
-        var builder = Agent.Create().WithProvider(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(new MockLLMProvider());
         var instance = new InstanceTestTools();
         builder.WithTools(instance);
 
@@ -62,7 +62,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Generic_ThrowsForInstanceMethods()
     {
-        var builder = Agent.Create().WithProvider(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(new MockLLMProvider());
         var ex = Assert.Throws<ArgumentException>(() => { builder.WithTools<InstanceTestTools>(); });
         Assert.Contains("instance method", ex.Message);
     }
@@ -70,7 +70,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Instance_RegistersMixedTools()
     {
-        var builder = Agent.Create().WithProvider(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(new MockLLMProvider());
         var instance = new MixedTestTools();
         builder.WithTools(instance);
 
@@ -102,6 +102,18 @@ public class AgentBuilderTests
             CallLog.Add("Remember");
             return inner.RememberAsync(completedTurn, ct);
         }
+
+        public Task ClearAsync(CancellationToken ct = default)
+        {
+            CallLog.Add("Clear");
+            return inner.ClearAsync(ct);
+        }
+
+        public Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+        {
+            CallLog.Add("Restore");
+            return inner.RestoreAsync(history, ct);
+        }
     }
 
     [Fact]
@@ -111,7 +123,7 @@ public class AgentBuilderTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var baseMemory = new Memory.ChatMemory(
+        var baseMemory = new Memory.WorkingMemory(
             new ApproximateTokenCounter(),
             new LLMCapabilities(),
             Array.Empty<Tool>(),
@@ -120,7 +132,7 @@ public class AgentBuilderTests
         decoratorInstance = new MemoryLoggerDecorator(baseMemory);
 
         var agent = Agent.Create()
-            .WithProvider(mockProvider)
+            .WithLLM(mockProvider)
             .WithMemory(decoratorInstance)
             .Build();
 
@@ -128,5 +140,39 @@ public class AgentBuilderTests
         await agent.InvokeAsync<string>(new Text("Hello"));
         Assert.NotNull(decoratorInstance);
         Assert.Contains("Recall", decoratorInstance.CallLog);
+    }
+
+    [Fact]
+    public void Build_AppliesLlmAndMemoryLayersInPipelineOrder()
+    {
+        var mockProvider = new MockLLMProvider();
+        var callOrder = new List<string>();
+
+        var agent = Agent.Create()
+            .WithLLM(mockProvider)
+            .AddLlmLayer(inner =>
+            {
+                callOrder.Add("LlmLayer1");
+                return inner;
+            })
+            .AddLlmLayer(inner =>
+            {
+                callOrder.Add("LlmLayer2");
+                return inner;
+            })
+            .AddMemoryLayer(inner =>
+            {
+                callOrder.Add("MemoryLayer1");
+                return inner;
+            })
+            .AddMemoryLayer(inner =>
+            {
+                callOrder.Add("MemoryLayer2");
+                return inner;
+            })
+            .Build();
+
+        Assert.NotNull(agent);
+        Assert.Equal(new[] { "LlmLayer1", "LlmLayer2", "MemoryLayer1", "MemoryLayer2" }, callOrder);
     }
 }

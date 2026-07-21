@@ -7,7 +7,7 @@ namespace AgentCore.LLM.Tornado;
 /// <summary>
 /// Factory methods for creating Tornado-based LLM providers.
 /// </summary>
-public static class TornadoProvider
+public static class TornadoLLMFactory
 {
     /// <summary>
     /// Creates an LLM provider using Tornado API.
@@ -19,7 +19,7 @@ public static class TornadoProvider
         Uri? baseUrl = null)
     {
         var api = new TornadoApi(baseUrl, apiKey);
-        return new TornadoLLMProvider(api, modelName, capabilities ?? new LLMCapabilities { ContextWindow = 128000 });
+        return new TornadoLLM(api, modelName, capabilities ?? new LLMCapabilities { ContextWindow = 128000 });
     }
 }
 
@@ -31,5 +31,5 @@ public static class TornadoAgentBuilderExtensions
         string modelName,
         LLMCapabilities? capabilities = null,
         Uri? baseUrl = null)
-        => builder.WithProvider(TornadoProvider.CreateLLMProvider(apiKey, modelName, capabilities, baseUrl));
+        => builder.WithLLM(TornadoLLMFactory.CreateLLMProvider(apiKey, modelName, capabilities, baseUrl));
 }

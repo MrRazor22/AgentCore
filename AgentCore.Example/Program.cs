@@ -70,7 +70,7 @@ internal class Program
 
         // 3. Initialize the Chat Session
         var sessionFile = "active_session.json";
-        var session = new ChatSession(apiKey, modelName, baseUrl, loggerFactory, sessionFile);
+        var session = await ChatSession.CreateAsync(apiKey, modelName, baseUrl, loggerFactory, sessionFile);
 
         PrintHelp();
 
@@ -93,7 +93,7 @@ internal class Program
 
             if (input.StartsWith("/"))
             {
-                HandleCommand(input, session, toggleLogger);
+                await HandleCommandAsync(input, session, toggleLogger);
                 continue;
             }
 
@@ -139,7 +139,7 @@ internal class Program
         }
     }
 
-    private static void HandleCommand(string input, ChatSession session, ToggleLoggerProvider loggerProvider)
+    private static async Task HandleCommandAsync(string input, ChatSession session, ToggleLoggerProvider loggerProvider)
     {
         var parts = input.Split(' ', 2);
         var command = parts[0].ToLowerInvariant();
@@ -152,7 +152,7 @@ internal class Program
                 break;
 
             case "/new":
-                session.StartNew();
+                await session.StartNewAsync();
                 Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("New conversation session started. Memory cleared.");
                 Console.ResetColor();
@@ -172,10 +172,10 @@ internal class Program
             case "/revert":
                 if (int.TryParse(argument, out var index))
                 {
-                    var localHistory = session.chat.GetLocalMessages();
+                    var localHistory = session.Messages;
                     if (index >= 0 && index < localHistory.Count)
                     {
-                        session.RevertTo(index);
+                        await session.RevertToAsync(index);
                         Console.ForegroundColor = ConsoleColor.Cyan;
                         Console.WriteLine($"Reverted conversation history back to message index {index}. Truncating subsequent messages.");
                         Console.ResetColor();
@@ -228,7 +228,7 @@ internal class Program
                 }
                 try
                 {
-                    session.Load(argument);
+                    await session.LoadAsync(argument);
                     Console.ForegroundColor = ConsoleColor.Cyan;
                     Console.WriteLine($"Session history loaded successfully from '{argument}'.");
                     Console.ResetColor();
@@ -252,7 +252,7 @@ internal class Program
 
     private static void PrintHistory(ChatSession session, int limit = int.MaxValue)
     {
-        var history = session.chat.GetLocalMessages();
+        var history = session.Messages;
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("\n--- Conversation Message History ---");
         if (history.Count == 0)
