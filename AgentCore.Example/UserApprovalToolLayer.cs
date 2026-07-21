@@ -11,11 +11,11 @@ namespace AgentCore.Example;
 /// A decorator layer for IToolService that prompts the user in the console
 /// for permission before executing sensitive actions (e.g. WriteTextFile).
 /// </summary>
-public class UserApprovalToolingLayer : IToolService
+public class UserApprovalToolLayer : IToolService
 {
     private readonly IToolService _inner;
 
-    public UserApprovalToolingLayer(IToolService inner)
+    public UserApprovalToolLayer(IToolService inner)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
@@ -56,6 +56,33 @@ public class UserApprovalToolingLayer : IToolService
 
                     // Inject rejection message to let the workflow know the tool failed due to lack of permission
                     var rejectionResult = new ToolResult(call.Id, new Text("Error: Permission denied. User rejected the request to write to file."));
+                    responses.Add(new Message(Role.Tool, rejectionResult));
+                }
+            }
+            else if (call.Name.Equals("ExecuteCommand", StringComparison.OrdinalIgnoreCase))
+            {
+                var command = "unknown";
+                if (call.ArgumentsObject != null && call.ArgumentsObject.TryGetPropertyValue("command", out var cmdNode))
+                {
+                    command = cmdNode?.ToString() ?? "unknown";
+                }
+
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write($"\n[Security Alert] The Agent wants to execute command: '{command}'.\nDo you want to allow this action? (y/n): ");
+                Console.ResetColor();
+
+                var answer = Console.ReadLine()?.Trim().ToLowerInvariant();
+                if (answer == "y" || answer == "yes")
+                {
+                    approvedCalls.Add(call);
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"[Access Denied] Command execution blocked by user: '{command}'.");
+                    Console.ResetColor();
+
+                    var rejectionResult = new ToolResult(call.Id, new Text("Error: Permission denied. User rejected the request to execute this command."));
                     responses.Add(new Message(Role.Tool, rejectionResult));
                 }
             }

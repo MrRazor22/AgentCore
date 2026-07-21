@@ -21,11 +21,12 @@ public class ChatSession
     private readonly string _modelName;
     private readonly Uri? _baseUrl;
     private readonly ILoggerFactory _loggerFactory;
-    private PersistentMemoryLayer? _persistentMemory;
+    private FileMemory? _persistentMemory;
+    private UserMemoryLayer? _profileMemory;
 
     public IAgent Agent { get; private set; } = null!;
     public string SessionFile { get; private set; }
-    public IReadOnlyList<Message> Messages => _persistentMemory?.GetLocalMessages() ?? Array.Empty<Message>();
+    public IReadOnlyList<Message> Messages => _persistentMemory?.Messages ?? Array.Empty<Message>();
 
     public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile)
     {
@@ -55,42 +56,59 @@ public class ChatSession
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         var tokenCounter = new ApproximateTokenCounter();
-        PersistentMemoryLayer? persistentMemory = null;
+        var provider = TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, null, _baseUrl);
+        var profileFile = "active_session_profile.json";
+
+        FileMemory? persistentMemory = null;
+        UserMemoryLayer? userMemory = null;
 
         Agent = AgentCore.Agent.Create()
-            .WithLLM(TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, null, _baseUrl))
-            .AddLlmLayer(inner => new RetryingLLM(inner))
-            .AddLlmLayer(inner => new PerformanceLoggingLlmLayer(inner, tokenCounter))
+            .WithLLM(provider)
+            .AddLlmLayer(inner => new RetryingLLMLayer(inner))
             .WithTools(new ExampleTools())
-            .AddToolingLayer(inner => new UserApprovalToolingLayer(inner))
+            .AddToolingLayer(inner => new UserApprovalToolLayer(inner))
             .WithTokenCounter(tokenCounter)
-            .AddMemoryLayer(inner => persistentMemory = new PersistentMemoryLayer(inner, SessionFile))
+            .AddMemoryLayer(inner => userMemory = new UserMemoryLayer(inner, provider, profileFile, _loggerFactory))
+            .AddMemoryLayer(inner => persistentMemory = new FileMemory(inner, SessionFile))
             .WithLoggerFactory(_loggerFactory)
             .Build();
 
-        if (persistentMemory == null)
+        if (persistentMemory == null || userMemory == null)
         {
-            throw new InvalidOperationException("PersistentMemoryLayer was not created during Build().");
+            throw new InvalidOperationException("Failed to construct memory layers during Build().");
         }
 
         _persistentMemory = persistentMemory;
-        await _persistentMemory.LoadAsync(ct);
+        _profileMemory = userMemory;
+        
+        if (File.Exists(SessionFile))
+        {
+            var json = await File.ReadAllTextAsync(SessionFile, ct).ConfigureAwait(false);
+            var messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new();
+            await _profileMemory.RestoreAsync(messages, ct).ConfigureAwait(false);
+        }
     }
 
     public async Task StartNewAsync(CancellationToken ct = default)
     {
-        if (_persistentMemory != null)
+        if (_profileMemory != null)
         {
-            await _persistentMemory.ClearAsync(ct);
+            await _profileMemory.ClearAsync(ct);
+        }
+        
+        var profileFile = "active_session_profile.json";
+        if (File.Exists(profileFile))
+        {
+            File.Delete(profileFile);
         }
     }
 
     public async Task RevertToAsync(int index, CancellationToken ct = default)
     {
         var remainingMessages = Messages.Take(index).ToList();
-        if (_persistentMemory != null)
+        if (_profileMemory != null)
         {
-            await _persistentMemory.RestoreAsync(remainingMessages, ct);
+            await _profileMemory.RestoreAsync(remainingMessages, ct);
         }
     }
 
@@ -100,9 +118,12 @@ public class ChatSession
         {
             throw new FileNotFoundException("Session file not found", path);
         }
-        if (_persistentMemory != null)
+        File.Copy(path, SessionFile, overwrite: true);
+        var json = await File.ReadAllTextAsync(SessionFile, ct).ConfigureAwait(false);
+        var messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new();
+        if (_profileMemory != null)
         {
-            await _persistentMemory.ReloadFromDiskAsync(path, ct);
+            await _profileMemory.RestoreAsync(messages, ct).ConfigureAwait(false);
         }
     }
 

@@ -1,3 +1,4 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Exceptions;
 using AgentCore.LLM.Schema;
@@ -8,14 +9,14 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.LLM;
+namespace AgentCore.Example;
 
-public sealed class RetryingLLM : ILLM
+public sealed class RetryingLLMLayer : ILLM
 {
     private readonly ILLM _inner;
     private readonly int _maxRetries;
 
-    public RetryingLLM(ILLM inner, int maxRetries = 3)
+    public RetryingLLMLayer(ILLM inner, int maxRetries = 3)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _maxRetries = maxRetries;

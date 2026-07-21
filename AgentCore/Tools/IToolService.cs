@@ -90,8 +90,12 @@ internal sealed class ToolService : IToolService
         catch (Exception ex)
         {
             sw.Stop();
-            _logger.LogWarning("Tool failed: {Name} Error={Message}", call.Name, ex.Message);
-            return Failed(call.Id, call.Name, ex.Message);
+            var actualEx = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null 
+                ? tie.InnerException 
+                : ex;
+
+            _logger.LogError(actualEx, "Tool execution failed: {Name} Error={Message}", call.Name, actualEx.Message);
+            return Failed(call.Id, call.Name, actualEx.Message);
         }
     }
 }
