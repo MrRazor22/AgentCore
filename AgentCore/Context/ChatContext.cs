@@ -22,7 +22,7 @@ namespace AgentCore.Context
         private readonly ILogger<ChatContext>? _logger;
         private string _factSheet = string.Empty;
 
-        public IReadOnlyList<Message> Messages
+        public IReadOnlyList<Message> Chat
         {
             get
             {

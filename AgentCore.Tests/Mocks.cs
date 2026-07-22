@@ -104,7 +104,7 @@ public class MockMemoryProvider : IContext
     public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
-    public IReadOnlyList<Message> Messages => Saved.SelectMany(x => x).ToList();
+    public IReadOnlyList<Message> Chat => Saved.SelectMany(x => x).ToList();
 
     public Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
     {

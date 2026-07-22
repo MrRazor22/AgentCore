@@ -24,7 +24,7 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual IReadOnlyList<Message> Messages => Inner.Messages;
+    public virtual IReadOnlyList<Message> Chat => Inner.Chat;
 
     public virtual Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
         => Inner.PrepareAsync(newInput, ct);

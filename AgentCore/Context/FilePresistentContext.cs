@@ -19,7 +19,7 @@ public class FilePresistentContext : ContextLayer
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
 
-    public override IReadOnlyList<Message> Messages => _messages;
+    public override IReadOnlyList<Message> Chat => _messages;
 
     public override async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {

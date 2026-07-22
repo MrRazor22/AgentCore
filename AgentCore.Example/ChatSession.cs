@@ -27,7 +27,7 @@ public class ChatSession
 
     public IAgent Agent { get; private set; } = null!;
     public string SessionFile { get; private set; }
-    public IReadOnlyList<Message> Messages => _memory?.Messages ?? Array.Empty<Message>();
+    public IReadOnlyList<Message> Messages => _memory?.Chat ?? Array.Empty<Message>();
 
     public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile, Action<LLMEvent> onLlmEvent)
     {
