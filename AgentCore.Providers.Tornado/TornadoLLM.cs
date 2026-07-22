@@ -47,7 +47,7 @@ public class TornadoLLM : ILLM
 
         foreach (var msg in messages)
         {
-            chat.AppendMessage(msg.ToTornadoMessage());
+            chat.AppendMessage(msg.ToTornadoMessage(activeModelName));
         }
 
         var channelOptions = new System.Threading.Channels.BoundedChannelOptions(1024)

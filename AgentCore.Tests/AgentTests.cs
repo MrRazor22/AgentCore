@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Xunit;
 using AgentCore;
 using AgentCore.LLM;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 
@@ -27,17 +27,17 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var memory = new WorkingMemory(
+        var memory = new ChatContext(
             new ApproximateTokenCounter(),
             new LLMCapabilities(),
             Array.Empty<Tool>(),
             null
         );
-        await memory.RememberAsync(new[] { new Message(Role.User, new Text("Old message")) });
+        await memory.UpdateAsync(new[] { new Message(Role.User, new Text("Old message")) });
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
-            .WithMemory(memory)
+            .WithContext(memory)
             .Build();
 
         // Act
@@ -68,7 +68,7 @@ public class AgentTests
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
             .WithLLM(mockProvider)
-            .WithMemory(memory)
+            .WithContext(memory)
             .Build();
 
         // Act

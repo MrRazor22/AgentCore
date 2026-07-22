@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Memory;
+using AgentCore.Context;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -17,7 +17,7 @@ using AgentCore.LLM.Schema;
 
 namespace AgentCore.Example;
 
-public class UserMemoryLayer : MemoryLayer
+public class UserMemoryLayer : ContextLayer
 {
     private readonly ILLM _extractor;
     private readonly string _filePath;
@@ -126,9 +126,9 @@ public class UserMemoryLayer : MemoryLayer
         return baseMessages;
     }
 
-    public override async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public override async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
-        await base.RememberAsync(completedTurn, ct).ConfigureAwait(false);
+        await base.UpdateAsync(completedTurn, ct).ConfigureAwait(false);
 
         // Run background extraction asynchronously to avoid blocking the main loop
         _ = Task.Run(async () =>

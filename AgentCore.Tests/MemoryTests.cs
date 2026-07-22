@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Xunit;
 using AgentCore;
 using AgentCore.LLM;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools; 
 
@@ -19,14 +19,14 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
-        var contextService = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be helpful."));
+        var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be helpful."));
 
         var history = new List<Message>
         {
             new Message(Role.User, new Text("Hello")),
             new Message(Role.Assistant, new Text("Hi, how are you?"))
         };
-        await contextService.RememberAsync(history);
+        await contextService.UpdateAsync(history);
 
         // Act
         var result = await contextService.PrepareAsync(
@@ -47,11 +47,11 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var tokenCounter = new ApproximateTokenCounter();
-        var contextService = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
+        var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message that will be pruned."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
-        await contextService.RememberAsync(new[] { msg1, msg2 });
+        await contextService.UpdateAsync(new[] { msg1, msg2 });
 
         // Act
         var result = await contextService.PrepareAsync(
@@ -69,14 +69,14 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var tokenCounter = new ApproximateTokenCounter();
-        var contextService = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
+        var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         // Limit is 20 tokens. We add a very long message which exceeds 20 tokens.
         var msg1 = new Message(Role.User, new Text("This is a very long message that easily exceeds the limit of twenty tokens."));
         var msg2 = new Message(Role.Assistant, new Text("Short."));
 
         // Act
-        await contextService.RememberAsync(new[] { msg1, msg2 });
+        await contextService.UpdateAsync(new[] { msg1, msg2 });
 
         // Assert
         // Verify that the master history has pruned msg1 because it exceeded capacity.
@@ -94,17 +94,17 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
-        var contextService = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
+        var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
-        await contextService.RememberAsync(new[] { msg1, msg2 });
+        await contextService.UpdateAsync(new[] { msg1, msg2 });
 
         // Act & Assert 1: Prepare with tight budget so msg1 gets pruned in the output
         var providerTight = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
-        var contextServiceTight = new WorkingMemory(tokenCounter, providerTight.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
+        var contextServiceTight = new ChatContext(tokenCounter, providerTight.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
         // Copy the history from the first context service to simulate shared state
-        await contextServiceTight.RememberAsync(new[] { msg1, msg2 });
+        await contextServiceTight.UpdateAsync(new[] { msg1, msg2 });
 
         var resultTight = await contextServiceTight.PrepareAsync(
             newInput: new Message(Role.User, new Text("Current short input"))
@@ -114,8 +114,8 @@ public class MemoryTests
 
         // Act & Assert 2: Prepare again with normal budget, msg1 should still be present because Prepare was side-effect-free
         // We recreate the service with normal budget using the same history (msg1, msg2)
-        var contextServiceNormal = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
-        await contextServiceNormal.RememberAsync(new[] { msg1, msg2 });
+        var contextServiceNormal = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
+        await contextServiceNormal.UpdateAsync(new[] { msg1, msg2 });
 
         var resultNormal = await contextServiceNormal.PrepareAsync(
             newInput: new Message(Role.User, new Text("Current short input"))
@@ -130,10 +130,10 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2048, ReservedTokens = 2048 }; // budget = 0
         var tokenCounter = new ApproximateTokenCounter();
-        var contextService = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
+        var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Hello"));
-        await contextService.RememberAsync(new[] { msg1 });
+        await contextService.UpdateAsync(new[] { msg1 });
 
         // Act
         var result = await contextService.PrepareAsync(
@@ -151,12 +151,12 @@ public class MemoryTests
         // Arrange
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
         var tokenCounter = new ApproximateTokenCounter();
-        var memoryProvider = new WorkingMemory(tokenCounter, mockLlm.GetCapabilities(), Array.Empty<Tool>(), null, summarizer: mockLlm);
+        var memoryProvider = new ChatContext(tokenCounter, mockLlm.GetCapabilities(), Array.Empty<Tool>(), null, summarizer: mockLlm);
 
         var turn = new List<Message> { new Message(Role.User, new Text("Short content turn")) };
 
         // Act
-        await memoryProvider.RememberAsync(turn);
+        await memoryProvider.UpdateAsync(turn);
 
         // Assert
         Assert.Equal(0, mockLlm.CallCount); // no LLM calls made
@@ -173,12 +173,12 @@ public class MemoryTests
         var tokenCounter = new ApproximateTokenCounter();
         
         var capabilities = new LLMCapabilities { ContextWindow = 20, ReservedTokens = 5 };
-        var memoryProvider = new WorkingMemory(tokenCounter, capabilities, Array.Empty<Tool>(), null, retentionTarget: 0.1, summarizer: mockLlm);
+        var memoryProvider = new ChatContext(tokenCounter, capabilities, Array.Empty<Tool>(), null, retentionTarget: 0.1, summarizer: mockLlm);
 
         var turn = new List<Message> { new Message(Role.User, new Text("This is a very long string designed to exceed the budget and force eviction.")) };
 
         // Act
-        await memoryProvider.RememberAsync(turn);
+        await memoryProvider.UpdateAsync(turn);
 
         // Assert
         Assert.Equal(1, mockLlm.CallCount);
@@ -192,9 +192,9 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
-        var memory = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
+        var memory = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
 
-        await memory.RememberAsync(new[] { new Message(Role.User, new Text("Old Turn")) });
+        await memory.UpdateAsync(new[] { new Message(Role.User, new Text("Old Turn")) });
 
         // Act
         await memory.ClearAsync();
@@ -211,7 +211,7 @@ public class MemoryTests
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2000 };
         var tokenCounter = new ApproximateTokenCounter();
-        var memory = new WorkingMemory(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
+        var memory = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
 
         var restored = new List<Message>
         {

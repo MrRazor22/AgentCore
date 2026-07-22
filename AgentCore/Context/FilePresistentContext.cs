@@ -7,23 +7,23 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Memory;
+namespace AgentCore.Context;
 
-public class FileMemory : MemoryLayer
+public class FilePresistentContext : ContextLayer
 {
     private readonly string _filePath;
     private readonly List<Message> _messages = new();
 
-    public FileMemory(string filePath)
+    public FilePresistentContext(string filePath)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
 
     public override IReadOnlyList<Message> Messages => _messages;
 
-    public override async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public override async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
     {
-        await base.RememberAsync(completedTurn, ct).ConfigureAwait(false);
+        await base.UpdateAsync(completedTurn, ct).ConfigureAwait(false);
         _messages.AddRange(completedTurn);
         await SaveToDiskAsync(ct).ConfigureAwait(false);
     }

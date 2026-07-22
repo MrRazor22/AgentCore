@@ -1,5 +1,5 @@
 using AgentCore.LLM;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
@@ -21,7 +21,7 @@ public sealed partial class Agent : IAgent
     public static Builder Create() => new Builder();
 
     private readonly ILLM _llm; 
-    private readonly IMemory _memory;
+    private readonly IContext _memory;
     private readonly IReadOnlyList<Tool> _tools;
     private readonly IContent? _instructions;
     private readonly IAgentWorkflow _workflow;
@@ -29,7 +29,7 @@ public sealed partial class Agent : IAgent
 
     public Agent(
         ILLM llm, 
-        IMemory memory,
+        IContext memory,
         IReadOnlyList<Tool> tools,
         IContent? instructions,
         IAgentWorkflow workflow,
@@ -139,7 +139,7 @@ public sealed partial class Agent : IAgent
         try
         {
             var newTurnMessages = conversation.Skip(initialCount - 1).ToList();
-            await _memory.RememberAsync(newTurnMessages, ct).ConfigureAwait(false);
+            await _memory.UpdateAsync(newTurnMessages, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

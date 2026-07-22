@@ -5,7 +5,7 @@ using System.Text.Json;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.Tools;
 using AgentCore.LLM.Tornado;
 using Microsoft.Extensions.Logging;
@@ -21,7 +21,7 @@ public class ChatSession
     private readonly string _modelName;
     private readonly Uri? _baseUrl;
     private readonly ILoggerFactory _loggerFactory;
-    private IMemory? _memory;
+    private IContext? _memory;
 
     private readonly Action<LLMEvent> _onLlmEvent;
 
@@ -58,7 +58,7 @@ public class ChatSession
     /// </summary>
     public async Task InitializeAsync(CancellationToken ct = default)
     { 
-        var provider = TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, null, _baseUrl);
+        var provider = TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 15000, ReservedTokens = 5000}, _baseUrl);
         var profileFile = "active_session_profile.json";
 
         var builder = AgentCore.Agent.Create()
@@ -66,12 +66,12 @@ public class ChatSession
             .WithTools(new WorkspaceTools())
             .AddLlmLayer(new StreamingLLMLayer(_onLlmEvent)) 
             .AddToolingLayer(new UserApprovalToolLayer()) 
-            .AddMemoryLayer(new UserMemoryLayer(provider, profileFile, _loggerFactory))
-            .AddMemoryLayer(new FileMemory(SessionFile))
+            .AddContextLayer(new UserMemoryLayer(provider, profileFile, _loggerFactory))
+            .AddContextLayer(new FilePresistentContext(SessionFile))
             .WithLoggerFactory(_loggerFactory);
 
         Agent = builder.Build();
-        _memory = builder.GetRequiredService<IMemory>();
+        _memory = builder.GetRequiredService<IContext>();
         
         if (File.Exists(SessionFile))
         {
@@ -81,12 +81,11 @@ public class ChatSession
         }
     }
 
-    public async Task StartNewAsync(CancellationToken ct = default)
+
+    public async Task StartNewAsync(string sessionFile, CancellationToken ct = default)
     {
-        if (_memory != null)
-        {
-            await _memory.ClearAsync(ct);
-        }
+        SessionFile = sessionFile;
+        await InitializeAsync(ct).ConfigureAwait(false);
         
         var profileFile = "active_session_profile.json";
         if (File.Exists(profileFile))
@@ -110,17 +109,39 @@ public class ChatSession
         {
             throw new FileNotFoundException("Session file not found", path);
         }
-        File.Copy(path, SessionFile, overwrite: true);
-        var json = await File.ReadAllTextAsync(SessionFile, ct).ConfigureAwait(false);
-        var messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new();
-        if (_memory != null)
-        {
-            await _memory.RestoreAsync(messages, ct).ConfigureAwait(false);
-        }
+        SessionFile = path;
+        await InitializeAsync(ct).ConfigureAwait(false);
     }
 
     public void Save(string path)
     {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
         File.Copy(SessionFile, path, overwrite: true);
+    }
+
+    public static async Task<string> GetSessionTitleAsync(string filePath, CancellationToken ct = default)
+    {
+        if (!File.Exists(filePath)) return "New Session";
+        try
+        {
+            var json = await File.ReadAllTextAsync(filePath, ct).ConfigureAwait(false);
+            var messages = JsonSerializer.Deserialize<List<Message>>(json);
+            if (messages != null && messages.Count > 0)
+            {
+                var firstUserMsg = messages.FirstOrDefault(m => m.Role == Role.User) ?? messages.FirstOrDefault();
+                if (firstUserMsg != null)
+                {
+                    var summary = string.Join(" ", firstUserMsg.Contents.Select(c => c.ForLlm()));
+                    if (summary.Length > 50) summary = summary[..47] + "...";
+                    return summary;
+                }
+            }
+        }
+        catch { }
+        return "Empty Session";
     }
 }

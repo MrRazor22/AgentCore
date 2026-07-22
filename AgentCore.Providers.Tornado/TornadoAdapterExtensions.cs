@@ -2,6 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Exceptions;
 using LlmTornado.Chat;
+using LlmTornado.Chat.Models;
 using LlmTornado.Code;
 using LlmTornado.Common;
 
@@ -73,13 +74,20 @@ internal static class TornadoAdapterExtensions
         
         if (options.ResponseSchema != null)
         {
-            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", options.ResponseSchema.ToJsonElement());
+            var schemaJson = options.ResponseSchema.ToString();
+            var newtonsoftSchema = Newtonsoft.Json.Linq.JToken.Parse(schemaJson);
+            request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response_schema", newtonsoftSchema);
         }
 
         request.ReasoningFormat = LlmTornado.Code.ChatReasoningFormats.Parsed;
     }
 
-    public static ChatMessage ToTornadoMessage(this Message msg)
+    public static bool SupportsNativeReasoning(this ChatModel model)
+    {
+        return model.Provider is LLmProviders.Google or LLmProviders.Anthropic;
+    }
+
+    public static ChatMessage ToTornadoMessage(this Message msg, string modelName)
     {
         switch (msg.Role)
         {
@@ -97,11 +105,20 @@ internal static class TornadoAdapterExtensions
                 {
                     var assistantMsg = new ChatMessage(ChatMessageRoles.Assistant);
                     var parts = new List<ChatMessagePart>();
+                    var chatModel = new ChatModel(modelName);
+
                     foreach (var content in msg.Contents)
                     {
                         if (content is Reasoning reasoning)
                         {
-                            parts.Add(new ChatMessagePart(new ChatMessageReasoningData { Content = reasoning.Thought }));
+                            if (chatModel.SupportsNativeReasoning())
+                            {
+                                parts.Add(new ChatMessagePart(new ChatMessageReasoningData { Content = reasoning.Thought }));
+                            }
+                            else
+                            {
+                                parts.Add(new ChatMessagePart(reasoning.Thought));
+                            }
                         }
                         else if (content is Text text)
                         {

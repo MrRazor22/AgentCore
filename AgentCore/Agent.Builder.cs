@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,7 +18,7 @@ public sealed partial class Agent
         private ILogger<Builder> _logger;
         private IContent? _instructions;
 
-        private IMemory? _memory;
+        private IContext? _context;
         private ITooling? _tooling;
         private ITokenCounter? _tokenCounter;
         private ILoggerFactory? _loggerFactory;
@@ -27,7 +27,7 @@ public sealed partial class Agent
 
         private readonly List<ToolingLayer> _toolingLayers = [];
         private readonly List<LlmLayer> _llmLayers = [];
-        private readonly List<MemoryLayer> _memoryLayers = [];
+        private readonly List<ContextLayer> _contextLayers = [];
 
         private readonly List<object> _builtComponents = new();
 
@@ -63,8 +63,8 @@ public sealed partial class Agent
             return this;
         }
 
-        public Builder WithMemory(IMemory memory) { _memory = memory; return this; }
-        public Builder AddMemoryLayer(MemoryLayer layer) { _memoryLayers.Add(layer); return this; }
+        public Builder WithContext(IContext context) { _context = context; return this; }
+        public Builder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 
         public Builder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
         public Builder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
@@ -133,15 +133,15 @@ public sealed partial class Agent
 
             var capabilities = baseProvider.GetCapabilities();
 
-            IMemory memory = _memory ?? new WorkingMemory(
+            IContext memory = _context ?? new ChatContext(
                 tokenCounter,
                 capabilities,
                 frozenTools,
                 _instructions,
                 summarizer: baseProvider,
-                logger: lf.CreateLogger<WorkingMemory>());
+                logger: lf.CreateLogger<ChatContext>());
 
-            foreach (var layer in _memoryLayers)
+            foreach (var layer in _contextLayers)
             {
                 layer.Attach(memory);
                 memory = layer;

@@ -69,7 +69,56 @@ internal class Program
         });
 
         // 3. Initialize the Chat Session
-        var sessionFile = "active_session.json";
+        var sessionsDir = Path.Combine(AppContext.BaseDirectory, "sessions");
+        if (!Directory.Exists(sessionsDir))
+        {
+            Directory.CreateDirectory(sessionsDir);
+        }
+
+        string sessionFile;
+        var lastSessionFileLog = Path.Combine(sessionsDir, "last_session.txt");
+        if (File.Exists(lastSessionFileLog))
+        {
+            var savedPath = File.ReadAllText(lastSessionFileLog).Trim();
+            if (!string.IsNullOrEmpty(savedPath) && File.Exists(savedPath))
+            {
+                sessionFile = savedPath;
+            }
+            else
+            {
+                var files = Directory.GetFiles(sessionsDir, "session_*.json")
+                    .Select(f => new FileInfo(f))
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .ToList();
+                if (files.Count > 0)
+                {
+                    sessionFile = files[0].FullName;
+                }
+                else
+                {
+                    sessionFile = Path.Combine(sessionsDir, $"session_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+                }
+            }
+        }
+        else
+        {
+            var files = Directory.GetFiles(sessionsDir, "session_*.json")
+                .Select(f => new FileInfo(f))
+                .OrderByDescending(f => f.LastWriteTime)
+                .ToList();
+            if (files.Count > 0)
+            {
+                sessionFile = files[0].FullName;
+            }
+            else
+            {
+                sessionFile = Path.Combine(sessionsDir, $"session_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+            }
+        }
+
+        // Save last used session path
+        File.WriteAllText(lastSessionFileLog, sessionFile);
+
         Action<LLMEvent>? currentLlmEventHandler = null;
         var session = await ChatSession.CreateAsync(
             apiKey, 
@@ -78,6 +127,11 @@ internal class Program
             loggerFactory, 
             sessionFile, 
             evt => currentLlmEventHandler?.Invoke(evt));
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        var sessionTitle = await ChatSession.GetSessionTitleAsync(sessionFile);
+        Console.WriteLine($"[Auto-loaded Session: {Path.GetFileName(sessionFile)} ({sessionTitle})]");
+        Console.ResetColor();
 
         PrintHelp();
 
@@ -134,6 +188,8 @@ internal class Program
             try
             {
                 var contentInput = new Text(input);
+                var rawArgs = new System.Collections.Generic.Dictionary<int, string>();
+                var lastUnescaped = new System.Collections.Generic.Dictionary<int, string>();
                 bool headerPrinted = false;
                 bool toolDeltaStarted = false;
 
@@ -165,18 +221,53 @@ internal class Program
                     }
                     else if (evt is ToolCall tc)
                     {
+                        int index = tc.Index ?? 0;
                         if (!toolDeltaStarted)
                         {
                             Console.ForegroundColor = ConsoleColor.DarkCyan;
-                            Console.Write($"\n[LLM Stream ToolCall: {tc.Name}");
+                            Console.Write($"\n[LLM Stream ToolCall: {tc.Name} ");
                             Console.ResetColor();
                             toolDeltaStarted = true;
                         }
+                        string newRaw = "";
                         if (tc.Arguments != null)
                         {
-                            Console.ForegroundColor = ConsoleColor.DarkCyan;
-                            Console.Write(tc.Arguments.ToString());
-                            Console.ResetColor();
+                            if (tc.Arguments is System.Text.Json.Nodes.JsonValue val && val.TryGetValue<string>(out var str))
+                            {
+                                newRaw = str;
+                            }
+                            else if (tc.Arguments is System.Text.Json.Nodes.JsonObject obj)
+                            {
+                                newRaw = obj.ToJsonString();
+                            }
+                            else
+                            {
+                                newRaw = tc.Arguments.ToString();
+                            }
+                        }
+
+                        if (!rawArgs.TryGetValue(index, out var oldRaw))
+                        {
+                            oldRaw = "";
+                        }
+
+                        if (newRaw != oldRaw)
+                        {
+                            rawArgs[index] = newRaw;
+                            var newUnescaped = UnescapePartialJson(newRaw);
+                            if (!lastUnescaped.TryGetValue(index, out var oldUnescaped))
+                            {
+                                oldUnescaped = "";
+                            }
+                            
+                            if (newUnescaped.Length > oldUnescaped.Length)
+                            {
+                                var delta = newUnescaped.Substring(oldUnescaped.Length);
+                                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                                Console.Write(delta);
+                                Console.ResetColor();
+                                lastUnescaped[index] = newUnescaped;
+                            }
                         }
                     }
                 };
@@ -252,6 +343,20 @@ internal class Program
         }
     }
 
+    private static List<string> GetSessionFiles()
+    {
+        var sessionsDir = Path.Combine(AppContext.BaseDirectory, "sessions");
+        if (!Directory.Exists(sessionsDir))
+        {
+            return new List<string>();
+        }
+        return Directory.GetFiles(sessionsDir, "session_*.json")
+            .Select(f => new FileInfo(f))
+            .OrderByDescending(f => f.LastWriteTime)
+            .Select(f => f.FullName)
+            .ToList();
+    }
+
     private static async Task HandleCommandAsync(string input, ChatSession session, ToggleLoggerProvider loggerProvider)
     {
         var parts = input.Split(' ', 2);
@@ -265,10 +370,44 @@ internal class Program
                 break;
 
             case "/new":
-                await session.StartNewAsync();
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("New conversation session started. Memory cleared.");
-                Console.ResetColor();
+                {
+                    var sessionsDir = Path.Combine(AppContext.BaseDirectory, "sessions");
+                    var newSessionFile = Path.Combine(sessionsDir, $"session_{DateTime.Now:yyyyMMdd_HHmmss}.json");
+                    await session.StartNewAsync(newSessionFile);
+                    
+                    File.WriteAllText(Path.Combine(sessionsDir, "last_session.txt"), newSessionFile);
+
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"New conversation session started: '{Path.GetFileName(newSessionFile)}'.");
+                    Console.ResetColor();
+                }
+                break;
+
+            case "/sessions":
+            case "/list":
+                {
+                    var files = GetSessionFiles();
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("\n--- Available Sessions ---");
+                    if (files.Count == 0)
+                    {
+                        Console.WriteLine("(No saved sessions found)");
+                    }
+                    else
+                    {
+                        for (int i = 0; i < files.Count; i++)
+                        {
+                            var file = files[i];
+                            var isActive = file.Equals(session.SessionFile, StringComparison.OrdinalIgnoreCase);
+                            var title = await ChatSession.GetSessionTitleAsync(file);
+                            var marker = isActive ? "-> " : "   ";
+                            var fileInfo = new FileInfo(file);
+                            Console.WriteLine($"{marker}[{i}] {title} (Modified: {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss})");
+                        }
+                    }
+                    Console.WriteLine("--------------------------\n");
+                    Console.ResetColor();
+                }
                 break;
 
             case "/logs":
@@ -335,15 +474,52 @@ internal class Program
                 if (string.IsNullOrWhiteSpace(argument))
                 {
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("Error: Specify a filename to load (e.g., /load chat1.json).");
+                    Console.WriteLine("Error: Specify a session index or file to load (e.g., /load 0 or /load chat1.json).");
                     Console.ResetColor();
                     return;
                 }
                 try
                 {
-                    await session.LoadAsync(argument);
+                    string targetFile = argument;
+                    var files = GetSessionFiles();
+                    if (int.TryParse(argument, out var sessionIndex))
+                    {
+                        if (sessionIndex >= 0 && sessionIndex < files.Count)
+                        {
+                            targetFile = files[sessionIndex];
+                        }
+                        else
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine($"Error: Session index {sessionIndex} is out of range. Use /sessions to see available sessions.");
+                            Console.ResetColor();
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        var sessionsDir = Path.Combine(AppContext.BaseDirectory, "sessions");
+                        var possiblePath = Path.Combine(sessionsDir, argument);
+                        if (File.Exists(possiblePath))
+                        {
+                            targetFile = possiblePath;
+                        }
+                        else if (!File.Exists(targetFile))
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine($"Error: File '{argument}' not found.");
+                            Console.ResetColor();
+                            return;
+                        }
+                    }
+
+                    await session.LoadAsync(targetFile);
+                    
+                    var sessionsDirUpdate = Path.Combine(AppContext.BaseDirectory, "sessions");
+                    File.WriteAllText(Path.Combine(sessionsDirUpdate, "last_session.txt"), targetFile);
+
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine($"Session history loaded successfully from '{argument}'.");
+                    Console.WriteLine($"Session history loaded successfully from '{Path.GetFileName(targetFile)}'.");
                     Console.ResetColor();
                     PrintHistory(session, limit: 5);
                 }
@@ -361,6 +537,27 @@ internal class Program
                 Console.ResetColor();
                 break;
         }
+    }
+
+    private static string UnescapePartialJson(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return "";
+
+        int trailingBackslashes = 0;
+        for (int i = raw.Length - 1; i >= 0; i--)
+        {
+            if (raw[i] == '\\')
+                trailingBackslashes++;
+            else
+                break;
+        }
+
+        string toUnescape = (trailingBackslashes % 2 != 0) ? raw[..^1] : raw;
+
+        return toUnescape.Replace("\\n", "\n")
+                         .Replace("\\t", "\t")
+                         .Replace("\\\"", "\"")
+                         .Replace("\\\\", "\\");
     }
 
     private static void PrintHistory(ChatSession session, int limit = int.MaxValue)
@@ -395,11 +592,12 @@ internal class Program
     {
         Console.ForegroundColor = ConsoleColor.Magenta;
         Console.WriteLine("\n--- Available Commands ---");
-        Console.WriteLine("  /new             - Start a new conversation (clear session memory)");
+        Console.WriteLine("  /new             - Start a new session with a new file");
+        Console.WriteLine("  /sessions        - List all saved sessions (alias /list)");
+        Console.WriteLine("  /load <index/fn> - Load a session by index or custom JSON file");
         Console.WriteLine("  /history         - List all messages in current session with indices");
         Console.WriteLine("  /revert <index>  - Truncate conversation history back to specific message index");
         Console.WriteLine("  /save <file>     - Save current session history to a JSON file");
-        Console.WriteLine("  /load <file>     - Load session history from a JSON file");
         Console.WriteLine("  /logs            - Toggle verbose framework logging");
         Console.WriteLine("  /help            - Show this help menu");
         Console.WriteLine("--------------------------\n");

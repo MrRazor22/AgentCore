@@ -8,9 +8,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace AgentCore.Memory
+namespace AgentCore.Context
 {
-    public class WorkingMemory : IMemory
+    public class ChatContext : IContext
     {
         private readonly List<Message> _history = new();
         private readonly ITokenCounter _tokenCounter;
@@ -19,7 +19,7 @@ namespace AgentCore.Memory
         private readonly IContent? _instructions;
         private readonly double _retentionTarget;
         private readonly ILLM? _summarizer;
-        private readonly ILogger<WorkingMemory>? _logger;
+        private readonly ILogger<ChatContext>? _logger;
         private string _factSheet = string.Empty;
 
         public IReadOnlyList<Message> Messages
@@ -33,14 +33,14 @@ namespace AgentCore.Memory
             }
         }
 
-        public WorkingMemory(
+        public ChatContext(
             ITokenCounter tokenCounter,
             LLMCapabilities capabilities,
             IReadOnlyList<Tool> tools,
             IContent? instructions,
             double retentionTarget = 0.70,
             ILLM? summarizer = null,
-            ILogger<WorkingMemory>? logger = null)
+            ILogger<ChatContext>? logger = null)
         {
             _tokenCounter = tokenCounter ?? throw new ArgumentNullException(nameof(tokenCounter));
             _capabilities = capabilities ?? throw new ArgumentNullException(nameof(capabilities));
@@ -103,7 +103,7 @@ namespace AgentCore.Memory
             return conversation;
         }
 
-        public async Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
         {
             if (completedTurn == null || completedTurn.Count == 0) return;
 

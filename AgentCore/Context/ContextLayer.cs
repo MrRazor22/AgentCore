@@ -4,18 +4,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Memory;
+namespace AgentCore.Context;
 
-public abstract class MemoryLayer : IMemory
+public abstract class ContextLayer : IContext
 {
     private bool _attached;
 
     /// <summary>
     /// Gets the inner memory layer.
     /// </summary>
-    public IMemory Inner { get; private set; } = null!;
+    public IContext Inner { get; private set; } = null!;
 
-    internal void Attach(IMemory inner)
+    internal void Attach(IContext inner)
     {
         if (_attached)
             throw new InvalidOperationException("This memory decorator has already been attached to a pipeline.");
@@ -29,8 +29,8 @@ public abstract class MemoryLayer : IMemory
     public virtual Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
         => Inner.PrepareAsync(newInput, ct);
 
-    public virtual Task RememberAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
-        => Inner.RememberAsync(completedTurn, ct);
+    public virtual Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        => Inner.UpdateAsync(completedTurn, ct);
 
     public virtual Task ClearAsync(CancellationToken ct = default)
         => Inner.ClearAsync(ct);

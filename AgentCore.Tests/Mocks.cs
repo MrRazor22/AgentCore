@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM;
-using AgentCore.Memory;
+using AgentCore.Context;
 using AgentCore.Tools;
 using AgentCore.LLM.Schema;
 using AgentCore.LLM.Chat;
@@ -99,7 +99,7 @@ public class MockLLMProvider : ILLM
     }
 }
 
-public class MockMemoryProvider : IMemory
+public class MockMemoryProvider : IContext
 {
     public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
@@ -117,7 +117,7 @@ public class MockMemoryProvider : IMemory
         return Task.FromResult(list);
     }
 
-    public Task RememberAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
+    public Task UpdateAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
     {
         Saved.Add(turn);
         return Task.CompletedTask;
