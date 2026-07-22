@@ -67,7 +67,7 @@ public class ChatSession
             .AddLlmLayer(new StreamingLLMLayer(_onLlmEvent)) 
             .AddToolingLayer(new UserApprovalToolLayer()) 
             .AddContextLayer(new UserMemoryLayer(provider, profileFile, _loggerFactory))
-            .AddContextLayer(new FilePresistentContext(SessionFile))
+            .AddContextLayer(new FilePersistentChatContext(SessionFile))
             .WithLoggerFactory(_loggerFactory);
 
         Agent = builder.Build();

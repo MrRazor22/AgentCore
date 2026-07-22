@@ -9,12 +9,12 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Context;
 
-public class FilePresistentContext : ContextLayer
+public class FilePersistentChatContext : ContextLayer
 {
     private readonly string _filePath;
     private readonly List<Message> _messages = new();
 
-    public FilePresistentContext(string filePath)
+    public FilePersistentChatContext(string filePath)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
