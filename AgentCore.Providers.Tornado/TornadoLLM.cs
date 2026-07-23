@@ -3,6 +3,8 @@ using AgentCore.LLM.Chat;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;
+using LlmTornado.Responses;
+using LlmTornado.Responses.Events;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.LLM.Tornado;
@@ -58,24 +60,49 @@ public class TornadoLLM : ILLM
         };
         var channel = System.Threading.Channels.Channel.CreateBounded<LLMEvent>(channelOptions);
 
+        var toolCallInfo = new System.Collections.Generic.Dictionary<int, (string Id, string Name)>();
+        var streamedIndices = new System.Collections.Generic.HashSet<int>();
+
+        var lastArguments = new System.Collections.Generic.Dictionary<int, string>();
+        var assignedToolCallIds = new System.Collections.Generic.Dictionary<int, string>();
+
         _ = Task.Run(async () =>
         {
             try
             {
                 await chat.StreamResponseRich(new ChatStreamEventHandler
                 {
+                    OnResponseEvent = async (evt) =>
+                    {
+                        if (evt is ResponseEventOutputItemAdded addedEvt && addedEvt.Item is ResponseFunctionToolCallItem fnCall)
+                        {
+                            toolCallInfo[addedEvt.OutputIndex] = (fnCall.CallId ?? fnCall.Id ?? "", fnCall.Name ?? "");
+                        }
+                        else if (evt is ResponseEventFunctionCallArgumentsDelta deltaEvt)
+                        {
+                            toolCallInfo.TryGetValue(deltaEvt.OutputIndex, out var info);
+                            var toolCallDelta = new ToolCall(
+                                info.Id ?? "",
+                                info.Name ?? "",
+                                System.Text.Json.Nodes.JsonValue.Create(deltaEvt.Delta),
+                                deltaEvt.OutputIndex
+                            );
+                            streamedIndices.Add(deltaEvt.OutputIndex);
+                            await channel.Writer.WriteAsync(toolCallDelta, ct);
+                        }
+                    },
                     ReasoningTokenHandler = async (reasoning) =>
                     {
                         if (reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new Reasoning(reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new AgentCore.LLM.Chat.Reasoning(reasoning.Content), ct);
                         }
                     },
                     MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new Reasoning(part.Reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new AgentCore.LLM.Chat.Reasoning(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
@@ -84,12 +111,46 @@ public class TornadoLLM : ILLM
                     },
                     FunctionCallHandler = async (calls) =>
                     {
-                         // Emit tool calls
                          int idx = 0;
                          foreach(var call in calls)
                          {
-                              var argsStr = call.Arguments;
-                              await channel.Writer.WriteAsync(new ToolCall(call.ToolCall?.Id ?? Guid.NewGuid().ToString(), call.Name, System.Text.Json.Nodes.JsonValue.Create(argsStr), idx++), ct);
+                              int currentIdx = idx++;
+                              if (streamedIndices.Contains(currentIdx))
+                              {
+                                   continue;
+                              }
+                              var argsStr = call.Arguments ?? "";
+                              lastArguments.TryGetValue(currentIdx, out var prevArgs);
+                              prevArgs ??= "";
+
+                              if (argsStr == prevArgs)
+                              {
+                                   continue;
+                              }
+
+                              if (argsStr.StartsWith(prevArgs))
+                              {
+                                   string deltaStr = argsStr.Substring(prevArgs.Length);
+                                   lastArguments[currentIdx] = argsStr;
+
+                                   string toolCallId;
+                                   if (!string.IsNullOrEmpty(call.ToolCall?.Id))
+                                   {
+                                        toolCallId = call.ToolCall.Id;
+                                   }
+                                   else if (!assignedToolCallIds.TryGetValue(currentIdx, out toolCallId!))
+                                   {
+                                        toolCallId = Guid.NewGuid().ToString();
+                                        assignedToolCallIds[currentIdx] = toolCallId;
+                                   }
+
+                                   await channel.Writer.WriteAsync(new ToolCall(
+                                        toolCallId,
+                                        call.Name,
+                                        System.Text.Json.Nodes.JsonValue.Create(deltaStr),
+                                        currentIdx
+                                   ), ct);
+                              }
                          }
                     },
                     OnUsageReceived = async (usage) => 

@@ -1,14 +1,16 @@
+using AgentCore;
+using AgentCore.Context;
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.MEAI;
+using AgentCore.Tools;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+using OpenAI;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using AgentCore;
-using AgentCore.LLM;
-using AgentCore.LLM.Chat;
-using AgentCore.Context;
-using AgentCore.Tools;
-using AgentCore.LLM.Tornado;
-using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Example;
 
@@ -58,11 +60,23 @@ public class ChatSession
     /// </summary>
     public async Task InitializeAsync(CancellationToken ct = default)
     { 
-        var provider = TornadoLLMFactory.CreateLLMProvider(_apiKey, _modelName, new LLMCapabilities { ContextWindow = 15000, ReservedTokens = 5000}, _baseUrl);
+        var clientOptions = new OpenAIClientOptions();
+        if (_baseUrl != null)
+        {
+            var urlStr = _baseUrl.ToString();
+            clientOptions.Endpoint = urlStr.Contains("/v1") 
+                ? _baseUrl 
+                : new Uri(urlStr.TrimEnd('/') + "/v1/");
+        }
+        var openAiClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(_apiKey), clientOptions);
+        var chatClient = openAiClient.GetChatClient(_modelName).AsIChatClient();
+
+        var capabilities = new LLMCapabilities { ContextWindow = 15000, ReservedTokens = 5000 };
+        var provider = new AgentCore.LLM.MEAI.MEAILLM(chatClient, capabilities);
         var profileFile = "active_session_profile.json";
 
         var builder = AgentCore.Agent.Create()
-            .WithLLM(provider)
+            .WithLLM(new MEAILLM(chatClient, capabilities))
             .WithTools(new WorkspaceTools())
             .AddLlmLayer(new StreamingLLMLayer(_onLlmEvent)) 
             .AddToolingLayer(new UserApprovalToolLayer()) 

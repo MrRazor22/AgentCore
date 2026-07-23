@@ -45,7 +45,7 @@ internal class Program
 
         var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") 
                         ?? configuration["LLM:Model"] 
-                        ?? "qwen/qwen3.5-9b";
+                        ?? "model";
 
         var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL") 
                          ?? configuration["LLM:BaseUrl"] 

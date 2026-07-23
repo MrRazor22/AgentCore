@@ -123,6 +123,24 @@ public sealed class ChatConsole
         bool isReasoningActive = false;
         bool hasPrintedAssistantHeader = false;
 
+        var activeToolCalls = new System.Collections.Generic.Dictionary<int, (string Name, StringBuilder Args)>();
+        var completedToolCalls = new System.Collections.Generic.HashSet<int>();
+
+        void CloseActiveToolCalls(int? exceptIndex = null)
+        {
+            foreach (var kv in activeToolCalls)
+            {
+                if (exceptIndex.HasValue && kv.Key == exceptIndex.Value)
+                    continue;
+
+                if (!completedToolCalls.Contains(kv.Key))
+                {
+                    AnsiConsole.Write(")");
+                    completedToolCalls.Add(kv.Key);
+                }
+            }
+        }
+
         void EndReasoningIfActive()
         {
             if (isReasoningActive)
@@ -140,6 +158,7 @@ public sealed class ChatConsole
             
             if (evt is AgentCore.LLM.Chat.Text t)
             {
+                CloseActiveToolCalls();
                 EndReasoningIfActive();
 
                 if (!hasPrintedAssistantHeader)
@@ -152,6 +171,7 @@ public sealed class ChatConsole
             }
             else if (evt is Reasoning r)
             {
+                CloseActiveToolCalls();
                 if (!isReasoningActive)
                 {
                     isReasoningActive = true;
@@ -160,6 +180,35 @@ public sealed class ChatConsole
                     AnsiConsole.MarkupLine("[grey]Thinking...[/]");
                 }
                 AnsiConsole.Write(new Spectre.Console.Text(r.Thought, new Style(foreground: Color.Grey)));
+            }
+            else if (evt is ToolCall tc)
+            {
+                EndReasoningIfActive();
+                int idx = tc.Index ?? 0;
+                CloseActiveToolCalls(idx);
+
+                if (!activeToolCalls.ContainsKey(idx))
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.Markup($"[yellow]●[/] {tc.Name}(");
+                    activeToolCalls[idx] = (tc.Name ?? "", new StringBuilder());
+                }
+
+                string delta = "";
+                if (tc.Arguments is System.Text.Json.Nodes.JsonValue val && val.TryGetValue<string>(out var str))
+                {
+                    delta = str;
+                }
+                else if (tc.Arguments != null)
+                {
+                    delta = tc.Arguments.ToString();
+                }
+
+                if (!string.IsNullOrEmpty(delta))
+                {
+                    activeToolCalls[idx].Args.Append(delta);
+                    AnsiConsole.Write(new Spectre.Console.Text(delta));
+                }
             }
         };
 
@@ -171,15 +220,29 @@ public sealed class ChatConsole
             {
                 if (evt is ToolCallEvent tce)
                 {
+                    CloseActiveToolCalls();
                     EndReasoningIfActive();
 
                     var tc = tce.ToolCall;
-                    var args = tc.ArgumentsObject?.ToString() ?? "";
-                    AnsiConsole.WriteLine();
-                    AnsiConsole.MarkupLine($"[yellow]●[/] {tc.Name}({Markup.Escape(args)})");
+                    int idx = tc.Index ?? 0;
+                    if (activeToolCalls.TryGetValue(idx, out var active))
+                    {
+                        if (!completedToolCalls.Contains(idx))
+                        {
+                            AnsiConsole.Write(")");
+                            completedToolCalls.Add(idx);
+                        }
+                    }
+                    else
+                    {
+                        var args = tc.ArgumentsObject?.ToString() ?? "";
+                        AnsiConsole.WriteLine();
+                        AnsiConsole.MarkupLine($"[yellow]●[/] {tc.Name}({Markup.Escape(args)})");
+                    }
                 }
                 else if (evt is ToolResultEvent tre)
                 {
+                    CloseActiveToolCalls();
                     EndReasoningIfActive();
 
                     var resultStr = tre.Result.Result?.ForLlm() ?? "";
@@ -189,6 +252,7 @@ public sealed class ChatConsole
                 }
                 else if (evt is ErrorEvent err)
                 {
+                    CloseActiveToolCalls();
                     EndReasoningIfActive();
 
                     AnsiConsole.MarkupLine($"[red]✗[/] {Markup.Escape(err.Error.Message)}");
@@ -197,6 +261,7 @@ public sealed class ChatConsole
         }
         finally
         {
+            CloseActiveToolCalls();
             EndReasoningIfActive();
             Program.CurrentLlmEventHandler = null;
             AnsiConsole.WriteLine();
