@@ -76,7 +76,7 @@ public class ChatSession
         var profileFile = "active_session_profile.json";
 
         var builder = AgentCore.Agent.Create()
-            .WithLLM(new MEAILLM(chatClient, capabilities))
+            .WithMEAI(chatClient, capabilities)
             .WithTools(new WorkspaceTools())
             .AddLlmLayer(new StreamingLLMLayer(_onLlmEvent)) 
             .AddToolingLayer(new UserApprovalToolLayer()) 

@@ -63,6 +63,20 @@ public sealed partial class Agent
             return this;
         }
 
+        public Builder WithTool(Tool tool)
+        {
+            AddTool(tool);
+            return this;
+        }
+
+        public Builder WithTools(IEnumerable<Tool> tools)
+        {
+            ArgumentNullException.ThrowIfNull(tools);
+            foreach (var tool in tools)
+                AddTool(tool);
+            return this;
+        }
+
         public Builder WithContext(IContext context) { _context = context; return this; }
         public Builder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 

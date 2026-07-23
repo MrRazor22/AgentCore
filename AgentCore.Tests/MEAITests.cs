@@ -168,4 +168,46 @@ public class MEAITests
         Assert.NotNull(builder.GetService<ILLM>());
         Assert.IsType<MEAILLM>(builder.GetService<ILLM>());
     }
+
+    private class TestAIFunction : AIFunction
+    {
+        public override string Name => "test_fn";
+        public override string Description => "a description";
+        public override JsonElement JsonSchema => JsonDocument.Parse("{\"type\":\"object\",\"properties\":{\"input\":{\"type\":\"string\"}}}").RootElement;
+
+        public CancellationToken LastCancellationToken { get; private set; }
+        public AIFunctionArguments? LastArguments { get; private set; }
+
+        protected override ValueTask<object?> InvokeCoreAsync(AIFunctionArguments arguments, CancellationToken cancellationToken)
+        {
+            LastCancellationToken = cancellationToken;
+            LastArguments = arguments;
+            return new ValueTask<object?>("result_value");
+        }
+    }
+
+    [Fact]
+    public async Task MEAIFunctionTool_PreservesFidelityAndPropagatesCancellation()
+    {
+        // Arrange
+        var aiFunction = new TestAIFunction();
+        var tool = new MEAIFunctionTool(aiFunction);
+
+        // Act & Assert 1: Fidelity
+        Assert.Equal("test_fn", tool.Name);
+        Assert.Equal("a description", tool.Description);
+        var schemaJson = tool.ParametersSchema.ToString();
+        Assert.Contains("input", schemaJson);
+
+        // Act & Assert 2: Execution and token propagation
+        using var cts = new CancellationTokenSource();
+        var arguments = new JsonObject { ["input"] = "hello" };
+        var result = await tool.InvokeAsync(arguments, cts.Token);
+
+        Assert.Equal("result_value", result);
+        Assert.NotNull(aiFunction.LastArguments);
+        Assert.Equal("hello", aiFunction.LastArguments["input"]?.ToString());
+        Assert.Equal(cts.Token, aiFunction.LastCancellationToken);
+    }
 }
+
