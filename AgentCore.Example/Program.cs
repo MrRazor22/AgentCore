@@ -1,6 +1,7 @@
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Serilog;
 
 namespace AgentCore.Example;
 
@@ -51,11 +52,16 @@ internal class Program
             baseUrl = new Uri(baseUrlStr);
         }
 
-        // 2. Setup Toggle Logging Provider
-        var toggleLogger = new ToggleLoggerProvider();
+        // 2. Setup Serilog Logging Provider
+        Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+            .MinimumLevel.Information()
+            .WriteTo.Console(outputTemplate: "[Diag Log] [{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+            .WriteTo.File("agent_diagnostics.log", rollingInterval: Serilog.RollingInterval.Infinite, outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
         using var loggerFactory = LoggerFactory.Create(builder =>
         {
-            builder.AddProvider(toggleLogger);
+            builder.AddSerilog();
         });
 
         // 3. Initialize the Chat Session
@@ -154,10 +160,7 @@ internal class Program
                         }
                         break;
 
-                    case "Toggle logs":
-                        toggleLogger.Enabled = !toggleLogger.Enabled;
-                        Spectre.Console.AnsiConsole.MarkupLine($"[teal]Logging toggled to:[/] {(toggleLogger.Enabled ? "[green]ENABLED[/]" : "[red]DISABLED[/]")}");
-                        break;
+
 
                     case "Help":
                         chatConsole.PrintHelp();
@@ -221,11 +224,7 @@ internal class Program
                                     chatConsole.PrintNormalChat(session.Messages);
                                 }
                             }
-                            else if (choice == "Toggle logs")
-                            {
-                                toggleLogger.Enabled = !toggleLogger.Enabled;
-                                Spectre.Console.AnsiConsole.MarkupLine($"[teal]Logging toggled to:[/] {(toggleLogger.Enabled ? "[green]ENABLED[/]" : "[red]DISABLED[/]")}");
-                            }
+
                             else if (choice == "Help")
                             {
                                 chatConsole.PrintHelp();
@@ -241,10 +240,7 @@ internal class Program
                         chatConsole.PrintDiagnosticHistory(session.Messages);
                         break;
 
-                    case "/logs":
-                        toggleLogger.Enabled = !toggleLogger.Enabled;
-                        Spectre.Console.AnsiConsole.MarkupLine($"[teal]Logging toggled to:[/] {(toggleLogger.Enabled ? "[green]ENABLED[/]" : "[red]DISABLED[/]")}");
-                        break;
+
 
                     case "/revert":
                         {
@@ -300,76 +296,4 @@ internal class Program
     }
 }
 
-public class ToggleLoggerProvider : ILoggerProvider
-{
-    private static readonly object _fileLock = new();
 
-    public ToggleLoggerProvider()
-    {
-        try
-        {
-            if (File.Exists("agent_diagnostics.log"))
-            {
-                File.Delete("agent_diagnostics.log");
-            }
-        }
-        catch { }
-    }
-
-    public bool Enabled { get; set; } = false;
-
-    public ILogger CreateLogger(string categoryName) => new ToggleLogger(categoryName, this);
-
-    public void Dispose() { }
-
-    private class ToggleLogger : ILogger
-    {
-        private readonly string _category;
-        private readonly ToggleLoggerProvider _provider;
-
-        public ToggleLogger(string category, ToggleLoggerProvider provider)
-        {
-            _category = category;
-            _provider = provider;
-        }
-
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-        {
-            var message = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] [{logLevel}] [{_category}] {formatter(state, exception)}";
-            if (exception != null)
-            {
-                message += "\n" + exception.ToString();
-            }
-
-            if (logLevel >= LogLevel.Information)
-            {
-                lock (_fileLock)
-                {
-                    try
-                    {
-                        File.AppendAllText("agent_diagnostics.log", message + Environment.NewLine);
-                    }
-                    catch
-                    {
-                        // Ignore file write issues
-                    }
-                }
-            }
-
-            if (!_provider.Enabled) return;
-
-            var originalColor = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"[Diag Log] [{logLevel}] [{_category}] {formatter(state, exception)}");
-            if (exception != null)
-            {
-                Console.WriteLine(exception.ToString());
-            }
-            Console.ResetColor();
-        }
-    }
-}

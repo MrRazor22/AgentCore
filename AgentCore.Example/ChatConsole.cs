@@ -81,7 +81,6 @@ public sealed class ChatConsole
                     "New session",
                     "Switch session",
                     "Revert",
-                    "Toggle logs",
                     "Help",
                     "Exit"
                 }));
