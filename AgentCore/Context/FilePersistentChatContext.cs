@@ -47,7 +47,26 @@ public class FilePersistentChatContext : ContextLayer
 
     private async Task SaveToDiskAsync(CancellationToken ct)
     {
+        var tempPath = _filePath + ".tmp";
+        var directory = Path.GetDirectoryName(_filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(_filePath, json, ct).ConfigureAwait(false);
+        
+        // Write to the temporary file first
+        await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
+
+        // Swap/replace the target file safely
+        if (File.Exists(_filePath))
+        {
+            File.Replace(tempPath, _filePath, null);
+        }
+        else
+        {
+            File.Move(tempPath, _filePath);
+        }
     }
 }
