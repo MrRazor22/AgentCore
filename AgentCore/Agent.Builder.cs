@@ -177,7 +177,7 @@ public sealed partial class Agent
             _builtComponents.Add(tooling);
             _builtComponents.Add(memory);
 
-            return new Agent(provider, memory, frozenTools, _instructions, workflow, lf.CreateLogger<Agent>());
+            return new Agent(memory, workflow, lf.CreateLogger<Agent>());
         }
     }
 }

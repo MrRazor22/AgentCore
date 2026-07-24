@@ -21,25 +21,16 @@ public sealed partial class Agent : IAgent
 {
     public static Builder Create() => new Builder();
 
-    private readonly ILLM _llm; 
-    private readonly IContext _memory;
-    private readonly IReadOnlyList<Tool> _tools;
-    private readonly IContent? _instructions;
+    private readonly IContext _context;
     private readonly IAgentWorkflow _workflow;
     private readonly ILogger<Agent> _logger;
 
     public Agent(
-        ILLM llm, 
         IContext memory,
-        IReadOnlyList<Tool> tools,
-        IContent? instructions,
         IAgentWorkflow workflow,
         ILogger<Agent>? logger = null)
     {
-        _llm = llm; 
-        _memory = memory;
-        _tools = tools;
-        _instructions = instructions;
+        _context = memory;
         _workflow = workflow;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
     } 
@@ -54,10 +45,7 @@ public sealed partial class Agent : IAgent
         return System.Text.Json.JsonSerializer.Deserialize<T>(response);
     }
 
-    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default)
-    {
-        return InvokeAsync<string>(input, ct);
-    }
+    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) => InvokeAsync<string>(input, ct); 
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
@@ -74,12 +62,7 @@ public sealed partial class Agent : IAgent
         return Deserialize<T>(fullText);
     }
 
-    public IAsyncEnumerable<IContent> InvokeStreamingAsync(
-        IContent input,
-        CancellationToken ct = default)
-    {
-        return ExecuteStreamAsync(input, null, ct);
-    }
+    public IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default) => ExecuteStreamAsync(input, null, ct);
 
     private IAsyncEnumerable<IContent> InvokeStreamingAsyncInternal<T>(
         IContent input,
@@ -104,7 +87,7 @@ public sealed partial class Agent : IAgent
             new KeyValuePair<string, object?>("Agent", nameof(Agent))
         }); 
 
-        await foreach (var content in _workflow.ExecuteAsync(_memory, input, responseSchema, ct))
+        await foreach (var content in _workflow.ExecuteAsync(_context, input, responseSchema, ct))
         {
             yield return content;
         }
