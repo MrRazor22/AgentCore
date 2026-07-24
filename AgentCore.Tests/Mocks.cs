@@ -149,12 +149,12 @@ public class MockTooling : ITooling
 {
     public IReadOnlyList<Tool> Tools { get; set; } = Array.Empty<Tool>();
 
-    public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<Message>>> Handler { get; set; } =
-        (calls, ct) => Task.FromResult<IReadOnlyList<Message>>(
-            calls.Select(c => new Message(Role.Tool, new ToolResult(c.Id, new Text("Success")))).ToList()
+    public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<ToolResult>>> Handler { get; set; } =
+        (calls, ct) => Task.FromResult<IReadOnlyList<ToolResult>>(
+            calls.Select(c => new ToolResult(c.Id, new Text("Success"))).ToList()
         );
 
-    public Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {
         return Handler(calls, ct);
     }

@@ -71,8 +71,8 @@ public class WorkflowTests
         var tooling = new MockTooling();
         tooling.Handler = (calls, ct) =>
         {
-            var results = calls.Select(c => new Message(Role.Tool, new ToolResult(c.Id, new Text("Rainy")))).ToList();
-            return Task.FromResult<IReadOnlyList<Message>>(results);
+            var results = calls.Select(c => new ToolResult(c.Id, new Text("Rainy"))).ToList();
+            return Task.FromResult<IReadOnlyList<ToolResult>>(results);
         };
 
         var (llm, _) = CreateServices(provider, tooling);

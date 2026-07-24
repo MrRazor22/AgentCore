@@ -23,6 +23,6 @@ public abstract class ToolingLayer : ITooling
 
     public virtual IReadOnlyList<Tool> Tools => Inner.Tools;
 
-    public virtual Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public virtual Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
         => Inner.ExecuteAsync(calls, ct);
 }

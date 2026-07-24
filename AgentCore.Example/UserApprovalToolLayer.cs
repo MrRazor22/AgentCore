@@ -17,10 +17,10 @@ public class UserApprovalToolLayer : ToolingLayer
     {
     }
 
-    public override async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public override async Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {
         var approvedCalls = new List<ToolCall>();
-        var responses = new List<Message>();
+        var responses = new List<ToolResult>();
 
         foreach (var call in calls)
         {
@@ -51,7 +51,7 @@ public class UserApprovalToolLayer : ToolingLayer
 
                     // Inject rejection message to let the workflow know the tool failed due to lack of permission
                     var rejectionResult = new ToolResult(call.Id, new Text("Error: Permission denied. User rejected the request to write to file."));
-                    responses.Add(new Message(Role.Tool, rejectionResult));
+                    responses.Add(rejectionResult);
                 }
             }
             else if (call.Name.Equals("ExecuteCommand", StringComparison.OrdinalIgnoreCase))
@@ -78,7 +78,7 @@ public class UserApprovalToolLayer : ToolingLayer
                     Console.ResetColor();
 
                     var rejectionResult = new ToolResult(call.Id, new Text("Error: Permission denied. User rejected the request to execute this command."));
-                    responses.Add(new Message(Role.Tool, rejectionResult));
+                    responses.Add(rejectionResult);
                 }
             }
             else

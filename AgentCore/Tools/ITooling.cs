@@ -10,7 +10,7 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<Tool> Tools { get; }
-    Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
+    Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling : ITooling
@@ -30,10 +30,9 @@ internal sealed class Tooling : ITooling
 
     public IReadOnlyList<Tool> Tools => _toolList;
 
-    public async Task<IReadOnlyList<Message>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {
-        var results = await Task.WhenAll(calls.Select(c => HandleInternalAsync(c, ct))).ConfigureAwait(false);
-        return results.Select(r => new Message(Role.Tool, r)).ToList();
+        return await Task.WhenAll(calls.Select(c => HandleInternalAsync(c, ct))).ConfigureAwait(false);
     }
 
     private static ToolResult Failed(string callId, string toolName, string message)

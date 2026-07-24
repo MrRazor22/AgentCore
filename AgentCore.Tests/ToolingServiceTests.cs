@@ -26,7 +26,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Contains("not registered", resultText);
     }
 
@@ -39,7 +39,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Contains("cannot be empty", resultText);
     }
 
@@ -59,7 +59,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Contains("Tool implementation crashed", resultText);
     }
 
@@ -74,7 +74,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Equal("", resultText);
     }
 
@@ -92,7 +92,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Equal("Explicit IContent", resultText);
     }
 
@@ -110,7 +110,7 @@ public class ToolingServiceTests
         var results = await tooling.ExecuteAsync(calls);
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Contains("{\"Key\":\"Val\"}", resultText);
     }
 

@@ -95,16 +95,13 @@ namespace AgentCore
                     iterations++;
 
                     _logger?.LogDebug("Executing {ToolCount} tool calls...", toolCalls.Count);
-                    var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
+                    var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
                     // 3. Save tool results to context immediately and yield ToolResult semantic content
-                    foreach (var message in toolMessages)
+                    foreach (var result in toolResults)
                     {
-                        await context.AddAsync(message, ct).ConfigureAwait(false);
-                        foreach (var result in message.Contents.OfType<ToolResult>())
-                        {
-                            yield return result;
-                        }
+                        await context.AddAsync(new Message(Role.Tool, result), ct).ConfigureAwait(false);
+                        yield return result;
                     }
 
                     continue;

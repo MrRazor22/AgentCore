@@ -31,9 +31,7 @@ public class ToolingTests
         var results = await tooling.ExecuteAsync(new[] { toolCall });
 
         Assert.Single(results);
-        var message = results[0];
-        Assert.Equal(Role.Tool, message.Role);
-        var toolResult = (ToolResult)message.Contents[0];
+        var toolResult = results[0];
         Assert.Equal("call_1", toolResult.CallId);
         Assert.Equal("25", toolResult.Result!.ForLlm());
     }
@@ -53,7 +51,7 @@ public class ToolingTests
         var results = await tooling.ExecuteAsync(new[] { toolCall });
 
         Assert.Single(results);
-        var resultText = results[0].Contents[0].ForLlm();
+        var resultText = results[0].ForLlm();
         Assert.Contains("Error calling tool", resultText);
     }
 
@@ -78,7 +76,7 @@ public class ToolingTests
         var results = await tooling.ExecuteAsync(new[] { toolCall });
 
         Assert.Single(results);
-        var toolResult = (ToolResult)results[0].Contents[0];
+        var toolResult = results[0];
         Assert.Equal("25", toolResult.Result!.ForLlm());
     }
 
