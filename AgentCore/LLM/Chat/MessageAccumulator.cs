@@ -4,11 +4,10 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentCore.LLM.Chat;
 
-namespace AgentCore.LLM;
+namespace AgentCore.LLM.Chat;
 
-internal static class LLMStreamExtensions
+public static class MessageAccumulator
 {
     public static async Task<(Message? Message, Metadata? Metadata)> AccumulateAsync(
         this IAsyncEnumerable<ILLMOutput> stream,
