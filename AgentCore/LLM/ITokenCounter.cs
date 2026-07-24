@@ -9,7 +9,7 @@ public interface ITokenCounter
 {
     Task<int> EstimateAsync(IEnumerable<Message> messages, CancellationToken ct = default);
     Task<int> EstimateAsync(IEnumerable<Tool> tools, CancellationToken ct = default);
-    void RecordActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens);
+    void ObserveActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens);
 }
 public sealed class ApproximateTokenCounter : ITokenCounter
 {
@@ -61,7 +61,7 @@ public sealed class ApproximateTokenCounter : ITokenCounter
         return tool.Name.Length + tool.Description.Length + tool.ParametersSchema.ToJsonNode().ToJsonString().Length;
     }
 
-    public void RecordActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens)
+    public void ObserveActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens)
     {
         if (messages == null || actualInputTokens <= 0) return;
 

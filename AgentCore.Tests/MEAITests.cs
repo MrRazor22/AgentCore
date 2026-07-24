@@ -161,8 +161,16 @@ public class MEAITests
 
         // Assert
         Assert.NotNull(agent);
-        Assert.NotNull(builder.GetService<ILLM>());
-        Assert.IsType<MEAILLM>(builder.GetService<ILLM>());
+        var llm = builder.GetService<ILLM>();
+        Assert.NotNull(llm);
+        if (llm is TokenCalibrationLayer calibrationLayer)
+        {
+            Assert.IsType<MEAILLM>(calibrationLayer.Inner);
+        }
+        else
+        {
+            Assert.IsType<MEAILLM>(llm);
+        }
     }
 
     private class TestAIFunction : AIFunction

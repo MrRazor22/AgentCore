@@ -244,4 +244,20 @@ public class AgentBuilderTests
         Assert.NotNull(memory);
         Assert.NotNull(tooling);
     }
+
+    [Fact]
+    public void Build_AutomaticallyWiresTokenCalibrationLayerAsOutermost()
+    {
+        var mockProvider = new MockLLMProvider();
+        var builder = Agent.Create()
+            .WithLLM(mockProvider);
+
+        var agent = builder.Build();
+
+        var llm = builder.GetRequiredService<ILLM>();
+        Assert.IsType<TokenCalibrationLayer>(llm);
+        
+        var calibrationLayer = (TokenCalibrationLayer)llm;
+        Assert.Same(mockProvider, calibrationLayer.Inner);
+    }
 }

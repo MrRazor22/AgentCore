@@ -135,6 +135,10 @@ public sealed partial class Agent
                 provider = layer;
             }
 
+            var calibrationLayer = new TokenCalibrationLayer(tokenCounter);
+            calibrationLayer.Attach(provider);
+            provider = calibrationLayer;
+
             var frozenTools = _tools.ToArray();
             _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
