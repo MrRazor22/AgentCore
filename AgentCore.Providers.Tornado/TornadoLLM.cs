@@ -84,7 +84,8 @@ public class TornadoLLM : ILLM
                             var toolCallDelta = new ToolCallDelta(
                                 info.Id ?? "",
                                 info.Name ?? "",
-                                deltaEvt.Delta
+                                deltaEvt.Delta,
+                                deltaEvt.OutputIndex
                             );
                             streamedIndices.Add(deltaEvt.OutputIndex);
                             await channel.Writer.WriteAsync(toolCallDelta, ct);
@@ -146,7 +147,8 @@ public class TornadoLLM : ILLM
                                    await channel.Writer.WriteAsync(new ToolCallDelta(
                                         toolCallId,
                                         call.Name,
-                                        deltaStr
+                                        deltaStr,
+                                        currentIdx
                                    ), ct);
                               }
                          }

@@ -29,9 +29,34 @@ public static class MessageAccumulator
                     reasoningBuffer.Append(r.Thought);
                     break;
                 case ToolCallDelta tc:
-                    var key = string.IsNullOrEmpty(tc.Id) ? (toolCalls.Keys.LastOrDefault() ?? "default") : tc.Id;
+                    string key;
+                    if (tc.Index.HasValue)
+                    {
+                        key = $"index_{tc.Index.Value}";
+                    }
+                    else
+                    {
+                        key = string.IsNullOrEmpty(tc.Id) ? (toolCalls.Keys.LastOrDefault() ?? "default") : tc.Id;
+                    }
+                    
                     if (!toolCalls.TryGetValue(key, out var entry))
-                        entry = (key, "", new StringBuilder());
+                    {
+                        string initialId = tc.Id;
+                        if (string.IsNullOrEmpty(initialId) && tc.Index.HasValue)
+                        {
+                            initialId = $"call_{tc.Index.Value}";
+                        }
+                        else if (string.IsNullOrEmpty(initialId))
+                        {
+                            initialId = key;
+                        }
+                        entry = (initialId, "", new StringBuilder());
+                    }
+                    
+                    if (!string.IsNullOrEmpty(tc.Id) && entry.id != tc.Id && tc.Id != key)
+                    {
+                        entry.id = tc.Id;
+                    }
                     
                     if (!string.IsNullOrEmpty(tc.NameDelta)) entry.name += tc.NameDelta;
                     if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);

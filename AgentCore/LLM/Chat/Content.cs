@@ -17,7 +17,7 @@ public record TextDelta(string Value) : IContentDelta;
 
 public record ReasoningDelta(string Thought) : IContentDelta;
 
-public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta) : IContentDelta;
+public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null) : IContentDelta;
 
 public record Metadata(
     int InputTokens = 0,

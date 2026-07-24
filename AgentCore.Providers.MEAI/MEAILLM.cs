@@ -131,8 +131,14 @@ public class MEAILLM : ILLM
                             string? callId = toolCallUpdate.ToolCallId;
                             string? funcName = toolCallUpdate.FunctionName;
                             string? argDelta = toolCallUpdate.FunctionArgumentsUpdate?.ToString();
+                            int? index = null;
+                            try
+                            {
+                                index = (int?)toolCallUpdate.Index;
+                            }
+                            catch { }
 
-                            rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta));
+                            rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta, index));
                         }
                     }
                 }
