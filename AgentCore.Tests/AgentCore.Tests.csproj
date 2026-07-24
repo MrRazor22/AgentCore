@@ -19,8 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AgentCore.LLM.MEAI\AgentCore.LLM.MEAI.csproj" />
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
-    <ProjectReference Include="..\AgentCore.Providers.MEAI\AgentCore.LLM.MEAI.csproj" />
   </ItemGroup>
 
 </Project>
