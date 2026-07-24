@@ -13,7 +13,6 @@ namespace AgentCore;
 public interface IAgent
 {
     Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<IContent> InvokeStreamingAsync<T>(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
     IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
@@ -63,7 +62,7 @@ public sealed partial class Agent : IAgent
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
         var sb = new StringBuilder();
-        await foreach (var content in InvokeStreamingAsync<T>(input, ct))
+        await foreach (var content in InvokeStreamingAsyncInternal<T>(input, ct))
         {
             if (content is Text t)
             {
@@ -82,7 +81,7 @@ public sealed partial class Agent : IAgent
         return ExecuteStreamAsync(input, null, ct);
     }
 
-    public IAsyncEnumerable<IContent> InvokeStreamingAsync<T>(
+    private IAsyncEnumerable<IContent> InvokeStreamingAsyncInternal<T>(
         IContent input,
         CancellationToken ct = default)
     {
