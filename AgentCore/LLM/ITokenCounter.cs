@@ -63,33 +63,33 @@ public sealed class ApproximateTokenCounter : ITokenCounter
 
     public void ObserveActualCount(IEnumerable<Message> messages, IReadOnlyList<Tool>? tools, int actualInputTokens)
     {
-        if (messages == null || actualInputTokens <= 0) return;
+        if (messages is null || actualInputTokens <= 0)
+            return;
 
-        int toolChars = 0;
+        int chars = GetCharCount(messages);
 
-        if (tools != null)
+        if (tools is not null)
+        {
             foreach (var tool in tools)
-                toolChars += GetToolCharacterCount(tool);
+            {
+                chars += GetToolCharacterCount(tool);
+            }
+        }
 
-        int messageTokens = Math.Max(1, actualInputTokens - EstimateTokens(toolChars));
-
-        Calibrate(messages, messageTokens);
+        Calibrate(chars, actualInputTokens);
     }
 
-    private void Calibrate(IEnumerable<Message> messages, int actualMessageTokens)
+    private void Calibrate(int charCount, int actualTokens)
     {
-        if (messages == null || actualMessageTokens <= 0) return;
+        if (charCount <= 0 || actualTokens <= 0) return;
 
-        int charCount = GetCharCount(messages);
-        if (charCount <= 0) return;
-
-        double currentRatio = (double)charCount / actualMessageTokens;
+        double currentRatio = (double)charCount / actualTokens;
 
         // Prevent wild outliers from destroying the ratio
         if (currentRatio < 1.0 || currentRatio > 10.0)
         {
             _logger.LogWarning("Token calibration rejected: CharCount={Char} TokenCount={Tokens} Ratio={Ratio} (out of range 1.0-10.0)",
-                charCount, actualMessageTokens, currentRatio);
+                charCount, actualTokens, currentRatio);
             return;
         }
 
