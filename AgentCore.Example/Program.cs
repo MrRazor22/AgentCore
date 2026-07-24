@@ -1,9 +1,3 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -28,7 +22,7 @@ internal class Program
             .AddEnvironmentVariables()
             .Build();
 
-        var apiKey = Environment.GetEnvironmentVariable("LLM_API_KEY") 
+        var apiKey = Environment.GetEnvironmentVariable("LLM_API_KEY")
                      ?? configuration["LLM:ApiKey"];
 
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -43,12 +37,12 @@ internal class Program
             }
         }
 
-        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL") 
-                        ?? configuration["LLM:Model"] 
+        var modelName = Environment.GetEnvironmentVariable("LLM_MODEL")
+                        ?? configuration["LLM:Model"]
                         ?? "model";
 
-        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL") 
-                         ?? configuration["LLM:BaseUrl"] 
+        var baseUrlStr = Environment.GetEnvironmentVariable("LLM_BASE_URL")
+                         ?? configuration["LLM:BaseUrl"]
                          ?? "http://127.0.0.1:1234";
 
         Uri? baseUrl = null;
@@ -92,11 +86,11 @@ internal class Program
         File.WriteAllText(lastSessionFileLog, sessionFile);
 
         var session = await ChatSession.CreateAsync(
-            apiKey, 
-            modelName, 
-            baseUrl, 
-            loggerFactory, 
-            sessionFile, 
+            apiKey,
+            modelName,
+            baseUrl,
+            loggerFactory,
+            sessionFile,
             evt => CurrentLlmEventHandler?.Invoke(evt));
 
         if (startupSelected != "NEW")
@@ -276,7 +270,7 @@ internal class Program
             {
                 var contentInput = new Text(input);
                 var eventStream = session.Agent.InvokeStreamingAsync(contentInput, promptCts.Token);
-                
+
                 await chatConsole.RenderStreamAsync(eventStream, evt => { }, promptCts.Token);
                 await session.RefreshAsync(promptCts.Token);
             }
@@ -309,7 +303,7 @@ internal class Program
 public class ToggleLoggerProvider : ILoggerProvider
 {
     private static readonly object _fileLock = new();
-    
+
     public ToggleLoggerProvider()
     {
         try

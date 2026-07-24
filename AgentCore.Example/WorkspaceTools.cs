@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
+using AgentCore.Tools;
 using System.ComponentModel;
-using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.Tools;
 
 namespace AgentCore.Example;
 
@@ -231,7 +225,7 @@ public class WorkspaceTools
     [Tool]
     [Description("Writes text content to a local text file.")]
     public string WriteTextFile(
-        [Description("Path to write to.")] string path, 
+        [Description("Path to write to.")] string path,
         [Description("The content to write.")] string content)
     {
         try

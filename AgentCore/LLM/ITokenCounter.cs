@@ -25,7 +25,7 @@ public sealed class ApproximateTokenCounter : ITokenCounter
         _safetyMargin = safetyMargin;
         _logger = logger ?? NullLogger<ApproximateTokenCounter>.Instance;
     }
-     
+
     public Task<int> EstimateAsync(IEnumerable<Message> messages, CancellationToken ct = default)
     {
         if (messages == null || !messages.Any())

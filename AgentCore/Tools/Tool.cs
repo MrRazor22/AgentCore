@@ -1,7 +1,7 @@
 using AgentCore.LLM.Schema;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools; 
+namespace AgentCore.Tools;
 
 public abstract class Tool
 {

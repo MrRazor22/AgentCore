@@ -1,11 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
 using AgentCore.Tools;
-using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using System.Threading;
 
 namespace AgentCore.Example;
 

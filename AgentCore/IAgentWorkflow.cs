@@ -1,15 +1,10 @@
+using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Exceptions;
 using AgentCore.LLM.Schema;
-using AgentCore.Context;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
-using System.Collections.Generic;
-using System;
-using System.Linq;
 
 namespace AgentCore
 {
@@ -68,7 +63,7 @@ namespace AgentCore
 
                 var options = new LLMOptions { ResponseSchema = responseSchema };
                 _logger?.LogDebug("Calling LLM StreamAsync...");
-                
+
                 var (assistantMessage, metadata) = await _llm
                     .StreamAsync(currentMessages, options, _tooling.Tools, ct)
                     .AccumulateAsync(ct)

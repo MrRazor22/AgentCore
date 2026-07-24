@@ -1,14 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.AI;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace AgentCore.LLM.MEAI;
 
@@ -36,7 +29,7 @@ public class MEAILLM : ILLM
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var chatMessages = messages.Select(m => m.ToMEAIMessage()).ToList();
-        
+
         var chatOptions = new ChatOptions();
         if (options != null)
         {

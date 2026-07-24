@@ -1,13 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Xunit;
-using AgentCore;
-using AgentCore.LLM;
 using AgentCore.Context;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools; 
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 
@@ -100,7 +94,7 @@ public class MemoryTests
         // Act & Assert 1: Prepare with tight budget so msg1 gets pruned in the output
         var providerTight = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var contextServiceTight = new ChatContext(tokenCounter, providerTight.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
-        
+
         await contextServiceTight.AddAsync(msg1);
         await contextServiceTight.AddAsync(msg2);
 
@@ -162,10 +156,10 @@ public class MemoryTests
     public async Task RollingWindowMemory_ExceedsBudget_TriggersConsolidationForEvictedMessages()
     {
         // Arrange
-        var mockLlm = new MockLLMProvider { ContextWindow = 600, ReservedTokens = 50 }; 
+        var mockLlm = new MockLLMProvider { ContextWindow = 600, ReservedTokens = 50 };
         mockLlm.Enqueue(new Text("Consolidated fact sheet result."));
         var tokenCounter = new ApproximateTokenCounter();
-        
+
         var capabilities = new LLMCapabilities { ContextWindow = 20, ReservedTokens = 5 };
         var memoryProvider = new ChatContext(tokenCounter, capabilities, Array.Empty<Tool>(), null, retentionTarget: 0.1, summarizer: mockLlm);
 

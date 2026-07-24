@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Threading;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
+using System.Runtime.CompilerServices;
 
 namespace AgentCore.LLM;
 
@@ -17,9 +14,9 @@ internal sealed class TokenCalibrationLayer : LLMLayer
     }
 
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
-        IReadOnlyList<Message> messages, 
-        LLMOptions? options = null, 
-        IReadOnlyList<Tool>? tools = null, 
+        IReadOnlyList<Message> messages,
+        LLMOptions? options = null,
+        IReadOnlyList<Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var output in Inner.StreamAsync(messages, options, tools, ct).WithCancellation(ct).ConfigureAwait(false))

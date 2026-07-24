@@ -30,7 +30,7 @@ public class JsonSchemaBuilder
     }
 
     public JsonSchemaBuilder Type(string type) { _schema[JsonSchemaConstants.TypeKey] = type; return this; }
-    public JsonSchemaBuilder Type<T>() { _schema[JsonSchemaConstants.TypeKey] = typeof(T).MapClrTypeToJsonType(); return this; } 
+    public JsonSchemaBuilder Type<T>() { _schema[JsonSchemaConstants.TypeKey] = typeof(T).MapClrTypeToJsonType(); return this; }
     public JsonSchemaBuilder Description(string description) { if (!string.IsNullOrWhiteSpace(description)) _schema[JsonSchemaConstants.DescriptionKey] = description; return this; }
     public JsonSchemaBuilder Enum(string[] values) { _schema[JsonSchemaConstants.EnumKey] = new JsonArray(values.Select(v => JsonValue.Create(v)).ToArray()); return this; }
     public JsonSchemaBuilder AdditionalProperties(bool allow) { _schema[JsonSchemaConstants.AdditionalPropertiesKey] = allow; return this; }

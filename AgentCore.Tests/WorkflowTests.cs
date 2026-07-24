@@ -1,14 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
-using AgentCore;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
 namespace AgentCore.Tests;
@@ -96,7 +87,7 @@ public class WorkflowTests
         // Verify conversation history captured by provider on the second call
         Assert.Equal(2, provider.CapturedMessages.Count);
         var secondCallHistory = provider.CapturedMessages[1];
-        
+
         // Should contain User message, Assistant message (with tool call), Tool result message
         Assert.Equal(3, secondCallHistory.Count);
         Assert.Equal(Role.User, secondCallHistory[0].Role);

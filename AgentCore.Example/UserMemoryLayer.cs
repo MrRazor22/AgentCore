@@ -1,19 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
+using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Context;
+using AgentCore.LLM.Schema;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
+using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.LLM.Schema;
+using System.Text.RegularExpressions;
 
 namespace AgentCore.Example;
 
@@ -45,7 +38,7 @@ public class UserMemoryLayer : ContextLayer
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
         _logger = loggerFactory?.CreateLogger<UserMemoryLayer>() ?? NullLogger<UserMemoryLayer>.Instance;
 
-        _extractionPrompt = extractionPrompt ?? 
+        _extractionPrompt = extractionPrompt ??
             "You are a background context extraction assistant. Analyze this conversation turn and extract any persistent user preferences, system details, workspace setups, or important facts learned about the environment. Update/merge them with the existing known facts. If a fact is no longer true, remove it. Respond ONLY with a raw JSON object containing a \"facts\" array of strings matching: {{ \"facts\": [\"Fact 1\", \"Fact 2\"] }}. Do not output markdown code blocks or conversational logs. Existing facts:\n{0}\n\nNew turn:\n{1}";
 
         LoadFacts();
@@ -179,8 +172,8 @@ public class UserMemoryLayer : ContextLayer
         string existingFactsStr;
         lock (_lock)
         {
-            existingFactsStr = _facts.Count > 0 
-                ? string.Join("\n", _facts.Select(f => $"- {f}")) 
+            existingFactsStr = _facts.Count > 0
+                ? string.Join("\n", _facts.Select(f => $"- {f}"))
                 : "(No existing facts)";
         }
 
@@ -199,7 +192,7 @@ public class UserMemoryLayer : ContextLayer
         }
 
         var rawResult = sb.ToString().Trim();
-        
+
         // Clean JSON formatting if model outputs markdown blocks
         var cleaned = Regex.Match(rawResult, @"\{[\s\S]*\}").Value;
         if (string.IsNullOrEmpty(cleaned))

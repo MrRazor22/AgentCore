@@ -1,33 +1,28 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.LLM;
 using AgentCore.Context;
-using AgentCore.Tools;
-using AgentCore.LLM.Schema;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tools;
+using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tests;
 
 public class MockLLMProvider : ILLM
 {
     private readonly Queue<Func<CancellationToken, IAsyncEnumerable<ILLMOutput>>> _responses = new();
-    
+
     public int ContextWindow { get; set; } = 4096;
     public int ReservedTokens { get; set; } = 512;
-    
+
     public LLMCapabilities GetCapabilities()
     {
         return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = ReservedTokens };
     }
-    
+
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
     public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();
     public List<JsonSchema?> CapturedResponseSchemas { get; } = new();
-    
+
     public int CallCount => CapturedMessages.Count;
 
     public void Enqueue(Func<CancellationToken, IAsyncEnumerable<ILLMOutput>> generator)
@@ -66,7 +61,7 @@ public class MockLLMProvider : ILLM
     }
 
     private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(
-        IEnumerable<ILLMOutput> deltas, 
+        IEnumerable<ILLMOutput> deltas,
         [EnumeratorCancellation] CancellationToken ct)
     {
         foreach (var delta in deltas)

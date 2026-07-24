@@ -17,7 +17,7 @@ public class Message
         Contents = contents;
     }
 
-    public Message(Role role, IContent content) : this(role, [content]){ }
+    public Message(Role role, IContent content) : this(role, [content]) { }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

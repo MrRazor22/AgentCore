@@ -1,9 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
@@ -31,7 +25,7 @@ public class TokenCalibrationLayerTests
         // Arrange
         var tokenCounter = new MockTokenCounter();
         var mockLLM = new MockLLMProvider();
-        
+
         // Enqueue some outputs including a Metadata output
         mockLLM.Enqueue(
             new Text("Hello"),

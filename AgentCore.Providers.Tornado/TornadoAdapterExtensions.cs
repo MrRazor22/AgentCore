@@ -1,4 +1,3 @@
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Exceptions;
 using LlmTornado.Chat;
@@ -26,8 +25,8 @@ internal static class TornadoAdapterExtensions
                 return new ContextLengthExceededException(ex.Message, ex);
             }
 
-            if (current is TimeoutException || 
-                current is System.IO.IOException || 
+            if (current is TimeoutException ||
+                current is System.IO.IOException ||
                 current is System.Net.Sockets.SocketException)
             {
                 return new RetryableException(ex.Message, ex);
@@ -36,7 +35,7 @@ internal static class TornadoAdapterExtensions
             if (current is HttpRequestException httpEx && httpEx.StatusCode.HasValue)
             {
                 var status = httpEx.StatusCode.Value;
-                if (status == System.Net.HttpStatusCode.TooManyRequests || 
+                if (status == System.Net.HttpStatusCode.TooManyRequests ||
                     status >= System.Net.HttpStatusCode.InternalServerError)
                 {
                     return new RetryableException(ex.Message, ex);
@@ -71,7 +70,7 @@ internal static class TornadoAdapterExtensions
 
         if (options.Temperature.HasValue) request.Temperature = options.Temperature.Value;
         if (options.MaxOutputTokens.HasValue) request.MaxTokens = options.MaxOutputTokens.Value;
-        
+
         if (options.ResponseSchema != null)
         {
             var schemaJson = options.ResponseSchema.ToString();

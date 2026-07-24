@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Context;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -84,14 +81,14 @@ public sealed partial class Agent
         public Builder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
 
         public Builder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
-        
+
         public Builder WithLoggerFactory(ILoggerFactory loggerFactory)
         {
             _loggerFactory = loggerFactory;
             _logger = loggerFactory?.CreateLogger<Builder>() ?? NullLogger<Builder>.Instance;
             return this;
         }
-        
+
         public Builder WithLLM(ILLM provider) { _provider = provider; return this; }
         public Builder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; }
 
@@ -169,8 +166,8 @@ public sealed partial class Agent
                 frozenTools.Length,
                 provider.GetType().Name);
 
-            var workflow = _workflowFactory != null 
-                ? _workflowFactory(provider, tooling) 
+            var workflow = _workflowFactory != null
+                ? _workflowFactory(provider, tooling)
                 : new ReActWorkflow(provider, tooling, logger: lf.CreateLogger<ReActWorkflow>());
 
             _builtComponents.Add(provider);

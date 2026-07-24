@@ -1,12 +1,9 @@
-using AgentCore.LLM;
 using AgentCore.Context;
-using AgentCore.Tools;
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
-using AgentCore.LLM.Schema;
-using AgentCore.LLM.Chat;
 using System.Text;
-using System.Linq;
 
 namespace AgentCore;
 
@@ -33,7 +30,7 @@ public sealed partial class Agent : IAgent
         _context = memory;
         _workflow = workflow;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
-    } 
+    }
 
     private static T? Deserialize<T>(string? response)
     {
@@ -45,7 +42,7 @@ public sealed partial class Agent : IAgent
         return System.Text.Json.JsonSerializer.Deserialize<T>(response);
     }
 
-    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) => InvokeAsync<string>(input, ct); 
+    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) => InvokeAsync<string>(input, ct);
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
@@ -57,7 +54,7 @@ public sealed partial class Agent : IAgent
                 sb.Append(t.Value);
             }
         }
-        
+
         var fullText = sb.ToString();
         return Deserialize<T>(fullText);
     }
@@ -85,7 +82,7 @@ public sealed partial class Agent : IAgent
         using var scope = _logger.BeginScope(new[]
         {
             new KeyValuePair<string, object?>("Agent", nameof(Agent))
-        }); 
+        });
 
         await foreach (var content in _workflow.ExecuteAsync(_context, input, responseSchema, ct))
         {

@@ -1,12 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json;
-using System.Threading.Tasks;
-using Xunit;
-using AgentCore;
-using AgentCore.LLM;
 using AgentCore.Context;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 
@@ -45,11 +38,11 @@ public class AgentTests
 
         // Assert
         Assert.Equal("Acknowledged", result);
-        
+
         // Assert that the LLM provider received recalled messages + current user message
         Assert.Single(mockProvider.CapturedMessages);
         var messagesSentToLlm = mockProvider.CapturedMessages[0];
-        
+
         // Should include: User: Old message, User: New message
         Assert.Equal(2, messagesSentToLlm.Count);
         Assert.Equal(Role.User, messagesSentToLlm[0].Role);
@@ -80,7 +73,7 @@ public class AgentTests
         Assert.Equal(2, messages.Count);
         Assert.Equal(Role.User, messages[0].Role);
         Assert.Equal("User input", messages[0].Contents[0].ForLlm());
-        
+
         Assert.Equal(Role.Assistant, messages[1].Role);
         Assert.Equal("Model reply", messages[1].Contents[0].ForLlm());
     }
@@ -143,7 +136,7 @@ public class AgentTests
         {
             contents.Add(ev);
         }
- 
+
         var textContent = contents.OfType<Text>().Single();
         Assert.Equal("Streaming reply", textContent.Value);
     }

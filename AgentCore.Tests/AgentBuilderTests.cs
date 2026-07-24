@@ -1,12 +1,7 @@
+using AgentCore.Context;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
-using AgentCore.LLM;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
-using System;
-using AgentCore.Context;
 
 namespace AgentCore.Tests;
 
@@ -67,7 +62,7 @@ public class AgentBuilderTests
         var ex = Assert.Throws<ArgumentException>(() => { builder.WithTools<InstanceTestTools>(); });
         Assert.Contains("instance method", ex.Message);
     }
-    
+
     [Fact]
     public void WithTools_Instance_RegistersMixedTools()
     {
@@ -129,7 +124,7 @@ public class AgentBuilderTests
             new LLMCapabilities(),
             Array.Empty<Tool>(),
             null);
-            
+
         var decoratorInstance = new MemoryLoggerDecorator();
 
         var builder = Agent.Create()
@@ -250,7 +245,7 @@ public class AgentBuilderTests
 
         var llm = builder.GetRequiredService<ILLM>();
         Assert.IsType<TokenCalibrationLayer>(llm);
-        
+
         var calibrationLayer = (TokenCalibrationLayer)llm;
         Assert.Same(mockProvider, calibrationLayer.Inner);
     }

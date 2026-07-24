@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
+using System.Text.Json;
 
 namespace AgentCore.Context;
 
@@ -55,7 +49,7 @@ public class FilePersistentChatContext : ContextLayer
         }
 
         var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions { WriteIndented = true });
-        
+
         // Write to the temporary file first
         await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
 

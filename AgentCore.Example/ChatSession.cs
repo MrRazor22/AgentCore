@@ -1,15 +1,9 @@
-using AgentCore;
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.MEAI;
-using AgentCore.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using OpenAI;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
 
 namespace AgentCore.Example;
@@ -42,11 +36,11 @@ public class ChatSession
     }
 
     public static async Task<ChatSession> CreateAsync(
-        string apiKey, 
-        string modelName, 
-        Uri? baseUrl, 
-        ILoggerFactory loggerFactory, 
-        string sessionFile, 
+        string apiKey,
+        string modelName,
+        Uri? baseUrl,
+        ILoggerFactory loggerFactory,
+        string sessionFile,
         Action<ILLMOutput> onLlmEvent,
         CancellationToken ct = default)
     {
@@ -59,13 +53,13 @@ public class ChatSession
     /// Builds the Agent using AgentCore builder API and initializes session messages if available.
     /// </summary>
     public async Task InitializeAsync(CancellationToken ct = default)
-    { 
+    {
         var clientOptions = new OpenAIClientOptions();
         if (_baseUrl != null)
         {
             var urlStr = _baseUrl.ToString();
-            clientOptions.Endpoint = urlStr.Contains("/v1") 
-                ? _baseUrl 
+            clientOptions.Endpoint = urlStr.Contains("/v1")
+                ? _baseUrl
                 : new Uri(urlStr.TrimEnd('/') + "/v1/");
         }
         var openAiClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(_apiKey), clientOptions);
@@ -78,15 +72,15 @@ public class ChatSession
         var builder = AgentCore.Agent.Create()
             .WithMEAI(chatClient, capabilities)
             .WithTools(new WorkspaceTools())
-            .AddLLMLayer(new StreamingLLMLayer(_onLlmEvent)) 
-            .AddToolingLayer(new UserApprovalToolLayer()) 
+            .AddLLMLayer(new StreamingLLMLayer(_onLlmEvent))
+            .AddToolingLayer(new UserApprovalToolLayer())
             .AddContextLayer(new UserMemoryLayer(provider, profileFile, _loggerFactory))
             .AddContextLayer(new FilePersistentChatContext(SessionFile))
             .WithLoggerFactory(_loggerFactory);
 
         Agent = builder.Build();
         _memory = builder.GetRequiredService<IContext>();
-        
+
         await RefreshAsync(ct).ConfigureAwait(false);
         if (_messages.Count > 0)
         {
@@ -119,7 +113,7 @@ public class ChatSession
     {
         SessionFile = sessionFile;
         await InitializeAsync(ct).ConfigureAwait(false);
-        
+
         var profileFile = "active_session_profile.json";
         if (File.Exists(profileFile))
         {

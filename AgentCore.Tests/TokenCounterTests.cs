@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Text.Json.Nodes;
-using System.Threading.Tasks;
-using Xunit;
 using AgentCore.LLM;
-using AgentCore.Tools;
-using AgentCore.LLM.Schema;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tools;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
@@ -29,17 +25,17 @@ public class TokenCounterTests
         Assert.True(estimated >= 1);
 
         // 3. Reasoning is completely excluded from estimation character counts
-        var msgWithReasoning = new Message(Role.Assistant, new IContent[] 
-        { 
+        var msgWithReasoning = new Message(Role.Assistant, new IContent[]
+        {
             new Reasoning("This is a deep thought that shouldn't be counted"),
             new Text("Short")
         });
-        
+
         var msgWithOnlyText = new Message(Role.Assistant, new Text("Short"));
-        
+
         var countWithReasoning = await counter.EstimateAsync(new[] { msgWithReasoning });
         var countWithOnlyText = await counter.EstimateAsync(new[] { msgWithOnlyText });
-        
+
         // They should have the same character estimation since Reasoning is skipped
         Assert.Equal(countWithOnlyText, countWithReasoning);
     }
@@ -97,7 +93,7 @@ public class TokenCounterTests
         // Initial chars/token = 5.0. EmaAlpha = 0.1. Safety margin = 1.0.
         var counter = new ApproximateTokenCounter(initialCharsPerToken: 5.0, safetyMargin: 1.0);
         var messages = new[] { new Message(Role.User, new Text(new string('a', 96))) }; // 100 chars (96 + 4 overhead)
-        
+
         var schema = new JsonSchema(new JsonObject
         {
             ["type"] = "object",

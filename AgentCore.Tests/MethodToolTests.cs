@@ -1,10 +1,5 @@
-using System;
-using System.Reflection;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using Xunit;
 using AgentCore.Tools;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
@@ -123,7 +118,7 @@ public class MethodToolTests
     public void Constructor_InstanceMethodWithoutTarget_ThrowsArgumentException()
     {
         var method = typeof(BrokenMethods).GetMethod(nameof(BrokenMethods.InstanceMethod))!;
-        
+
         Assert.Throws<ArgumentException>(() => new MethodTool(method, target: null));
     }
 

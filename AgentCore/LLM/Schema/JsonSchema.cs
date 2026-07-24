@@ -23,7 +23,7 @@ public sealed class JsonSchema
         => _schema.Validate(node, path);
 
     public void WriteTo(Utf8JsonWriter writer)
-        =>_schema.WriteTo(writer); 
+        => _schema.WriteTo(writer);
 
     public JsonNode ToJsonNode() => _schema.DeepClone();
 

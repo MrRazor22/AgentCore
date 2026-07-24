@@ -1,7 +1,6 @@
-using System.Collections.Concurrent;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -178,7 +177,7 @@ public static class JsonSchemaExtensions
                         }
                     }
 
-                    if (schema[JsonSchemaConstants.AdditionalPropertiesKey] is JsonValue ap 
+                    if (schema[JsonSchemaConstants.AdditionalPropertiesKey] is JsonValue ap
                         && ap.GetValue<bool>() == false)
                     {
                         var schemaKeys = props.Select(p => p.Key).ToHashSet();
@@ -186,7 +185,7 @@ public static class JsonSchemaExtensions
                         {
                             if (!schemaKeys.Contains(key))
                             {
-                                errors.Add(string.IsNullOrEmpty(path) 
+                                errors.Add(string.IsNullOrEmpty(path)
                                     ? $"Unknown parameter '{key}'. Expected parameters: [{string.Join(", ", schemaKeys)}]."
                                     : $"Unknown property '{key}' at '{path}'. Expected properties: [{string.Join(", ", schemaKeys)}].");
                             }

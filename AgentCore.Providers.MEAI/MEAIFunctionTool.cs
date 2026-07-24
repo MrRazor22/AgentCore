@@ -1,10 +1,7 @@
-using System;
+using AgentCore.LLM.Schema;
+using Microsoft.Extensions.AI;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.AI;
-using AgentCore.LLM.Schema;
 
 namespace AgentCore.LLM.MEAI;
 
@@ -50,10 +47,10 @@ public sealed class MEAIFunctionTool : AgentCore.Tools.Tool
     private static JsonSchema GetFunctionSchema(AIFunction aiFunction)
     {
         ArgumentNullException.ThrowIfNull(aiFunction);
-        var schemaJson = aiFunction.JsonSchema.ValueKind == JsonValueKind.Undefined 
-            ? "{}" 
+        var schemaJson = aiFunction.JsonSchema.ValueKind == JsonValueKind.Undefined
+            ? "{}"
             : aiFunction.JsonSchema.GetRawText();
-            
+
         var node = JsonNode.Parse(schemaJson)?.AsObject() ?? new JsonObject();
         return new JsonSchema(node);
     }

@@ -1,18 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.MEAI;
-using AgentCore.Tools;
 using Microsoft.Extensions.AI;
-using Xunit;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
@@ -88,7 +80,7 @@ public class MEAITests
     {
         // Arrange
         var mockClient = new MockChatClient();
-        
+
         var usageDetails = new UsageDetails
         {
             InputTokenCount = 10,
@@ -124,7 +116,7 @@ public class MEAITests
     {
         // Arrange
         var mockClient = new MockChatClient();
-        
+
         // Simulating incremental streaming chunks for a tool call
         mockClient.AddStreamingUpdate(new ChatResponseUpdate(ChatRole.Assistant, [
             new FunctionCallContent("call_1", "get_weather")

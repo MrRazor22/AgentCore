@@ -1,8 +1,5 @@
-using System;
-using System.ComponentModel;
-using System.Net.Http;
-using System.Threading.Tasks;
 using AgentCore.Tools;
+using System.ComponentModel;
 
 namespace AgentCore.Example;
 

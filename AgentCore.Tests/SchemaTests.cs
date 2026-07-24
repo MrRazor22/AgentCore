@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
+using AgentCore.LLM.Schema;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
-using Xunit;
-using AgentCore.LLM.Schema;
 
 namespace AgentCore.Tests;
 

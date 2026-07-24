@@ -1,11 +1,7 @@
-using System;
-using System.ComponentModel;
-using System.Reflection;
-using System.Text.Json.Nodes;
-using System.Threading.Tasks;
-using Xunit;
-using AgentCore.Tools;
 using AgentCore.LLM.Chat;
+using AgentCore.Tools;
+using System.ComponentModel;
+using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 

@@ -1,6 +1,4 @@
 using LlmTornado;
-using LlmTornado.Chat.Models;
-using AgentCore.LLM;
 
 namespace AgentCore.LLM.Tornado;
 
@@ -13,7 +11,7 @@ public static class TornadoLLMFactory
     /// Creates an LLM provider using Tornado API.
     /// </summary>
     public static ILLM CreateLLMProvider(
-        string apiKey, 
+        string apiKey,
         string modelName,
         LLMCapabilities? capabilities = null,
         Uri? baseUrl = null)
@@ -26,8 +24,8 @@ public static class TornadoLLMFactory
 public static class TornadoAgentBuilderExtensions
 {
     public static Agent.Builder AddTornado(
-        this Agent.Builder builder, 
-        string apiKey, 
+        this Agent.Builder builder,
+        string apiKey,
         string modelName,
         LLMCapabilities? capabilities = null,
         Uri? baseUrl = null)

@@ -2,11 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace AgentCore.Context
 {

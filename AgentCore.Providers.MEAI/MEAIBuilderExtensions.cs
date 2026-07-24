@@ -1,4 +1,3 @@
-using System;
 using AgentCore.LLM;
 using AgentCore.LLM.MEAI;
 using Microsoft.Extensions.AI;

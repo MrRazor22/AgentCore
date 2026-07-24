@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
@@ -89,8 +88,8 @@ internal sealed class Tooling : ITooling
         catch (Exception ex)
         {
             sw.Stop();
-            var actualEx = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null 
-                ? tie.InnerException 
+            var actualEx = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
+                ? tie.InnerException
                 : ex;
 
             _logger.LogError(actualEx, "Tool execution failed: {Name} Error={Message}", call.Name, actualEx.Message);

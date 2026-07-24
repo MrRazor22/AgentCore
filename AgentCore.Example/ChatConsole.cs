@@ -1,12 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore;
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Spectre.Console;
 
@@ -103,7 +94,7 @@ public sealed class ChatConsole
         var prompt = new TextPrompt<string>("[teal]>[/]")
             .PromptStyle("white")
             .AllowEmpty();
-        
+
         try
         {
             return AnsiConsole.Prompt(prompt).Trim();
@@ -115,7 +106,7 @@ public sealed class ChatConsole
     }
 
     public async Task RenderStreamAsync(
-        IAsyncEnumerable<IContent> eventStream, 
+        IAsyncEnumerable<IContent> eventStream,
         Action<ILLMOutput> onLlmEvent,
         CancellationToken cancellationToken = default)
     {
@@ -137,7 +128,7 @@ public sealed class ChatConsole
         Action<ILLMOutput> originalHandler = evt =>
         {
             onLlmEvent(evt);
-            
+
             if (evt is TextDelta t)
             {
                 EndReasoningIfActive();
@@ -225,7 +216,7 @@ public sealed class ChatConsole
             {
                 var content = string.Join(" ", msg.Contents.Select(c => c.ForLlm()));
                 if (content.Length > 60) content = content[..57] + "...";
-                
+
                 options.Add(new RevertOption { DisplayText = $"\"{content}\"", Index = i });
             }
         }

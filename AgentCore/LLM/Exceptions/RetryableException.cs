@@ -1,5 +1,3 @@
-using System;
-
 namespace AgentCore.LLM.Exceptions;
 
 /// <summary>
@@ -8,7 +6,7 @@ namespace AgentCore.LLM.Exceptions;
 /// </summary>
 public class RetryableException : Exception
 {
-    public RetryableException(string message, Exception? innerException = null) 
+    public RetryableException(string message, Exception? innerException = null)
         : base(message, innerException)
     {
     }

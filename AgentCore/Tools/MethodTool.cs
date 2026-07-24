@@ -35,7 +35,7 @@ public sealed class MethodTool : Tool
             BuildSchema(method))
     {
         ArgumentNullException.ThrowIfNull(method);
-        
+
         if (!method.IsStatic && target == null)
             throw new ArgumentException("Instance methods require a target instance.", nameof(target));
 
@@ -45,7 +45,7 @@ public sealed class MethodTool : Tool
 
         _returnsTask = method.ReturnType == typeof(Task);
         _returnsGenericTask = method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>);
-        
+
         if (_returnsGenericTask)
         {
             _taskResultProperty = method.ReturnType.GetProperty("Result");

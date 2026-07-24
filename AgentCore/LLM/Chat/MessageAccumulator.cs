@@ -1,9 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat;
 
@@ -38,7 +34,7 @@ public static class MessageAccumulator
                     {
                         key = string.IsNullOrEmpty(tc.Id) ? (toolCalls.Keys.LastOrDefault() ?? "default") : tc.Id;
                     }
-                    
+
                     if (!toolCalls.TryGetValue(key, out var entry))
                     {
                         string initialId = tc.Id;
@@ -52,12 +48,12 @@ public static class MessageAccumulator
                         }
                         entry = (initialId, "", new StringBuilder());
                     }
-                    
+
                     if (!string.IsNullOrEmpty(tc.Id) && entry.id != tc.Id && tc.Id != key)
                     {
                         entry.id = tc.Id;
                     }
-                    
+
                     if (!string.IsNullOrEmpty(tc.NameDelta)) entry.name += tc.NameDelta;
                     if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
                     toolCalls[key] = entry;

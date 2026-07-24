@@ -9,7 +9,7 @@ public class ToolingServiceTests
 {
     private class FakeTool : Tool
     {
-        public Func<JsonObject, CancellationToken, Task<object?>> Invoker { get; set; } = 
+        public Func<JsonObject, CancellationToken, Task<object?>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<object?>("Result");
 
         public FakeTool(string name, JsonSchema schema) : base(name, "Fake Description", schema) { }
@@ -82,9 +82,9 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolReturnsIContent_UsedDirectly()
     {
         var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
-        var tool = new FakeTool("content_tool", schema) 
-        { 
-            Invoker = (args, ct) => Task.FromResult<object?>(new Text("Explicit IContent")) 
+        var tool = new FakeTool("content_tool", schema)
+        {
+            Invoker = (args, ct) => Task.FromResult<object?>(new Text("Explicit IContent"))
         };
         var tooling = new Tooling(new[] { tool });
 
@@ -100,9 +100,9 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_ToolReturnsObject_JsonSerialized()
     {
         var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
-        var tool = new FakeTool("object_tool", schema) 
-        { 
-            Invoker = (args, ct) => Task.FromResult<object?>(new { Key = "Val" }) 
+        var tool = new FakeTool("object_tool", schema)
+        {
+            Invoker = (args, ct) => Task.FromResult<object?>(new { Key = "Val" })
         };
         var tooling = new Tooling(new[] { tool });
 

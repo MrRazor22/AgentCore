@@ -1,4 +1,3 @@
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using LlmTornado;
 using LlmTornado.Chat;
@@ -17,7 +16,7 @@ public class TornadoLLM : ILLM
     private readonly LLMCapabilities _capabilities;
 
     public TornadoLLM(
-        TornadoApi api, 
+        TornadoApi api,
         string modelName,
         LLMCapabilities capabilities,
         LLMOptions? options = null)
@@ -111,49 +110,49 @@ public class TornadoLLM : ILLM
                     },
                     FunctionCallHandler = async (calls) =>
                     {
-                         int idx = 0;
-                         foreach(var call in calls)
-                         {
-                              int currentIdx = idx++;
-                              if (streamedIndices.Contains(currentIdx))
-                              {
-                                   continue;
-                              }
-                              var argsStr = call.Arguments ?? "";
-                              lastArguments.TryGetValue(currentIdx, out var prevArgs);
-                              prevArgs ??= "";
+                        int idx = 0;
+                        foreach (var call in calls)
+                        {
+                            int currentIdx = idx++;
+                            if (streamedIndices.Contains(currentIdx))
+                            {
+                                continue;
+                            }
+                            var argsStr = call.Arguments ?? "";
+                            lastArguments.TryGetValue(currentIdx, out var prevArgs);
+                            prevArgs ??= "";
 
-                              if (argsStr == prevArgs)
-                              {
-                                   continue;
-                              }
+                            if (argsStr == prevArgs)
+                            {
+                                continue;
+                            }
 
-                              if (argsStr.StartsWith(prevArgs))
-                              {
-                                   string deltaStr = argsStr.Substring(prevArgs.Length);
-                                   lastArguments[currentIdx] = argsStr;
+                            if (argsStr.StartsWith(prevArgs))
+                            {
+                                string deltaStr = argsStr.Substring(prevArgs.Length);
+                                lastArguments[currentIdx] = argsStr;
 
-                                   string toolCallId;
-                                   if (!string.IsNullOrEmpty(call.ToolCall?.Id))
-                                   {
-                                        toolCallId = call.ToolCall.Id;
-                                   }
-                                   else if (!assignedToolCallIds.TryGetValue(currentIdx, out toolCallId!))
-                                   {
-                                        toolCallId = Guid.NewGuid().ToString();
-                                        assignedToolCallIds[currentIdx] = toolCallId;
-                                   }
+                                string toolCallId;
+                                if (!string.IsNullOrEmpty(call.ToolCall?.Id))
+                                {
+                                    toolCallId = call.ToolCall.Id;
+                                }
+                                else if (!assignedToolCallIds.TryGetValue(currentIdx, out toolCallId!))
+                                {
+                                    toolCallId = Guid.NewGuid().ToString();
+                                    assignedToolCallIds[currentIdx] = toolCallId;
+                                }
 
-                                   await channel.Writer.WriteAsync(new ToolCallDelta(
-                                        toolCallId,
-                                        call.Name,
-                                        deltaStr,
-                                        currentIdx
-                                   ), ct);
-                              }
-                         }
+                                await channel.Writer.WriteAsync(new ToolCallDelta(
+                                     toolCallId,
+                                     call.Name,
+                                     deltaStr,
+                                     currentIdx
+                                ), ct);
+                            }
+                        }
                     },
-                    OnUsageReceived = async (usage) => 
+                    OnUsageReceived = async (usage) =>
                     {
                         if (usage.TotalTokens > 0)
                         {
