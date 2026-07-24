@@ -116,12 +116,6 @@ public class AgentBuilderTests
             CallLog.Add("AddRange");
             return base.AddRangeAsync(messages, ct);
         }
-
-        public override Task FinalizeTurnAsync(CancellationToken ct = default)
-        {
-            CallLog.Add("Finalize");
-            return base.FinalizeTurnAsync(ct);
-        }
     }
 
     [Fact]

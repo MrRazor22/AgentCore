@@ -23,7 +23,6 @@ public class MemoryTests
 
         await contextService.AddAsync(new Message(Role.User, new Text("Hello")));
         await contextService.AddAsync(new Message(Role.Assistant, new Text("Hi, how are you?")));
-        await contextService.FinalizeTurnAsync();
 
         // Act
         await contextService.AddAsync(new Message(Role.User, new Text("Help")));
@@ -49,7 +48,6 @@ public class MemoryTests
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
         await contextService.AddAsync(msg1);
         await contextService.AddAsync(msg2);
-        await contextService.FinalizeTurnAsync();
 
         // Act
         await contextService.AddAsync(new Message(Role.User, new Text("Current short input")));
@@ -75,11 +73,9 @@ public class MemoryTests
 
         await contextService.AddAsync(msg1);
         await contextService.AddAsync(msg2);
-        await contextService.FinalizeTurnAsync();
 
         // Act
         await contextService.AddAsync(new Message(Role.User, new Text("Test")));
-        await contextService.FinalizeTurnAsync();
         var result = contextService.Messages;
 
         // Assert
@@ -100,7 +96,6 @@ public class MemoryTests
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
         await contextService.AddAsync(msg1);
         await contextService.AddAsync(msg2);
-        await contextService.FinalizeTurnAsync();
 
         // Act & Assert 1: Prepare with tight budget so msg1 gets pruned in the output
         var providerTight = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
@@ -108,10 +103,8 @@ public class MemoryTests
         
         await contextServiceTight.AddAsync(msg1);
         await contextServiceTight.AddAsync(msg2);
-        await contextServiceTight.FinalizeTurnAsync();
 
         await contextServiceTight.AddAsync(new Message(Role.User, new Text("Current short input")));
-        await contextServiceTight.FinalizeTurnAsync();
         var resultTight = contextServiceTight.Messages;
 
         Assert.DoesNotContain(resultTight, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
@@ -120,10 +113,8 @@ public class MemoryTests
         var contextServiceNormal = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
         await contextServiceNormal.AddAsync(msg1);
         await contextServiceNormal.AddAsync(msg2);
-        await contextServiceNormal.FinalizeTurnAsync();
 
         await contextServiceNormal.AddAsync(new Message(Role.User, new Text("Current short input")));
-        await contextServiceNormal.FinalizeTurnAsync();
         var resultNormal = contextServiceNormal.Messages;
 
         Assert.Contains(resultNormal, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
@@ -139,7 +130,6 @@ public class MemoryTests
 
         var msg1 = new Message(Role.User, new Text("Hello"));
         await contextService.AddAsync(msg1);
-        await contextService.FinalizeTurnAsync();
 
         // Act
         await contextService.AddAsync(new Message(Role.User, new Text("Test")));
@@ -160,7 +150,6 @@ public class MemoryTests
 
         // Act
         await memoryProvider.AddAsync(new Message(Role.User, new Text("Short content turn")));
-        await memoryProvider.FinalizeTurnAsync();
 
         // Assert
         Assert.Equal(0, mockLlm.CallCount); // no LLM calls made
@@ -182,11 +171,10 @@ public class MemoryTests
 
         // Act
         await memoryProvider.AddAsync(new Message(Role.User, new Text("This is a very long string designed to exceed the budget and force eviction.")));
-        await memoryProvider.FinalizeTurnAsync();
+        await memoryProvider.AddAsync(new Message(Role.User, new Text("Query")));
 
         // Assert
         Assert.Equal(1, mockLlm.CallCount);
-        await memoryProvider.AddAsync(new Message(Role.User, new Text("Query")));
         var prepared = memoryProvider.Messages;
         Assert.Contains(prepared, msg => msg.Contents.Any(c => c.ForLlm().Contains("Consolidated fact sheet result.")));
     }
@@ -200,7 +188,6 @@ public class MemoryTests
         var memory = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
 
         await memory.AddAsync(new Message(Role.User, new Text("Old Turn")));
-        await memory.FinalizeTurnAsync();
 
         // Act
         await memory.ClearAsync();

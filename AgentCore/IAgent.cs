@@ -110,19 +110,6 @@ public sealed partial class Agent : IAgent
             yield return content;
         }
 
-        try
-        {
-            if (_memory is IMemoryFinalizer finalizer)
-            {
-                await finalizer.FinalizeTurnAsync(ct).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Agent failed during Memory finalization.");
-            throw;
-        }
-
         _logger.LogInformation("Agent completed.");
     }
 }

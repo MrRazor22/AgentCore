@@ -103,12 +103,10 @@ public class MockLLMProvider : ILLM
     }
 }
 
-public class MockMemoryProvider : IContext, IMemoryFinalizer
+public class MockMemoryProvider : IContext
 {
     private readonly List<Message> _internalMessages = new();
-    private int _lastSavedCount = 0;
 
-    public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
     public IReadOnlyList<Message> Messages
@@ -134,8 +132,6 @@ public class MockMemoryProvider : IContext, IMemoryFinalizer
     public Task ClearAsync(CancellationToken ct = default)
     {
         _internalMessages.Clear();
-        Saved.Clear();
-        _lastSavedCount = 0;
         return Task.CompletedTask;
     }
 
@@ -145,15 +141,6 @@ public class MockMemoryProvider : IContext, IMemoryFinalizer
         {
             _internalMessages.AddRange(messages);
         }
-        _lastSavedCount = _internalMessages.Count;
-        return Task.CompletedTask;
-    }
-
-    public Task FinalizeTurnAsync(CancellationToken ct = default)
-    {
-        var turnMessages = _internalMessages.Skip(_lastSavedCount).ToList();
-        Saved.Add(turnMessages);
-        _lastSavedCount = _internalMessages.Count;
         return Task.CompletedTask;
     }
 }

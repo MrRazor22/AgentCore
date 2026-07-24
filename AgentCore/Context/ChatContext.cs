@@ -64,17 +64,27 @@ namespace AgentCore.Context
             _logger = logger;
         }
 
-        public Task AddAsync(Message message, CancellationToken ct = default)
+        public async Task AddAsync(Message message, CancellationToken ct = default)
         {
-            if (message == null) return Task.CompletedTask;
+            if (message == null) return;
             lock (_history)
             {
                 _history.Add(message);
             }
-            return Task.CompletedTask;
+            await PruneAndConsolidateIfNeededAsync(ct).ConfigureAwait(false);
         }
 
-        public async Task FinalizeTurnAsync(CancellationToken ct = default)
+        public async Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
+        {
+            if (messages == null) return;
+            lock (_history)
+            {
+                _history.AddRange(messages);
+            }
+            await PruneAndConsolidateIfNeededAsync(ct).ConfigureAwait(false);
+        }
+
+        private async Task PruneAndConsolidateIfNeededAsync(CancellationToken ct = default)
         {
             List<Message> workingHistory;
             lock (_history)
@@ -103,7 +113,7 @@ namespace AgentCore.Context
 
                 _logger?.LogInformation("History size ({HistoryTokens} tokens) exceeded budget ({Budget} tokens). Evicting messages to reach target {TargetLimit} tokens.", historyTokens, budget, targetLimit);
 
-                while (historyTokens > targetLimit && workingHistory.Count > 0)
+                while (historyTokens > targetLimit && workingHistory.Count > 1)
                 {
                     evicted.Add(workingHistory[0]);
                     workingHistory.RemoveAt(0); // prune oldest
@@ -156,16 +166,6 @@ namespace AgentCore.Context
             }
 
             return sb.ToString().Trim();
-        }
-
-        public Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
-        {
-            if (messages == null) return Task.CompletedTask;
-            lock (_history)
-            {
-                _history.AddRange(messages);
-            }
-            return Task.CompletedTask;
         }
 
         public Task ClearAsync(CancellationToken ct = default)

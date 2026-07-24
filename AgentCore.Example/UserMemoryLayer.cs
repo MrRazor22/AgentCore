@@ -129,24 +129,29 @@ public class UserMemoryLayer : ContextLayer
         }
     }
 
-    public override async Task FinalizeTurnAsync(CancellationToken ct = default)
+    public override async Task AddAsync(Message message, CancellationToken ct = default)
     {
-        await base.FinalizeTurnAsync(ct).ConfigureAwait(false);
+        await base.AddAsync(message, ct).ConfigureAwait(false);
+        TriggerExtraction();
+    }
 
+    public override async Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
+    {
+        await base.AddRangeAsync(messages, ct).ConfigureAwait(false);
+        TriggerExtraction();
+    }
+
+    private void TriggerExtraction()
+    {
         var rawMessages = base.Messages;
         var actualMessages = rawMessages.Where(m => m.Role != Role.System).ToList();
-
-        int lastUserIdx = actualMessages.FindLastIndex(m => m.Role == Role.User);
-        if (lastUserIdx >= 0)
+        if (actualMessages.Count > 0)
         {
-            var completedTurn = actualMessages.Skip(lastUserIdx).ToList();
-
-            // Run background extraction asynchronously to avoid blocking the main loop
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await ExtractAndUpdateFactsAsync(completedTurn, CancellationToken.None).ConfigureAwait(false);
+                    await ExtractAndUpdateFactsAsync(actualMessages, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

@@ -34,7 +34,6 @@ public class AgentTests
             null
         );
         await memory.AddAsync(new Message(Role.User, new Text("Old message")));
-        await memory.FinalizeTurnAsync();
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
@@ -77,14 +76,13 @@ public class AgentTests
 
         // Assert
         // Memory should contain: User: User input, Assistant: Model reply
-        Assert.Single(memory.Saved);
-        var savedTurn = memory.Saved[0];
-        Assert.Equal(2, savedTurn.Count);
-        Assert.Equal(Role.User, savedTurn[0].Role);
-        Assert.Equal("User input", savedTurn[0].Contents[0].ForLlm());
+        var messages = memory.Messages;
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(Role.User, messages[0].Role);
+        Assert.Equal("User input", messages[0].Contents[0].ForLlm());
         
-        Assert.Equal(Role.Assistant, savedTurn[1].Role);
-        Assert.Equal("Model reply", savedTurn[1].Contents[0].ForLlm());
+        Assert.Equal(Role.Assistant, messages[1].Role);
+        Assert.Equal("Model reply", messages[1].Contents[0].ForLlm());
     }
 
     [Fact]

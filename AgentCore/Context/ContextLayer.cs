@@ -6,7 +6,7 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Context;
 
-public abstract class ContextLayer : IContext, IMemoryFinalizer
+public abstract class ContextLayer : IContext
 {
     private bool _attached;
 
@@ -34,13 +34,5 @@ public abstract class ContextLayer : IContext, IMemoryFinalizer
 
     public virtual Task ClearAsync(CancellationToken ct = default)
         => Inner.ClearAsync(ct);
-
-    public virtual async Task FinalizeTurnAsync(CancellationToken ct = default)
-    {
-        if (Inner is IMemoryFinalizer finalizer)
-        {
-            await finalizer.FinalizeTurnAsync(ct).ConfigureAwait(false);
-        }
-    }
 }
 
