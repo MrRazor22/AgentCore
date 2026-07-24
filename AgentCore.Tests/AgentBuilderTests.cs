@@ -90,18 +90,19 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public override Task<List<Message>> PrepareAsync(
-            Message userInput,
-            CancellationToken ct = default)
+        public override IReadOnlyList<Message> Messages
         {
-            CallLog.Add("Recall");
-            return base.PrepareAsync(userInput, ct);
+            get
+            {
+                CallLog.Add("Get");
+                return base.Messages;
+            }
         }
 
-        public override Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public override Task AddAsync(Message message, CancellationToken ct = default)
         {
-            CallLog.Add("Remember");
-            return base.UpdateAsync(completedTurn, ct);
+            CallLog.Add("Add");
+            return base.AddAsync(message, ct);
         }
 
         public override Task ClearAsync(CancellationToken ct = default)
@@ -110,10 +111,16 @@ public class AgentBuilderTests
             return base.ClearAsync(ct);
         }
 
-        public override Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+        public override Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
         {
-            CallLog.Add("Restore");
-            return base.RestoreAsync(history, ct);
+            CallLog.Add("AddRange");
+            return base.AddRangeAsync(messages, ct);
+        }
+
+        public override Task FinalizeTurnAsync(CancellationToken ct = default)
+        {
+            CallLog.Add("Finalize");
+            return base.FinalizeTurnAsync(ct);
         }
     }
 
@@ -140,10 +147,10 @@ public class AgentBuilderTests
 
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
-        Assert.Contains("Recall", decoratorInstance.CallLog);
+        Assert.Contains("Add", decoratorInstance.CallLog);
     }
 
-    private class TestLlmDecorator : LlmLayer
+    private class TestLlmDecorator : LLMLayer
     {
         private readonly string _name;
         private readonly List<string> _callOrder;
@@ -154,7 +161,7 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override IAsyncEnumerable<LLMEvent> StreamAsync(IReadOnlyList<Message> messages, LLMOptions? options = null, IReadOnlyList<Tool>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<ILLMOutput> StreamAsync(IReadOnlyList<Message> messages, LLMOptions? options = null, IReadOnlyList<Tool>? tools = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
             return base.StreamAsync(messages, options, tools, ct);
@@ -172,10 +179,10 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+        public override Task AddAsync(Message newInput, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.PrepareAsync(newInput, ct);
+            return base.AddAsync(newInput, ct);
         }
     }
 
@@ -188,8 +195,8 @@ public class AgentBuilderTests
 
         var builder = Agent.Create()
             .WithLLM(mockProvider)
-            .AddLlmLayer(new TestLlmDecorator("LlmLayer1", callOrder))
-            .AddLlmLayer(new TestLlmDecorator("LlmLayer2", callOrder))
+            .AddLLMLayer(new TestLlmDecorator("LlmLayer1", callOrder))
+            .AddLLMLayer(new TestLlmDecorator("LlmLayer2", callOrder))
             .AddContextLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
             .AddContextLayer(new TestMemoryDecorator("MemoryLayer2", callOrder));
 
@@ -198,7 +205,7 @@ public class AgentBuilderTests
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
 
-        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1" }, callOrder);
+        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
     }
 
     [Fact]

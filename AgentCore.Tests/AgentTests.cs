@@ -25,7 +25,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Acknowledged"));
+        mockProvider.Enqueue(new TextDelta("Acknowledged"));
 
         var memory = new ChatContext(
             new ApproximateTokenCounter(),
@@ -33,7 +33,8 @@ public class AgentTests
             Array.Empty<Tool>(),
             null
         );
-        await memory.UpdateAsync(new[] { new Message(Role.User, new Text("Old message")) });
+        await memory.AddAsync(new Message(Role.User, new Text("Old message")));
+        await memory.FinalizeTurnAsync();
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
@@ -63,7 +64,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Model reply"));
+        mockProvider.Enqueue(new TextDelta("Model reply"));
 
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
@@ -91,7 +92,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("{\"Name\":\"John Doe\",\"Age\":30}"));
+        mockProvider.Enqueue(new TextDelta("{\"Name\":\"John Doe\",\"Age\":30}"));
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
@@ -130,30 +131,30 @@ public class AgentTests
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(
-            new Text("Streaming "),
-            new Text("reply"),
-            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
+            new TextDelta("Streaming "),
+            new TextDelta("reply"),
+            new Metadata(FinishReason: "stop")
         );
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
             .Build();
 
-        var events = new List<AgentEvent>();
+        var contents = new List<IContent>();
         await foreach (var ev in agent.InvokeStreamingAsync(new Text("Hi")))
         {
-            events.Add(ev);
+            contents.Add(ev);
         }
  
-        var responseEvent = events.OfType<AgentResponseEvent<string>>().Single();
-        Assert.Equal("Streaming reply", responseEvent.Response);
+        var textContent = contents.OfType<Text>().Single();
+        Assert.Equal("Streaming reply", textContent.Value);
     }
 
     [Fact]
     public async Task InvokeAsync_PrependsSystemInstructionsToHistory()
     {
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Success"));
+        mockProvider.Enqueue(new TextDelta("Success"));
 
         var agent = Agent.Create()
             .WithInstructions("System instruction baseline")

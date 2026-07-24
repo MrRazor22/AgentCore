@@ -19,12 +19,12 @@ public class FilePersistentChatContext : ContextLayer
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
 
-    public override IReadOnlyList<Message> Chat => _messages;
+    public override IReadOnlyList<Message> Messages => base.Messages;
 
-    public override async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public override async Task AddAsync(Message message, CancellationToken ct = default)
     {
-        await base.UpdateAsync(completedTurn, ct).ConfigureAwait(false);
-        _messages.AddRange(completedTurn);
+        await base.AddAsync(message, ct).ConfigureAwait(false);
+        _messages.Add(message);
         await SaveToDiskAsync(ct).ConfigureAwait(false);
     }
 
@@ -35,15 +35,14 @@ public class FilePersistentChatContext : ContextLayer
         await base.ClearAsync(ct).ConfigureAwait(false);
     }
 
-    public override async Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+    public override async Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
     {
-        _messages.Clear();
-        if (history != null && history.Count > 0)
+        await base.AddRangeAsync(messages, ct).ConfigureAwait(false);
+        if (messages != null)
         {
-            _messages.AddRange(history);
+            _messages.AddRange(messages);
         }
         await SaveToDiskAsync(ct).ConfigureAwait(false);
-        await base.RestoreAsync(_messages, ct).ConfigureAwait(false);
     }
 
     private async Task SaveToDiskAsync(CancellationToken ct)

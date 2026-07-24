@@ -70,7 +70,7 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<LLMEvent>();
+        var events = new List<ILLMOutput>();
         await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("Hi"))]))
         {
             events.Add(evt);
@@ -78,9 +78,9 @@ public class MEAITests
 
         // Assert
         Assert.Equal(3, events.Count);
-        Assert.Equal("Hello", Assert.IsType<Text>(events[0]).Value);
-        Assert.Equal("Thinking about reply...", Assert.IsType<Reasoning>(events[1]).Thought);
-        Assert.Equal(" World!", Assert.IsType<Text>(events[2]).Value);
+        Assert.Equal("Hello", Assert.IsType<TextDelta>(events[0]).Value);
+        Assert.Equal("Thinking about reply...", Assert.IsType<ReasoningDelta>(events[1]).Thought);
+        Assert.Equal(" World!", Assert.IsType<TextDelta>(events[2]).Value);
     }
 
     [Fact]
@@ -105,21 +105,18 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<LLMEvent>();
+        var events = new List<ILLMOutput>();
         await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("Hi"))]))
         {
             events.Add(evt);
         }
 
         // Assert
-        Assert.Equal(2, events.Count);
-        var tokenUsage = Assert.IsType<TokenUsage>(events[0]);
-        Assert.Equal(10, tokenUsage.InputTokens);
-        Assert.Equal(20, tokenUsage.OutputTokens);
-        Assert.Equal(5, tokenUsage.ReasoningTokens);
-
-        var metaData = Assert.IsType<MetaDataEvent>(events[1]);
-        Assert.Equal(FinishReason.Stop, metaData.FinishReason);
+        Assert.Single(events);
+        var metaData = Assert.IsType<Metadata>(events[0]);
+        Assert.Equal(10, metaData.InputTokens);
+        Assert.Equal(20, metaData.OutputTokens);
+        Assert.Equal("stop", metaData.FinishReason);
     }
 
     [Fact]
@@ -139,18 +136,17 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<LLMEvent>();
+        var events = new List<ILLMOutput>();
         await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("What is the weather?"))]))
         {
             events.Add(evt);
         }
 
         // Assert
-        var toolCallEvent = Assert.Single(events);
-        var toolCall = Assert.IsType<ToolCall>(toolCallEvent);
-        Assert.Equal("call_1", toolCall.Id);
-        Assert.Equal("get_weather", toolCall.Name);
-        Assert.Equal("Seattle", toolCall.Arguments["location"]?.ToString());
+        Assert.Equal(2, events.Count);
+        var toolCallDelta = Assert.IsType<ToolCallDelta>(events[0]);
+        Assert.Equal("call_1", toolCallDelta.Id);
+        Assert.Equal("get_weather", toolCallDelta.NameDelta);
     }
 
     [Fact]
@@ -210,4 +206,3 @@ public class MEAITests
         Assert.Equal(cts.Token, aiFunction.LastCancellationToken);
     }
 }
-

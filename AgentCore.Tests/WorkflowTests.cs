@@ -7,67 +7,65 @@ using System.Threading.Tasks;
 using Xunit;
 using AgentCore;
 using AgentCore.LLM;
-using AgentCore.Context;
-using AgentCore.Tools;
-using Microsoft.Extensions.Logging.Abstractions;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tools;
 
 namespace AgentCore.Tests;
 
 public class WorkflowTests
 {
-    private (ILLM Llm, ITooling Tooling) CreateServices(MockLLMProvider provider, ITooling tooling)
+    private (ILLM, ITooling) CreateServices(MockLLMProvider provider, ITooling tooling)
     {
         return (provider, tooling);
     }
 
     [Fact]
-    public async Task ExecuteAsync_NormalAssistantResponse_StreamsAndYieldsResponse()
+    public async Task ExecuteAsync_SunnyPath_RunsToCompletion()
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(
-            new Text("Hello "),
-            new Text("world!"),
-            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
-        );
+        provider.Enqueue(new TextDelta("Today is sunny."));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Hi")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Hello");
 
         // Act
-        var events = new List<AgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
+        var contents = new List<IContent>();
+        await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
         {
-            events.Add(evt);
+            contents.Add(item);
         }
 
         // Assert
-        // Yields only AgentResponseEvent<string>
-        var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
-        Assert.Equal("Hello world!", finalResponse.Response);
+        var textContent = Assert.Single(contents.OfType<Text>());
+        Assert.Equal("Today is sunny.", textContent.Value);
 
-        // Conversation history updated with Assistant response
-        Assert.Equal(2, conversation.Count);
-        Assert.Equal(Role.Assistant, conversation[1].Role);
-        Assert.Equal("Hello world!", conversation[1].Contents[0].ForLlm());
+        // Assert messages were added to context (User and Assistant)
+        var messages = context.Messages;
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(Role.User, messages[0].Role);
+        Assert.Equal("Hello", messages[0].Contents[0].ForLlm());
+        Assert.Equal(Role.Assistant, messages[1].Role);
+        Assert.Equal("Today is sunny.", messages[1].Contents[0].ForLlm());
     }
 
     [Fact]
-    public async Task ExecuteAsync_SingleToolCall_RunsToolAndInvokesLLMAgain()
+    public async Task ExecuteAsync_WithToolCalls_ExecutesAndResumes()
     {
         // Arrange
         var provider = new MockLLMProvider();
-        // First LLM call: return tool call
+        // First LLM call yields tool call
         provider.Enqueue(
-            new ToolCall("call_1", "get_weather", new JsonObject { ["city"] = "London" }),
-            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
+            new ToolCallDelta("call_1", "get_weather", "{\"location\": \"London\"}"),
+            new Metadata(FinishReason: "tool_calls")
         );
-        // Second LLM call: return final text response based on tool result
+        // Second LLM call yields final response
         provider.Enqueue(
-            new Text("It is sunny in London."),
-            new MetaDataEvent(FinishReason.Stop, TimeSpan.Zero)
+            new TextDelta("It is sunny in London."),
+            new Metadata(FinishReason: "stop")
         );
 
         var tooling = new MockTooling();
@@ -79,21 +77,21 @@ public class WorkflowTests
 
         var (llm, _) = CreateServices(provider, tooling);
         var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Weather in London?")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Weather in London?");
 
         // Act
-        var events = new List<AgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
+        var contents = new List<IContent>();
+        await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
         {
-            events.Add(evt);
+            contents.Add(item);
         }
 
         // Assert
-        // Events check
-        Assert.Contains(events, e => e is ToolCallEvent tc && tc.ToolCall.Name == "get_weather");
-        Assert.Contains(events, e => e is ToolResultEvent tr && tr.Result.ForLlm() == "Rainy");
-        var finalResponse = events.OfType<AgentResponseEvent<string>>().Single();
-        Assert.Equal("It is sunny in London.", finalResponse.Response);
+        Assert.Contains(contents, c => c is ToolCall tc && tc.Name == "get_weather");
+        Assert.Contains(contents, c => c is ToolResult tr && tr.ForLlm() == "Rainy");
+        var finalResponse = contents.OfType<Text>().Single();
+        Assert.Equal("It is sunny in London.", finalResponse.Value);
 
         // Verify conversation history captured by provider on the second call
         Assert.Equal(2, provider.CapturedMessages.Count);
@@ -108,38 +106,35 @@ public class WorkflowTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_MaxIterationsReached_YieldsWarningAndStops()
+    public async Task ExecuteAsync_MaxIterationsReached_ThrowsException()
     {
         // Arrange
         var provider = new MockLLMProvider();
         // Return tool call indefinitely
         provider.Enqueue(
-            new ToolCall("call_1", "looping_tool", new JsonObject()),
-            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
+            new ToolCallDelta("call_1", "looping_tool", "{}"),
+            new Metadata(FinishReason: "tool_calls")
         );
         provider.Enqueue(
-            new ToolCall("call_2", "looping_tool", new JsonObject()),
-            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
+            new ToolCallDelta("call_2", "looping_tool", "{}"),
+            new Metadata(FinishReason: "tool_calls")
         );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
-        // Configure maxIterations = 1
         var executor = new ReActWorkflow(llm, tooling, maxIterations: 1);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Loop")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Loop");
 
-        // Act
-        var events = new List<AgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            events.Add(evt);
-        }
+            await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
+            {
+                // Consume
+            }
+        });
 
-        // Assert
-        var errorEvent = Assert.Single(events.OfType<ErrorEvent>());
-        Assert.IsType<InvalidOperationException>(errorEvent.Error);
-        Assert.Contains("exceeded the maximum limit", errorEvent.Error.Message);
-        
-        Assert.Empty(events.OfType<AgentResponseEvent<string>>());
+        Assert.Contains("exceeded the maximum limit", ex.Message);
     }
 
     [Fact]
@@ -148,8 +143,8 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCall("call_1", "broken_tool", new JsonObject()),
-            new MetaDataEvent(FinishReason.ToolCall, TimeSpan.Zero)
+            new ToolCallDelta("call_1", "broken_tool", "{}"),
+            new Metadata(FinishReason: "tool_calls")
         );
 
         var tooling = new MockTooling();
@@ -157,12 +152,13 @@ public class WorkflowTests
 
         var (llm, _) = CreateServices(provider, tooling);
         var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Run tool")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Run tool");
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
+            await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
             {
                 // Consume
             }
@@ -178,12 +174,13 @@ public class WorkflowTests
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Run")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Run");
 
         // Act & Assert
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null))
+            await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
             {
                 // Consume
             }
@@ -195,11 +192,12 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new Text("Never streamed"));
+        provider.Enqueue(new TextDelta("Never streamed"));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
-        var conversation = new List<Message> { new Message(Role.User, new Text("Cancel me")) };
+        var context = new MockMemoryProvider();
+        var input = new Text("Cancel me");
 
         var cts = new CancellationTokenSource();
         await cts.CancelAsync();
@@ -207,7 +205,7 @@ public class WorkflowTests
         // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var evt in executor.ExecuteAsync(conversation, responseSchema: null, ct: cts.Token))
+            await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null, ct: cts.Token))
             {
                 // Consume
             }

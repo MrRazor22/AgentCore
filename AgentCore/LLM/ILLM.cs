@@ -22,7 +22,7 @@ public interface ILLM
 {
     LLMCapabilities GetCapabilities();
 
-    IAsyncEnumerable<LLMEvent> StreamAsync(
+    IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,

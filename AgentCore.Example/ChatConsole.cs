@@ -115,31 +115,13 @@ public sealed class ChatConsole
     }
 
     public async Task RenderStreamAsync(
-        IAsyncEnumerable<AgentEvent> eventStream, 
-        Action<LLMEvent> onLlmEvent,
+        IAsyncEnumerable<IContent> eventStream, 
+        Action<ILLMOutput> onLlmEvent,
         CancellationToken cancellationToken = default)
     {
         var reasoningSw = new System.Diagnostics.Stopwatch();
         bool isReasoningActive = false;
         bool hasPrintedAssistantHeader = false;
-
-        var activeToolCalls = new System.Collections.Generic.Dictionary<int, (string Name, StringBuilder Args)>();
-        var completedToolCalls = new System.Collections.Generic.HashSet<int>();
-
-        void CloseActiveToolCalls(int? exceptIndex = null)
-        {
-            foreach (var kv in activeToolCalls)
-            {
-                if (exceptIndex.HasValue && kv.Key == exceptIndex.Value)
-                    continue;
-
-                if (!completedToolCalls.Contains(kv.Key))
-                {
-                    AnsiConsole.Write(")");
-                    completedToolCalls.Add(kv.Key);
-                }
-            }
-        }
 
         void EndReasoningIfActive()
         {
@@ -152,13 +134,12 @@ public sealed class ChatConsole
             }
         }
 
-        Action<LLMEvent> originalHandler = evt =>
+        Action<ILLMOutput> originalHandler = evt =>
         {
             onLlmEvent(evt);
             
-            if (evt is AgentCore.LLM.Chat.Text t)
+            if (evt is TextDelta t)
             {
-                CloseActiveToolCalls();
                 EndReasoningIfActive();
 
                 if (!hasPrintedAssistantHeader)
@@ -169,9 +150,8 @@ public sealed class ChatConsole
                 }
                 AnsiConsole.Write(new Spectre.Console.Text(t.Value));
             }
-            else if (evt is Reasoning r)
+            else if (evt is ReasoningDelta r)
             {
-                CloseActiveToolCalls();
                 if (!isReasoningActive)
                 {
                     isReasoningActive = true;
@@ -181,33 +161,18 @@ public sealed class ChatConsole
                 }
                 AnsiConsole.Write(new Spectre.Console.Text(r.Thought, new Style(foreground: Color.Grey)));
             }
-            else if (evt is ToolCall tc)
+            else if (evt is ToolCallDelta tc)
             {
                 EndReasoningIfActive();
-                int idx = tc.Index ?? 0;
-                CloseActiveToolCalls(idx);
-
-                if (!activeToolCalls.ContainsKey(idx))
+                if (!string.IsNullOrEmpty(tc.NameDelta))
                 {
                     AnsiConsole.WriteLine();
-                    AnsiConsole.Markup($"[yellow]●[/] {tc.Name}(");
-                    activeToolCalls[idx] = (tc.Name ?? "", new StringBuilder());
+                    AnsiConsole.Markup($"[yellow]●[/] {tc.NameDelta}(");
                 }
 
-                string delta = "";
-                if (tc.Arguments is System.Text.Json.Nodes.JsonValue val && val.TryGetValue<string>(out var str))
+                if (!string.IsNullOrEmpty(tc.ArgumentsDelta))
                 {
-                    delta = str;
-                }
-                else if (tc.Arguments != null)
-                {
-                    delta = tc.Arguments.ToString();
-                }
-
-                if (!string.IsNullOrEmpty(delta))
-                {
-                    activeToolCalls[idx].Args.Append(delta);
-                    AnsiConsole.Write(new Spectre.Console.Text(delta));
+                    AnsiConsole.Write(new Spectre.Console.Text(tc.ArgumentsDelta));
                 }
             }
         };
@@ -216,52 +181,26 @@ public sealed class ChatConsole
 
         try
         {
-            await foreach (var evt in eventStream.WithCancellation(cancellationToken))
+            await foreach (var content in eventStream.WithCancellation(cancellationToken))
             {
-                if (evt is ToolCallEvent tce)
+                if (content is ToolResult tr)
                 {
-                    CloseActiveToolCalls();
                     EndReasoningIfActive();
 
-                    var tc = tce.ToolCall;
-                    int idx = tc.Index ?? 0;
-                    if (activeToolCalls.TryGetValue(idx, out var active))
-                    {
-                        if (!completedToolCalls.Contains(idx))
-                        {
-                            AnsiConsole.Write(")");
-                            completedToolCalls.Add(idx);
-                        }
-                    }
-                    else
-                    {
-                        var args = tc.ArgumentsObject?.ToString() ?? "";
-                        AnsiConsole.WriteLine();
-                        AnsiConsole.MarkupLine($"[yellow]●[/] {tc.Name}({Markup.Escape(args)})");
-                    }
-                }
-                else if (evt is ToolResultEvent tre)
-                {
-                    CloseActiveToolCalls();
-                    EndReasoningIfActive();
-
-                    var resultStr = tre.Result.Result?.ForLlm() ?? "";
+                    var resultStr = tr.Result?.ForLlm() ?? "";
                     var size = resultStr.Length;
                     var sizeStr = size >= 1024 ? $"{size / 1024.0:F1} KB" : $"{size} bytes";
-                    AnsiConsole.MarkupLine($"[green]✓[/] {tre.Result.CallId} ({sizeStr})");
-                }
-                else if (evt is ErrorEvent err)
-                {
-                    CloseActiveToolCalls();
-                    EndReasoningIfActive();
-
-                    AnsiConsole.MarkupLine($"[red]✗[/] {Markup.Escape(err.Error.Message)}");
+                    AnsiConsole.MarkupLine($"\n[green]✓[/] {tr.CallId} ({sizeStr})");
                 }
             }
         }
+        catch (Exception ex)
+        {
+            EndReasoningIfActive();
+            AnsiConsole.MarkupLine($"\n[red]✗[/] {Markup.Escape(ex.Message)}");
+        }
         finally
         {
-            CloseActiveToolCalls();
             EndReasoningIfActive();
             Program.CurrentLlmEventHandler = null;
             AnsiConsole.WriteLine();
@@ -297,8 +236,8 @@ public sealed class ChatConsole
             return null;
         }
 
-        options.Reverse(); // Show most recent messages first
-        
+        options.Reverse();
+
         var cancelOption = new RevertOption { DisplayText = "← Cancel", Index = -1 };
         options.Add(cancelOption);
 
@@ -376,26 +315,5 @@ public sealed class ChatConsole
         }
         catch { }
         return "Empty Session";
-    }
-
-    private static string UnescapePartialJson(string raw)
-    {
-        if (string.IsNullOrEmpty(raw)) return "";
-
-        int trailingBackslashes = 0;
-        for (int i = raw.Length - 1; i >= 0; i--)
-        {
-            if (raw[i] == '\\')
-                trailingBackslashes++;
-            else
-                break;
-        }
-
-        string toUnescape = (trailingBackslashes % 2 != 0) ? raw[..^1] : raw;
-
-        return toUnescape.Replace("\\n", "\n")
-                         .Replace("\\t", "\t")
-                         .Replace("\\\"", "\"")
-                         .Replace("\\\\", "\\");
     }
 }

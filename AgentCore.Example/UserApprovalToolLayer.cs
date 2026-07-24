@@ -28,7 +28,7 @@ public class UserApprovalToolLayer : ToolingLayer
             {
                 // Retrieve the path from JSON arguments safely
                 var path = "unknown";
-                if (call.ArgumentsObject != null && call.ArgumentsObject.TryGetPropertyValue("path", out var pathNode))
+                if (call.Arguments != null && call.Arguments.TryGetPropertyValue("path", out var pathNode))
                 {
                     path = pathNode?.ToString() ?? "unknown";
                 }
@@ -57,7 +57,7 @@ public class UserApprovalToolLayer : ToolingLayer
             else if (call.Name.Equals("ExecuteCommand", StringComparison.OrdinalIgnoreCase))
             {
                 var command = "unknown";
-                if (call.ArgumentsObject != null && call.ArgumentsObject.TryGetPropertyValue("command", out var cmdNode))
+                if (call.Arguments != null && call.Arguments.TryGetPropertyValue("command", out var cmdNode))
                 {
                     command = cmdNode?.ToString() ?? "unknown";
                 }

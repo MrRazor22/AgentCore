@@ -22,14 +22,27 @@ namespace AgentCore.Context
         private readonly ILogger<ChatContext>? _logger;
         private string _factSheet = string.Empty;
 
-        public IReadOnlyList<Message> Chat
+        public IReadOnlyList<Message> Messages
         {
             get
             {
+                var conversation = new List<Message>();
+                if (_instructions != null)
+                {
+                    conversation.Add(new Message(Role.System, _instructions));
+                }
+
+                if (_summarizer != null && !string.IsNullOrEmpty(_factSheet))
+                {
+                    conversation.Add(new Message(Role.User, new Text("Another language model started to solve this problem and produced a summary of its thinking process. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\n\n" + _factSheet)));
+                }
+
                 lock (_history)
                 {
-                    return _history.ToList();
+                    conversation.AddRange(_history);
                 }
+
+                return conversation;
             }
         }
 
@@ -51,66 +64,21 @@ namespace AgentCore.Context
             _logger = logger;
         }
 
-        public async Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+        public Task AddAsync(Message message, CancellationToken ct = default)
         {
-            // 1. Measure tokens of fixed parts of the prompt
-            var fixedMessages = new List<Message>();
-            if (_instructions != null) fixedMessages.Add(new Message(Role.System, _instructions));
-
-            Message? summaryMessage = null;
-            if (_summarizer != null && !string.IsNullOrEmpty(_factSheet))
-            {
-                summaryMessage = new Message(Role.User, new Text("Another language model started to solve this problem and produced a summary of its thinking process. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:\n\n" + _factSheet));
-                fixedMessages.Add(summaryMessage);
-            }
-            fixedMessages.Add(newInput);
-
-            // 2. Compute remaining budget for rolling history
-            int totalLimit = _capabilities.ContextWindow;
-            int fixedTokens = await _tokenCounter.EstimateAsync(fixedMessages, ct).ConfigureAwait(false);
-            int toolTokens = _tools.Count > 0 ? await _tokenCounter.EstimateAsync(_tools, ct).ConfigureAwait(false) : 0;
-            int budget = Math.Max(0, totalLimit - (fixedTokens + toolTokens + _capabilities.ReservedTokens));
-
-            List<Message> workingHistory;
+            if (message == null) return Task.CompletedTask;
             lock (_history)
             {
-                workingHistory = _history.ToList();
+                _history.Add(message);
             }
-
-            int historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
-
-            _logger?.LogDebug("Preparing memory. Fixed: {FixedTokens} tokens, Tools: {ToolTokens} tokens, Budget: {Budget} tokens, History: {HistoryTokens} tokens", fixedTokens, toolTokens, budget, historyTokens);
-
-            // Prune the local copy to fit the exact final budget (no mutation to master history)
-            if (historyTokens > budget)
-            {
-                int targetLimit = (int)(budget * _retentionTarget);
-                _logger?.LogInformation("Pruning local working history from {HistoryTokens} tokens to target {TargetLimit} tokens", historyTokens, targetLimit);
-                while (historyTokens > targetLimit && workingHistory.Count > 0)
-                {
-                    workingHistory.RemoveAt(0); // prune oldest
-                    historyTokens = await _tokenCounter.EstimateAsync(workingHistory, ct).ConfigureAwait(false);
-                }
-            }
-
-            // 3. Construct conversation
-            var conversation = new List<Message>();
-            if (_instructions != null) conversation.Add(new Message(Role.System, _instructions));
-            if (summaryMessage != null) conversation.Add(summaryMessage);
-            conversation.AddRange(workingHistory);
-            conversation.Add(newInput);
-
-            return conversation;
+            return Task.CompletedTask;
         }
 
-        public async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+        public async Task FinalizeTurnAsync(CancellationToken ct = default)
         {
-            if (completedTurn == null || completedTurn.Count == 0) return;
-
             List<Message> workingHistory;
             lock (_history)
             {
-                _history.AddRange(completedTurn);
                 workingHistory = _history.ToList();
             }
 
@@ -181,13 +149,23 @@ namespace AgentCore.Context
 
             await foreach (var evt in _summarizer!.StreamAsync(messages, options: null, tools: null, ct: ct).ConfigureAwait(false))
             {
-                if (evt is Text t)
+                if (evt is TextDelta t)
                 {
                     sb.Append(t.Value);
                 }
             }
 
             return sb.ToString().Trim();
+        }
+
+        public Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
+        {
+            if (messages == null) return Task.CompletedTask;
+            lock (_history)
+            {
+                _history.AddRange(messages);
+            }
+            return Task.CompletedTask;
         }
 
         public Task ClearAsync(CancellationToken ct = default)
@@ -199,20 +177,5 @@ namespace AgentCore.Context
             }
             return Task.CompletedTask;
         }
-
-        public Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
-        {
-            lock (_history)
-            {
-                _history.Clear();
-                _factSheet = string.Empty;
-                if (history != null && history.Count > 0)
-                {
-                    _history.AddRange(history);
-                }
-            }
-            return Task.CompletedTask;
-        }
     }
-
 }

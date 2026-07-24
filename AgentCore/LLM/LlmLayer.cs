@@ -6,7 +6,7 @@ using AgentCore.Tools;
 
 namespace AgentCore.LLM;
 
-public abstract class LlmLayer : ILLM
+public abstract class LLMLayer : ILLM
 {
     private bool _attached;
 
@@ -23,7 +23,7 @@ public abstract class LlmLayer : ILLM
 
     public virtual LLMCapabilities GetCapabilities() => Inner.GetCapabilities();
 
-    public virtual IAsyncEnumerable<LLMEvent> StreamAsync(
+    public virtual IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages, 
         LLMOptions? options = null, 
         IReadOnlyList<Tool>? tools = null, 

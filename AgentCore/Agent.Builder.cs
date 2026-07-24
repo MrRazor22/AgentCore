@@ -26,7 +26,7 @@ public sealed partial class Agent
         private Func<ILLM, ITooling, IAgentWorkflow>? _workflowFactory;
 
         private readonly List<ToolingLayer> _toolingLayers = [];
-        private readonly List<LlmLayer> _llmLayers = [];
+        private readonly List<LLMLayer> _llmLayers = [];
         private readonly List<ContextLayer> _contextLayers = [];
 
         private readonly List<object> _builtComponents = new();
@@ -80,7 +80,7 @@ public sealed partial class Agent
         public Builder WithContext(IContext context) { _context = context; return this; }
         public Builder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 
-        public Builder UseTooling(ITooling tooling) { _tooling = tooling; return this; }
+        public Builder WithTooling(ITooling tooling) { _tooling = tooling; return this; }
         public Builder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
 
         public Builder WithTokenCounter(ITokenCounter tokenCounter) { _tokenCounter = tokenCounter; return this; }
@@ -93,9 +93,9 @@ public sealed partial class Agent
         }
         
         public Builder WithLLM(ILLM provider) { _provider = provider; return this; }
-        public Builder AddLlmLayer(LlmLayer layer) { _llmLayers.Add(layer); return this; }
+        public Builder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; }
 
-        public Builder UseWorkflow(Func<ILLM, ITooling, IAgentWorkflow> factory)
+        public Builder WithWorkflow(Func<ILLM, ITooling, IAgentWorkflow> factory)
         {
             _workflowFactory = factory;
             return this;

@@ -5,15 +5,17 @@ using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using AgentCore.LLM.Schema;
 using AgentCore.LLM.Chat;
+using System.Text;
+using System.Linq;
 
 namespace AgentCore;
 
 public interface IAgent
 {
     Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<IContent> InvokeStreamingAsync<T>(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
 
 public sealed partial class Agent : IAgent
@@ -60,32 +62,29 @@ public sealed partial class Agent : IAgent
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
-        T? result = default;
-        await foreach (var evt in InvokeStreamingAsync<T>(input, ct))
+        var sb = new StringBuilder();
+        await foreach (var content in InvokeStreamingAsync<T>(input, ct))
         {
-            if (evt is ErrorEvent error)
+            if (content is Text t)
             {
-                throw error.Error;
-            }
-            if (evt is AgentResponseEvent<T> resp)
-            {
-                result = resp.Response;
+                sb.Append(t.Value);
             }
         }
         
-        return result;
+        var fullText = sb.ToString();
+        return Deserialize<T>(fullText);
     }
 
-    public IAsyncEnumerable<AgentEvent> InvokeStreamingAsync(
+    public IAsyncEnumerable<IContent> InvokeStreamingAsync(
         IContent input,
         CancellationToken ct = default)
     {
         return ExecuteStreamAsync(input, null, ct);
     }
 
-    public async IAsyncEnumerable<AgentEvent> InvokeStreamingAsync<T>(
+    public IAsyncEnumerable<IContent> InvokeStreamingAsync<T>(
         IContent input,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        CancellationToken ct = default)
     {
         JsonSchema? schema = null;
         if (typeof(T) != typeof(string))
@@ -93,20 +92,10 @@ public sealed partial class Agent : IAgent
             schema = typeof(T).GetSchemaForType();
         }
 
-        await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
-        {
-            if (evt is AgentResponseEvent<string> resp)
-            {
-                yield return new AgentResponseEvent<T>(Deserialize<T>(resp.Response)!);
-            }
-            else
-            {
-                yield return evt;
-            }
-        }
+        return ExecuteStreamAsync(input, schema, ct);
     }
 
-    private async IAsyncEnumerable<AgentEvent> ExecuteStreamAsync(
+    private async IAsyncEnumerable<IContent> ExecuteStreamAsync(
         IContent input,
         JsonSchema? responseSchema,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -116,34 +105,21 @@ public sealed partial class Agent : IAgent
             new KeyValuePair<string, object?>("Agent", nameof(Agent))
         }); 
 
-        List<Message> conversation;
-        try
+        await foreach (var content in _workflow.ExecuteAsync(_memory, input, responseSchema, ct))
         {
-            conversation = await _memory.PrepareAsync(
-                new Message(Role.User, input),
-                ct).ConfigureAwait(false);
-        }
-        catch (Exception ex)    
-        {
-            _logger.LogError(ex, "Agent failed during Memory preparation.");
-            throw;
-        }
-
-        int initialCount = conversation.Count;
-
-        await foreach (var evt in _workflow.ExecuteAsync(conversation, responseSchema, ct))
-        {
-            yield return evt;
+            yield return content;
         }
 
         try
         {
-            var newTurnMessages = conversation.Skip(initialCount - 1).ToList();
-            await _memory.UpdateAsync(newTurnMessages, ct).ConfigureAwait(false);
+            if (_memory is IMemoryFinalizer finalizer)
+            {
+                await finalizer.FinalizeTurnAsync(ct).ConfigureAwait(false);
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Agent failed during Memory update.");
+            _logger.LogError(ex, "Agent failed during Memory finalization.");
             throw;
         }
 

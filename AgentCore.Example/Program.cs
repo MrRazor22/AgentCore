@@ -12,7 +12,7 @@ namespace AgentCore.Example;
 
 internal class Program
 {
-    public static Action<LLMEvent>? CurrentLlmEventHandler { get; set; }
+    public static Action<ILLMOutput>? CurrentLlmEventHandler { get; set; }
 
     private static async Task Main(string[] args)
     {
@@ -278,6 +278,7 @@ internal class Program
                 var eventStream = session.Agent.InvokeStreamingAsync(contentInput, promptCts.Token);
                 
                 await chatConsole.RenderStreamAsync(eventStream, evt => { }, promptCts.Token);
+                await session.RefreshAsync(promptCts.Token);
             }
             catch (OperationCanceledException)
             {

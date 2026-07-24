@@ -71,7 +71,7 @@ internal sealed class Tooling : ITooling
 
         try
         {
-            var rawResult = await tool.InvokeAsync(call.ArgumentsObject, ct).ConfigureAwait(false);
+            var rawResult = await tool.InvokeAsync(call.Arguments, ct).ConfigureAwait(false);
             IContent result = rawResult switch
             {
                 IContent c => c,

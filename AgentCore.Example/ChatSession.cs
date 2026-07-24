@@ -23,15 +23,15 @@ public class ChatSession
     private readonly string _modelName;
     private readonly Uri? _baseUrl;
     private readonly ILoggerFactory _loggerFactory;
+    private List<Message> _messages = new();
     private IContext? _memory;
-
-    private readonly Action<LLMEvent> _onLlmEvent;
+    private readonly Action<ILLMOutput> _onLlmEvent;
 
     public IAgent Agent { get; private set; } = null!;
     public string SessionFile { get; private set; }
-    public IReadOnlyList<Message> Messages => _memory?.Chat ?? Array.Empty<Message>();
+    public IReadOnlyList<Message> Messages => _messages;
 
-    public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile, Action<LLMEvent> onLlmEvent)
+    public ChatSession(string apiKey, string modelName, Uri? baseUrl, ILoggerFactory loggerFactory, string sessionFile, Action<ILLMOutput> onLlmEvent)
     {
         _apiKey = apiKey;
         _modelName = modelName;
@@ -47,7 +47,7 @@ public class ChatSession
         Uri? baseUrl, 
         ILoggerFactory loggerFactory, 
         string sessionFile, 
-        Action<LLMEvent> onLlmEvent,
+        Action<ILLMOutput> onLlmEvent,
         CancellationToken ct = default)
     {
         var session = new ChatSession(apiKey, modelName, baseUrl, loggerFactory, sessionFile, onLlmEvent);
@@ -78,7 +78,7 @@ public class ChatSession
         var builder = AgentCore.Agent.Create()
             .WithMEAI(chatClient, capabilities)
             .WithTools(new WorkspaceTools())
-            .AddLlmLayer(new StreamingLLMLayer(_onLlmEvent)) 
+            .AddLLMLayer(new StreamingLLMLayer(_onLlmEvent)) 
             .AddToolingLayer(new UserApprovalToolLayer()) 
             .AddContextLayer(new UserMemoryLayer(provider, profileFile, _loggerFactory))
             .AddContextLayer(new FilePersistentChatContext(SessionFile))
@@ -87,14 +87,33 @@ public class ChatSession
         Agent = builder.Build();
         _memory = builder.GetRequiredService<IContext>();
         
-        if (File.Exists(SessionFile))
+        await RefreshAsync(ct).ConfigureAwait(false);
+        if (_messages.Count > 0)
         {
-            var json = await File.ReadAllTextAsync(SessionFile, ct).ConfigureAwait(false);
-            var messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new();
-            await _memory.RestoreAsync(messages, ct).ConfigureAwait(false);
+            await _memory.ClearAsync(ct).ConfigureAwait(false);
+            await _memory.AddRangeAsync(_messages, ct).ConfigureAwait(false);
         }
     }
 
+    public async Task RefreshAsync(CancellationToken ct = default)
+    {
+        if (File.Exists(SessionFile))
+        {
+            try
+            {
+                var json = await File.ReadAllTextAsync(SessionFile, ct).ConfigureAwait(false);
+                _messages = JsonSerializer.Deserialize<List<Message>>(json) ?? new();
+            }
+            catch
+            {
+                _messages = new();
+            }
+        }
+        else
+        {
+            _messages = new();
+        }
+    }
 
     public async Task StartNewAsync(string sessionFile, CancellationToken ct = default)
     {
@@ -110,10 +129,12 @@ public class ChatSession
 
     public async Task RevertToAsync(int index, CancellationToken ct = default)
     {
-        var remainingMessages = Messages.Take(index).ToList();
+        var remainingMessages = _messages.Take(index).ToList();
+        _messages = remainingMessages;
         if (_memory != null)
         {
-            await _memory.RestoreAsync(remainingMessages, ct);
+            await _memory.ClearAsync(ct);
+            await _memory.AddRangeAsync(remainingMessages, ct);
         }
     }
 

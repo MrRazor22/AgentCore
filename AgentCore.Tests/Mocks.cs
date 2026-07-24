@@ -14,7 +14,7 @@ namespace AgentCore.Tests;
 
 public class MockLLMProvider : ILLM
 {
-    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<LLMEvent>>> _responses = new();
+    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<ILLMOutput>>> _responses = new();
     
     public int ContextWindow { get; set; } = 4096;
     public int ReservedTokens { get; set; } = 512;
@@ -30,16 +30,20 @@ public class MockLLMProvider : ILLM
     
     public int CallCount => CapturedMessages.Count;
 
-    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<LLMEvent>> generator)
+    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<ILLMOutput>> generator)
     {
         _responses.Enqueue(generator);
     }
 
-    private static LLMEvent ConvertToDelta(object evt)
+    private static ILLMOutput ConvertToDelta(object evt)
     {
         return evt switch
         {
-            LLMEvent ev => ev,
+            ILLMOutput output => output,
+            Text t => new TextDelta(t.Value),
+            Reasoning r => new ReasoningDelta(r.Thought),
+            ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString()),
+            string str => new TextDelta(str),
             _ => throw new ArgumentException($"Unknown event type {evt.GetType()}")
         };
     }
@@ -61,8 +65,8 @@ public class MockLLMProvider : ILLM
         _responses.Enqueue(ct => ThrowException(ex));
     }
 
-    private static async IAsyncEnumerable<LLMEvent> ToAsyncEnumerable(
-        IEnumerable<LLMEvent> deltas, 
+    private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(
+        IEnumerable<ILLMOutput> deltas, 
         [EnumeratorCancellation] CancellationToken ct)
     {
         foreach (var delta in deltas)
@@ -73,13 +77,13 @@ public class MockLLMProvider : ILLM
         await Task.CompletedTask;
     }
 
-    private static async IAsyncEnumerable<LLMEvent> ThrowException(Exception ex)
+    private static async IAsyncEnumerable<ILLMOutput> ThrowException(Exception ex)
     {
         if (false) yield break;
         throw ex;
     }
 
-    public IAsyncEnumerable<LLMEvent> StreamAsync(
+    public IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
@@ -91,7 +95,7 @@ public class MockLLMProvider : ILLM
 
         if (_responses.Count == 0)
         {
-            return ToAsyncEnumerable(Enumerable.Empty<LLMEvent>(), ct);
+            return ToAsyncEnumerable(Enumerable.Empty<ILLMOutput>(), ct);
         }
 
         var generator = _responses.Dequeue();
@@ -99,43 +103,57 @@ public class MockLLMProvider : ILLM
     }
 }
 
-public class MockMemoryProvider : IContext
+public class MockMemoryProvider : IContext, IMemoryFinalizer
 {
+    private readonly List<Message> _internalMessages = new();
+    private int _lastSavedCount = 0;
+
     public List<IReadOnlyList<Message>> Saved { get; } = new();
     public string RecallResult { get; set; } = "";
 
-    public IReadOnlyList<Message> Chat => Saved.SelectMany(x => x).ToList();
-
-    public Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+    public IReadOnlyList<Message> Messages
     {
-        var list = new List<Message>();
-        if (!string.IsNullOrEmpty(RecallResult))
+        get
         {
-            list.Add(new Message(Role.System, new Text(RecallResult)));
+            var list = new List<Message>();
+            if (!string.IsNullOrEmpty(RecallResult))
+            {
+                list.Add(new Message(Role.System, new Text(RecallResult)));
+            }
+            list.AddRange(_internalMessages);
+            return list;
         }
-        list.Add(newInput);
-        return Task.FromResult(list);
     }
 
-    public Task UpdateAsync(IReadOnlyList<Message> turn, CancellationToken ct = default)
+    public Task AddAsync(Message message, CancellationToken ct = default)
     {
-        Saved.Add(turn);
+        _internalMessages.Add(message);
         return Task.CompletedTask;
     }
 
     public Task ClearAsync(CancellationToken ct = default)
     {
+        _internalMessages.Clear();
         Saved.Clear();
+        _lastSavedCount = 0;
         return Task.CompletedTask;
     }
 
-    public Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
+    public Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
     {
-        Saved.Clear();
-        if (history != null && history.Count > 0)
+        if (messages != null)
         {
-            Saved.Add(history);
+            _internalMessages.AddRange(messages);
         }
+        _lastSavedCount = _internalMessages.Count;
+        return Task.CompletedTask;
+    }
+
+    public Task FinalizeTurnAsync(CancellationToken ct = default)
+    {
+        var turnMessages = _internalMessages.Skip(_lastSavedCount).ToList();
+        Saved.Add(turnMessages);
+        _lastSavedCount = _internalMessages.Count;
         return Task.CompletedTask;
     }
 }

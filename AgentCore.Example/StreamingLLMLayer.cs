@@ -9,16 +9,16 @@ using System.Threading;
 
 namespace AgentCore.Example;
 
-public sealed class StreamingLLMLayer : LlmLayer
+public sealed class StreamingLLMLayer : LLMLayer
 {
-    private readonly Action<LLMEvent> _onEvent;
+    private readonly Action<ILLMOutput> _onEvent;
 
-    public StreamingLLMLayer(Action<LLMEvent> onEvent)
+    public StreamingLLMLayer(Action<ILLMOutput> onEvent)
     {
         _onEvent = onEvent ?? throw new ArgumentNullException(nameof(onEvent));
     }
 
-    public override async IAsyncEnumerable<LLMEvent> StreamAsync(
+    public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,

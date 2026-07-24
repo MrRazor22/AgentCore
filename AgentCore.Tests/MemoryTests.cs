@@ -21,17 +21,13 @@ public class MemoryTests
         var tokenCounter = new ApproximateTokenCounter();
         var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be helpful."));
 
-        var history = new List<Message>
-        {
-            new Message(Role.User, new Text("Hello")),
-            new Message(Role.Assistant, new Text("Hi, how are you?"))
-        };
-        await contextService.UpdateAsync(history);
+        await contextService.AddAsync(new Message(Role.User, new Text("Hello")));
+        await contextService.AddAsync(new Message(Role.Assistant, new Text("Hi, how are you?")));
+        await contextService.FinalizeTurnAsync();
 
         // Act
-        var result = await contextService.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Help"))
-        );
+        await contextService.AddAsync(new Message(Role.User, new Text("Help")));
+        var result = contextService.Messages;
 
         // Assert
         Assert.Equal(4, result.Count);
@@ -51,18 +47,20 @@ public class MemoryTests
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message that will be pruned."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
-        await contextService.UpdateAsync(new[] { msg1, msg2 });
+        await contextService.AddAsync(msg1);
+        await contextService.AddAsync(msg2);
+        await contextService.FinalizeTurnAsync();
 
         // Act
-        var result = await contextService.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Current short input"))
-        );
+        await contextService.AddAsync(new Message(Role.User, new Text("Current short input")));
+        var result = contextService.Messages;
 
         // Assert
         // Verify msg1 is pruned, but msg2 is kept
         Assert.DoesNotContain(result, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
         Assert.Contains(result, m => m.Contents.Any(c => c.ForLlm().Contains("Message 2")));
     }
+
     [Fact]
     public async Task UpdateHistoryAsync_ExceedsCapacity_PrunesMasterHistory()
     {
@@ -75,15 +73,17 @@ public class MemoryTests
         var msg1 = new Message(Role.User, new Text("This is a very long message that easily exceeds the limit of twenty tokens."));
         var msg2 = new Message(Role.Assistant, new Text("Short."));
 
+        await contextService.AddAsync(msg1);
+        await contextService.AddAsync(msg2);
+        await contextService.FinalizeTurnAsync();
+
         // Act
-        await contextService.UpdateAsync(new[] { msg1, msg2 });
+        await contextService.AddAsync(new Message(Role.User, new Text("Test")));
+        await contextService.FinalizeTurnAsync();
+        var result = contextService.Messages;
 
         // Assert
         // Verify that the master history has pruned msg1 because it exceeded capacity.
-        var result = await contextService.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Test"))
-        );
-
         Assert.DoesNotContain(result, m => m.Contents.Any(c => c.ForLlm().Contains("exceeds the limit")));
         Assert.Contains(result, m => m.Contents.Any(c => c.ForLlm().Contains("Short.")));
     }
@@ -98,28 +98,33 @@ public class MemoryTests
 
         var msg1 = new Message(Role.User, new Text("Message 1: This is a very long message."));
         var msg2 = new Message(Role.Assistant, new Text("Message 2: Short."));
-        await contextService.UpdateAsync(new[] { msg1, msg2 });
+        await contextService.AddAsync(msg1);
+        await contextService.AddAsync(msg2);
+        await contextService.FinalizeTurnAsync();
 
         // Act & Assert 1: Prepare with tight budget so msg1 gets pruned in the output
         var providerTight = new MockLLMProvider { ContextWindow = 2068, ReservedTokens = 2048 };
         var contextServiceTight = new ChatContext(tokenCounter, providerTight.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
-        // Copy the history from the first context service to simulate shared state
-        await contextServiceTight.UpdateAsync(new[] { msg1, msg2 });
+        
+        await contextServiceTight.AddAsync(msg1);
+        await contextServiceTight.AddAsync(msg2);
+        await contextServiceTight.FinalizeTurnAsync();
 
-        var resultTight = await contextServiceTight.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Current short input"))
-        );
+        await contextServiceTight.AddAsync(new Message(Role.User, new Text("Current short input")));
+        await contextServiceTight.FinalizeTurnAsync();
+        var resultTight = contextServiceTight.Messages;
 
         Assert.DoesNotContain(resultTight, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
 
         // Act & Assert 2: Prepare again with normal budget, msg1 should still be present because Prepare was side-effect-free
-        // We recreate the service with normal budget using the same history (msg1, msg2)
         var contextServiceNormal = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), new Text("Be concise."), retentionTarget: 0.5);
-        await contextServiceNormal.UpdateAsync(new[] { msg1, msg2 });
+        await contextServiceNormal.AddAsync(msg1);
+        await contextServiceNormal.AddAsync(msg2);
+        await contextServiceNormal.FinalizeTurnAsync();
 
-        var resultNormal = await contextServiceNormal.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Current short input"))
-        );
+        await contextServiceNormal.AddAsync(new Message(Role.User, new Text("Current short input")));
+        await contextServiceNormal.FinalizeTurnAsync();
+        var resultNormal = contextServiceNormal.Messages;
 
         Assert.Contains(resultNormal, m => m.Contents.Any(c => c.ForLlm().Contains("Message 1")));
     }
@@ -133,12 +138,12 @@ public class MemoryTests
         var contextService = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null, retentionTarget: 0.5);
 
         var msg1 = new Message(Role.User, new Text("Hello"));
-        await contextService.UpdateAsync(new[] { msg1 });
+        await contextService.AddAsync(msg1);
+        await contextService.FinalizeTurnAsync();
 
         // Act
-        var result = await contextService.PrepareAsync(
-            newInput: new Message(Role.User, new Text("Test"))
-        );
+        await contextService.AddAsync(new Message(Role.User, new Text("Test")));
+        var result = contextService.Messages;
 
         // Assert: History must be completely pruned
         Assert.Single(result); // Only userInput is left
@@ -153,14 +158,14 @@ public class MemoryTests
         var tokenCounter = new ApproximateTokenCounter();
         var memoryProvider = new ChatContext(tokenCounter, mockLlm.GetCapabilities(), Array.Empty<Tool>(), null, summarizer: mockLlm);
 
-        var turn = new List<Message> { new Message(Role.User, new Text("Short content turn")) };
-
         // Act
-        await memoryProvider.UpdateAsync(turn);
+        await memoryProvider.AddAsync(new Message(Role.User, new Text("Short content turn")));
+        await memoryProvider.FinalizeTurnAsync();
 
         // Assert
         Assert.Equal(0, mockLlm.CallCount); // no LLM calls made
-        var prepared = await memoryProvider.PrepareAsync(new Message(Role.User, new Text("Query")));
+        await memoryProvider.AddAsync(new Message(Role.User, new Text("Query")));
+        var prepared = memoryProvider.Messages;
         Assert.All(prepared, msg => Assert.DoesNotContain("Another language model started", string.Join("\n", msg.Contents.Select(c => c.ForLlm()))));
     }
 
@@ -175,14 +180,14 @@ public class MemoryTests
         var capabilities = new LLMCapabilities { ContextWindow = 20, ReservedTokens = 5 };
         var memoryProvider = new ChatContext(tokenCounter, capabilities, Array.Empty<Tool>(), null, retentionTarget: 0.1, summarizer: mockLlm);
 
-        var turn = new List<Message> { new Message(Role.User, new Text("This is a very long string designed to exceed the budget and force eviction.")) };
-
         // Act
-        await memoryProvider.UpdateAsync(turn);
+        await memoryProvider.AddAsync(new Message(Role.User, new Text("This is a very long string designed to exceed the budget and force eviction.")));
+        await memoryProvider.FinalizeTurnAsync();
 
         // Assert
         Assert.Equal(1, mockLlm.CallCount);
-        var prepared = await memoryProvider.PrepareAsync(new Message(Role.User, new Text("Query")));
+        await memoryProvider.AddAsync(new Message(Role.User, new Text("Query")));
+        var prepared = memoryProvider.Messages;
         Assert.Contains(prepared, msg => msg.Contents.Any(c => c.ForLlm().Contains("Consolidated fact sheet result.")));
     }
 
@@ -194,19 +199,21 @@ public class MemoryTests
         var tokenCounter = new ApproximateTokenCounter();
         var memory = new ChatContext(tokenCounter, provider.GetCapabilities(), Array.Empty<Tool>(), null);
 
-        await memory.UpdateAsync(new[] { new Message(Role.User, new Text("Old Turn")) });
+        await memory.AddAsync(new Message(Role.User, new Text("Old Turn")));
+        await memory.FinalizeTurnAsync();
 
         // Act
         await memory.ClearAsync();
 
         // Assert
-        var result = await memory.PrepareAsync(new Message(Role.User, new Text("New Turn")));
+        await memory.AddAsync(new Message(Role.User, new Text("New Turn")));
+        var result = memory.Messages;
         Assert.Single(result);
         Assert.Equal("New Turn", result[0].Contents[0].ForLlm());
     }
 
     [Fact]
-    public async Task RestoreAsync_HydratesHistoryWithoutSideEffects()
+    public async Task AddRangeAsync_HydratesHistoryWithoutSideEffects()
     {
         // Arrange
         var provider = new MockLLMProvider { ContextWindow = 2000 };
@@ -220,10 +227,12 @@ public class MemoryTests
         };
 
         // Act
-        await memory.RestoreAsync(restored);
+        await memory.ClearAsync();
+        await memory.AddRangeAsync(restored);
 
         // Assert
-        var result = await memory.PrepareAsync(new Message(Role.User, new Text("Followup")));
+        await memory.AddAsync(new Message(Role.User, new Text("Followup")));
+        var result = memory.Messages;
         Assert.Equal(3, result.Count);
         Assert.Equal("Restored User Message", result[0].Contents[0].ForLlm());
         Assert.Equal("Restored Assistant Message", result[1].Contents[0].ForLlm());

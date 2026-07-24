@@ -30,7 +30,7 @@ public class TornadoLLM : ILLM
 
     public LLMCapabilities GetCapabilities() => _capabilities;
 
-    public async IAsyncEnumerable<LLMEvent> StreamAsync(
+    public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
@@ -58,7 +58,7 @@ public class TornadoLLM : ILLM
             SingleReader = true,
             FullMode = System.Threading.Channels.BoundedChannelFullMode.Wait
         };
-        var channel = System.Threading.Channels.Channel.CreateBounded<LLMEvent>(channelOptions);
+        var channel = System.Threading.Channels.Channel.CreateBounded<ILLMOutput>(channelOptions);
 
         var toolCallInfo = new System.Collections.Generic.Dictionary<int, (string Id, string Name)>();
         var streamedIndices = new System.Collections.Generic.HashSet<int>();
@@ -81,11 +81,10 @@ public class TornadoLLM : ILLM
                         else if (evt is ResponseEventFunctionCallArgumentsDelta deltaEvt)
                         {
                             toolCallInfo.TryGetValue(deltaEvt.OutputIndex, out var info);
-                            var toolCallDelta = new ToolCall(
+                            var toolCallDelta = new ToolCallDelta(
                                 info.Id ?? "",
                                 info.Name ?? "",
-                                System.Text.Json.Nodes.JsonValue.Create(deltaEvt.Delta),
-                                deltaEvt.OutputIndex
+                                deltaEvt.Delta
                             );
                             streamedIndices.Add(deltaEvt.OutputIndex);
                             await channel.Writer.WriteAsync(toolCallDelta, ct);
@@ -95,18 +94,18 @@ public class TornadoLLM : ILLM
                     {
                         if (reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new AgentCore.LLM.Chat.Reasoning(reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoning.Content), ct);
                         }
                     },
                     MessagePartHandler = async (part) =>
                     {
                         if (part.Reasoning is not null && part.Reasoning.Content is not null)
                         {
-                            await channel.Writer.WriteAsync(new AgentCore.LLM.Chat.Reasoning(part.Reasoning.Content), ct);
+                            await channel.Writer.WriteAsync(new ReasoningDelta(part.Reasoning.Content), ct);
                         }
                         if (part.Text is not null)
                         {
-                            await channel.Writer.WriteAsync(new Text(part.Text), ct);
+                            await channel.Writer.WriteAsync(new TextDelta(part.Text), ct);
                         }
                     },
                     FunctionCallHandler = async (calls) =>
@@ -144,11 +143,10 @@ public class TornadoLLM : ILLM
                                         assignedToolCallIds[currentIdx] = toolCallId;
                                    }
 
-                                   await channel.Writer.WriteAsync(new ToolCall(
+                                   await channel.Writer.WriteAsync(new ToolCallDelta(
                                         toolCallId,
                                         call.Name,
-                                        System.Text.Json.Nodes.JsonValue.Create(deltaStr),
-                                        currentIdx
+                                        deltaStr
                                    ), ct);
                               }
                          }
@@ -157,7 +155,10 @@ public class TornadoLLM : ILLM
                     {
                         if (usage.TotalTokens > 0)
                         {
-                            await channel.Writer.WriteAsync(new TokenUsage(usage.PromptTokens, usage.CompletionTokens), ct);
+                            await channel.Writer.WriteAsync(new Metadata(
+                                InputTokens: usage.PromptTokens,
+                                OutputTokens: usage.CompletionTokens
+                            ), ct);
                         }
                     }
                 }, ct);

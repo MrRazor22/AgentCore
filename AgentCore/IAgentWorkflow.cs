@@ -2,17 +2,22 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Exceptions;
 using AgentCore.LLM.Schema;
+using AgentCore.Context;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System;
+using System.Linq;
 
 namespace AgentCore
 {
     public interface IAgentWorkflow
     {
-        IAsyncEnumerable<AgentEvent> ExecuteAsync(
-            List<Message> conversation,
+        IAsyncEnumerable<IContent> ExecuteAsync(
+            IContext context,
+            IContent input,
             JsonSchema? responseSchema,
             CancellationToken ct = default);
     }
@@ -36,12 +41,17 @@ namespace AgentCore
             _logger = logger;
         }
 
-        public async IAsyncEnumerable<AgentEvent> ExecuteAsync(
-            List<Message> conversation,
+        public async IAsyncEnumerable<IContent> ExecuteAsync(
+            IContext context,
+            IContent input,
             JsonSchema? responseSchema,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
+
+            // 1. Immediately record user input in the context (durable)
+            var userMessage = new Message(Role.User, input);
+            await context.AddAsync(userMessage, ct).ConfigureAwait(false);
 
             while (true)
             {
@@ -50,16 +60,17 @@ namespace AgentCore
                 if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
                 {
                     _logger?.LogError("Execution exceeded the maximum limit of {MaxIterations} iterations.", _maxIterations.Value);
-                    yield return new ErrorEvent(new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations."));
-                    break;
+                    throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
-                _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, conversation.Count);
+                var currentMessages = context.Messages;
+                _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, currentMessages.Count);
 
                 var options = new LLMOptions { ResponseSchema = responseSchema };
                 _logger?.LogDebug("Calling LLM StreamAsync...");
-                var assistantMessage = await _llm
-                    .StreamAsync(conversation, options, _tooling.Tools, ct)
+                
+                var (assistantMessage, metadata) = await _llm
+                    .StreamAsync(currentMessages, options, _tooling.Tools, ct)
                     .AccumulateAsync(ct)
                     .ConfigureAwait(false);
 
@@ -69,38 +80,36 @@ namespace AgentCore
                     break;
                 }
 
-                conversation.Add(assistantMessage);
+                // 2. Save LLM response to context immediately (durable mid-turn!)
+                await context.AddAsync(assistantMessage, ct).ConfigureAwait(false);
 
-                var texts = assistantMessage.Contents.OfType<Text>().ToList();
+                // Yield all contents produced by LLM assistant response (Text, Reasoning, ToolCall)
+                foreach (var content in assistantMessage.Contents)
+                {
+                    yield return content;
+                }
+
                 var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
-                var reasonings = assistantMessage.Contents.OfType<Reasoning>().ToList();
-
-                _logger?.LogInformation("LLM response received. Texts: {TextCount}, ToolCalls: {ToolCount}, Reasonings: {ReasoningCount}", texts.Count, toolCalls.Count, reasonings.Count);
-
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
 
-                    foreach (var call in toolCalls)
-                    {
-                        yield return new ToolCallEvent(call);
-                    }
-
                     _logger?.LogDebug("Executing {ToolCount} tool calls...", toolCalls.Count);
                     var toolMessages = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
-                    conversation.AddRange(toolMessages);
 
+                    // 3. Save tool results to context immediately and yield ToolResult semantic content
                     foreach (var message in toolMessages)
                     {
-                        var result = message.Contents.OfType<ToolResult>().Single();
-                        yield return new ToolResultEvent(result);
+                        await context.AddAsync(message, ct).ConfigureAwait(false);
+                        foreach (var result in message.Contents.OfType<ToolResult>())
+                        {
+                            yield return result;
+                        }
                     }
 
                     continue;
                 }
 
-                var finalText = string.Join("\n", texts.Select(t => t.Value)).Trim();
-                yield return new AgentResponseEvent<string>(finalText);
                 break;
             }
         }

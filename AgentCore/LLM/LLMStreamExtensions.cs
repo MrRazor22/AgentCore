@@ -10,54 +10,43 @@ namespace AgentCore.LLM;
 
 internal static class LLMStreamExtensions
 {
-    public static async Task<Message?> AccumulateAsync(
-        this IAsyncEnumerable<LLMEvent> stream,
+    public static async Task<(Message? Message, Metadata? Metadata)> AccumulateAsync(
+        this IAsyncEnumerable<ILLMOutput> stream,
         CancellationToken ct = default)
     {
         var textBuffer = new StringBuilder();
         var reasoningBuffer = new StringBuilder();
-        var toolCalls = new Dictionary<int, (string id, string name, StringBuilder args)>();
+        var toolCalls = new Dictionary<string, (string id, string name, StringBuilder args)>();
+        Metadata? metadata = null;
 
-        await foreach (var evt in stream.WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
         {
-            switch (evt)
+            switch (item)
             {
-                case Text t:
+                case TextDelta t:
                     textBuffer.Append(t.Value);
                     break;
-                case Reasoning r:
+                case ReasoningDelta r:
                     reasoningBuffer.Append(r.Thought);
                     break;
-                case ToolCall tc:
-                    int index = tc.Index ?? 0;
-                    if (!toolCalls.TryGetValue(index, out var entry))
-                        entry = ("", "", new StringBuilder());
-                    if (!string.IsNullOrEmpty(tc.Id)) entry.id = tc.Id;
-                    if (!string.IsNullOrEmpty(tc.Name)) entry.name = tc.Name;
-                    if (tc.Arguments != null)
-                    {
-                        if (tc.Arguments is JsonValue val && val.TryGetValue<string>(out var str))
-                        {
-                            entry.args.Append(str);
-                        }
-                        else if (tc.Arguments is JsonObject obj)
-                        {
-                            entry.args.Append(obj.ToJsonString());
-                        }
-                        else
-                        {
-                            entry.args.Append(tc.Arguments.ToString());
-                        }
-                    }
-                    toolCalls[index] = entry;
+                case ToolCallDelta tc:
+                    var key = string.IsNullOrEmpty(tc.Id) ? (toolCalls.Keys.LastOrDefault() ?? "default") : tc.Id;
+                    if (!toolCalls.TryGetValue(key, out var entry))
+                        entry = (key, "", new StringBuilder());
+                    
+                    if (!string.IsNullOrEmpty(tc.NameDelta)) entry.name += tc.NameDelta;
+                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
+                    toolCalls[key] = entry;
+                    break;
+                case Metadata m:
+                    metadata = m;
                     break;
             }
         }
 
         var finalToolCalls = new List<ToolCall>();
-        foreach (var pair in toolCalls.OrderBy(p => p.Key))
+        foreach (var entry in toolCalls.Values)
         {
-            var entry = pair.Value;
             JsonObject? parsedArgs = null;
             var argsStr = entry.args.ToString().Trim();
             if (!string.IsNullOrEmpty(argsStr))
@@ -89,6 +78,7 @@ internal static class LLMStreamExtensions
             contents.AddRange(finalToolCalls);
         }
 
-        return contents.Count == 0 ? null : new Message(Role.Assistant, contents);
+        var message = contents.Count == 0 ? null : new Message(Role.Assistant, contents);
+        return (message, metadata);
     }
 }

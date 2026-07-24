@@ -1,18 +1,16 @@
-using AgentCore.LLM;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
-using System.Text;
-using System.Text.Json.Nodes;
 
 namespace AgentCore.Context;
 
 public interface IContext
 {
-    IReadOnlyList<Message> Chat { get; }
-    Task<List<Message>> PrepareAsync(Message userMessage, CancellationToken ct = default);
-    Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default);
+    IReadOnlyList<Message> Messages { get; }
+    Task AddAsync(Message message, CancellationToken ct = default);
+    Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default);
     Task ClearAsync(CancellationToken ct = default);
-    Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default);
 }
 
 

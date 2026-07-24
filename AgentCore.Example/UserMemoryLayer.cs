@@ -97,51 +97,63 @@ public class UserMemoryLayer : ContextLayer
         await File.WriteAllTextAsync(_filePath, json, ct).ConfigureAwait(false);
     }
 
-    public override async Task<List<Message>> PrepareAsync(Message newInput, CancellationToken ct = default)
+    public override IReadOnlyList<Message> Messages
     {
-        var baseMessages = await base.PrepareAsync(newInput, ct).ConfigureAwait(false);
-
-        List<string> activeFacts;
-        lock (_lock)
+        get
         {
-            activeFacts = _facts.ToList();
-        }
+            var baseMessages = base.Messages.ToList();
 
-        if (activeFacts.Count > 0)
-        {
-            var factsText = "Known facts & user preferences:\n" + string.Join("\n", activeFacts.Select(f => $"- {f}"));
-            var factsMessage = new Message(Role.System, new Text(factsText));
-
-            var systemIndex = baseMessages.FindIndex(m => m.Role == Role.System);
-            if (systemIndex >= 0)
+            List<string> activeFacts;
+            lock (_lock)
             {
-                baseMessages.Insert(systemIndex + 1, factsMessage);
+                activeFacts = _facts.ToList();
             }
-            else
-            {
-                baseMessages.Insert(0, factsMessage);
-            }
-        }
 
-        return baseMessages;
+            if (activeFacts.Count > 0)
+            {
+                var factsText = "Known facts & user preferences:\n" + string.Join("\n", activeFacts.Select(f => $"- {f}"));
+                var factsMessage = new Message(Role.System, new Text(factsText));
+
+                var systemIndex = baseMessages.FindIndex(m => m.Role == Role.System);
+                if (systemIndex >= 0)
+                {
+                    baseMessages.Insert(systemIndex + 1, factsMessage);
+                }
+                else
+                {
+                    baseMessages.Insert(0, factsMessage);
+                }
+            }
+
+            return baseMessages;
+        }
     }
 
-    public override async Task UpdateAsync(IReadOnlyList<Message> completedTurn, CancellationToken ct = default)
+    public override async Task FinalizeTurnAsync(CancellationToken ct = default)
     {
-        await base.UpdateAsync(completedTurn, ct).ConfigureAwait(false);
+        await base.FinalizeTurnAsync(ct).ConfigureAwait(false);
 
-        // Run background extraction asynchronously to avoid blocking the main loop
-        _ = Task.Run(async () =>
+        var rawMessages = base.Messages;
+        var actualMessages = rawMessages.Where(m => m.Role != Role.System).ToList();
+
+        int lastUserIdx = actualMessages.FindLastIndex(m => m.Role == Role.User);
+        if (lastUserIdx >= 0)
         {
-            try
+            var completedTurn = actualMessages.Skip(lastUserIdx).ToList();
+
+            // Run background extraction asynchronously to avoid blocking the main loop
+            _ = Task.Run(async () =>
             {
-                await ExtractAndUpdateFactsAsync(completedTurn, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed background context fact extraction.");
-            }
-        });
+                try
+                {
+                    await ExtractAndUpdateFactsAsync(completedTurn, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed background context fact extraction.");
+                }
+            });
+        }
     }
 
     public override async Task ClearAsync(CancellationToken ct = default)
@@ -155,12 +167,6 @@ public class UserMemoryLayer : ContextLayer
             File.Delete(_filePath);
         }
         await base.ClearAsync(ct).ConfigureAwait(false);
-    }
-
-    public override async Task RestoreAsync(IReadOnlyList<Message> history, CancellationToken ct = default)
-    {
-        await base.RestoreAsync(history, ct).ConfigureAwait(false);
-        LoadFacts();
     }
 
     private async Task ExtractAndUpdateFactsAsync(IReadOnlyList<Message> turn, CancellationToken ct)
@@ -181,7 +187,7 @@ public class UserMemoryLayer : ContextLayer
         var options = new LLMOptions { ResponseSchema = _responseSchema };
         await foreach (var evt in _extractor.StreamAsync(messages, options: options, tools: null, ct: ct).ConfigureAwait(false))
         {
-            if (evt is Text t)
+            if (evt is TextDelta t)
             {
                 sb.Append(t.Value);
             }
