@@ -109,42 +109,7 @@ public class MEAILLM : ILLM
                 }
             }
 
-            if (update.RawRepresentation is not null)
-            {
-                List<ToolCallDelta>? rawDeltas = null;
-                try
-                {
-                    dynamic rawUpdate = update.RawRepresentation;
-                    var toolCallUpdates = rawUpdate.ToolCallUpdates;
-                    if (toolCallUpdates != null)
-                    {
-                        rawDeltas = new List<ToolCallDelta>();
-                        foreach (dynamic toolCallUpdate in toolCallUpdates)
-                        {
-                            string? callId = toolCallUpdate.ToolCallId;
-                            string? funcName = toolCallUpdate.FunctionName;
-                            string? argDelta = toolCallUpdate.FunctionArgumentsUpdate?.ToString();
-                            int? index = null;
-                            try
-                            {
-                                index = (int?)toolCallUpdate.Index;
-                            }
-                            catch { }
 
-                            rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta, index));
-                        }
-                    }
-                }
-                catch { }
-
-                if (rawDeltas != null)
-                {
-                    foreach (var d in rawDeltas)
-                    {
-                        yield return d;
-                    }
-                }
-            }
 
             if (update.FinishReason is { } finishReason)
             {

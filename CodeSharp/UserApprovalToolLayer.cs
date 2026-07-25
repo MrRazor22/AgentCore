@@ -1,4 +1,4 @@
-using AgentCore.LLM.Chat;
+brusing AgentCore.LLM.Chat;
 using AgentCore.Tools;
 
 namespace AgentCore.Example;

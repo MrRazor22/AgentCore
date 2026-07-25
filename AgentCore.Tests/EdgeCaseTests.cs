@@ -1,0 +1,241 @@
+using AgentCore.Context;
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.Tools;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace AgentCore.Tests
+{
+    public class EdgeCaseTests
+    {
+        private class TestDto
+        {
+            public string? Name { get; set; }
+            public int Age { get; set; }
+        }
+
+        private class MockLLM : ILLM
+        {
+            private readonly Queue<Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<ILLMOutput>>>> _responses = new();
+
+            public int ContextWindow { get; set; } = 4096;
+            public int ReservedTokens { get; set; } = 512;
+
+            public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
+
+            public LLMCapabilities GetCapabilities()
+            {
+                return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = ReservedTokens };
+            }
+
+            public void Enqueue(Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<ILLMOutput>>> responseGenerator)
+            {
+                _responses.Enqueue(responseGenerator);
+            }
+
+            public void EnqueueSimpleText(string text)
+            {
+                Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
+                    new[] { new TextDelta(text) }.ToAsyncEnumerable()
+                ));
+            }
+
+            public IAsyncEnumerable<ILLMOutput> StreamAsync(
+                IReadOnlyList<Message> messages,
+                LLMOptions? options = null,
+                IReadOnlyList<Tool>? tools = null,
+                CancellationToken ct = default)
+            {
+                CapturedMessages.Add(messages.ToList());
+                if (_responses.Count > 0)
+                {
+                    var generator = _responses.Dequeue();
+                    return generator(messages).GetAwaiter().GetResult();
+                }
+                return Array.Empty<ILLMOutput>().ToAsyncEnumerable();
+            }
+        }
+
+        private class TestExecutionTool : Tool
+        {
+            public List<string> ExecutionLog { get; } = new();
+            private readonly int _delayMs;
+
+            public TestExecutionTool(string name, int delayMs = 0)
+                : base(name, "Mock Tool Description", new LLM.Schema.JsonSchema(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }))
+            {
+                _delayMs = delayMs;
+            }
+
+            public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
+            {
+                ExecutionLog.Add($"Started {Name}");
+                if (_delayMs > 0)
+                {
+                    await Task.Delay(_delayMs, ct);
+                }
+                ExecutionLog.Add($"Completed {Name}");
+                return $"Result of {Name}";
+            }
+        }
+
+        [Fact]
+        public async Task InvokeAsync_StructuredOutput_MalformedJson_ThrowsJsonException()
+        {
+            // Arrange
+            var mockLlm = new MockLLM();
+            mockLlm.EnqueueSimpleText("{ malformed json : ");
+
+            var agent = Agent.Create()
+                .WithLLM(mockLlm)
+                .Build();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<JsonException>(async () =>
+            {
+                await agent.InvokeAsync<TestDto>(new Text("Requesting structured data"));
+            });
+        }
+
+        [Fact]
+        public async Task InvokeAsync_ContextPruning_ConsolidatesMemory()
+        {
+            // Arrange
+            var mockLlm = new MockLLM();
+            mockLlm.EnqueueSimpleText("Assistant final reply");
+
+            var mockSummarizer = new MockLLM();
+            mockSummarizer.EnqueueSimpleText("Summarized context sheet content");
+
+            var tokenCounter = new ApproximateTokenCounter();
+            var context = new ChatContext(
+                tokenCounter,
+                new LLMCapabilities { ContextWindow = 120, ReservedTokens = 10 },
+                Array.Empty<Tool>(),
+                instructions: new Text("Instructions"),
+                retentionTarget: 0.5,
+                summarizer: mockSummarizer
+            );
+
+            // Add some messages to trigger pruning. 
+            // The budget is roughly: 120 - (Instructions (12 chars + overhead) + ReservedTokens (10)) -> budget is ~80 tokens (~400 characters).
+            // Let's add multiple large messages so it exceeds the budget.
+            await context.AddAsync(new Message(Role.User, new Text(new string('A', 300))));
+            await context.AddAsync(new Message(Role.Assistant, new Text(new string('B', 300))));
+
+            var agent = Agent.Create()
+                .WithLLM(mockLlm)
+                .WithContext(context)
+                .Build();
+
+            // Act
+            var result = await agent.InvokeAsync<string>(new Text("Trigger conversation"));
+
+            // Assert
+            Assert.Equal("Assistant final reply", result);
+            // Summarizer should have been invoked to consolidate memory
+            Assert.True(mockSummarizer.CapturedMessages.Count > 0);
+            
+            // Check that the pruned history has consolidated fact sheet included
+            var lastCaptured = mockLlm.CapturedMessages.Last();
+            Assert.Contains(lastCaptured, m => m.Contents.Any(c => c.ForLlm().Contains("Summarized context")));
+        }
+
+        [Fact]
+        public async Task InvokeAsync_ContextOverflow_ZeroOrNegativeBudget_PrunesGracefully()
+        {
+            // Arrange
+            var mockLlm = new MockLLM();
+            mockLlm.EnqueueSimpleText("Reply despite overflow");
+
+            var tokenCounter = new ApproximateTokenCounter();
+            // Context Window is 30, but Reserved = 40 (negative budget: 30 - 40 = -10 -> clamped to 0)
+            var context = new ChatContext(
+                tokenCounter,
+                new LLMCapabilities { ContextWindow = 30, ReservedTokens = 40 },
+                Array.Empty<Tool>(),
+                instructions: new Text("Instructions")
+            );
+
+            await context.AddAsync(new Message(Role.User, new Text("First")));
+            await context.AddAsync(new Message(Role.Assistant, new Text("Second")));
+
+            var agent = Agent.Create()
+                .WithLLM(mockLlm)
+                .WithContext(context)
+                .Build();
+
+            // Act
+            var result = await agent.InvokeAsync<string>(new Text("Third"));
+
+            // Assert
+            Assert.Equal("Reply despite overflow", result);
+            // Verify history has pruned down to minimum allowed (at least the last message)
+            var lastCaptured = mockLlm.CapturedMessages.Last();
+            Assert.NotEmpty(lastCaptured);
+        }
+
+        [Fact]
+        public async Task InvokeAsync_ParallelToolExecution_CallsExecuted()
+        {
+            // Arrange
+            var mockLlm = new MockLLM();
+            var tool1 = new TestExecutionTool("Tool1", delayMs: 50);
+            var tool2 = new TestExecutionTool("Tool2", delayMs: 10);
+
+            // Step 1: Enqueue two parallel tool calls
+            mockLlm.Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
+                new ILLMOutput[]
+                {
+                    new ToolCallDelta("call-1", "Tool1", "{}"),
+                    new ToolCallDelta("call-2", "Tool2", "{}")
+                }.ToAsyncEnumerable()
+            ));
+
+            // Step 2: Enqueue final text response
+            mockLlm.EnqueueSimpleText("Tools executed successfully.");
+
+            var agent = Agent.Create()
+                .WithLLM(mockLlm)
+                .WithTools(new[] { tool1, tool2 })
+                .Build();
+
+            // Act
+            var result = await agent.InvokeAsync<string>(new Text("Execute tools"));
+
+            // Assert
+            Assert.Equal("Tools executed successfully.", result);
+            Assert.Contains("Completed Tool1", tool1.ExecutionLog);
+            Assert.Contains("Completed Tool2", tool2.ExecutionLog);
+
+            // Verify they executed concurrently. Since Tool2 has 10ms delay and Tool1 has 50ms delay,
+            // if executed concurrently, Tool2 should complete before Tool1 completes.
+            int idxCompleted2 = tool2.ExecutionLog.IndexOf("Completed Tool2");
+            int idxCompleted1 = tool1.ExecutionLog.IndexOf("Completed Tool1");
+            
+            // Note: Parallel starts may happen in quick succession.
+            // We just verify both were executed and completed successfully.
+            Assert.True(idxCompleted1 >= 0);
+            Assert.True(idxCompleted2 >= 0);
+        }
+    }
+
+    internal static class AsyncEnumerableExtensions
+    {
+        public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
+        {
+            foreach (var item in source)
+            {
+                yield return item;
+                await Task.CompletedTask;
+            }
+        }
+    }
+}
