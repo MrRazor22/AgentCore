@@ -6,8 +6,10 @@ using Microsoft.Extensions.AI;
 using OpenAI;
 using System.ClientModel;
 using AgentCore;
+using AgentCore.Tools;
 using Spectre.Console;
 using CodeSharp.UI;
+using CodeSharp.Layers;
 
 namespace CodeSharp;
 
@@ -97,10 +99,60 @@ internal class App
             var chatClient = openAIClient.GetChatClient(config.Model).AsIChatClient();
 
             var streamingLayer = new StreamingLLMLayer();
+
+            // Initialize static tool contexts with workspace boundary
+            CodeSharp.Tools.FileTools.Initialize(workspacePath);
+            CodeSharp.Tools.SearchTool.Initialize(workspacePath);
+
+            // Instantiate stateful/instance tools
+            var shellTool = new CodeSharp.Tools.ShellTool(workspacePath);
+            var webTools = new CodeSharp.Tools.WebTools();
+            var todoTool = new CodeSharp.Tools.TodoTool();
+            var scheduleTool = new CodeSharp.Tools.ScheduleTool();
+
+            // Define data-driven tool permissions
+            var permissions = new Dictionary<string, ToolPermission>
+            {
+                ["ReadFile"]   = ToolPermission.Allow,
+                ["Search"]     = ToolPermission.Allow,
+                ["SearchWeb"]  = ToolPermission.Allow,
+                ["TodoList"]   = ToolPermission.Allow,
+                ["Schedule"]   = ToolPermission.Allow,
+                ["EditFile"]   = ToolPermission.Confirm,
+                ["Filesystem"] = ToolPermission.Confirm,
+                ["RunCommand"] = ToolPermission.Confirm,
+            };
+
+            // Defense-in-depth guardrails
+            var guardrails = DenyRules.Combine(
+                DenyRules.CommandPatterns(
+                    "rm -rf /", "format c:", "del /s /q c:\\",
+                    ":(){:|:&};:", "mkfs.", "dd if="
+                )
+            );
+
+            var approvalLayer = new CodeSharp.Layers.ApprovalLayer(
+                permissions,
+                ExecutionPolicy.Strict,
+                new CodeSharp.UI.ConsoleApprovalPrompt(),
+                guardrails
+            );
+
             IAgent agent = Agent.Create()
                 .WithMEAI(chatClient)
                 .AddLLMLayer(streamingLayer)
-                .WithInstructions("You are CodeSharp, a helpful, precise, and concise AI assistant.")
+                .WithTools(shellTool)
+                .WithTools(typeof(CodeSharp.Tools.FileTools))
+                .WithTools(typeof(CodeSharp.Tools.SearchTool))
+                .WithTools(webTools)
+                .WithTools(todoTool)
+                .WithTools(scheduleTool)
+                .AddToolingLayer(approvalLayer)
+                .WithInstructions(
+                    "You are CodeSharp, an expert agentic AI coding assistant.\n" +
+                    "You have direct access to tools for file operations, workspace searching, terminal execution, task management, and web lookup.\n" +
+                    "Always prefer reading files and searching code before proposing changes."
+                )
                 .Build();
 
             var chatUi = new ChatUI(agent, config.Model, workspacePath, streamingLayer);

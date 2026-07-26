@@ -50,14 +50,14 @@ public interface IApprovalPrompt
 /// ToolingLayer decorator that intercepts tool calls and enforces host execution policies,
 /// data-driven permission classification, call-order preservation, and defense-in-depth guardrails.
 /// </summary>
-public sealed class ToolingApprovalLayer : ToolingLayer
+public sealed class ApprovalLayer : ToolingLayer
 {
     private readonly FrozenDictionary<string, ToolPermission> _permissions;
     private readonly ExecutionPolicy _policy;
     private readonly IApprovalPrompt _prompt;
     private readonly DenyRule? _guardrailDeny;
 
-    public ToolingApprovalLayer(
+    public ApprovalLayer(
         IReadOnlyDictionary<string, ToolPermission> permissions,
         ExecutionPolicy policy,
         IApprovalPrompt prompt,
