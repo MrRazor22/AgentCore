@@ -112,14 +112,11 @@ public sealed class ApprovalLayer : ToolingLayer
         if (approvedCalls.Count > 0)
         {
             var executedResults = await Inner.ExecuteAsync(approvedCalls, ct).ConfigureAwait(false);
-            var resultMap = executedResults.ToDictionary(r => r.CallId, StringComparer.Ordinal);
             for (int j = 0; j < approvedCalls.Count; j++)
             {
-                var call = approvedCalls[j];
-                if (resultMap.TryGetValue(call.Id, out var res))
-                    results[approvedIndices[j]] = res;
-                else
-                    results[approvedIndices[j]] = Denied(call, "Tool execution produced no result.");
+                results[approvedIndices[j]] = j < executedResults.Count
+                    ? executedResults[j]
+                    : Denied(approvedCalls[j], "Tool execution produced no result.");
             }
         }
 
