@@ -11,7 +11,7 @@ using CodeSharp.UI;
 
 namespace CodeSharp;
 
-internal class Program
+internal class App
 {
     private class Config
     {
