@@ -20,12 +20,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\AgentCore.LLM.MEAI\AgentCore.LLM.MEAI.csproj" />
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
   </ItemGroup>
