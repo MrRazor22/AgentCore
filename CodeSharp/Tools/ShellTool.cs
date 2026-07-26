@@ -73,7 +73,22 @@ public sealed class ShellTool
         }
 
         // Foreground execution
-        await tracker.WaitForExitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await tracker.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                tracker.Kill();
+            }
+            catch
+            {
+                // Silence process clean-up errors on cancellation exit
+            }
+            throw;
+        }
 
         var output = tracker.GetCombinedOutput();
         var formatted = OutputHelpers.HeadTail(output, Math.Min(outputCharacterCount, _maxOutputChars));
@@ -134,6 +149,14 @@ public sealed class ShellTool
             if (_process != null)
             {
                 await _process.WaitForExitAsync(ct).ConfigureAwait(false);
+            }
+        }
+
+        public void Kill()
+        {
+            if (_process != null && !_process.HasExited)
+            {
+                _process.Kill(entireProcessTree: true);
             }
         }
 

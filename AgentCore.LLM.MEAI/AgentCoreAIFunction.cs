@@ -33,3 +33,4 @@ public sealed class AgentCoreAIFunction : AIFunction
         return await _tool.InvokeAsync(jsonObject, cancellationToken).ConfigureAwait(false);
     }
 }
+ 

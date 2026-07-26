@@ -89,7 +89,7 @@ namespace AgentCore
                 {
                     iterations++;
 
-                    _logger?.LogDebug("Executing {ToolCount} tool calls...", toolCalls.Count);
+                    _logger?.LogDebug("ReActWorkflow: Iteration {Iteration} executing {Count} tool calls.", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
                     // 3. Save tool results to context immediately and yield ToolResult semantic content

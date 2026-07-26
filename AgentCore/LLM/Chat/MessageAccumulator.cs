@@ -11,7 +11,12 @@ public static class MessageAccumulator
     {
         var textBuffer = new StringBuilder();
         var reasoningBuffer = new StringBuilder();
-        var toolCalls = new Dictionary<string, (string id, string name, StringBuilder args)>();
+        var indexToId = new Dictionary<int, string>();
+        var idToName = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
+        var idToArgs = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
+        var orderedIds = new List<string>();
+        var defaultName = new StringBuilder();
+        var defaultArgs = new StringBuilder();
         Metadata? metadata = null;
 
         await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
@@ -25,38 +30,83 @@ public static class MessageAccumulator
                     reasoningBuffer.Append(r.Thought);
                     break;
                 case ToolCallDelta tc:
-                    string key;
+                    string? key = null;
+
+                    // 1. Resolve key by existing index mapping
                     if (tc.Index.HasValue)
                     {
-                        key = $"index_{tc.Index.Value}";
-                    }
-                    else
-                    {
-                        key = string.IsNullOrEmpty(tc.Id) ? (toolCalls.Keys.LastOrDefault() ?? "default") : tc.Id;
-                    }
-
-                    if (!toolCalls.TryGetValue(key, out var entry))
-                    {
-                        string initialId = tc.Id;
-                        if (string.IsNullOrEmpty(initialId) && tc.Index.HasValue)
+                        indexToId.TryGetValue(tc.Index.Value, out var mappedId);
+                        if (!string.IsNullOrEmpty(mappedId))
                         {
-                            initialId = $"call_{tc.Index.Value}";
+                            key = mappedId;
                         }
-                        else if (string.IsNullOrEmpty(initialId))
+                        else
                         {
-                            initialId = key;
+                            key = $"index_{tc.Index.Value}";
                         }
-                        entry = (initialId, "", new StringBuilder());
                     }
 
-                    if (!string.IsNullOrEmpty(tc.Id) && entry.id != tc.Id && tc.Id != key)
+                    // 2. Resolve key by ID if not resolved by index
+                    if (key == null || key.StartsWith("index_"))
                     {
-                        entry.id = tc.Id;
+                        if (!string.IsNullOrEmpty(tc.Id))
+                        {
+                            // If index key was temporary, we will migrate it later, but check ID mapping first
+                            if (idToName.ContainsKey(tc.Id))
+                            {
+                                key = tc.Id;
+                            }
+                        }
                     }
 
-                    if (!string.IsNullOrEmpty(tc.NameDelta)) entry.name += tc.NameDelta;
-                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) entry.args.Append(tc.ArgumentsDelta);
-                    toolCalls[key] = entry;
+                    if (key == null)
+                    {
+                        key = string.IsNullOrEmpty(tc.Id) ? (orderedIds.LastOrDefault() ?? "default") : tc.Id;
+                    }
+
+                    // 3. Initialize buffers
+                    if (!idToName.ContainsKey(key))
+                    {
+                        idToName[key] = new StringBuilder();
+                        idToArgs[key] = new StringBuilder();
+                        orderedIds.Add(key);
+                    }
+
+                    // 4. Append
+                    if (!string.IsNullOrEmpty(tc.NameDelta))
+                    {
+                        var currentName = idToName[key].ToString();
+                        if (string.IsNullOrEmpty(currentName))
+                        {
+                            idToName[key].Append(tc.NameDelta);
+                        }
+                        else if (currentName != tc.NameDelta && !currentName.EndsWith(tc.NameDelta))
+                        {
+                            idToName[key].Append(tc.NameDelta);
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(tc.ArgumentsDelta)) idToArgs[key].Append(tc.ArgumentsDelta);
+
+                    // 5. Migrate key if temporary index converges to real ID
+                    if (key.StartsWith("index_") && tc.Index.HasValue && !string.IsNullOrEmpty(tc.Id))
+                    {
+                        var newId = tc.Id;
+                        indexToId[tc.Index.Value] = newId;
+
+                        if (newId != key)
+                        {
+                            idToName[newId] = idToName[key];
+                            idToArgs[newId] = idToArgs[key];
+                            idToName.Remove(key);
+                            idToArgs.Remove(key);
+
+                            int pos = orderedIds.IndexOf(key);
+                            if (pos >= 0)
+                            {
+                                orderedIds[pos] = newId;
+                            }
+                        }
+                    }
                     break;
                 case Metadata m:
                     metadata = m;
@@ -65,10 +115,13 @@ public static class MessageAccumulator
         }
 
         var finalToolCalls = new List<ToolCall>();
-        foreach (var entry in toolCalls.Values)
+        foreach (var entryId in orderedIds)
         {
+            if (!idToName.TryGetValue(entryId, out var nameBuf)) continue;
+            var argsBuf = idToArgs.GetValueOrDefault(entryId);
+
             JsonObject? parsedArgs = null;
-            var argsStr = entry.args.ToString().Trim();
+            var argsStr = argsBuf?.ToString().Trim() ?? "";
             if (!string.IsNullOrEmpty(argsStr))
             {
                 try
@@ -77,7 +130,20 @@ public static class MessageAccumulator
                 }
                 catch { }
             }
-            finalToolCalls.Add(new ToolCall(entry.id, entry.name, parsedArgs ?? new JsonObject()));
+            // Map index_ prefix to empty ID for ToolCall representation if real ID was never learned
+            var finalId = entryId.StartsWith("index_") ? "" : entryId;
+            finalToolCalls.Add(new ToolCall(finalId, nameBuf.ToString(), parsedArgs ?? new JsonObject()));
+        }
+
+        if (defaultName.Length > 0 || defaultArgs.Length > 0)
+        {
+            JsonObject? parsedArgs = null;
+            var argsStr = defaultArgs.ToString().Trim();
+            if (!string.IsNullOrEmpty(argsStr))
+            {
+                try { parsedArgs = JsonNode.Parse(argsStr)?.AsObject(); } catch { }
+            }
+            finalToolCalls.Add(new ToolCall("", defaultName.ToString(), parsedArgs ?? new JsonObject()));
         }
 
         var contents = new List<IContent>();

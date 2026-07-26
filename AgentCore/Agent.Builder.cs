@@ -45,9 +45,12 @@ public sealed partial class Agent
             _tools.Add(tool);
         }
 
-        public Builder WithTools<T>()
+        public Builder WithTools<T>() => WithTools(typeof(T)); 
+
+        public Builder WithTools(Type type)
         {
-            foreach (var tool in MethodTool.FromType(typeof(T)))
+            ArgumentNullException.ThrowIfNull(type);
+            foreach (var tool in MethodTool.FromType(type))
                 AddTool(tool);
             return this;
         }
@@ -55,6 +58,7 @@ public sealed partial class Agent
         public Builder WithTools(object instance)
         {
             ArgumentNullException.ThrowIfNull(instance);
+            if (instance is Type type) return WithTools(type); 
             foreach (var tool in MethodTool.FromType(instance.GetType(), instance))
                 AddTool(tool);
             return this;

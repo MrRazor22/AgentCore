@@ -1,12 +1,11 @@
-using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using Spectre.Console;
 
 namespace CodeSharp.UI;
 
 /// <summary>
-/// Spectre.Console implementation of IApprovalPrompt for interactive terminal confirmation.
-/// Uses async confirmation inside a styled Spectre Panel with CancellationToken support and thread-safe console serialization.
+/// Minimalist interactive approval prompt using reusable MenuPrompt helper.
+/// No heavy panels or boxes — clean inline tool accenting with arrow-key Yes/No selection.
 /// </summary>
 public sealed class ConsoleApprovalPrompt : Layers.IApprovalPrompt
 {
@@ -18,29 +17,19 @@ public sealed class ConsoleApprovalPrompt : Layers.IApprovalPrompt
         try
         {
             var argsJson = call.Arguments?.ToString() ?? "{}";
+            var compactArgs = argsJson.Length > 150 ? argsJson[..150] + "..." : argsJson;
 
-            var grid = new Grid();
-            grid.AddColumn(new GridColumn().NoWrap().PadRight(2));
-            grid.AddColumn(new GridColumn());
-
-            grid.AddRow("[bold grey]Tool:[/]", $"[bold cyan]{Markup.Escape(call.Name)}[/]");
-            grid.AddRow("[bold grey]Arguments:[/]", $"[yellow]{Markup.Escape(argsJson)}[/]");
-
-            var panel = new Panel(grid)
-            {
-                Header = new PanelHeader($"[bold yellow] ⚠ Approval Required [/]"),
-                Border = BoxBorder.Rounded,
-                BorderStyle = new Style(Color.Yellow),
-                Padding = new Padding(1, 0, 1, 0)
-            };
-
+            // Minimal inline header with subtle color accents (no question mark prefix)
             AnsiConsole.WriteLine();
-            AnsiConsole.Write(panel);
+            AnsiConsole.MarkupLine($"[bold yellow]Approval Required:[/] [bold cyan]{Markup.Escape(call.Name)}[/] [grey]({Markup.Escape(compactArgs)})[/]");
 
-            return await AnsiConsole.ConfirmAsync(
-                "  [bold green]Allow execution?[/]",
-                defaultValue: false,
-                cancellationToken: ct).ConfigureAwait(false);
+            var choice = await MenuPrompt.SelectAsync(
+                title: "  [grey]Allow execution?[/]",
+                choices: new[] { "Yes", "No" },
+                ct: ct
+            ).ConfigureAwait(false);
+
+            return choice == "Yes";
         }
         finally
         {

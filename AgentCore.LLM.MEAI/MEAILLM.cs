@@ -69,8 +69,38 @@ public class MEAILLM : ILLM
         int outputTokens = 0;
         int? reasoningTokens = null;
 
+        var rawYieldedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, chatOptions, ct).ConfigureAwait(false))
         {
+            var rawDeltas = new List<ToolCallDelta>();
+            if (update.RawRepresentation is not null)
+            {
+                try
+                {
+                    dynamic rawUpdate = update.RawRepresentation;
+                    var toolCallUpdates = rawUpdate.ToolCallUpdates;
+                    if (toolCallUpdates != null)
+                    {
+                        foreach (dynamic toolCallUpdate in toolCallUpdates)
+                        {
+                            string? callId = toolCallUpdate.ToolCallId;
+                            string? funcName = toolCallUpdate.FunctionName;
+                            string? argDelta = toolCallUpdate.FunctionArgumentsUpdate?.ToString();
+                            int? index = null;
+                            try { index = (int?)toolCallUpdate.Index; } catch { }
+
+                            if (!string.IsNullOrEmpty(callId))
+                            {
+                                rawYieldedIds.Add(callId);
+                            }
+                            rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta, index));
+                        }
+                    }
+                }
+                catch { }
+            }
+
             if (update.Contents != null)
             {
                 foreach (var content in update.Contents)
@@ -85,6 +115,11 @@ public class MEAILLM : ILLM
                     }
                     else if (content is FunctionCallContent fnCall)
                     {
+                        if (!string.IsNullOrEmpty(fnCall.CallId) && rawYieldedIds.Contains(fnCall.CallId))
+                        {
+                            continue;
+                        }
+
                         string argsStr = "";
                         if (fnCall.Arguments != null)
                         {
@@ -109,43 +144,9 @@ public class MEAILLM : ILLM
                 }
             }
 
-
-
-            if (update.RawRepresentation is not null)
+            foreach (var d in rawDeltas)
             {
-                List<ToolCallDelta>? rawDeltas = null;
-                try
-                {
-                    dynamic rawUpdate = update.RawRepresentation;
-                    var toolCallUpdates = rawUpdate.ToolCallUpdates;
-                    if (toolCallUpdates != null)
-                    {
-                        rawDeltas = new List<ToolCallDelta>();
-                        foreach (dynamic toolCallUpdate in toolCallUpdates)
-                        {
-                            string? callId = toolCallUpdate.ToolCallId;
-                            string? funcName = toolCallUpdate.FunctionName;
-                            string? argDelta = toolCallUpdate.FunctionArgumentsUpdate?.ToString();
-                            int? index = null;
-                            try
-                            {
-                                index = (int?)toolCallUpdate.Index;
-                            }
-                            catch { }
-
-                            rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta, index));
-                        }
-                    }
-                }
-                catch { }
-
-                if (rawDeltas != null)
-                {
-                    foreach (var d in rawDeltas)
-                    {
-                        yield return d;
-                    }
-                }
+                yield return d;
             }
 
             if (update.FinishReason is { } finishReason)

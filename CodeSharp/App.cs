@@ -150,8 +150,7 @@ internal class App
                 .AddToolingLayer(approvalLayer)
                 .WithInstructions(
                     "You are CodeSharp, an expert agentic AI coding assistant.\n" +
-                    "You have direct access to tools for file operations, workspace searching, terminal execution, task management, and web lookup.\n" +
-                    "Always prefer reading files and searching code before proposing changes."
+                    "Prefer Search for directory listing, file discovery, filename matching, and repository content search. Use ReadFile to inspect file contents. Do not use RunCommand as a substitute for Search or ReadFile. Use RunCommand when shell execution is inherently required, such as builds, tests, git operations, package managers, scripts, or application execution."
                 )
                 .Build();
 

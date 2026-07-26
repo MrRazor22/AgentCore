@@ -28,14 +28,27 @@ namespace CodeSharp.UI
             _spinner = null;
         }
 
+        public void ResetForNextStep()
+        {
+            FinalizeThinking();
+            _answerStarted = false;
+        }
+
         public void Write(ILLMOutput output)
         {
+            if (output is Metadata meta && meta.FinishReason != null)
+            {
+                ResetForNextStep();
+                return;
+            }
+
             if (output is ReasoningDelta reasoning)
             {
                 if (_thinkingWriter == null)
                 {
                     StopSpinner();
                     AnsiConsole.WriteLine();
+                    _thinkingSw.Reset();
                     _thinkingSw.Start();
                     var style = new Style(Color.Grey, decoration: Decoration.Italic);
                     _thinkingWriter = new ConsoleTreeWriter(style);
@@ -67,6 +80,11 @@ namespace CodeSharp.UI
                 {
                     AnsiConsole.Write(text.Value);
                 }
+            }
+            else if (output is ToolCallDelta)
+            {
+                // When tool call tokens stream, finalize any active reasoning block for this step
+                FinalizeThinking();
             }
         }
 
