@@ -18,7 +18,7 @@ public static class FileTools
 
     [Tool("ReadFile", "Read lines from a text file within a specified line range.")]
     public static string ReadFile(
-        [Description("Absolute or relative path to the file.")] string filePath,
+        [Description("Absolute or relative path to the file, relative to the workspace root. Use standard paths such as 'AgentCore/Tools/Tool.cs'. Do not use URI schemes or prefixes such as 'solutionrelative:'.")] string filePath,
         [Description("Starting line number (1-based, default: 1).")] int startLine = 1,
         [Description("Ending line number (inclusive, default: 800 lines max).")] int endLine = 0)
     {
@@ -58,7 +58,7 @@ public static class FileTools
 
     [Tool("EditFile", "Edit an existing file by replacing exact target text, or create a new file.")]
     public static string EditFile(
-        [Description("Path to the file to edit or create.")] string filePath,
+        [Description("Path to the file to edit or create, relative to the workspace root. Use standard paths such as 'AgentCore/Tools/Tool.cs'. Do not use URI schemes or prefixes such as 'solutionrelative:'.")] string filePath,
         [Description("Target exact text substring to replace. Leave empty to create a new file.")] string targetContent,
         [Description("Replacement content text.")] string replacementContent,
         [Description("Advisory risk assessment flag.")] bool safeToAutoRun = false)
@@ -101,8 +101,8 @@ public static class FileTools
     [Tool("Filesystem", "Perform file filesystem operations: move, copy, delete.")]
     public static string Filesystem(
         [Description("Action type: 'move' | 'copy' | 'delete'")] string action,
-        [Description("Target file or directory path.")] string path,
-        [Description("Destination path (required for move/copy).")] string? destination = null,
+        [Description("Target file or directory path, relative to the workspace root. Use standard paths such as 'AgentCore/Tools/Tool.cs'. Do not use URI schemes or prefixes such as 'solutionrelative:'.")] string path,
+        [Description("Destination path (required for move/copy), relative to the workspace root. Use standard paths such as 'AgentCore/Tools/Tool.cs'. Do not use URI schemes or prefixes such as 'solutionrelative:'.")] string? destination = null,
         [Description("Advisory risk assessment flag.")] bool safeToAutoRun = false)
     {
         var targetPath = PathGuard.EnsureWithinWorkspace(_workspaceRoot, path);

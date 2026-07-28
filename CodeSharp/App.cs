@@ -10,6 +10,8 @@ using AgentCore.Tools;
 using Spectre.Console;
 using CodeSharp.UI;
 using CodeSharp.Layers;
+using Serilog;
+using Microsoft.Extensions.Logging;
 
 namespace CodeSharp;
 
@@ -89,6 +91,18 @@ internal class App
         // 3. Build Agent and Run UI
         try
         {
+            // 3. Configure Serilog rolling file logger
+            Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.File(
+                    path: Path.Combine(AppContext.BaseDirectory, "logs", "agentcore-.log"),
+                    rollingInterval: Serilog.RollingInterval.Day,
+                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] ({SourceContext}) {Message:lj}{NewLine}{Exception}")
+                .CreateLogger();
+
+            var lf = new Microsoft.Extensions.Logging.LoggerFactory()
+                .AddSerilog();
+
             var baseUrl = config.BaseUrl;
             if (!baseUrl.EndsWith("/"))
             {
@@ -131,16 +145,28 @@ internal class App
                 )
             );
 
+            var formatter = new CodeSharp.UI.CompositeToolDisplayFormatter(new CodeSharp.UI.IToolDisplayFormatter[]
+            {
+                new CodeSharp.UI.RunCommandFormatter(),
+                new CodeSharp.UI.EditFileFormatter(),
+                new CodeSharp.UI.FilesystemFormatter(),
+                new CodeSharp.UI.SearchToolFormatter(),
+                new CodeSharp.UI.SearchWebFormatter()
+            });
+
             var approvalLayer = new CodeSharp.Layers.ApprovalLayer(
                 permissions,
                 ExecutionPolicy.Strict,
-                new CodeSharp.UI.ConsoleApprovalPrompt(),
+                new CodeSharp.UI.ConsoleApprovalPrompt(formatter),
                 guardrails
             );
 
             IAgent agent = Agent.Create()
+                .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
+                .WithMessageCoalescing()
                 .AddLLMLayer(streamingLayer)
+                .AddLLMLayer(new CodeSharp.Layers.StreamingToolCallParserLayer())
                 .WithTools(shellTool)
                 .WithTools(typeof(CodeSharp.Tools.FileTools))
                 .WithTools(typeof(CodeSharp.Tools.SearchTool))
@@ -150,11 +176,13 @@ internal class App
                 .AddToolingLayer(approvalLayer)
                 .WithInstructions(
                     "You are CodeSharp, an expert agentic AI coding assistant.\n" +
+                    "Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\n" +
+                    "Use workspace-relative paths for file tools. Do not invent path schemes or prefixes.\n" +
                     "Prefer Search for directory listing, file discovery, filename matching, and repository content search. Use ReadFile to inspect file contents. Do not use RunCommand as a substitute for Search or ReadFile. Use RunCommand when shell execution is inherently required, such as builds, tests, git operations, package managers, scripts, or application execution."
                 )
                 .Build();
 
-            var chatUi = new ChatUI(agent, config.Model, workspacePath, streamingLayer);
+            var chatUi = new ChatUI(agent, config.Model, workspacePath, streamingLayer, formatter);
             await chatUi.RunAsync();
         }
         catch (Exception ex)

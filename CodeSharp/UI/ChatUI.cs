@@ -20,13 +20,15 @@ public class ChatUI
     private readonly string _modelName;
     private readonly string _workspacePath;
     private readonly StreamingLLMLayer _streamingLayer;
+    private readonly IToolDisplayFormatter _formatter;
 
-    public ChatUI(IAgent agent, string modelName, string workspacePath, StreamingLLMLayer streamingLayer)
+    public ChatUI(IAgent agent, string modelName, string workspacePath, StreamingLLMLayer streamingLayer, IToolDisplayFormatter formatter)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _modelName = modelName;
         _workspacePath = workspacePath;
         _streamingLayer = streamingLayer ?? throw new ArgumentNullException(nameof(streamingLayer));
+        _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -88,7 +90,8 @@ public class ChatUI
                 AllowSynchronousContinuations = false
             });
 
-            var renderTask = RenderStreamAsync(channel.Reader, turnCts.Token);
+            var renderer = new ConsoleStreamRenderer(_formatter);
+            var renderTask = RenderStreamAsync(renderer, channel.Reader, turnCts.Token);
             _streamingLayer.Writer = channel.Writer;
 
             try
@@ -99,6 +102,12 @@ public class ChatUI
                     {
                         // Stream execution is driven by pulling items from the high-level enumerator.
                         // Raw token rendering is handled out-of-band by the channel observer.
+                        // Tool results are written into the same channel so they are rendered in
+                        // strict FIFO order after any preceding LLM token deltas.
+                        if (content is AgentCore.LLM.Chat.ToolResult toolResult)
+                        {
+                            channel.Writer.TryWrite(new ToolResultOutput(toolResult));
+                        }
                     }
                 }
                 finally
@@ -141,10 +150,8 @@ public class ChatUI
         }
     }
 
-    private async Task RenderStreamAsync(ChannelReader<ILLMOutput> reader, CancellationToken cancellationToken)
+    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<ILLMOutput> reader, CancellationToken cancellationToken)
     {
-        var renderer = new ConsoleStreamRenderer();
-
         try
         {
             await foreach (var output in reader.ReadAllAsync(cancellationToken))

@@ -101,6 +101,7 @@ public class MEAILLM : ILLM
                 catch { }
             }
 
+            bool yieldedReasoning = false;
             if (update.Contents != null)
             {
                 foreach (var content in update.Contents)
@@ -111,6 +112,7 @@ public class MEAILLM : ILLM
                     }
                     else if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
                     {
+                        yieldedReasoning = true;
                         yield return new ReasoningDelta(reasoningContent.Text);
                     }
                     else if (content is FunctionCallContent fnCall)
@@ -144,6 +146,15 @@ public class MEAILLM : ILLM
                 }
             }
 
+            if (!yieldedReasoning)
+            {
+                var rawReasoning = TryExtractReasoning(update.RawRepresentation);
+                if (!string.IsNullOrEmpty(rawReasoning))
+                {
+                    yield return new ReasoningDelta(rawReasoning);
+                }
+            }
+
             foreach (var d in rawDeltas)
             {
                 yield return d;
@@ -159,5 +170,55 @@ public class MEAILLM : ILLM
                 );
             }
         }
+    }
+
+    public static string? TryExtractReasoning(object? rawRepresentation)
+    {
+        if (rawRepresentation is null) return null;
+
+        try
+        {
+            var rawType = rawRepresentation.GetType();
+            var reasoningProp = rawType.GetProperty("ReasoningContentUpdate")
+                             ?? rawType.GetProperty("ReasoningContent");
+
+            if (reasoningProp != null)
+            {
+                var val = reasoningProp.GetValue(rawRepresentation);
+                if (val != null)
+                {
+                    if (val is System.Collections.IEnumerable enumerable && val is not string)
+                    {
+                        var sb = new System.Text.StringBuilder();
+                        foreach (var part in enumerable)
+                        {
+                            if (part != null)
+                            {
+                                var textProp = part.GetType().GetProperty("Text");
+                                if (textProp != null)
+                                {
+                                    sb.Append(textProp.GetValue(part)?.ToString());
+                                }
+                                else
+                                {
+                                    sb.Append(part.ToString());
+                                }
+                            }
+                        }
+                        var result = sb.ToString();
+                        return string.IsNullOrEmpty(result) ? null : result;
+                    }
+
+                    var strVal = val.ToString();
+                    return string.IsNullOrEmpty(strVal) ? null : strVal;
+                }
+            }
+        }
+        catch
+        {
+            // Fail-safe reflection exception handling
+        }
+
+        return null;
     }
 }

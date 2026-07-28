@@ -18,7 +18,7 @@ public static class SearchTool
 
     [Tool("Search", "Find files or search exact text / regex patterns within the workspace.")]
     public static string Search(
-        [Description("Directory or file path to search inside (default: workspace root).")] string? path = null,
+        [Description("Directory or file path to search inside, relative to the workspace root. Use standard relative paths such as 'AgentCore/Tools'. Do not use URI schemes or prefixes such as 'solutionrelative:'.")] string? path = null,
         [Description("Text or pattern to search. If omitted, lists directory tree.")] string? query = null,
         [Description("Glob pattern to filter files (e.g. '*.cs').")] string? include = null,
         [Description("Treat query as regular expression if true.")] bool isRegex = false,

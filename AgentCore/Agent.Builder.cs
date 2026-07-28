@@ -25,6 +25,7 @@ public sealed partial class Agent
         private readonly List<ToolingLayer> _toolingLayers = [];
         private readonly List<LLMLayer> _llmLayers = [];
         private readonly List<ContextLayer> _contextLayers = [];
+        private bool _enableMessageCoalescing = false;
 
         private readonly List<object> _builtComponents = new();
 
@@ -34,6 +35,12 @@ public sealed partial class Agent
         }
 
         public Builder WithInstructions(string prompt) { _instructions = new Text(prompt); return this; }
+
+        public Builder WithMessageCoalescing(bool enable = true)
+        {
+            _enableMessageCoalescing = enable;
+            return this;
+        }
 
         private void AddTool(Tool tool)
         {
@@ -130,6 +137,13 @@ public sealed partial class Agent
             var tokenCounter = _tokenCounter ?? new ApproximateTokenCounter(logger: lf.CreateLogger<ApproximateTokenCounter>());
 
             ILLM provider = baseProvider;
+            if (_enableMessageCoalescing)
+            {
+                var coalescingLayer = new MessageCoalescingLayer();
+                coalescingLayer.Attach(provider);
+                provider = coalescingLayer;
+            }
+
             foreach (var layer in _llmLayers)
             {
                 layer.Attach(provider);

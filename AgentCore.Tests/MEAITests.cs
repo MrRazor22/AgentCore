@@ -205,4 +205,20 @@ public class MEAITests
         Assert.Equal("hello", aiFunction.LastArguments["input"]?.ToString());
         Assert.Equal(cts.Token, aiFunction.LastCancellationToken);
     }
+
+    [Fact]
+    public void TryExtractReasoning_ExtractsReasoningFromRawRepresentation()
+    {
+        var mockRawObj = new { ReasoningContentUpdate = "Thinking deeply..." };
+        var extracted = MEAILLM.TryExtractReasoning(mockRawObj);
+        Assert.Equal("Thinking deeply...", extracted);
+    }
+
+    [Fact]
+    public void TryExtractReasoning_ReturnsNullWhenNoReasoningPropertyPresent()
+    {
+        var mockRawObj = new { UnrelatedProperty = "Hello" };
+        var extracted = MEAILLM.TryExtractReasoning(mockRawObj);
+        Assert.Null(extracted);
+    }
 }

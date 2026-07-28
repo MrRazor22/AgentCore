@@ -6,7 +6,7 @@ namespace AgentCore.LLM;
 
 public sealed class LLMCapabilities
 {
-    public int ContextWindow { get; set; } = 8000;
+    public int ContextWindow { get; set; } = 50000;
     public int ReservedTokens { get; set; } = 2000;
 }
 
