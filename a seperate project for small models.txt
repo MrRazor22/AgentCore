@@ -1,0 +1,180 @@
+I think there **is a package here**, but I wouldn't define it as “tool parser for small models.” That's too narrow.
+
+Small models genuinely have disproportionate trouble with structured/function calling and format adherence; recent SLM research finds exactly that, and community evaluations also show parser/template differences can turn apparently bad tool calling into successful calls. ([arXiv][1])
+
+I'd frame the package as something like:
+
+`AgentCore.SmallModels` or `AgentCore.Resilience`
+
+Its job:
+
+> **Make weak/local models more reliable as agents without changing the core abstractions.**
+
+Then it can legitimately span all three extension points.
+
+### LLM side
+
+This is where most of the value initially lives:
+
+```text
+ToolCallRecoveryLayer
+    malformed XML/JSON
+    tool call leaked into reasoning/text
+    split markers
+    provider-format normalization
+
+ToolCallRepairLayer
+    missing/invalid arguments
+    coercible types: "123" ↔ 123
+    maybe malformed JSON recovery
+
+RetryLayer
+    invalid call
+       ↓
+    feed concise validation error back
+       ↓
+    retry with bounded attempts
+
+DuplicateCallGuard
+    identical tool + arguments repeatedly generated
+
+OutputSanitization
+    garbage/special-token cleanup
+```
+
+But **don't silently coerce everything**. `"123"` → `123` can be safe when the schema requires an integer; `"foo"` → something guessed is not. Failed validation should usually become targeted feedback to the model.
+
+And retry should be **failure-aware**, not simply “retry three times.” Recent work on tool-agent recovery supports classifying failures and choosing bounded recovery actions rather than blindly repeating the same operation. ([arXiv][2])
+
+### Tooling side
+
+This might actually become more valuable than the parser.
+
+For weak models I'd want a tooling layer that turns ugly runtime/schema failures into **small-model-friendly feedback**:
+
+```text
+BAD:
+JsonException at $.lineNumber...
+
+BETTER:
+Tool `EditFile` rejected the call.
+
+`lineNumber` must be an integer.
+You supplied: "twenty"
+
+Correct the arguments and call EditFile again.
+```
+
+Also:
+
+```text
+ToolResultBudgetLayer
+```
+
+could prevent a small model from being destroyed by a 50K-token `dotnet build` result.
+
+And maybe:
+
+```text
+ToolLoopGuardLayer
+```
+
+detect:
+
+```text
+ReadFile(foo)
+ReadFile(foo)
+ReadFile(foo)
+ReadFile(foo)
+```
+
+and return something like:
+
+```text
+You already called this tool with identical arguments.
+Use the previous result or choose another action.
+```
+
+Tool-use failures aren't limited to malformed syntax either; recent diagnostic work distinguishes things like skipping required tools, ignoring results, fabricating outputs, and unnecessary calls. ([arXiv][3])
+
+### Context side
+
+Here's where I'd be more conservative.
+
+Don't create a magical `SmallModelContextLayer` that tries to solve memory with another LLM summary. Small models are exactly where lossy recursive summarisation can hurt you.
+
+But there are useful policies:
+
+```text
+ContextBudgetLayer
+    reserve more headroom for tool execution
+
+ToolResultCompactionLayer
+    prevent giant historical tool results dominating context
+
+InstructionReinforcementLayer
+    reintroduce critical tool/protocol instructions
+    after long conversations
+```
+
+Potentially later, structured working state:
+
+```text
+Current objective
+Current plan
+Files touched
+Known failures
+Pending work
+```
+
+rather than expecting a 3B model to reconstruct all of that from a compressed chat.
+
+---
+
+### The part I'd **not** do
+
+You said installing the package could automatically add its layers.
+
+I wouldn't.
+
+Installation should not silently alter agent behaviour:
+
+```csharp
+builder
+    .WithLLM(localModel)
+    .WithSmallModelOptimizations();
+```
+
+**That** can install an opinionated preset:
+
+```text
+ToolCallRecovery
+ValidationFeedback
+BoundedRetry
+LoopGuard
+ToolResultBudget
+...
+```
+
+while still allowing:
+
+```csharp
+.WithSmallModelOptimizations(o =>
+{
+    o.MaxRepairAttempts = 2;
+    o.EnableToolCallRecovery = true;
+    o.EnableLoopGuard = true;
+});
+```
+
+Individual layers remain available for advanced users.
+
+That's where your layer architecture starts paying off: **the package doesn't require a parallel Agent implementation. It's essentially an opinionated reliability profile assembled from normal AgentCore extension points.**
+
+And I'd call it **`AgentCore.SmallModels`**, not `SmallModelHelper`/`Improver`. The latter names sound like utilities rather than a coherent capability package.
+
+I think it's worth a separate package **once it contains recovery + validation + loop protection + context/tool-result controls**. If today it contains only `StreamingToolCallParserLayer`, keep that in core/internal until you've built enough of the reliability stack to justify the package.
+
+[1]: https://arxiv.org/abs/2504.19277?utm_source=chatgpt.com "Small Models, Big Tasks: An Exploratory Empirical Study on Small Language Models for Function Calling"
+[2]: https://arxiv.org/abs/2606.01416?utm_source=chatgpt.com "Self-Healing Agentic Orchestrators for Reliable Tool-Augmented Large Language Model Systems"
+[3]: https://arxiv.org/abs/2607.04686?utm_source=chatgpt.com "ToolFailBench: Diagnosing Tool-Use Failures in LLM Agents"
