@@ -45,12 +45,8 @@ public class ApprovalLayerDuplicateIdTests
             ["test_tool"] = ToolPermission.Allow
         };
 
-        var approvalLayer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, new AlwaysApprovePrompt());
         var mockInner = new MockTooling(tool);
-
-        // Attach inner tooling via internal Attach method using reflection for test isolation
-        var attachMethod = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-        attachMethod!.Invoke(approvalLayer, new object[] { mockInner });
+        var approvalLayer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.AlwaysAllow, new AlwaysApprovePrompt());
 
         // Tool calls with duplicate and empty IDs ["", "", "1", "1"]
         var calls = new[]

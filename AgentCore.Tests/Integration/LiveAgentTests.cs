@@ -67,7 +67,7 @@ public class LiveAgentTests
     {
         var chatClient = OpenAICompatibleFixture.CreateChatClient();
         return Agent.Create()
-            .WithMEAI(chatClient, OpenAICompatibleFixture.GetCapabilities());
+            .WithMEAI(chatClient);
     }
 
     [LiveFact]
@@ -103,7 +103,7 @@ public class LiveAgentTests
             rawOutputs.Add(rawOut);
         }
 
-        var metadataItem = rawOutputs.OfType<Metadata>().FirstOrDefault();
+        var metadataItem = rawOutputs.OfType<TokenUsage>().FirstOrDefault();
         if (metadataItem != null)
         {
             // If the provider supports token usage extraction, verify it captures it
@@ -117,10 +117,7 @@ public class LiveAgentTests
     {
         // Arrange
         var context = new ChatContext(
-            new ApproximateTokenCounter(),
-            OpenAICompatibleFixture.GetCapabilities(),
-            Array.Empty<Tool>(),
-            null
+            contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
             .WithContext(context)
@@ -180,10 +177,7 @@ public class LiveAgentTests
     {
         // Arrange
         var context = new ChatContext(
-            new ApproximateTokenCounter(),
-            OpenAICompatibleFixture.GetCapabilities(),
-            Array.Empty<Tool>(),
-            null
+            contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
             .WithContext(context)
@@ -213,10 +207,7 @@ public class LiveAgentTests
         // Arrange
         var tools = new OrderTools();
         var context = new ChatContext(
-            new ApproximateTokenCounter(),
-            OpenAICompatibleFixture.GetCapabilities(),
-            Array.Empty<Tool>(),
-            null
+            contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
             .WithInstructions("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")
@@ -254,10 +245,7 @@ public class LiveAgentTests
         // Arrange
         var tools = new OrderTools();
         var context = new ChatContext(
-            new ApproximateTokenCounter(),
-            OpenAICompatibleFixture.GetCapabilities(),
-            Array.Empty<Tool>(),
-            null
+            contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
             .WithContext(context)

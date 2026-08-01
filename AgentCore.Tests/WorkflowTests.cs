@@ -51,12 +51,12 @@ public class WorkflowTests
         // First LLM call yields tool call
         provider.Enqueue(
             new ToolCallDelta("call_1", "get_weather", "{\"location\": \"London\"}"),
-            new Metadata(FinishReason: "tool_calls")
+            new FinishReason("tool_calls")
         );
         // Second LLM call yields final response
         provider.Enqueue(
             new TextDelta("It is sunny in London."),
-            new Metadata(FinishReason: "stop")
+            new FinishReason("stop")
         );
 
         var tooling = new MockTooling();
@@ -104,11 +104,11 @@ public class WorkflowTests
         // Return tool call indefinitely
         provider.Enqueue(
             new ToolCallDelta("call_1", "looping_tool", "{}"),
-            new Metadata(FinishReason: "tool_calls")
+            new FinishReason("tool_calls")
         );
         provider.Enqueue(
             new ToolCallDelta("call_2", "looping_tool", "{}"),
-            new Metadata(FinishReason: "tool_calls")
+            new FinishReason("tool_calls")
         );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
@@ -135,7 +135,7 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         provider.Enqueue(
             new ToolCallDelta("call_1", "broken_tool", "{}"),
-            new Metadata(FinishReason: "tool_calls")
+            new FinishReason("tool_calls")
         );
 
         var tooling = new MockTooling();

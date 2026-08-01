@@ -5,7 +5,7 @@ namespace AgentCore.LLM.Chat;
 
 public static class MessageAccumulator
 {
-    public static async Task<(Message? Message, Metadata? Metadata)> AccumulateAsync(
+    public static async Task<(Message? Message, TokenUsage? TokenUsage, FinishReason? FinishReason)> AccumulateAsync(
         this IAsyncEnumerable<ILLMOutput> stream,
         CancellationToken ct = default)
     {
@@ -17,7 +17,8 @@ public static class MessageAccumulator
         var orderedIds = new List<string>();
         var defaultName = new StringBuilder();
         var defaultArgs = new StringBuilder();
-        Metadata? metadata = null;
+        TokenUsage? tokenUsage = null;
+        FinishReason? finishReason = null;
 
         await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
         {
@@ -108,8 +109,11 @@ public static class MessageAccumulator
                         }
                     }
                     break;
-                case Metadata m:
-                    metadata = m;
+                case TokenUsage tu:
+                    tokenUsage = tu;
+                    break;
+                case FinishReason fr:
+                    finishReason = fr;
                     break;
             }
         }
@@ -165,6 +169,6 @@ public static class MessageAccumulator
         }
 
         var message = contents.Count == 0 ? null : new Message(Role.Assistant, contents);
-        return (message, metadata);
+        return (message, tokenUsage, finishReason);
     }
 }

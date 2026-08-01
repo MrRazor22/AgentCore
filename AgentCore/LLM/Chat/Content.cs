@@ -19,11 +19,12 @@ public record ReasoningDelta(string Thought) : IContentDelta;
 
 public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null) : IContentDelta;
 
-public record Metadata(
+public record TokenUsage(
     int InputTokens = 0,
     int OutputTokens = 0,
-    int? ReasoningTokens = null,
-    string? FinishReason = null) : ILLMOutput;
+    int? ReasoningTokens = null) : ILLMOutput;
+
+public record FinishReason(string Value) : ILLMOutput;
 
 /// <summary>
 /// Root interface for settled, fully validated semantic content items.
@@ -34,6 +35,7 @@ public record Metadata(
 [JsonDerivedType(typeof(ToolCall), "toolCall")]
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
+[JsonDerivedType(typeof(AgentCore.Context.CompactedSummary), "compactedSummary")]
 public interface IContent
 {
     string ForLlm();

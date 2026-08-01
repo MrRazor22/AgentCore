@@ -21,12 +21,10 @@ public class AgentTests
         mockProvider.Enqueue(new TextDelta("Acknowledged"));
 
         var memory = new ChatContext(
-            new ApproximateTokenCounter(),
-            new LLMCapabilities(),
-            Array.Empty<Tool>(),
-            null
+            contextWindow: 50000
         );
-        await memory.AddAsync(new Message(Role.User, new Text("Old message")));
+        var prompt = await memory.BuildPromptAsync(new[] { new Message(Role.User, new Text("Old message")) });
+        await memory.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         var agent = Agent.Create()
             .WithLLM(mockProvider)
@@ -124,7 +122,7 @@ public class AgentTests
         mockProvider.Enqueue(
             new TextDelta("Streaming "),
             new TextDelta("reply"),
-            new Metadata(FinishReason: "stop")
+            new FinishReason("stop")
         );
 
         var agent = Agent.Create()

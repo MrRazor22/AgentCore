@@ -85,31 +85,25 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public override IReadOnlyList<Message> Messages
+        public MemoryLoggerDecorator(IContext inner) : base(inner)
         {
-            get
-            {
-                CallLog.Add("Get");
-                return base.Messages;
-            }
         }
 
-        public override Task AddAsync(Message message, CancellationToken ct = default)
+        public override Task<IReadOnlyList<Message>> BuildPromptAsync(
+            IReadOnlyList<Message> uncommittedMessages,
+            CancellationToken ct = default)
         {
-            CallLog.Add("Add");
-            return base.AddAsync(message, ct);
+            CallLog.Add("Prepare");
+            return base.BuildPromptAsync(uncommittedMessages, ct);
         }
 
-        public override Task ClearAsync(CancellationToken ct = default)
+        public override async Task CommitAsync(
+            TokenUsage usage,
+            IReadOnlyList<Message> response,
+            CancellationToken ct = default)
         {
-            CallLog.Add("Clear");
-            return base.ClearAsync(ct);
-        }
-
-        public override Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
-        {
-            CallLog.Add("AddRange");
-            return base.AddRangeAsync(messages, ct);
+            CallLog.Add("Commit");
+            await base.CommitAsync(usage, response, ct).ConfigureAwait(false);
         }
     }
 
@@ -120,23 +114,26 @@ public class AgentBuilderTests
         mockProvider.Enqueue(new Text("Acknowledged"));
 
         var baseMemory = new ChatContext(
-            new ApproximateTokenCounter(),
-            new LLMCapabilities(),
-            Array.Empty<Tool>(),
-            null);
+            contextWindow: 50000
+        );
 
-        var decoratorInstance = new MemoryLoggerDecorator();
+        MemoryLoggerDecorator? decoratorInstance = null;
 
         var builder = Agent.Create()
             .WithLLM(mockProvider)
             .WithContext(baseMemory)
-            .AddContextLayer(decoratorInstance);
+            .AddContextLayer(inner =>
+            {
+                decoratorInstance = new MemoryLoggerDecorator(inner);
+                return decoratorInstance;
+            });
 
         var agent = builder.Build();
 
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
-        Assert.Contains("Add", decoratorInstance.CallLog);
+        Assert.NotNull(decoratorInstance);
+        Assert.Contains("Commit", decoratorInstance.CallLog);
     }
 
     private class TestLlmDecorator : LLMLayer
@@ -144,7 +141,7 @@ public class AgentBuilderTests
         private readonly string _name;
         private readonly List<string> _callOrder;
 
-        public TestLlmDecorator(string name, List<string> callOrder)
+        public TestLlmDecorator(string name, List<string> callOrder, ILLM inner) : base(inner)
         {
             _name = name;
             _callOrder = callOrder;
@@ -162,16 +159,27 @@ public class AgentBuilderTests
         private readonly string _name;
         private readonly List<string> _callOrder;
 
-        public TestMemoryDecorator(string name, List<string> callOrder)
+        public TestMemoryDecorator(string name, List<string> callOrder, IContext inner) : base(inner)
         {
             _name = name;
             _callOrder = callOrder;
         }
 
-        public override Task AddAsync(Message newInput, CancellationToken ct = default)
+        public override Task<IReadOnlyList<Message>> BuildPromptAsync(
+            IReadOnlyList<Message> uncommittedMessages,
+            CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.AddAsync(newInput, ct);
+            return base.BuildPromptAsync(uncommittedMessages, ct);
+        }
+
+        public override async Task CommitAsync(
+            TokenUsage usage,
+            IReadOnlyList<Message> response,
+            CancellationToken ct = default)
+        {
+            _callOrder.Add(_name);
+            await base.CommitAsync(usage, response, ct).ConfigureAwait(false);
         }
     }
 
@@ -184,10 +192,10 @@ public class AgentBuilderTests
 
         var builder = Agent.Create()
             .WithLLM(mockProvider)
-            .AddLLMLayer(new TestLlmDecorator("LlmLayer1", callOrder))
-            .AddLLMLayer(new TestLlmDecorator("LlmLayer2", callOrder))
-            .AddContextLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
-            .AddContextLayer(new TestMemoryDecorator("MemoryLayer2", callOrder));
+            .AddLLMLayer(inner => new TestLlmDecorator("LlmLayer1", callOrder, inner))
+            .AddLLMLayer(inner => new TestLlmDecorator("LlmLayer2", callOrder, inner))
+            .AddContextLayer(inner => new TestMemoryDecorator("MemoryLayer1", callOrder, inner))
+            .AddContextLayer(inner => new TestMemoryDecorator("MemoryLayer2", callOrder, inner));
 
         var agent = builder.Build();
 
@@ -195,25 +203,6 @@ public class AgentBuilderTests
         await agent.InvokeAsync<string>(new Text("Hello"));
 
         Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
-    }
-
-    [Fact]
-    public void Build_ThrowsOnDecoratorReuse()
-    {
-        var mockProvider = new MockLLMProvider();
-        var decorator = new TestMemoryDecorator("Shared", new List<string>());
-
-        var builder1 = Agent.Create()
-            .WithLLM(mockProvider)
-            .AddContextLayer(decorator);
-
-        builder1.Build();
-
-        var builder2 = Agent.Create()
-            .WithLLM(mockProvider)
-            .AddContextLayer(decorator);
-
-        Assert.Throws<InvalidOperationException>(() => builder2.Build());
     }
 
     [Fact]
@@ -232,21 +221,5 @@ public class AgentBuilderTests
         Assert.NotNull(llm);
         Assert.NotNull(memory);
         Assert.NotNull(tooling);
-    }
-
-    [Fact]
-    public void Build_AutomaticallyWiresTokenCalibrationLayerAsOutermost()
-    {
-        var mockProvider = new MockLLMProvider();
-        var builder = Agent.Create()
-            .WithLLM(mockProvider);
-
-        var agent = builder.Build();
-
-        var llm = builder.GetRequiredService<ILLM>();
-        Assert.IsType<TokenCalibrationLayer>(llm);
-
-        var calibrationLayer = (TokenCalibrationLayer)llm;
-        Assert.Same(mockProvider, calibrationLayer.Inner);
     }
 }

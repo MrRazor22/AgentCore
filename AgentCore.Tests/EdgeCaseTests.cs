@@ -30,10 +30,7 @@ namespace AgentCore.Tests
 
             public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
 
-            public LLMCapabilities GetCapabilities()
-            {
-                return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = ReservedTokens };
-            }
+
 
             public void Enqueue(Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<ILLMOutput>>> responseGenerator)
             {
@@ -114,21 +111,18 @@ namespace AgentCore.Tests
             var mockSummarizer = new MockLLM();
             mockSummarizer.EnqueueSimpleText("Summarized context sheet content");
 
-            var tokenCounter = new ApproximateTokenCounter();
             var context = new ChatContext(
-                tokenCounter,
-                new LLMCapabilities { ContextWindow = 120, ReservedTokens = 10 },
-                Array.Empty<Tool>(),
-                instructions: new Text("Instructions"),
-                retentionTarget: 0.5,
+                contextWindow: 120,
+                reserveTokens: 10,
                 summarizer: mockSummarizer
             );
 
             // Add some messages to trigger pruning. 
             // The budget is roughly: 120 - (Instructions (12 chars + overhead) + ReservedTokens (10)) -> budget is ~80 tokens (~400 characters).
             // Let's add multiple large messages so it exceeds the budget.
-            await context.AddAsync(new Message(Role.User, new Text(new string('A', 300))));
-            await context.AddAsync(new Message(Role.Assistant, new Text(new string('B', 300))));
+            var system = new Message(Role.System, new Text("Instructions"));
+            var p1 = await context.BuildPromptAsync(new[] { system, new Message(Role.User, new Text(new string('A', 300))), new Message(Role.Assistant, new Text(new string('B', 300))) });
+            await context.CommitAsync(new TokenUsage(50, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
                 .WithLLM(mockLlm)
@@ -155,17 +149,14 @@ namespace AgentCore.Tests
             var mockLlm = new MockLLM();
             mockLlm.EnqueueSimpleText("Reply despite overflow");
 
-            var tokenCounter = new ApproximateTokenCounter();
-            // Context Window is 30, but Reserved = 40 (negative budget: 30 - 40 = -10 -> clamped to 0)
             var context = new ChatContext(
-                tokenCounter,
-                new LLMCapabilities { ContextWindow = 30, ReservedTokens = 40 },
-                Array.Empty<Tool>(),
-                instructions: new Text("Instructions")
+                contextWindow: 30,
+                reserveTokens: 40
             );
 
-            await context.AddAsync(new Message(Role.User, new Text("First")));
-            await context.AddAsync(new Message(Role.Assistant, new Text("Second")));
+            var system = new Message(Role.System, new Text("Instructions"));
+            var p1 = await context.BuildPromptAsync(new[] { system, new Message(Role.User, new Text("First")), new Message(Role.Assistant, new Text("Second")) });
+            await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
                 .WithLLM(mockLlm)
@@ -224,6 +215,40 @@ namespace AgentCore.Tests
             // We just verify both were executed and completed successfully.
             Assert.True(idxCompleted1 >= 0);
             Assert.True(idxCompleted2 >= 0);
+        }
+
+        [Fact]
+        public void TestMessageExtensionsAddIfValid()
+        {
+            var list = new List<Message>();
+
+            // Test null content
+            list.AddIfValid(Role.System, (IContent?)null);
+            Assert.Empty(list);
+
+            // Test null / empty Text
+            list.AddIfValid(Role.User, new Text(""))
+                .AddIfValid(Role.User, new Text(null!));
+            Assert.Empty(list);
+
+            // Test valid Text
+            list.AddIfValid(Role.User, new Text("hello"));
+            Assert.Single(list);
+            Assert.Equal("hello", list[0].Contents[0].ForLlm());
+
+            // Test null Message
+            list.AddIfValid((Message?)null);
+            Assert.Single(list);
+
+            // Test Message with empty contents
+            list.AddIfValid(new Message(Role.Assistant, Array.Empty<IContent>()));
+            Assert.Single(list);
+
+            // Test valid Message addition & method chaining
+            list.AddIfValid(new Message(Role.Assistant, new Text("hi")))
+                .AddIfValid(Role.User, new Text("fluent"));
+            Assert.Equal(3, list.Count);
+            Assert.Equal("fluent", list[2].Contents[0].ForLlm());
         }
     }
 

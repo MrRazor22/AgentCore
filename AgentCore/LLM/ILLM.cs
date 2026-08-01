@@ -4,12 +4,6 @@ using AgentCore.Tools;
 
 namespace AgentCore.LLM;
 
-public sealed class LLMCapabilities
-{
-    public int ContextWindow { get; set; } = 50000;
-    public int ReservedTokens { get; set; } = 2000;
-}
-
 public sealed class LLMOptions
 {
     public string? Model { get; init; }
@@ -20,8 +14,6 @@ public sealed class LLMOptions
 
 public interface ILLM
 {
-    LLMCapabilities GetCapabilities();
-
     IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,

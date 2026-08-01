@@ -10,6 +10,10 @@ namespace AgentCore.LLM;
 /// </summary>
 public class MessageCoalescingLayer : LLMLayer
 {
+    public MessageCoalescingLayer(ILLM inner) : base(inner)
+    {
+    }
+
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,

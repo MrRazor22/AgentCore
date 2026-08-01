@@ -27,7 +27,7 @@ public class MessageAccumulatorTests
             new ToolCallDelta("ABC", null, "{\"commandLine\":\"ls\"}", null)
         };
 
-        var (message1, _) = await ToAsyncStream(sequence1).AccumulateAsync();
+        var (message1, _, _) = await ToAsyncStream(sequence1).AccumulateAsync();
         Assert.NotNull(message1);
         var calls1 = message1.Contents.OfType<ToolCall>().ToList();
         Assert.Single(calls1);
@@ -42,7 +42,7 @@ public class MessageAccumulatorTests
             new ToolCallDelta("XYZ", null, "{\"query\":\"test\"}", 1)
         };
 
-        var (message2, _) = await ToAsyncStream(sequence2).AccumulateAsync();
+        var (message2, _, _) = await ToAsyncStream(sequence2).AccumulateAsync();
         Assert.NotNull(message2);
         var calls2 = message2.Contents.OfType<ToolCall>().ToList();
         Assert.Single(calls2);
@@ -65,7 +65,7 @@ public class MessageAccumulatorTests
             new ToolCallDelta("ABC", "RunCommand", "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}", null)
         };
 
-        var (message, _) = await ToAsyncStream(sequence).AccumulateAsync();
+        var (message, _, _) = await ToAsyncStream(sequence).AccumulateAsync();
         Assert.NotNull(message);
         var calls = message.Contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
@@ -91,7 +91,7 @@ public class MessageAccumulatorTests
             new ToolCallDelta("", null, "\"test\"}", 1)
         };
 
-        var (message, _) = await ToAsyncStream(sequence).AccumulateAsync();
+        var (message, _, _) = await ToAsyncStream(sequence).AccumulateAsync();
         Assert.NotNull(message);
         var calls = message.Contents.OfType<ToolCall>().ToList();
         

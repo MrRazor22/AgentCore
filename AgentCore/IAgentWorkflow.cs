@@ -22,17 +22,20 @@ namespace AgentCore
         private readonly ILLM _llm;
         private readonly ITooling _tooling;
         private readonly int? _maxIterations;
+        private readonly IContent? _instructions;
         private readonly ILogger<ReActWorkflow>? _logger;
 
         public ReActWorkflow(
             ILLM llm,
             ITooling tooling,
             int? maxIterations = null,
+            IContent? instructions = null,
             ILogger<ReActWorkflow>? logger = null)
         {
             _llm = llm;
             _tooling = tooling;
             _maxIterations = maxIterations;
+            _instructions = instructions;
             _logger = logger;
         }
 
@@ -44,9 +47,9 @@ namespace AgentCore
         {
             int iterations = 0;
 
-            // 1. Immediately record user input in the context (durable)
-            var userMessage = new Message(Role.User, input);
-            await context.AddAsync(userMessage, ct).ConfigureAwait(false);
+            var messagesToSend = new List<Message>()
+                .AddIfValid(Role.System, _instructions)
+                .AddIfValid(Role.User, input);
 
             while (true)
             {
@@ -58,13 +61,15 @@ namespace AgentCore
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
-                var currentMessages = context.Messages;
+                // Prepare context: handles internal compaction policy, returning the full candidate prompt
+                var currentMessages = await context.BuildPromptAsync(messagesToSend, ct).ConfigureAwait(false);
+
                 _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, currentMessages.Count);
 
                 var options = new LLMOptions { ResponseSchema = responseSchema };
                 _logger?.LogDebug("Calling LLM StreamAsync...");
 
-                var (assistantMessage, metadata) = await _llm
+                var (assistantMessage, tokenUsage, _) = await _llm
                     .StreamAsync(currentMessages, options, _tooling.Tools, ct)
                     .AccumulateAsync(ct)
                     .ConfigureAwait(false);
@@ -75,8 +80,10 @@ namespace AgentCore
                     break;
                 }
 
-                // 2. Save LLM response to context immediately (durable mid-turn!)
-                await context.AddAsync(assistantMessage, ct).ConfigureAwait(false);
+                // Save LLM response to context immediately (authoritative commit!)
+                var finalUsage = tokenUsage ?? new TokenUsage(0, 0);
+                await context.CommitAsync(finalUsage, new[] { assistantMessage }, ct).ConfigureAwait(false);
+                messagesToSend.Clear();
 
                 // Yield all contents produced by LLM assistant response (Text, Reasoning, ToolCall)
                 foreach (var content in assistantMessage.Contents)
@@ -92,10 +99,9 @@ namespace AgentCore
                     _logger?.LogDebug("ReActWorkflow: Iteration {Iteration} executing {Count} tool calls.", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
-                    // 3. Save tool results to context immediately and yield ToolResult semantic content
                     foreach (var result in toolResults)
                     {
-                        await context.AddAsync(new Message(Role.Tool, result), ct).ConfigureAwait(false);
+                        messagesToSend.AddIfValid(Role.Tool, result);
                         yield return result;
                     }
 

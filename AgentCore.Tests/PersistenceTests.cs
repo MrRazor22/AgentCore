@@ -1,4 +1,5 @@
 using AgentCore.Context;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Text.Json;
 
@@ -29,30 +30,34 @@ public class PersistenceTests : IDisposable
         public List<Message> InnerMessages { get; } = new();
         public IReadOnlyList<Message> Messages => InnerMessages;
 
-        public Task AddAsync(Message message, CancellationToken ct = default)
+        private List<Message>? _pendingPrompt;
+
+        public Task<IReadOnlyList<Message>> BuildPromptAsync(
+            IReadOnlyList<Message> uncommittedMessages,
+            CancellationToken ct = default)
         {
-            InnerMessages.Add(message);
-            return Task.CompletedTask;
+            var list = new List<Message>(InnerMessages);
+            list.AddRange(uncommittedMessages);
+            _pendingPrompt = list;
+            return Task.FromResult<IReadOnlyList<Message>>(list);
         }
 
-        public Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
-        {
-            InnerMessages.AddRange(messages);
-            return Task.CompletedTask;
-        }
-
-        public Task ClearAsync(CancellationToken ct = default)
+        public Task CommitAsync(
+            TokenUsage usage,
+            IReadOnlyList<Message> response,
+            CancellationToken ct = default)
         {
             InnerMessages.Clear();
+            InnerMessages.AddRange(_pendingPrompt ?? Messages.ToList());
+            InnerMessages.AddRange(response);
+            _pendingPrompt = null;
             return Task.CompletedTask;
         }
     }
 
     private FilePersistentChatContext CreateContext()
     {
-        var context = new FilePersistentChatContext(_sessionFilePath);
-        context.Attach(new FakeContext());
-        return context;
+        return new FilePersistentChatContext(new FakeContext(), _sessionFilePath);
     }
 
     [Fact]
@@ -63,7 +68,8 @@ public class PersistenceTests : IDisposable
         var msg = new Message(Role.User, new Text("Hello World"));
 
         // Act
-        await context.AddAsync(msg);
+        var prompt = await context.BuildPromptAsync(new[] { msg });
+        await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         // Assert
         Assert.True(File.Exists(_sessionFilePath));
@@ -80,7 +86,8 @@ public class PersistenceTests : IDisposable
         // Arrange
         var context = CreateContext();
         var initialMsg = new Message(Role.User, new Text("Initial Message"));
-        await context.AddAsync(initialMsg);
+        var prompt = await context.BuildPromptAsync(new[] { initialMsg });
+        await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         // Act - Simulate a crash during the next save right before the replace step
         // We write to the .tmp file manually to simulate a partial save where the app crashed.
@@ -104,7 +111,8 @@ public class PersistenceTests : IDisposable
 
         // Now, if we write again, the temp file is overwritten and replaced successfully.
         var finalMsg = new Message(Role.Assistant, new Text("Final Successful Message"));
-        await context.AddAsync(finalMsg);
+        var prompt2 = await context.BuildPromptAsync(Array.Empty<Message>());
+        await context.CommitAsync(new TokenUsage(10, 5), new[] { finalMsg });
 
         // The final file should now have both initial and final messages.
         var finalJson = await File.ReadAllTextAsync(_sessionFilePath);

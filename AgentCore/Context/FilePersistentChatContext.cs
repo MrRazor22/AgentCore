@@ -1,3 +1,4 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Text.Json;
 
@@ -6,40 +7,37 @@ namespace AgentCore.Context;
 public class FilePersistentChatContext : ContextLayer
 {
     private readonly string _filePath;
-    private readonly List<Message> _messages = new();
+    private IReadOnlyList<Message>? _lastPreparedPrompt;
 
-    public FilePersistentChatContext(string filePath)
+    public FilePersistentChatContext(IContext inner, string filePath) : base(inner)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
 
-    public override IReadOnlyList<Message> Messages => base.Messages;
-
-    public override async Task AddAsync(Message message, CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> BuildPromptAsync(
+        IReadOnlyList<Message> uncommittedMessages,
+        CancellationToken ct = default)
     {
-        await base.AddAsync(message, ct).ConfigureAwait(false);
-        _messages.Add(message);
-        await SaveToDiskAsync(ct).ConfigureAwait(false);
+        var prepared = await base.BuildPromptAsync(uncommittedMessages, ct).ConfigureAwait(false);
+        _lastPreparedPrompt = prepared;
+        return prepared;
     }
 
-    public override async Task ClearAsync(CancellationToken ct = default)
+    public override async Task CommitAsync(
+        TokenUsage usage,
+        IReadOnlyList<Message> response,
+        CancellationToken ct = default)
     {
-        _messages.Clear();
-        await SaveToDiskAsync(ct).ConfigureAwait(false);
-        await base.ClearAsync(ct).ConfigureAwait(false);
+        await base.CommitAsync(usage, response, ct).ConfigureAwait(false);
+
+        var messages = new List<Message>(_lastPreparedPrompt ?? Array.Empty<Message>());
+        messages.AddRange(response);
+
+        await SaveToDiskAsync(messages, ct).ConfigureAwait(false);
+        _lastPreparedPrompt = null;
     }
 
-    public override async Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
-    {
-        await base.AddRangeAsync(messages, ct).ConfigureAwait(false);
-        if (messages != null)
-        {
-            _messages.AddRange(messages);
-        }
-        await SaveToDiskAsync(ct).ConfigureAwait(false);
-    }
-
-    private async Task SaveToDiskAsync(CancellationToken ct)
+    private async Task SaveToDiskAsync(List<Message> messages, CancellationToken ct)
     {
         var tempPath = _filePath + ".tmp";
         var directory = Path.GetDirectoryName(_filePath);
@@ -48,12 +46,11 @@ public class FilePersistentChatContext : ContextLayer
             Directory.CreateDirectory(directory);
         }
 
-        var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(messages, new JsonSerializerOptions { WriteIndented = true });
 
-        // Write to the temporary file first
+        // Write to temporary file and swap
         await File.WriteAllTextAsync(tempPath, json, ct).ConfigureAwait(false);
 
-        // Swap/replace the target file safely
         if (File.Exists(_filePath))
         {
             File.Replace(tempPath, _filePath, null);

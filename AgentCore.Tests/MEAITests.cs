@@ -69,10 +69,11 @@ public class MEAITests
         }
 
         // Assert
-        Assert.Equal(3, events.Count);
+        Assert.Equal(4, events.Count);
         Assert.Equal("Hello", Assert.IsType<TextDelta>(events[0]).Value);
         Assert.Equal("Thinking about reply...", Assert.IsType<ReasoningDelta>(events[1]).Thought);
         Assert.Equal(" World!", Assert.IsType<TextDelta>(events[2]).Value);
+        Assert.IsType<TokenUsage>(events[3]);
     }
 
     [Fact]
@@ -104,11 +105,12 @@ public class MEAITests
         }
 
         // Assert
-        Assert.Single(events);
-        var metaData = Assert.IsType<Metadata>(events[0]);
-        Assert.Equal(10, metaData.InputTokens);
-        Assert.Equal(20, metaData.OutputTokens);
-        Assert.Equal("stop", metaData.FinishReason);
+        Assert.Equal(2, events.Count);
+        var usage = Assert.IsType<TokenUsage>(events[0]);
+        Assert.Equal(10, usage.InputTokens);
+        Assert.Equal(20, usage.OutputTokens);
+        var finish = Assert.IsType<FinishReason>(events[1]);
+        Assert.Equal("stop", finish.Value);
     }
 
     [Fact]
@@ -135,10 +137,11 @@ public class MEAITests
         }
 
         // Assert
-        Assert.Equal(2, events.Count);
+        Assert.Equal(3, events.Count);
         var toolCallDelta = Assert.IsType<ToolCallDelta>(events[0]);
         Assert.Equal("call_1", toolCallDelta.Id);
         Assert.Equal("get_weather", toolCallDelta.NameDelta);
+        Assert.IsType<TokenUsage>(events[2]);
     }
 
     [Fact]
@@ -146,7 +149,7 @@ public class MEAITests
     {
         // Arrange
         var mockClient = new MockChatClient();
-        var builder = Agent.Create().WithMEAI(mockClient, new LLMCapabilities());
+        var builder = Agent.Create().WithMEAI(mockClient);
 
         // Act
         var agent = builder.Build();
@@ -155,14 +158,7 @@ public class MEAITests
         Assert.NotNull(agent);
         var llm = builder.GetService<ILLM>();
         Assert.NotNull(llm);
-        if (llm is TokenCalibrationLayer calibrationLayer)
-        {
-            Assert.IsType<MEAILLM>(calibrationLayer.Inner);
-        }
-        else
-        {
-            Assert.IsType<MEAILLM>(llm);
-        }
+        Assert.IsType<MEAILLM>(llm);
     }
 
     private class TestAIFunction : AIFunction

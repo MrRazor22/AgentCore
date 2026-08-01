@@ -11,16 +11,12 @@ namespace AgentCore.LLM.MEAI;
 public class MEAILLM : ILLM
 {
     private readonly IChatClient _client;
-    private readonly LLMCapabilities _capabilities;
 
-    public MEAILLM(IChatClient client, LLMCapabilities? capabilities = null)
+    public MEAILLM(IChatClient client)
     {
         ArgumentNullException.ThrowIfNull(client);
         _client = client;
-        _capabilities = capabilities ?? new LLMCapabilities();
     }
-
-    public LLMCapabilities GetCapabilities() => _capabilities;
 
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -68,6 +64,7 @@ public class MEAILLM : ILLM
         int inputTokens = 0;
         int outputTokens = 0;
         int? reasoningTokens = null;
+        string? finalFinishReason = null;
 
         var rawYieldedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -162,13 +159,19 @@ public class MEAILLM : ILLM
 
             if (update.FinishReason is { } finishReason)
             {
-                yield return new Metadata(
-                    InputTokens: inputTokens,
-                    OutputTokens: outputTokens,
-                    ReasoningTokens: reasoningTokens,
-                    FinishReason: finishReason.Value
-                );
+                finalFinishReason = finishReason.Value;
             }
+        }
+
+        yield return new TokenUsage(
+            InputTokens: inputTokens,
+            OutputTokens: outputTokens,
+            ReasoningTokens: reasoningTokens
+        );
+
+        if (finalFinishReason != null)
+        {
+            yield return new FinishReason(finalFinishReason);
         }
     }
 

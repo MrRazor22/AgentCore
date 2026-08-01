@@ -14,13 +14,12 @@ public static class MEAIBuilderExtensions
     /// </summary>
     public static Agent.Builder WithMEAI(
         this Agent.Builder builder,
-        IChatClient client,
-        LLMCapabilities? capabilities = null)
+        IChatClient client)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(client);
 
-        return builder.WithLLM(new MEAILLM(client, capabilities));
+        return builder.WithLLM(new MEAILLM(client));
     }
 
     /// <summary>

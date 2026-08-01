@@ -67,11 +67,7 @@ public static class OpenAICompatibleFixture
     public static string GetBaseUrl() => _baseUrl;
     public static string GetApiKey() => _apiKey;
     public static string GetModelName() => _modelName;
-    public static LLMCapabilities GetCapabilities() => new()
-    {
-        ContextWindow = _contextWindow,
-        ReservedTokens = _reservedTokens
-    };
+    public static int GetContextWindow() => _contextWindow;
 
     public static bool IsEndpointReachable()
     {

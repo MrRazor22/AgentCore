@@ -23,7 +23,7 @@ public class StreamingLLMLayerTests
             _outputs = outputs;
         }
 
-        public LLMCapabilities GetCapabilities() => new LLMCapabilities();
+
 
         public async IAsyncEnumerable<ILLMOutput> StreamAsync(
             IReadOnlyList<Message> messages,
@@ -52,15 +52,12 @@ public class StreamingLLMLayerTests
             new TextDelta("Hello "),
             new TextDelta("world!"),
             new ToolCallDelta("tc-1", "test_tool", "{}"),
-            new Metadata(10, 20, null, "stop")
+            new TokenUsage(10, 20, null),
+            new FinishReason("stop")
         };
 
         var mockInner = new MockLLM(expectedOutputs);
-        var layer = new StreamingLLMLayer();
-        
-        // Attach mock inner LLM using reflection since Attach is internal
-        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
-        attachMethod!.Invoke(layer, new object[] { mockInner });
+        var layer = new StreamingLLMLayer(mockInner);
 
         var channel = Channel.CreateUnbounded<ILLMOutput>();
         layer.Writer = channel.Writer;
@@ -97,7 +94,8 @@ public class StreamingLLMLayerTests
         Assert.Equal("Hello ", ((TextDelta)channelResults[1]).Value);
         Assert.Equal("world!", ((TextDelta)channelResults[2]).Value);
         Assert.Equal("tc-1", ((ToolCallDelta)channelResults[3]).Id);
-        Assert.Equal("stop", ((Metadata)channelResults[4]).FinishReason);
+        Assert.Equal(10, ((TokenUsage)channelResults[4]).InputTokens);
+        Assert.Equal("stop", ((FinishReason)channelResults[5]).Value);
     }
 
     [Fact]
@@ -105,10 +103,7 @@ public class StreamingLLMLayerTests
     {
         var outputs = new List<ILLMOutput> { new TextDelta("hi") };
         var mockInner = new MockLLM(outputs);
-        var layer = new StreamingLLMLayer();
-        
-        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
-        attachMethod!.Invoke(layer, new object[] { mockInner });
+        var layer = new StreamingLLMLayer(mockInner);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // pre-cancel

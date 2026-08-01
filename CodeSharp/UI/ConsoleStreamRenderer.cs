@@ -74,7 +74,7 @@ namespace CodeSharp.UI
 
         public void Write(ILLMOutput output)
         {
-            if (output is Metadata meta && meta.FinishReason != null)
+            if (output is FinishReason)
             {
                 ResetForNextStep();
                 return;

@@ -14,11 +14,6 @@ public class MockLLMProvider : ILLM
     public int ContextWindow { get; set; } = 4096;
     public int ReservedTokens { get; set; } = 512;
 
-    public LLMCapabilities GetCapabilities()
-    {
-        return new LLMCapabilities { ContextWindow = ContextWindow, ReservedTokens = ReservedTokens };
-    }
-
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
     public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();
     public List<JsonSchema?> CapturedResponseSchemas { get; } = new();
@@ -38,63 +33,56 @@ public class MockLLMProvider : ILLM
             Text t => new TextDelta(t.Value),
             Reasoning r => new ReasoningDelta(r.Thought),
             ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString()),
-            string str => new TextDelta(str),
-            _ => throw new ArgumentException($"Unknown event type {evt.GetType()}")
+            _ => throw new NotSupportedException()
         };
     }
 
-    public void Enqueue(params object[] events)
+    public void Enqueue(params object[] items)
     {
-        var deltas = events.Select(ConvertToDelta).ToList();
-        _responses.Enqueue(ct => ToAsyncEnumerable(deltas, ct));
+        Enqueue(ct => ToAsyncEnumerable(items, ct));
     }
 
-    public void Enqueue(IEnumerable<object> events)
+    public void EnqueueSimpleText(string text)
     {
-        var deltas = events.Select(ConvertToDelta).ToList();
-        _responses.Enqueue(ct => ToAsyncEnumerable(deltas, ct));
+        Enqueue(new Text(text));
     }
 
     public void EnqueueException(Exception ex)
     {
-        _responses.Enqueue(ct => ThrowException(ex));
+        Enqueue(ct => ThrowException(ex, ct));
     }
 
-    private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(
-        IEnumerable<ILLMOutput> deltas,
-        [EnumeratorCancellation] CancellationToken ct)
+    private static async IAsyncEnumerable<ILLMOutput> ThrowException(Exception ex, [EnumeratorCancellation] CancellationToken ct)
     {
-        foreach (var delta in deltas)
-        {
-            ct.ThrowIfCancellationRequested();
-            yield return delta;
-        }
-        await Task.CompletedTask;
-    }
-
-    private static async IAsyncEnumerable<ILLMOutput> ThrowException(Exception ex)
-    {
-        if (false) yield break;
+        await Task.Yield();
         throw ex;
+        yield break;
     }
 
-    public IAsyncEnumerable<ILLMOutput> StreamAsync(
+    private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
+    {
+        foreach (var item in items)
+        {
+            await Task.Yield();
+            yield return ConvertToDelta(item);
+        }
+    }
+
+    public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
-        CancellationToken ct = default)
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        CapturedMessages.Add(messages.ToList());
-        CapturedTools.Add(tools?.ToList());
+        CapturedMessages.Add(messages);
+        CapturedTools.Add(tools);
         CapturedResponseSchemas.Add(options?.ResponseSchema);
 
-        if (_responses.Count == 0)
+        var generator = _responses.Count > 0 ? _responses.Dequeue() : (ct => ToAsyncEnumerable(Enumerable.Empty<ILLMOutput>(), ct));
+        await foreach (var item in generator(ct).WithCancellation(ct).ConfigureAwait(false))
         {
-            return ToAsyncEnumerable(Enumerable.Empty<ILLMOutput>(), ct);
+            yield return item;
         }
-
-        var generator = _responses.Dequeue();
-        return generator(ct);
     }
 }
 
@@ -118,24 +106,33 @@ public class MockMemoryProvider : IContext
         }
     }
 
-    public Task AddAsync(Message message, CancellationToken ct = default)
+    private List<Message>? _pendingPrompt;
+
+    public Task<IReadOnlyList<Message>> BuildPromptAsync(
+        IReadOnlyList<Message> uncommittedMessages,
+        CancellationToken ct = default)
     {
-        _internalMessages.Add(message);
-        return Task.CompletedTask;
+        var list = new List<Message>(Messages);
+        list.AddRange(uncommittedMessages);
+        _pendingPrompt = list;
+        return Task.FromResult<IReadOnlyList<Message>>(list);
     }
 
-    public Task ClearAsync(CancellationToken ct = default)
+    public Task CommitAsync(
+        TokenUsage usage,
+        IReadOnlyList<Message> response,
+        CancellationToken ct = default)
     {
         _internalMessages.Clear();
-        return Task.CompletedTask;
-    }
-
-    public Task AddRangeAsync(IEnumerable<Message> messages, CancellationToken ct = default)
-    {
-        if (messages != null)
+        var prompt = _pendingPrompt ?? Messages.ToList();
+        var messagesToStore = new List<Message>(prompt);
+        if (!string.IsNullOrEmpty(RecallResult) && messagesToStore.Count > 0 && messagesToStore[0].Role == Role.System)
         {
-            _internalMessages.AddRange(messages);
+            messagesToStore.RemoveAt(0);
         }
+        _internalMessages.AddRange(messagesToStore);
+        _internalMessages.AddRange(response);
+        _pendingPrompt = null;
         return Task.CompletedTask;
     }
 }
