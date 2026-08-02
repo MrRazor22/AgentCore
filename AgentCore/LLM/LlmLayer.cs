@@ -5,11 +5,17 @@ namespace AgentCore.LLM;
 
 public abstract class LLMLayer : ILLM
 {
-    public ILLM Inner { get; }
+    private bool _attached;
 
-    protected LLMLayer(ILLM inner)
+    public ILLM Inner { get; private set; } = null!;
+
+    internal void Attach(ILLM inner)
     {
+        if (_attached)
+            throw new InvalidOperationException("This LLM decorator has already been attached to a pipeline.");
+
         Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _attached = true;
     }
 
     public virtual IAsyncEnumerable<ILLMOutput> StreamAsync(

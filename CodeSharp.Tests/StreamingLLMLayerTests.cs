@@ -57,7 +57,9 @@ public class StreamingLLMLayerTests
         };
 
         var mockInner = new MockLLM(expectedOutputs);
-        var layer = new StreamingLLMLayer(mockInner);
+        var layer = new StreamingLLMLayer();
+        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        attachMethod!.Invoke(layer, new object[] { mockInner });
 
         var channel = Channel.CreateUnbounded<ILLMOutput>();
         layer.Writer = channel.Writer;
@@ -103,7 +105,9 @@ public class StreamingLLMLayerTests
     {
         var outputs = new List<ILLMOutput> { new TextDelta("hi") };
         var mockInner = new MockLLM(outputs);
-        var layer = new StreamingLLMLayer(mockInner);
+        var layer = new StreamingLLMLayer();
+        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        attachMethod!.Invoke(layer, new object[] { mockInner });
 
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // pre-cancel

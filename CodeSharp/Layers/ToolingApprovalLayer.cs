@@ -58,11 +58,10 @@ public sealed class ApprovalLayer : ToolingLayer
     private readonly DenyRule? _guardrailDeny;
 
     public ApprovalLayer(
-        ITooling inner,
         IReadOnlyDictionary<string, ToolPermission> permissions,
         ExecutionPolicy policy,
         IApprovalPrompt prompt,
-        DenyRule? guardrailDeny = null) : base(inner)
+        DenyRule? guardrailDeny = null)
     {
         _permissions = (permissions ?? throw new ArgumentNullException(nameof(permissions)))
             .ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);

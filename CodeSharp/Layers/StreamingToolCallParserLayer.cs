@@ -30,7 +30,7 @@ public class StreamingToolCallParserLayer : LLMLayer
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
     );
 
-    public StreamingToolCallParserLayer(ILLM inner, StreamingToolCallParserOptions? options = null) : base(inner)
+    public StreamingToolCallParserLayer(StreamingToolCallParserOptions? options = null)
     {
         _options = options ?? new StreamingToolCallParserOptions();
     }

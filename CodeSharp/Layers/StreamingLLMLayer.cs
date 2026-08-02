@@ -11,9 +11,7 @@ namespace CodeSharp.Layers;
 
 public sealed class StreamingLLMLayer : LLMLayer
 {
-    public StreamingLLMLayer(ILLM inner) : base(inner)
-    {
-    }
+
 
     internal ChannelWriter<ILLMOutput>? Writer { get; set; }
 

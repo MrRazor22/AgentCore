@@ -22,9 +22,9 @@ Most agent frameworks use slow runtime reflection (`MethodInfo.Invoke`) to execu
 Instead of forcing you into complex middleware configurations or rigid dependency injection configurations, AgentCore uses standard **Decorator Patterns** (Layers). You can intercept, log, modify, or cache LLM requests, tool invocations, or memory updates by stacking decorators:
 
 ```csharp
-var agent = LLMAgent.Create("my-agent")
-    .AddMemoryLayer(memory => new LoggingMemoryDecorator(memory))
-    .AddToolingLayer(tooling => new CustomApprovalDecorator(tooling))
+var agent = Agent.Create()
+    .AddContextLayer(new LoggingMemoryDecorator())
+    .AddToolingLayer(new CustomApprovalDecorator())
     .Build();
 ```
 

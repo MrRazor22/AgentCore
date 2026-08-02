@@ -24,9 +24,9 @@ public sealed partial class Agent
         private int _contextWindow = 50000;
         private int? _reserveTokens;
 
-        private readonly List<Func<ITooling, ITooling>> _toolingLayers = [];
-        private readonly List<Func<ILLM, ILLM>> _llmLayers = [];
-        private readonly List<Func<IContext, IContext>> _contextLayers = [];
+        private readonly List<ToolingLayer> _toolingLayers = [];
+        private readonly List<LLMLayer> _llmLayers = [];
+        private readonly List<ContextLayer> _contextLayers = [];
         private bool _enableMessageCoalescing = false;
 
         private readonly List<object> _builtComponents = new();
@@ -88,10 +88,10 @@ public sealed partial class Agent
         }
 
         public Builder WithContext(IContext context) { _context = context; return this; }
-        public Builder AddContextLayer(Func<IContext, IContext> factory) { _contextLayers.Add(factory); return this; }
+        public Builder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 
         public Builder WithTooling(ITooling tooling) { _tooling = tooling; return this; }
-        public Builder AddToolingLayer(Func<ITooling, ITooling> factory) { _toolingLayers.Add(factory); return this; }
+        public Builder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
 
         public Builder WithContextWindow(int contextWindow)
         {
@@ -113,7 +113,7 @@ public sealed partial class Agent
         }
 
         public Builder WithLLM(ILLM provider) { _provider = provider; return this; }
-        public Builder AddLLMLayer(Func<ILLM, ILLM> factory) { _llmLayers.Add(factory); return this; }
+        public Builder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; }
 
         public Builder WithWorkflow(Func<ILLM, ITooling, IAgentWorkflow> factory)
         {
@@ -150,21 +150,25 @@ public sealed partial class Agent
             ILLM provider = baseProvider;
             if (_enableMessageCoalescing)
             {
-                provider = new MessageCoalescingLayer(provider);
+                var coalescingLayer = new MessageCoalescingLayer();
+                coalescingLayer.Attach(provider);
+                provider = coalescingLayer;
             }
 
-            foreach (var layerFactory in _llmLayers)
+            foreach (var layer in _llmLayers)
             {
-                provider = layerFactory(provider);
+                layer.Attach(provider);
+                provider = layer;
             }
 
             var frozenTools = _tools.ToArray();
             _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
             ITooling tooling = _tooling ?? new Tooling(frozenTools, lf.CreateLogger<Tooling>());
-            foreach (var layerFactory in _toolingLayers)
+            foreach (var layer in _toolingLayers)
             {
-                tooling = layerFactory(tooling);
+                layer.Attach(tooling);
+                tooling = layer;
             }
 
             IContext memory = _context ?? new ChatContext(
@@ -173,9 +177,10 @@ public sealed partial class Agent
                 summarizer: baseProvider,
                 logger: lf.CreateLogger<ChatContext>());
 
-            foreach (var layerFactory in _contextLayers)
+            foreach (var layer in _contextLayers)
             {
-                memory = layerFactory(memory);
+                layer.Attach(memory);
+                memory = layer;
             }
 
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",

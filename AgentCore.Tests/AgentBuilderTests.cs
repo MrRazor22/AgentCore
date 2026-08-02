@@ -85,9 +85,7 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public MemoryLoggerDecorator(IContext inner) : base(inner)
-        {
-        }
+
 
         public override Task<IReadOnlyList<Message>> BuildPromptAsync(
             IReadOnlyList<Message> uncommittedMessages,
@@ -117,22 +115,17 @@ public class AgentBuilderTests
             contextWindow: 50000
         );
 
-        MemoryLoggerDecorator? decoratorInstance = null;
+        var decoratorInstance = new MemoryLoggerDecorator();
 
         var builder = Agent.Create()
             .WithLLM(mockProvider)
             .WithContext(baseMemory)
-            .AddContextLayer(inner =>
-            {
-                decoratorInstance = new MemoryLoggerDecorator(inner);
-                return decoratorInstance;
-            });
+            .AddContextLayer(decoratorInstance);
 
         var agent = builder.Build();
 
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
-        Assert.NotNull(decoratorInstance);
         Assert.Contains("Commit", decoratorInstance.CallLog);
     }
 
@@ -141,7 +134,7 @@ public class AgentBuilderTests
         private readonly string _name;
         private readonly List<string> _callOrder;
 
-        public TestLlmDecorator(string name, List<string> callOrder, ILLM inner) : base(inner)
+        public TestLlmDecorator(string name, List<string> callOrder)
         {
             _name = name;
             _callOrder = callOrder;
@@ -159,7 +152,7 @@ public class AgentBuilderTests
         private readonly string _name;
         private readonly List<string> _callOrder;
 
-        public TestMemoryDecorator(string name, List<string> callOrder, IContext inner) : base(inner)
+        public TestMemoryDecorator(string name, List<string> callOrder)
         {
             _name = name;
             _callOrder = callOrder;
@@ -192,10 +185,10 @@ public class AgentBuilderTests
 
         var builder = Agent.Create()
             .WithLLM(mockProvider)
-            .AddLLMLayer(inner => new TestLlmDecorator("LlmLayer1", callOrder, inner))
-            .AddLLMLayer(inner => new TestLlmDecorator("LlmLayer2", callOrder, inner))
-            .AddContextLayer(inner => new TestMemoryDecorator("MemoryLayer1", callOrder, inner))
-            .AddContextLayer(inner => new TestMemoryDecorator("MemoryLayer2", callOrder, inner));
+            .AddLLMLayer(new TestLlmDecorator("LlmLayer1", callOrder))
+            .AddLLMLayer(new TestLlmDecorator("LlmLayer2", callOrder))
+            .AddContextLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
+            .AddContextLayer(new TestMemoryDecorator("MemoryLayer2", callOrder));
 
         var agent = builder.Build();
 
@@ -203,6 +196,25 @@ public class AgentBuilderTests
         await agent.InvokeAsync<string>(new Text("Hello"));
 
         Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
+    }
+
+    [Fact]
+    public void Build_ThrowsOnDecoratorReuse()
+    {
+        var mockProvider = new MockLLMProvider();
+        var decorator = new TestMemoryDecorator("Shared", new List<string>());
+
+        var builder1 = Agent.Create()
+            .WithLLM(mockProvider)
+            .AddContextLayer(decorator);
+
+        builder1.Build();
+
+        var builder2 = Agent.Create()
+            .WithLLM(mockProvider)
+            .AddContextLayer(decorator);
+
+        Assert.Throws<InvalidOperationException>(() => builder2.Build());
     }
 
     [Fact]

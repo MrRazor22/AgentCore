@@ -9,7 +9,7 @@ public class FilePersistentChatContext : ContextLayer
     private readonly string _filePath;
     private IReadOnlyList<Message>? _lastPreparedPrompt;
 
-    public FilePersistentChatContext(IContext inner, string filePath) : base(inner)
+    public FilePersistentChatContext(string filePath)
     {
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }

@@ -57,7 +57,10 @@ public class PersistenceTests : IDisposable
 
     private FilePersistentChatContext CreateContext()
     {
-        return new FilePersistentChatContext(new FakeContext(), _sessionFilePath);
+        var context = new FilePersistentChatContext(_sessionFilePath);
+        var attachMethod = typeof(ContextLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        attachMethod!.Invoke(context, new object[] { new FakeContext() });
+        return context;
     }
 
     [Fact]

@@ -112,7 +112,7 @@ internal class App
             var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
             var chatClient = openAIClient.GetChatClient(config.Model).AsIChatClient();
 
-            StreamingLLMLayer? streamingLayer = null;
+            var streamingLayer = new StreamingLLMLayer();
 
             // Initialize static tool contexts with workspace boundary
             CodeSharp.Tools.FileTools.Initialize(workspacePath);
@@ -154,29 +154,26 @@ internal class App
                 new CodeSharp.UI.SearchWebFormatter()
             });
 
+            var approvalLayer = new CodeSharp.Layers.ApprovalLayer(
+                permissions,
+                ExecutionPolicy.Strict,
+                new CodeSharp.UI.ConsoleApprovalPrompt(formatter),
+                guardrails
+            );
+
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
                 .WithMessageCoalescing()
-                .AddLLMLayer(inner =>
-                {
-                    streamingLayer = new StreamingLLMLayer(inner);
-                    return streamingLayer;
-                })
-                .AddLLMLayer(inner => new CodeSharp.Layers.StreamingToolCallParserLayer(inner))
+                .AddLLMLayer(streamingLayer)
+                .AddLLMLayer(new CodeSharp.Layers.StreamingToolCallParserLayer())
                 .WithTools(shellTool)
                 .WithTools(typeof(CodeSharp.Tools.FileTools))
                 .WithTools(typeof(CodeSharp.Tools.SearchTool))
                 .WithTools(webTools)
                 .WithTools(todoTool)
                 .WithTools(scheduleTool)
-                .AddToolingLayer(inner => new CodeSharp.Layers.ApprovalLayer(
-                    inner,
-                    permissions,
-                    ExecutionPolicy.Strict,
-                    new CodeSharp.UI.ConsoleApprovalPrompt(formatter),
-                    guardrails
-                ))
+                .AddToolingLayer(approvalLayer)
                 .WithInstructions(
                     "You are CodeSharp, an expert agentic AI coding assistant.\n" +
                     "Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\n" +

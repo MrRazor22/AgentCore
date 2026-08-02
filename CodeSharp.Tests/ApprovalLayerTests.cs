@@ -61,13 +61,21 @@ public class ApprovalLayerTests
     }
 
 
+    private static void AttachInner(ApprovalLayer layer, ITooling inner)
+    {
+        var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        method!.Invoke(layer, new object[] { inner });
+    }
+
+
     [Fact]
     public async Task ExecuteAsync_StrictPolicy_AlwaysPromptsAndApproves()
     {
         var mockInner = new MockTooling();
         var prompt = new ConfigurablePrompt(approve: true);
         var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
         var results = await layer.ExecuteAsync(calls);
@@ -83,7 +91,8 @@ public class ApprovalLayerTests
         var mockInner = new MockTooling();
         var prompt = new ConfigurablePrompt(approve: false);
         var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
         var results = await layer.ExecuteAsync(calls);
@@ -99,7 +108,8 @@ public class ApprovalLayerTests
         var mockInner = new MockTooling();
         var prompt = new ConfigurablePrompt(approve: false); // Prompt would deny if called
         var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.TrustModel, prompt);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.TrustModel, prompt);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "test_tool", new JsonObject { ["SafeToAutoRun"] = true }) };
         var results = await layer.ExecuteAsync(calls);
@@ -115,7 +125,8 @@ public class ApprovalLayerTests
         var mockInner = new MockTooling();
         var prompt = new ConfigurablePrompt(approve: false); // Prompt would deny if called
         var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.AlwaysAllow, prompt);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
         var results = await layer.ExecuteAsync(calls);
@@ -134,7 +145,8 @@ public class ApprovalLayerTests
         
         // Add rule to block format c:
         var guardrails = DenyRules.CommandPatterns("format c:");
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.AlwaysAllow, prompt, guardrails);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt, guardrails);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" }) };
         var results = await layer.ExecuteAsync(calls);
@@ -151,7 +163,8 @@ public class ApprovalLayerTests
         var mockInner = new MockTooling();
         var prompt = new ConfigurablePrompt(approve: true);
         var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(mockInner, permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        AttachInner(layer, mockInner);
 
         var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
         
