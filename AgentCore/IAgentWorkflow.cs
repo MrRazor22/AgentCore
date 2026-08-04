@@ -43,6 +43,7 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
+            var options = new LLMOptions { ResponseSchema = responseSchema };
 
             await context.StageAsync(new[] { new Message(Role.User, input) }, ct).ConfigureAwait(false);
 
@@ -61,7 +62,6 @@ namespace AgentCore
 
                 _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, currentMessages.Count);
 
-                var options = new LLMOptions { ResponseSchema = responseSchema };
                 _logger?.LogDebug("Calling LLM StreamAsync...");
 
                 var (assistantMessage, tokenUsage, _) = await _llm
@@ -71,8 +71,8 @@ namespace AgentCore
 
                 if (assistantMessage == null)
                 {
-                    _logger?.LogWarning("LLM returned null response.");
-                    break;
+                    _logger?.LogError("LLM returned null response.");
+                    throw new InvalidOperationException("LLM returned a null assistant message.");
                 }
 
                 // Save LLM response to context immediately (authoritative commit!)
@@ -93,13 +93,13 @@ namespace AgentCore
                     _logger?.LogDebug("ReActWorkflow: Iteration {Iteration} executing {Count} tool calls.", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
-                    var toolMessages = new List<Message>();
                     foreach (var result in toolResults)
                     {
-                        toolMessages.AddMessage(Role.Tool, result);
                         yield return result;
                     }
-                    await context.StageAsync(toolMessages, ct).ConfigureAwait(false);
+                    await context.StageAsync(
+                        toolResults.Select(r => new Message(Role.Tool, r)).ToList(),
+                        ct).ConfigureAwait(false);
 
                     continue;
                 }
