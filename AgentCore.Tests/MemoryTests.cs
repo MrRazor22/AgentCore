@@ -17,7 +17,8 @@ public class MemoryTests
         var assistant = new Message(Role.Assistant, new Text("Hi, how are you?"));
 
         // Act
-        var prepared = await context.BuildPromptAsync(new[] { system, user, assistant });
+        await context.StageAsync(new[] { system, user, assistant });
+        var prepared = await context.PreparePromptAsync();
 
         // Assert
         Assert.Equal(3, prepared.Count);
@@ -27,25 +28,35 @@ public class MemoryTests
 
         await context.CommitAsync(new TokenUsage(50, 0), Array.Empty<Message>());
 
-        var result = context.Messages;
-        Assert.Equal(3, result.Count);
-        Assert.True(context.TokenUsage > 0);
+        var postCommitPrepared = await context.PreparePromptAsync();
+        Assert.Equal(3, postCommitPrepared.Count);
     }
 
     [Fact]
-    public async Task ChatContext_UpdateTokenUsage_CalibratesCharsPerTokenAndLocksActuals()
+    public async Task ChatContext_CommitUpdatesTokenUsage_TriggersCompactionOnNextPrepare()
     {
         // Arrange
-        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100);
-        var system = new Message(Role.System, new Text("System instructions"));
-        var user = new Message(Role.User, new Text("User message content here"));
+        var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
+        mockLlm.Enqueue(new Text("Compacted summary"));
 
-        // Act
-        var prompt = await context.BuildPromptAsync(new[] { system, user });
-        await context.CommitAsync(new TokenUsage(20, 0), Array.Empty<Message>());
+        var context = new ChatContext(
+            contextWindow: 100, // limit = 90
+            reserveTokens: 10,
+            summarizer: mockLlm
+        );
+
+        var system = new Message(Role.System, new Text("System instructions"));
+        await context.StageAsync(new[] { system });
+        var prompt = await context.PreparePromptAsync();
+        
+        // Commit a high token usage (95 tokens, exceeding limit of 90)
+        await context.CommitAsync(new TokenUsage(95, 0), Array.Empty<Message>());
+
+        // Act - Prepare again, which should trigger compaction immediately due to high TokenUsage
+        var finalPrompt = await context.PreparePromptAsync();
 
         // Assert
-        Assert.Equal(20, context.TokenUsage);
+        Assert.Contains(finalPrompt, m => m.Contents.Any(c => c.ForLlm().Contains("Compacted summary")));
     }
 
     [Fact]
@@ -63,13 +74,15 @@ public class MemoryTests
 
         var system = new Message(Role.System, new Text("Be helpful."));
         var firstUser = new Message(Role.User, new Text("Hello"));
-        var prompt1 = await context.BuildPromptAsync(new[] { system, firstUser });
+        await context.StageAsync(new[] { system, firstUser });
+        var prompt1 = await context.PreparePromptAsync();
         await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         var secondUser = new Message(Role.User, new Text(new string('B', 300)));
 
         // Act - Prepare triggering compaction
-        var prepared = await context.BuildPromptAsync(new[] { secondUser });
+        await context.StageAsync(new[] { secondUser });
+        var prepared = await context.PreparePromptAsync();
 
         // Assert
         // Should have System instructions + 1 summary message + secondUser
@@ -96,11 +109,13 @@ public class MemoryTests
         var msg3 = new Message(Role.User, new Text("Third message that will definitely cause overflow and force eviction"));
 
         // Commit first two messages to committed history
-        var prompt1 = await context.BuildPromptAsync(new[] { system, msg1, msg2 });
+        await context.StageAsync(new[] { system, msg1, msg2 });
+        var prompt1 = await context.PreparePromptAsync();
         await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         // Act - Prepare triggering rolling trimming
-        var prepared = await context.BuildPromptAsync(new[] { msg3 });
+        await context.StageAsync(new[] { msg3 });
+        var prepared = await context.PreparePromptAsync();
 
         // Assert
         // Oldest message (First message) should be evicted. Only System instructions, second, and third should remain

@@ -121,7 +121,8 @@ namespace AgentCore.Tests
             // The budget is roughly: 120 - (Instructions (12 chars + overhead) + ReservedTokens (10)) -> budget is ~80 tokens (~400 characters).
             // Let's add multiple large messages so it exceeds the budget.
             var system = new Message(Role.System, new Text("Instructions"));
-            var p1 = await context.BuildPromptAsync(new[] { system, new Message(Role.User, new Text(new string('A', 300))), new Message(Role.Assistant, new Text(new string('B', 300))) });
+            await context.StageAsync(new[] { system, new Message(Role.User, new Text(new string('A', 300))), new Message(Role.Assistant, new Text(new string('B', 300))) });
+            var p1 = await context.PreparePromptAsync();
             await context.CommitAsync(new TokenUsage(50, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
@@ -155,7 +156,8 @@ namespace AgentCore.Tests
             );
 
             var system = new Message(Role.System, new Text("Instructions"));
-            var p1 = await context.BuildPromptAsync(new[] { system, new Message(Role.User, new Text("First")), new Message(Role.Assistant, new Text("Second")) });
+            await context.StageAsync(new[] { system, new Message(Role.User, new Text("First")), new Message(Role.Assistant, new Text("Second")) });
+            var p1 = await context.PreparePromptAsync();
             await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
@@ -223,30 +225,30 @@ namespace AgentCore.Tests
             var list = new List<Message>();
 
             // Test null content
-            list.AddIfValid(Role.System, (IContent?)null);
+            list.AddMessage(Role.System, (IContent?)null);
             Assert.Empty(list);
 
             // Test null / empty Text
-            list.AddIfValid(Role.User, new Text(""))
-                .AddIfValid(Role.User, new Text(null!));
+            list.AddMessage(Role.User, new Text(""))
+                .AddMessage(Role.User, new Text(null!));
             Assert.Empty(list);
 
             // Test valid Text
-            list.AddIfValid(Role.User, new Text("hello"));
+            list.AddMessage(Role.User, new Text("hello"));
             Assert.Single(list);
             Assert.Equal("hello", list[0].Contents[0].ForLlm());
 
             // Test null Message
-            list.AddIfValid((Message?)null);
+            MessageExtensions.AddMessage(list, (Message?)null);
             Assert.Single(list);
 
             // Test Message with empty contents
-            list.AddIfValid(new Message(Role.Assistant, Array.Empty<IContent>()));
+            MessageExtensions.AddMessage(list, new Message(Role.Assistant, Array.Empty<IContent>()));
             Assert.Single(list);
 
             // Test valid Message addition & method chaining
-            list.AddIfValid(new Message(Role.Assistant, new Text("hi")))
-                .AddIfValid(Role.User, new Text("fluent"));
+            MessageExtensions.AddMessage(list, new Message(Role.Assistant, new Text("hi")))
+                .AddMessage(Role.User, new Text("fluent"));
             Assert.Equal(3, list.Count);
             Assert.Equal("fluent", list[2].Contents[0].ForLlm());
         }

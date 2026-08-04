@@ -23,7 +23,8 @@ public class AgentTests
         var memory = new ChatContext(
             contextWindow: 50000
         );
-        var prompt = await memory.BuildPromptAsync(new[] { new Message(Role.User, new Text("Old message")) });
+        await memory.StageAsync(new[] { new Message(Role.User, new Text("Old message")) });
+        var prompt = await memory.PreparePromptAsync();
         await memory.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         var agent = Agent.Create()

@@ -14,11 +14,10 @@ public class FilePersistentChatContext : ContextLayer
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
     }
 
-    public override async Task<IReadOnlyList<Message>> BuildPromptAsync(
-        IReadOnlyList<Message> uncommittedMessages,
+    public override async Task<IReadOnlyList<Message>> PreparePromptAsync(
         CancellationToken ct = default)
     {
-        var prepared = await base.BuildPromptAsync(uncommittedMessages, ct).ConfigureAwait(false);
+        var prepared = await base.PreparePromptAsync(ct).ConfigureAwait(false);
         _lastPreparedPrompt = prepared;
         return prepared;
     }
@@ -33,7 +32,8 @@ public class FilePersistentChatContext : ContextLayer
         var messages = new List<Message>(_lastPreparedPrompt ?? Array.Empty<Message>());
         messages.AddRange(response);
 
-        await SaveToDiskAsync(messages, ct).ConfigureAwait(false);
+        var messagesToSave = messages.Where(m => m.Role != Role.System).ToList();
+        await SaveToDiskAsync(messagesToSave, ct).ConfigureAwait(false);
         _lastPreparedPrompt = null;
     }
 

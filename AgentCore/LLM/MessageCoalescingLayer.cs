@@ -9,19 +9,14 @@ namespace AgentCore.LLM;
 /// by coalescing adjacent text-only User or Assistant messages without mutating context.
 /// </summary>
 public class MessageCoalescingLayer : LLMLayer
-{
-    public MessageCoalescingLayer(ILLM inner) : base(inner)
-    {
-    }
-
+{ 
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
         IReadOnlyList<Tool>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        var normalizedMessages = CoalesceTextMessages(messages);
-        await foreach (var item in Inner.StreamAsync(normalizedMessages, options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
+    { 
+        await foreach (var item in Inner.StreamAsync(CoalesceTextMessages(messages), options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             yield return item;
         }
@@ -29,8 +24,7 @@ public class MessageCoalescingLayer : LLMLayer
 
     public static IReadOnlyList<Message> CoalesceTextMessages(IReadOnlyList<Message> messages)
     {
-        if (messages == null || messages.Count <= 1)
-            return messages ?? Array.Empty<Message>();
+        if (messages.Count <= 1) return messages ?? Array.Empty<Message>();
 
         var result = new List<Message>(messages.Count);
 
@@ -72,8 +66,6 @@ public class MessageCoalescingLayer : LLMLayer
         return message.Contents.All(c => c is Text);
     }
 
-    private static string GetTextOnlyValue(Message message)
-    {
-        return string.Join("\n", message.Contents.OfType<Text>().Select(t => t.Value));
-    }
+    private static string GetTextOnlyValue(Message message) => string.Join("\n", message.Contents.OfType<Text>().Select(t => t.Value));
+    
 }

@@ -85,14 +85,18 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-
-
-        public override Task<IReadOnlyList<Message>> BuildPromptAsync(
-            IReadOnlyList<Message> uncommittedMessages,
+        public override Task StageAsync(
+            IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
             CallLog.Add("Prepare");
-            return base.BuildPromptAsync(uncommittedMessages, ct);
+            return base.StageAsync(messages, ct);
+        }
+
+        public override Task<IReadOnlyList<Message>> PreparePromptAsync(
+            CancellationToken ct = default)
+        {
+            return base.PreparePromptAsync(ct);
         }
 
         public override async Task CommitAsync(
@@ -158,12 +162,18 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Task<IReadOnlyList<Message>> BuildPromptAsync(
-            IReadOnlyList<Message> uncommittedMessages,
+        public override Task StageAsync(
+            IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.BuildPromptAsync(uncommittedMessages, ct);
+            return base.StageAsync(messages, ct);
+        }
+
+        public override Task<IReadOnlyList<Message>> PreparePromptAsync(
+            CancellationToken ct = default)
+        {
+            return base.PreparePromptAsync(ct);
         }
 
         public override async Task CommitAsync(

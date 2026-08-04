@@ -183,13 +183,18 @@ public sealed partial class Agent
                 memory = layer;
             }
 
+            if (_instructions != null)
+            {
+                memory.StageAsync([new Message(Role.System, _instructions)]).GetAwaiter().GetResult();
+            }
+
             _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
                 frozenTools.Length,
                 provider.GetType().Name);
 
             var workflow = _workflowFactory != null
                 ? _workflowFactory(provider, tooling)
-                : new ReActWorkflow(provider, tooling, instructions: _instructions, logger: lf.CreateLogger<ReActWorkflow>());
+                : new ReActWorkflow(provider, tooling, logger: lf.CreateLogger<ReActWorkflow>());
 
             _builtComponents.Add(provider);
             _builtComponents.Add(tooling);

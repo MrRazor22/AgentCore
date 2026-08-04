@@ -30,15 +30,21 @@ public class PersistenceTests : IDisposable
         public List<Message> InnerMessages { get; } = new();
         public IReadOnlyList<Message> Messages => InnerMessages;
 
-        private List<Message>? _pendingPrompt;
+        private readonly List<Message> _staged = new();
 
-        public Task<IReadOnlyList<Message>> BuildPromptAsync(
-            IReadOnlyList<Message> uncommittedMessages,
+        public Task StageAsync(
+            IReadOnlyList<Message> messages,
+            CancellationToken ct = default)
+        {
+            _staged.AddRange(messages);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Message>> PreparePromptAsync(
             CancellationToken ct = default)
         {
             var list = new List<Message>(InnerMessages);
-            list.AddRange(uncommittedMessages);
-            _pendingPrompt = list;
+            list.AddRange(_staged);
             return Task.FromResult<IReadOnlyList<Message>>(list);
         }
 
@@ -48,9 +54,11 @@ public class PersistenceTests : IDisposable
             CancellationToken ct = default)
         {
             InnerMessages.Clear();
-            InnerMessages.AddRange(_pendingPrompt ?? Messages.ToList());
+            var prompt = new List<Message>(InnerMessages);
+            prompt.AddRange(_staged);
+            InnerMessages.AddRange(prompt);
             InnerMessages.AddRange(response);
-            _pendingPrompt = null;
+            _staged.Clear();
             return Task.CompletedTask;
         }
     }
@@ -71,7 +79,8 @@ public class PersistenceTests : IDisposable
         var msg = new Message(Role.User, new Text("Hello World"));
 
         // Act
-        var prompt = await context.BuildPromptAsync(new[] { msg });
+        await context.StageAsync(new[] { msg });
+        var prompt = await context.PreparePromptAsync();
         await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         // Assert
@@ -89,7 +98,8 @@ public class PersistenceTests : IDisposable
         // Arrange
         var context = CreateContext();
         var initialMsg = new Message(Role.User, new Text("Initial Message"));
-        var prompt = await context.BuildPromptAsync(new[] { initialMsg });
+        await context.StageAsync(new[] { initialMsg });
+        var prompt = await context.PreparePromptAsync();
         await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         // Act - Simulate a crash during the next save right before the replace step
@@ -114,7 +124,8 @@ public class PersistenceTests : IDisposable
 
         // Now, if we write again, the temp file is overwritten and replaced successfully.
         var finalMsg = new Message(Role.Assistant, new Text("Final Successful Message"));
-        var prompt2 = await context.BuildPromptAsync(Array.Empty<Message>());
+        await context.StageAsync(Array.Empty<Message>());
+        var prompt2 = await context.PreparePromptAsync();
         await context.CommitAsync(new TokenUsage(10, 5), new[] { finalMsg });
 
         // The final file should now have both initial and final messages.

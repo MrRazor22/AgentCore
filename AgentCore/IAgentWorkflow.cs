@@ -22,20 +22,17 @@ namespace AgentCore
         private readonly ILLM _llm;
         private readonly ITooling _tooling;
         private readonly int? _maxIterations;
-        private readonly IContent? _instructions;
         private readonly ILogger<ReActWorkflow>? _logger;
 
         public ReActWorkflow(
             ILLM llm,
             ITooling tooling,
             int? maxIterations = null,
-            IContent? instructions = null,
             ILogger<ReActWorkflow>? logger = null)
         {
             _llm = llm;
             _tooling = tooling;
             _maxIterations = maxIterations;
-            _instructions = instructions;
             _logger = logger;
         }
 
@@ -47,9 +44,7 @@ namespace AgentCore
         {
             int iterations = 0;
 
-            var messagesToSend = new List<Message>()
-                .AddIfValid(Role.System, _instructions)
-                .AddIfValid(Role.User, input);
+            await context.StageAsync(new[] { new Message(Role.User, input) }, ct).ConfigureAwait(false);
 
             while (true)
             {
@@ -62,7 +57,7 @@ namespace AgentCore
                 }
 
                 // Prepare context: handles internal compaction policy, returning the full candidate prompt
-                var currentMessages = await context.BuildPromptAsync(messagesToSend, ct).ConfigureAwait(false);
+                var currentMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
 
                 _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, currentMessages.Count);
 
@@ -83,7 +78,6 @@ namespace AgentCore
                 // Save LLM response to context immediately (authoritative commit!)
                 var finalUsage = tokenUsage ?? new TokenUsage(0, 0);
                 await context.CommitAsync(finalUsage, new[] { assistantMessage }, ct).ConfigureAwait(false);
-                messagesToSend.Clear();
 
                 // Yield all contents produced by LLM assistant response (Text, Reasoning, ToolCall)
                 foreach (var content in assistantMessage.Contents)
@@ -99,11 +93,13 @@ namespace AgentCore
                     _logger?.LogDebug("ReActWorkflow: Iteration {Iteration} executing {Count} tool calls.", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
+                    var toolMessages = new List<Message>();
                     foreach (var result in toolResults)
                     {
-                        messagesToSend.AddIfValid(Role.Tool, result);
+                        toolMessages.AddMessage(Role.Tool, result);
                         yield return result;
                     }
+                    await context.StageAsync(toolMessages, ct).ConfigureAwait(false);
 
                     continue;
                 }

@@ -21,10 +21,14 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual Task<IReadOnlyList<Message>> BuildPromptAsync(
-        IReadOnlyList<Message> uncommittedMessages,
+    public virtual Task StageAsync(
+        IReadOnlyList<Message> messages,
         CancellationToken ct = default)
-        => Inner.BuildPromptAsync(uncommittedMessages, ct);
+        => Inner.StageAsync(messages, ct);
+
+    public virtual Task<IReadOnlyList<Message>> PreparePromptAsync(
+        CancellationToken ct = default)
+        => Inner.PreparePromptAsync(ct);
 
     public virtual Task CommitAsync(
         TokenUsage usage,
