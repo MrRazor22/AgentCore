@@ -23,7 +23,7 @@ public class ChatContext : IContext
 
     private TokenUsage TokenUsage { get; set; } = new(0, 0);
 
-    public ChatContext(int contextWindow, int? reserveTokens = null, ILLM? summarizer = null, ILogger<ChatContext>? logger = null)
+    public ChatContext(int contextWindow = 50000, int? reserveTokens = null, ILLM? summarizer = null, ILogger<ChatContext>? logger = null)
     {
         _contextWindow = contextWindow;
         _reserveTokens = reserveTokens ?? (contextWindow / 10);
@@ -129,7 +129,7 @@ public class ChatContext : IContext
         tempChat.Add(new Message(Role.User, new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
 
         var sb = new StringBuilder();
-        await foreach (var evt in _summarizer.StreamAsync(tempChat, options: null, tools: null, ct: ct).ConfigureAwait(false))
+        await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
         {
             if (evt is TextDelta t)
             {

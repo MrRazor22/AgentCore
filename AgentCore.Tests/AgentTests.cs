@@ -28,8 +28,9 @@ public class AgentTests
         await memory.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
         var agent = Agent.Create()
-            .WithLLM(mockProvider)
-            .WithContext(memory)
+            .WithLLM(lf => mockProvider)
+            .WithContext(lf => memory)
+            .AddLLMLayer(new AgentCore.Layers.LLM.MessageMergingLayer())
             .Build();
 
         // Act
@@ -57,8 +58,8 @@ public class AgentTests
 
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
-            .WithLLM(mockProvider)
-            .WithContext(memory)
+            .WithLLM(lf => mockProvider)
+            .WithContext(lf => memory)
             .Build();
 
         // Act
@@ -83,7 +84,7 @@ public class AgentTests
         mockProvider.Enqueue(new TextDelta("{\"Name\":\"John Doe\",\"Age\":30}"));
 
         var agent = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .Build();
 
         // Act
@@ -103,7 +104,7 @@ public class AgentTests
         mockProvider.EnqueueException(new InvalidOperationException("Fatal provider error"));
 
         var agent = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .Build();
 
         // Act & Assert
@@ -125,7 +126,7 @@ public class AgentTests
         );
 
         var agent = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .Build();
 
         var contents = new List<IContent>();
@@ -146,7 +147,7 @@ public class AgentTests
 
         var agent = Agent.Create()
             .WithInstructions("System instruction baseline")
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .Build();
 
         await agent.InvokeAsync<string>(new Text("User baseline"));

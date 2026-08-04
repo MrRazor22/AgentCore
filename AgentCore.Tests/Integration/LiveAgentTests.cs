@@ -120,7 +120,7 @@ public class LiveAgentTests
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
-            .WithContext(context)
+            .WithContext(lf => context)
             .Build();
 
         // Act
@@ -180,7 +180,7 @@ public class LiveAgentTests
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
-            .WithContext(context)
+            .WithContext(lf => context)
             .Build();
 
         // Act - Turn 1
@@ -211,7 +211,7 @@ public class LiveAgentTests
         );
         var agent = CreateAgentBuilder()
             .WithInstructions("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")
-            .WithContext(context)
+            .WithContext(lf => context)
             .WithTools(tools)
             .Build();
 
@@ -248,7 +248,7 @@ public class LiveAgentTests
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
-            .WithContext(context)
+            .WithContext(lf => context)
             .WithTools(tools)
             .Build();
 

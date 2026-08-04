@@ -1,21 +1,22 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace CodeSharp.Layers;
+namespace AgentCore.Layers.LLM;
 
-public class StreamingToolCallParserOptions
+public class ToolCallDetectionOptions
 {
     public bool StopAfterFirstToolCall { get; set; } = false;
 }
 
-public class StreamingToolCallParserLayer : LLMLayer
+public class ToolCallDetectionLayer : LLMLayer
 {
-    private readonly StreamingToolCallParserOptions _options;
+    private readonly ToolCallDetectionOptions _options;
 
     // Matches any tag like <tool_call>...</tool_call>, [TOOLCALL]...[/TOOLCALL], etc.
     // Specifically looking for open tag enclosing JSON, followed by corresponding closing tag.
@@ -30,18 +31,18 @@ public class StreamingToolCallParserLayer : LLMLayer
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
     );
 
-    public StreamingToolCallParserLayer(StreamingToolCallParserOptions? options = null)
+    public ToolCallDetectionLayer(ToolCallDetectionOptions? options = null)
     {
-        _options = options ?? new StreamingToolCallParserOptions();
+        _options = options ?? new ToolCallDetectionOptions();
     }
 
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var innerStream = Inner.StreamAsync(messages, options, tools, ct);
+        var innerStream = Inner.StreamAsync(messages, responseSchema, tools, ct);
         var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
 
         if (toolNames.Count == 0)

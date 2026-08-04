@@ -1,4 +1,5 @@
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using Microsoft.Extensions.AI;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -20,39 +21,24 @@ public class MEAILLM : ILLM
 
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var chatMessages = messages.Select(m => m.ToMEAIMessage()).ToList();
 
         var chatOptions = new ChatOptions();
-        if (options != null)
+        if (responseSchema != null)
         {
-            if (options.Model != null)
+            try
             {
-                chatOptions.ModelId = options.Model;
+                var schemaJson = responseSchema.ToString();
+                var jsonElement = JsonSerializer.Deserialize<JsonElement>(schemaJson);
+                chatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(jsonElement);
             }
-            if (options.Temperature.HasValue)
+            catch
             {
-                chatOptions.Temperature = options.Temperature.Value;
-            }
-            if (options.MaxOutputTokens.HasValue)
-            {
-                chatOptions.MaxOutputTokens = options.MaxOutputTokens.Value;
-            }
-            if (options.ResponseSchema != null)
-            {
-                try
-                {
-                    var schemaJson = options.ResponseSchema.ToString();
-                    var jsonElement = JsonSerializer.Deserialize<JsonElement>(schemaJson);
-                    chatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(jsonElement);
-                }
-                catch
-                {
-                    chatOptions.ResponseFormat = ChatResponseFormat.Json;
-                }
+                chatOptions.ResponseFormat = ChatResponseFormat.Json;
             }
         }
 

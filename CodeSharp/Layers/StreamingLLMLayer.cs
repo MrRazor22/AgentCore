@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Channels;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
 namespace CodeSharp.Layers;
@@ -17,12 +18,12 @@ public sealed class StreamingLLMLayer : LLMLayer
 
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var writer = Writer;
-        await foreach (var output in Inner.StreamAsync(messages, options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var output in Inner.StreamAsync(messages, responseSchema, tools, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             writer?.TryWrite(output);
             yield return output;

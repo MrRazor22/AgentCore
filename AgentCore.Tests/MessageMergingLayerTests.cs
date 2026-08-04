@@ -1,13 +1,13 @@
-using AgentCore.LLM;
+using AgentCore.Layers.LLM;
 using AgentCore.LLM.Chat;
 using Xunit;
 
 namespace AgentCore.Tests;
 
-public class MessageCoalescingLayerTests
+public class MessageMergingLayerTests
 {
     [Fact]
-    public void CoalesceTextMessages_AdjacentUserTextMessages_MergesIntoSingleMessage()
+    public void MergeTextMessages_AdjacentUserTextMessages_MergesIntoSingleMessage()
     {
         var input = new List<Message>
         {
@@ -15,7 +15,7 @@ public class MessageCoalescingLayerTests
             new Message(Role.User, new Text("no i mean the class diagram"))
         };
 
-        var output = MessageCoalescingLayer.CoalesceTextMessages(input);
+        var output = MessageMergingLayer.MergeTextMessages(input);
 
         Assert.Single(output);
         Assert.Equal(Role.User, output[0].Role);
@@ -27,7 +27,7 @@ public class MessageCoalescingLayerTests
     }
 
     [Fact]
-    public void CoalesceTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
+    public void MergeTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
         var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
         var toolResult = new ToolResult("1", new Text("search result content"));
@@ -40,7 +40,7 @@ public class MessageCoalescingLayerTests
             new Message(Role.Assistant, new Text("here are the files"))
         };
 
-        var output = MessageCoalescingLayer.CoalesceTextMessages(input);
+        var output = MessageMergingLayer.MergeTextMessages(input);
 
         Assert.Equal(4, output.Count);
         Assert.Equal(Role.User, output[0].Role);
@@ -50,7 +50,7 @@ public class MessageCoalescingLayerTests
     }
 
     [Fact]
-    public void CoalesceTextMessages_MixedStructuredAndTextMessage_DoesNotMerge()
+    public void MergeTextMessages_MixedStructuredAndTextMessage_DoesNotMerge()
     {
         var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
 
@@ -60,7 +60,7 @@ public class MessageCoalescingLayerTests
             new Message(Role.Assistant, new Text("I'm searching for files."))
         };
 
-        var output = MessageCoalescingLayer.CoalesceTextMessages(input);
+        var output = MessageMergingLayer.MergeTextMessages(input);
 
         Assert.Equal(2, output.Count);
     }

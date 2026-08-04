@@ -43,8 +43,6 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
-            var options = new LLMOptions { ResponseSchema = responseSchema };
-
             await context.StageAsync(new[] { new Message(Role.User, input) }, ct).ConfigureAwait(false);
 
             while (true)
@@ -65,7 +63,7 @@ namespace AgentCore
                 _logger?.LogDebug("Calling LLM StreamAsync...");
 
                 var (assistantMessage, tokenUsage, _) = await _llm
-                    .StreamAsync(currentMessages, options, _tooling.GetDefinitions(), ct)
+                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
                     .AccumulateAsync(ct)
                     .ConfigureAwait(false);
 

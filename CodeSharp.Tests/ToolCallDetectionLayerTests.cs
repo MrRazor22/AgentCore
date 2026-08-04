@@ -1,23 +1,22 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
-using CodeSharp.Layers;
+using AgentCore.Layers.LLM;
 using System.Text.Json.Nodes;
 using Xunit;
 
 namespace CodeSharp.Tests;
 
-public class StreamingToolCallParserLayerTests
+public class ToolCallDetectionLayerTests
 {
     private class MockLLM : ILLM
     {
         public IAsyncEnumerable<ILLMOutput> EmittedOutputs { get; set; } = AsyncEnumerableExtensions.ToAsyncEnumerable(Array.Empty<ILLMOutput>());
 
-
-
         public IAsyncEnumerable<ILLMOutput> StreamAsync(
             IReadOnlyList<Message> messages,
-            LLMOptions? options = null,
+            JsonSchema? responseSchema = null,
             IReadOnlyList<ToolDefinition>? tools = null,
             CancellationToken ct = default)
         {
@@ -38,7 +37,7 @@ public class StreamingToolCallParserLayerTests
     }
 
 
-    private static void AttachMockInner(StreamingToolCallParserLayer layer, ILLM mockInner)
+    private static void AttachMockInner(ToolCallDetectionLayer layer, ILLM mockInner)
     {
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
@@ -52,7 +51,7 @@ public class StreamingToolCallParserLayerTests
         var expectedCall = new ToolCallDelta("call-1", "TestTool", "{}");
         mockLlm.EmittedOutputs = new ILLMOutput[] { expectedCall }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -79,7 +78,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -110,7 +109,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -140,7 +139,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta(" After tool")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -166,7 +165,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("{\"name\": \"UnregisteredTool\", \"arguments\": {}}")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -191,7 +190,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("You can use a List<string> here: {\"something\": 123}")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -220,7 +219,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta(rawText)
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -245,7 +244,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -269,7 +268,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": ")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -302,8 +301,8 @@ public class StreamingToolCallParserLayerTests
                 new TextDelta(chunk2)
             }.ToAsyncEnumerable();
 
-            var layer = new StreamingToolCallParserLayer();
-        AttachMockInner(layer, mockLlm);
+            var layer = new ToolCallDetectionLayer();
+            AttachMockInner(layer, mockLlm);
 
             // Act
             var results = await layer.StreamAsync(
@@ -327,7 +326,7 @@ public class StreamingToolCallParserLayerTests
             new ReasoningDelta("Thinking process: { \"name\": \"NotATool\" }")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -352,7 +351,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -377,7 +376,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -405,7 +404,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta("</function></tool_call>")
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act
@@ -431,7 +430,7 @@ public class StreamingToolCallParserLayerTests
             new TextDelta(rawText)
         }.ToAsyncEnumerable();
 
-        var layer = new StreamingToolCallParserLayer();
+        var layer = new ToolCallDetectionLayer();
         AttachMockInner(layer, mockLlm);
 
         // Act

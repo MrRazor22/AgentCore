@@ -57,7 +57,7 @@ public class ToolingTests
         var builder = Agent.Create()
             .WithTools(new SampleAddTool())
             .WithTools(new SampleAddTool())
-            .WithLLM(new MockLLMProvider()); // Needs LLM to build
+            .WithLLM(lf => new MockLLMProvider()); // Needs LLM to build
 
         Assert.Throws<ArgumentException>(() => builder.Build());
     }

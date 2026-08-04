@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp", "CodeSharp\Code
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp.Tests", "CodeSharp.Tests\CodeSharp.Tests.csproj", "{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Layers", "AgentCore.Layers\AgentCore.Layers.csproj", "{57BBF322-1F3C-4B01-A0B7-C89A14505E88}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -88,6 +90,18 @@ Global
 		{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}.Release|x64.Build.0 = Release|Any CPU
 		{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}.Release|x86.ActiveCfg = Release|Any CPU
 		{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}.Release|x86.Build.0 = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|x64.Build.0 = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Debug|x86.Build.0 = Debug|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x64.ActiveCfg = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x64.Build.0 = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x86.ActiveCfg = Release|Any CPU
+		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,4 +1,5 @@
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
 namespace AgentCore.LLM;
@@ -20,8 +21,8 @@ public abstract class LLMLayer : ILLM
 
     public virtual IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
-        => Inner.StreamAsync(messages, options, tools, ct);
+        => Inner.StreamAsync(messages, responseSchema, tools, ct);
 }

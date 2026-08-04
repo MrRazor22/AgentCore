@@ -7,9 +7,11 @@ using OpenAI;
 using System.ClientModel;
 using AgentCore;
 using AgentCore.Tools;
+using AgentCore.Context;
 using Spectre.Console;
 using CodeSharp.UI;
 using CodeSharp.Layers;
+using AgentCore.Layers.LLM;
 using Serilog;
 using Microsoft.Extensions.Logging;
 
@@ -164,8 +166,10 @@ internal class App
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
+                .WithChatContext(contextWindow: 50000, reserveTokens: 2500, summarizer: new AgentCore.LLM.MEAI.MEAILLM(chatClient))
+                .AddLLMLayer(new MessageMergingLayer())
                 .AddLLMLayer(streamingLayer)
-                .AddLLMLayer(new CodeSharp.Layers.StreamingToolCallParserLayer())
+                .AddLLMLayer(new ToolCallDetectionLayer())
                 .WithTools(shellTool)
                 .WithTools(typeof(CodeSharp.Tools.FileTools))
                 .WithTools(typeof(CodeSharp.Tools.SearchTool))

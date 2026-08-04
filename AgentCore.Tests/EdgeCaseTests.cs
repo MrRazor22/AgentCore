@@ -1,6 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using System;
 using System.Collections.Generic;
@@ -46,7 +47,7 @@ namespace AgentCore.Tests
 
             public IAsyncEnumerable<ILLMOutput> StreamAsync(
                 IReadOnlyList<Message> messages,
-                LLMOptions? options = null,
+                JsonSchema? responseSchema = null,
                 IReadOnlyList<ToolDefinition>? tools = null,
                 CancellationToken ct = default)
             {
@@ -91,7 +92,7 @@ namespace AgentCore.Tests
             mockLlm.EnqueueSimpleText("{ malformed json : ");
 
             var agent = Agent.Create()
-                .WithLLM(mockLlm)
+                .WithLLM(lf => mockLlm)
                 .Build();
 
             // Act & Assert
@@ -126,8 +127,8 @@ namespace AgentCore.Tests
             await context.CommitAsync(new TokenUsage(50, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
-                .WithLLM(mockLlm)
-                .WithContext(context)
+                .WithLLM(lf => mockLlm)
+                .WithContext(lf => context)
                 .Build();
 
             // Act
@@ -161,8 +162,8 @@ namespace AgentCore.Tests
             await context.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
 
             var agent = Agent.Create()
-                .WithLLM(mockLlm)
-                .WithContext(context)
+                .WithLLM(lf => mockLlm)
+                .WithContext(lf => context)
                 .Build();
 
             // Act
@@ -196,8 +197,8 @@ namespace AgentCore.Tests
             mockLlm.EnqueueSimpleText("Tools executed successfully.");
 
             var agent = Agent.Create()
-                .WithLLM(mockLlm)
-                .AddTools(new[] { tool1, tool2 })
+                .WithLLM(lf => mockLlm)
+                .WithTools(tool1, tool2)
                 .Build();
 
             // Act

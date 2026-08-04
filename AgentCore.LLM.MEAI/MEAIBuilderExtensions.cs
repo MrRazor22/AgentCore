@@ -19,7 +19,7 @@ public static class MEAIBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(client);
 
-        return builder.WithLLM(new MEAILLM(client));
+        return builder.WithLLM(lf => new MEAILLM(client));
     }
 
     /// <summary>

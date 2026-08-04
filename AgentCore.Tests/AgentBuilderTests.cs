@@ -1,6 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
 namespace AgentCore.Tests;
@@ -37,7 +38,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Generic_RegistersStaticTools()
     {
-        var builder = Agent.Create().WithLLM(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         builder.WithTools<StaticTestTools>();
 
         var agent = builder.Build();
@@ -47,7 +48,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Instance_RegistersInstanceTools()
     {
-        var builder = Agent.Create().WithLLM(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         var instance = new InstanceTestTools();
         builder.WithTools(instance);
 
@@ -58,7 +59,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Generic_ThrowsForInstanceMethods()
     {
-        var builder = Agent.Create().WithLLM(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         var ex = Assert.Throws<ArgumentException>(() => { builder.WithTools<InstanceTestTools>(); });
         Assert.Contains("instance method", ex.Message);
     }
@@ -66,7 +67,7 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Instance_RegistersMixedTools()
     {
-        var builder = Agent.Create().WithLLM(new MockLLMProvider());
+        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         var instance = new MixedTestTools();
         builder.WithTools(instance);
 
@@ -122,8 +123,8 @@ public class AgentBuilderTests
         var decoratorInstance = new MemoryLoggerDecorator();
 
         var builder = Agent.Create()
-            .WithLLM(mockProvider)
-            .WithContext(baseMemory)
+            .WithLLM(lf => mockProvider)
+            .WithContext(lf => baseMemory)
             .AddContextLayer(decoratorInstance);
 
         var agent = builder.Build();
@@ -144,10 +145,10 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override IAsyncEnumerable<ILLMOutput> StreamAsync(IReadOnlyList<Message> messages, LLMOptions? options = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<ILLMOutput> StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.StreamAsync(messages, options, tools, ct);
+            return base.StreamAsync(messages, responseSchema, tools, ct);
         }
     }
 
@@ -194,7 +195,7 @@ public class AgentBuilderTests
         var callOrder = new List<string>();
 
         var builder = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .AddLLMLayer(new TestLlmDecorator("LlmLayer1", callOrder))
             .AddLLMLayer(new TestLlmDecorator("LlmLayer2", callOrder))
             .AddContextLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
@@ -215,13 +216,13 @@ public class AgentBuilderTests
         var decorator = new TestMemoryDecorator("Shared", new List<string>());
 
         var builder1 = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .AddContextLayer(decorator);
 
         builder1.Build();
 
         var builder2 = Agent.Create()
-            .WithLLM(mockProvider)
+            .WithLLM(lf => mockProvider)
             .AddContextLayer(decorator);
 
         Assert.Throws<InvalidOperationException>(() => builder2.Build());
@@ -232,7 +233,7 @@ public class AgentBuilderTests
     {
         var mockProvider = new MockLLMProvider();
         var builder = Agent.Create()
-            .WithLLM(mockProvider);
+            .WithLLM(lf => mockProvider);
 
         var agent = builder.Build();
 

@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using CodeSharp.Layers;
 using Xunit;
 
@@ -27,7 +28,7 @@ public class StreamingLLMLayerTests
 
         public async IAsyncEnumerable<ILLMOutput> StreamAsync(
             IReadOnlyList<Message> messages,
-            LLMOptions? options = null,
+            JsonSchema? responseSchema = null,
             IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {

@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AgentCore.LLM.MEAI\AgentCore.LLM.MEAI.csproj" />
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
+    <ProjectReference Include="..\AgentCore.Layers\AgentCore.Layers.csproj" />
   </ItemGroup>
 
   <ItemGroup>

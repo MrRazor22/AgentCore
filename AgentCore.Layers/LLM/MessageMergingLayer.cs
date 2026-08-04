@@ -1,28 +1,30 @@
 using System.Runtime.CompilerServices;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
-namespace AgentCore.LLM;
+namespace AgentCore.Layers.LLM;
 
 /// <summary>
 /// Pipeline layer that normalizes request messages for strict chat template compatibility
-/// by coalescing adjacent text-only User or Assistant messages without mutating context.
+/// by merging adjacent text-only User or Assistant messages without mutating context.
 /// </summary>
-public class MessageCoalescingLayer : LLMLayer
+public class MessageMergingLayer : LLMLayer
 { 
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
-        LLMOptions? options = null,
+        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     { 
-        await foreach (var item in Inner.StreamAsync(CoalesceTextMessages(messages), options, tools, ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var item in Inner.StreamAsync(MergeTextMessages(messages), responseSchema, tools, ct).WithCancellation(ct).ConfigureAwait(false))
         {
             yield return item;
         }
     }
 
-    public static IReadOnlyList<Message> CoalesceTextMessages(IReadOnlyList<Message> messages)
+    public static IReadOnlyList<Message> MergeTextMessages(IReadOnlyList<Message> messages)
     {
         if (messages.Count <= 1) return messages ?? Array.Empty<Message>();
 
@@ -38,7 +40,7 @@ public class MessageCoalescingLayer : LLMLayer
 
             var prev = result[^1];
 
-            if (CanCoalesce(prev, msg))
+            if (CanMerge(prev, msg))
             {
                 var combinedText = GetTextOnlyValue(prev) + "\n" + GetTextOnlyValue(msg);
                 result[^1] = new Message(prev.Role, new Text(combinedText));
@@ -52,7 +54,7 @@ public class MessageCoalescingLayer : LLMLayer
         return result;
     }
 
-    private static bool CanCoalesce(Message prev, Message curr)
+    private static bool CanMerge(Message prev, Message curr)
     {
         if (prev.Role != curr.Role) return false;
         if (prev.Role != Role.User && prev.Role != Role.Assistant) return false;
@@ -67,5 +69,4 @@ public class MessageCoalescingLayer : LLMLayer
     }
 
     private static string GetTextOnlyValue(Message message) => string.Join("\n", message.Contents.OfType<Text>().Select(t => t.Value));
-    
 }
