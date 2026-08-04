@@ -105,4 +105,20 @@ public class MessageAccumulatorTests
         Assert.Equal("SearchWeb", calls[1].Name);
         Assert.Contains("test", calls[1].Arguments.ToString());
     }
+
+    [Fact]
+    public async Task AccumulateAsync_AmbiguousDeltaWithMultipleActiveGroups_ThrowsInvalidOperationException()
+    {
+        var sequence = new List<ILLMOutput>
+        {
+            new ToolCallDelta("A", "RunCommand", "", 0),
+            new ToolCallDelta("B", "SearchWeb", "", 1),
+            new ToolCallDelta("", null, "{\"commandLine\":\"ls\"}", null) // Ambiguous chunk
+        };
+
+        await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
+        {
+            await ToAsyncStream(sequence).AccumulateAsync();
+        });
+    }
 }
