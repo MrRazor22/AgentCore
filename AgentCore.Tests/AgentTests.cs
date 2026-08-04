@@ -42,12 +42,10 @@ public class AgentTests
         Assert.Single(mockProvider.CapturedMessages);
         var messagesSentToLlm = mockProvider.CapturedMessages[0];
 
-        // Should include: User: Old message, User: New message
-        Assert.Equal(2, messagesSentToLlm.Count);
+        // Should include coalesced User message containing: "Old message\nNew message"
+        Assert.Single(messagesSentToLlm);
         Assert.Equal(Role.User, messagesSentToLlm[0].Role);
-        Assert.Equal("Old message", messagesSentToLlm[0].Contents[0].ForLlm());
-        Assert.Equal(Role.User, messagesSentToLlm[1].Role);
-        Assert.Equal("New message", messagesSentToLlm[1].Contents[0].ForLlm());
+        Assert.Equal("Old message\nNew message", messagesSentToLlm[0].Contents[0].ForLlm());
     }
 
     [Fact]

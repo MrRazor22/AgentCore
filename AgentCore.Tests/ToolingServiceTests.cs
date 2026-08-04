@@ -12,7 +12,7 @@ public class ToolingServiceTests
         public Func<JsonObject, CancellationToken, Task<object?>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<object?>("Result");
 
-        public FakeTool(string name, JsonSchema schema) : base(name, "Fake Description", schema) { }
+        public FakeTool(string name, JsonSchema schema) : base(new ToolDefinition(name, "Fake Description", schema)) { }
 
         public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Invoker(arguments, ct);
     }

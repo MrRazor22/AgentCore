@@ -21,7 +21,7 @@ public class MEAILLM : ILLM
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
+        IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var chatMessages = messages.Select(m => m.ToMEAIMessage()).ToList();

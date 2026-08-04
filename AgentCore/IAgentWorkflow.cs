@@ -65,7 +65,7 @@ namespace AgentCore
                 _logger?.LogDebug("Calling LLM StreamAsync...");
 
                 var (assistantMessage, tokenUsage, _) = await _llm
-                    .StreamAsync(currentMessages, options, _tooling.Tools, ct)
+                    .StreamAsync(currentMessages, options, _tooling.GetDefinitions(), ct)
                     .AccumulateAsync(ct)
                     .ConfigureAwait(false);
 

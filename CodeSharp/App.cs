@@ -164,7 +164,6 @@ internal class App
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
-                .WithMessageCoalescing()
                 .AddLLMLayer(streamingLayer)
                 .AddLLMLayer(new CodeSharp.Layers.StreamingToolCallParserLayer())
                 .WithTools(shellTool)

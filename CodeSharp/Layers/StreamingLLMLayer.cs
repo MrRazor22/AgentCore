@@ -18,7 +18,7 @@ public sealed class StreamingLLMLayer : LLMLayer
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var writer = Writer;

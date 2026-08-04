@@ -9,9 +9,9 @@ namespace AgentCore.LLM.MEAI;
 /// </summary>
 public sealed class AgentCoreAIFunction : AIFunction
 {
-    private readonly AgentCore.Tools.Tool _tool;
+    private readonly AgentCore.Tools.ToolDefinition _tool;
 
-    public AgentCoreAIFunction(AgentCore.Tools.Tool tool)
+    public AgentCoreAIFunction(AgentCore.Tools.ToolDefinition tool)
     {
         ArgumentNullException.ThrowIfNull(tool);
         _tool = tool;
@@ -23,14 +23,12 @@ public sealed class AgentCoreAIFunction : AIFunction
 
     public override JsonElement JsonSchema => _tool.ParametersSchema.ToJsonElement();
 
-    protected override async ValueTask<object?> InvokeCoreAsync(
+    protected override ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
         CancellationToken cancellationToken)
     {
-        // Convert AIFunctionArguments to JsonObject for AgentCore tool execution
-        var jsonNode = JsonSerializer.SerializeToNode(arguments);
-        var jsonObject = jsonNode?.AsObject() ?? new JsonObject();
-        return await _tool.InvokeAsync(jsonObject, cancellationToken).ConfigureAwait(false);
+        // This function exists only to expose metadata to MEAI. Invocation is handled by AgentCore, not MEAI.
+        throw new NotSupportedException("Tool execution is managed by AgentCore's tooling pipeline, not via direct MEAI invocation.");
     }
 }
  

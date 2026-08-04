@@ -15,7 +15,7 @@ public class MockLLMProvider : ILLM
     public int ReservedTokens { get; set; } = 512;
 
     public List<IReadOnlyList<Message>> CapturedMessages { get; } = new();
-    public List<IReadOnlyList<Tool>?> CapturedTools { get; } = new();
+    public List<IReadOnlyList<ToolDefinition>?> CapturedTools { get; } = new();
     public List<JsonSchema?> CapturedResponseSchemas { get; } = new();
 
     public int CallCount => CapturedMessages.Count;
@@ -71,7 +71,7 @@ public class MockLLMProvider : ILLM
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         CapturedMessages.Add(messages);
@@ -145,7 +145,9 @@ public class MockMemoryProvider : IContext
 
 public class MockTooling : ITooling
 {
-    public IReadOnlyList<Tool> Tools { get; set; } = Array.Empty<Tool>();
+    public IReadOnlyList<ToolDefinition> Definitions { get; set; } = Array.Empty<ToolDefinition>();
+
+    public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
 
     public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<ToolResult>>> Handler { get; set; } =
         (calls, ct) => Task.FromResult<IReadOnlyList<ToolResult>>(

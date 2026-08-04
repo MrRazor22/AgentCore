@@ -25,9 +25,8 @@ public sealed partial class Agent
         private int? _reserveTokens;
 
         private readonly List<ToolingLayer> _toolingLayers = [];
-        private readonly List<LLMLayer> _llmLayers = [];
+        private readonly List<LLMLayer> _llmLayers = [ new MessageCoalescingLayer() ];
         private readonly List<ContextLayer> _contextLayers = [];
-        private bool _enableMessageCoalescing = false;
 
         private readonly List<object> _builtComponents = new();
 
@@ -38,19 +37,9 @@ public sealed partial class Agent
 
         public Builder WithInstructions(string prompt) { _instructions = new Text(prompt); return this; }
 
-        public Builder WithMessageCoalescing(bool enable = true)
-        {
-            _enableMessageCoalescing = enable;
-            return this;
-        }
-
         private void AddTool(Tool tool)
         {
             ArgumentNullException.ThrowIfNull(tool);
-            if (_tools.Any(t => string.Equals(t.Name, tool.Name, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException($"Duplicate tool name '{tool.Name}'.");
-            }
             _tools.Add(tool);
         }
 
@@ -73,13 +62,7 @@ public sealed partial class Agent
             return this;
         }
 
-        public Builder WithTool(Tool tool)
-        {
-            AddTool(tool);
-            return this;
-        }
-
-        public Builder WithTools(IEnumerable<Tool> tools)
+        public Builder AddTools(IEnumerable<Tool> tools)
         {
             ArgumentNullException.ThrowIfNull(tools);
             foreach (var tool in tools)
@@ -148,13 +131,6 @@ public sealed partial class Agent
             var lf = _loggerFactory ?? NullLoggerFactory.Instance;
 
             ILLM provider = baseProvider;
-            if (_enableMessageCoalescing)
-            {
-                var coalescingLayer = new MessageCoalescingLayer();
-                coalescingLayer.Attach(provider);
-                provider = coalescingLayer;
-            }
-
             foreach (var layer in _llmLayers)
             {
                 layer.Attach(provider);

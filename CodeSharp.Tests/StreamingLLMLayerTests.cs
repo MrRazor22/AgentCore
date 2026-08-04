@@ -28,7 +28,7 @@ public class StreamingLLMLayerTests
         public async IAsyncEnumerable<ILLMOutput> StreamAsync(
             IReadOnlyList<Message> messages,
             LLMOptions? options = null,
-            IReadOnlyList<AgentCore.Tools.Tool>? tools = null,
+            IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             foreach (var output in _outputs)

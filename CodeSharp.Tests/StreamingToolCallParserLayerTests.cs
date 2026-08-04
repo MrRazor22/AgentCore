@@ -18,7 +18,7 @@ public class StreamingToolCallParserLayerTests
         public IAsyncEnumerable<ILLMOutput> StreamAsync(
             IReadOnlyList<Message> messages,
             LLMOptions? options = null,
-            IReadOnlyList<Tool>? tools = null,
+            IReadOnlyList<ToolDefinition>? tools = null,
             CancellationToken ct = default)
         {
             return EmittedOutputs;
@@ -27,7 +27,7 @@ public class StreamingToolCallParserLayerTests
 
     private class DummyTool : Tool
     {
-        public DummyTool(string name) : base(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject()))
+        public DummyTool(string name) : base(new ToolDefinition(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject())))
         {
         }
 
@@ -58,7 +58,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TestTool") }
+            tools: new[] { new DummyTool("TestTool").Definition }
         ).ToListAsync();
 
         // Assert
@@ -85,7 +85,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA"), new DummyTool("ToolB") }
+            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
         ).ToListAsync();
 
         // Assert
@@ -116,7 +116,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA"), new DummyTool("ToolB") }
+            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
         ).ToListAsync();
 
         // Assert
@@ -146,7 +146,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -172,7 +172,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -197,7 +197,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -226,7 +226,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -251,7 +251,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -275,7 +275,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -308,7 +308,7 @@ public class StreamingToolCallParserLayerTests
             // Act
             var results = await layer.StreamAsync(
                 Array.Empty<Message>(),
-                tools: new[] { dummyTool }
+                tools: new[] { dummyTool.Definition }
             ).ToListAsync();
 
             // Assert
@@ -333,7 +333,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA") }
+            tools: new[] { new DummyTool("ToolA").Definition }
         ).ToListAsync();
 
         // Assert
@@ -358,7 +358,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList") }
+            tools: new[] { new DummyTool("TodoList").Definition }
         ).ToListAsync();
 
         // Assert
@@ -383,7 +383,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("EditFile") }
+            tools: new[] { new DummyTool("EditFile").Definition }
         ).ToListAsync();
 
         // Assert
@@ -411,7 +411,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList") }
+            tools: new[] { new DummyTool("TodoList").Definition }
         ).ToListAsync();
 
         // Assert
@@ -437,7 +437,7 @@ public class StreamingToolCallParserLayerTests
         // Act
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList") }
+            tools: new[] { new DummyTool("TodoList").Definition }
         ).ToListAsync();
 
         // Assert

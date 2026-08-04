@@ -8,13 +8,13 @@ namespace AgentCore.Tools;
 
 public interface ITooling
 {
-    IReadOnlyList<Tool> Tools { get; }
+    IReadOnlyList<ToolDefinition> GetDefinitions();
     Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling : ITooling
 {
-    private readonly IReadOnlyList<Tool> _toolList;
+    private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<Tooling> _logger;
 
@@ -22,12 +22,25 @@ internal sealed class Tooling : ITooling
         IReadOnlyList<Tool> tools,
         ILogger<Tooling>? logger = null)
     {
-        _toolList = tools ?? Array.Empty<Tool>();
-        _tools = _toolList.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+        var toolList = tools ?? Array.Empty<Tool>();
+
+        var duplicates = toolList
+            .GroupBy(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        if (duplicates.Count > 0)
+        {
+            throw new ArgumentException($"Duplicate tool names registered: {string.Join(", ", duplicates)}");
+        }
+
+        _toolDefinitions = toolList.Select(t => t.Definition).ToList();
+        _tools = toolList.ToDictionary(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase);
         _logger = logger ?? NullLogger<Tooling>.Instance;
     }
 
-    public IReadOnlyList<Tool> Tools => _toolList;
+    public IReadOnlyList<ToolDefinition> GetDefinitions() => _toolDefinitions;
 
     public async Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
     {
@@ -57,7 +70,7 @@ internal sealed class Tooling : ITooling
             return Failed(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
         }
 
-        var errors = tool.ParametersSchema.Validate(call.Arguments);
+        var errors = tool.Definition.ParametersSchema.Validate(call.Arguments);
         if (errors.Any())
         {
             var errorMessage = string.Join("; ", errors);

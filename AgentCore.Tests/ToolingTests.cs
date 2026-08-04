@@ -22,7 +22,7 @@ public class ToolingTests
         var tooling = new Tooling(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
-        var toolCall = new ToolCall("call_1", tool.Name, args);
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
         var results = await tooling.ExecuteAsync(new[] { toolCall });
 
@@ -42,7 +42,7 @@ public class ToolingTests
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
-        var toolCall = new ToolCall("call_1", tool.Name, args);
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
         var results = await tooling.ExecuteAsync(new[] { toolCall });
 
@@ -55,9 +55,11 @@ public class ToolingTests
     public void Builder_ThrowsOnDuplicateName()
     {
         var builder = Agent.Create()
-            .WithTools(new SampleAddTool());
+            .WithTools(new SampleAddTool())
+            .WithTools(new SampleAddTool())
+            .WithLLM(new MockLLMProvider()); // Needs LLM to build
 
-        Assert.Throws<InvalidOperationException>(() => builder.WithTools(new SampleAddTool()));
+        Assert.Throws<ArgumentException>(() => builder.Build());
     }
 
     [Fact]
@@ -78,7 +80,7 @@ public class ToolingTests
 
     private class NullNameTool : Tool
     {
-        public NullNameTool(string name) : base(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build()) { }
+        public NullNameTool(string name) : base(new ToolDefinition(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())) { }
         public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Task.FromResult<object?>(null);
     }
 

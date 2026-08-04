@@ -13,7 +13,7 @@ public class MessageCoalescingLayer : LLMLayer
     public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     { 
         await foreach (var item in Inner.StreamAsync(CoalesceTextMessages(messages), options, tools, ct).WithCancellation(ct).ConfigureAwait(false))

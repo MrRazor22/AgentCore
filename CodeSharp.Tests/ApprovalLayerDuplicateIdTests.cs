@@ -12,17 +12,17 @@ public class ApprovalLayerDuplicateIdTests
 {
     private class DummyTool : Tool
     {
-        public DummyTool(string name) : base(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build()) { }
+        public DummyTool(string name) : base(new ToolDefinition(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build())) { }
 
         public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
-            => Task.FromResult<object?>($"Output for {Name}");
+            => Task.FromResult<object?>($"Output for {Definition.Name}");
     }
 
     private class MockTooling : ITooling
     {
         private readonly Tool _tool;
         public MockTooling(Tool tool) => _tool = tool;
-        public IReadOnlyList<Tool> Tools => new[] { _tool };
+        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { _tool.Definition };
         public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
         {
             return Task.FromResult<IReadOnlyList<ToolResult>>(

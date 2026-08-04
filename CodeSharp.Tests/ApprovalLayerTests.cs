@@ -17,14 +17,14 @@ public class ApprovalLayerTests
 {
     private class TestTool : Tool
     {
-        public TestTool(string name) : base(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build()) { }
+        public TestTool(string name) : base(new ToolDefinition(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build())) { }
         public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Task.FromResult<object?>("ok");
     }
 
     private class MockTooling : ITooling
     {
         public bool ExecuteCalled { get; private set; }
-        public IReadOnlyList<Tool> Tools => Array.Empty<Tool>();
+        public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
         public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
         {

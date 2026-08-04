@@ -13,10 +13,10 @@ public sealed class MEAIFunctionTool : AgentCore.Tools.Tool
     private readonly AIFunction _aiFunction;
 
     public MEAIFunctionTool(AIFunction aiFunction)
-        : base(
+        : base(new AgentCore.Tools.ToolDefinition(
             GetFunctionName(aiFunction),
             GetFunctionDescription(aiFunction),
-            GetFunctionSchema(aiFunction))
+            GetFunctionSchema(aiFunction)))
     {
         _aiFunction = aiFunction;
     }

@@ -21,7 +21,7 @@ public abstract class LLMLayer : ILLM
     public virtual IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
         => Inner.StreamAsync(messages, options, tools, ct);
 }

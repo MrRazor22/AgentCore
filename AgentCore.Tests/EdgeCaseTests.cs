@@ -47,7 +47,7 @@ namespace AgentCore.Tests
             public IAsyncEnumerable<ILLMOutput> StreamAsync(
                 IReadOnlyList<Message> messages,
                 LLMOptions? options = null,
-                IReadOnlyList<Tool>? tools = null,
+                IReadOnlyList<ToolDefinition>? tools = null,
                 CancellationToken ct = default)
             {
                 CapturedMessages.Add(messages.ToList());
@@ -66,20 +66,20 @@ namespace AgentCore.Tests
             private readonly int _delayMs;
 
             public TestExecutionTool(string name, int delayMs = 0)
-                : base(name, "Mock Tool Description", new LLM.Schema.JsonSchema(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }))
+                : base(new ToolDefinition(name, "Mock Tool Description", new LLM.Schema.JsonSchema(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() })))
             {
                 _delayMs = delayMs;
             }
 
             public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
             {
-                ExecutionLog.Add($"Started {Name}");
+                ExecutionLog.Add($"Started {Definition.Name}");
                 if (_delayMs > 0)
                 {
                     await Task.Delay(_delayMs, ct);
                 }
-                ExecutionLog.Add($"Completed {Name}");
-                return $"Result of {Name}";
+                ExecutionLog.Add($"Completed {Definition.Name}");
+                return $"Result of {Definition.Name}";
             }
         }
 
@@ -197,7 +197,7 @@ namespace AgentCore.Tests
 
             var agent = Agent.Create()
                 .WithLLM(mockLlm)
-                .WithTools(new[] { tool1, tool2 })
+                .AddTools(new[] { tool1, tool2 })
                 .Build();
 
             // Act

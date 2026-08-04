@@ -17,7 +17,7 @@ public abstract class ToolingLayer : ITooling
         _attached = true;
     }
 
-    public virtual IReadOnlyList<Tool> Tools => Inner.Tools;
+    public virtual IReadOnlyList<ToolDefinition> GetDefinitions() => Inner.GetDefinitions();
 
     public virtual Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
         => Inner.ExecuteAsync(calls, ct);

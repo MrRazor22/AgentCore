@@ -29,10 +29,10 @@ public sealed class MethodTool : Tool
     private readonly PropertyInfo? _taskResultProperty;
 
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null)
-        : base(
+        : base(new ToolDefinition(
             GetName(method, name),
             GetDescription(method, description),
-            BuildSchema(method))
+            BuildSchema(method)))
     {
         ArgumentNullException.ThrowIfNull(method);
 

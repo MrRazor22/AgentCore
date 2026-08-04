@@ -5,27 +5,20 @@ namespace AgentCore.Tools;
 
 public abstract class Tool
 {
-    public string Name { get; }
-    public string Description { get; }
-    public JsonSchema ParametersSchema { get; }
+    public ToolDefinition Definition { get; }
 
-    protected Tool(string name, string description, JsonSchema parametersSchema)
+    protected Tool(ToolDefinition definition)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-        ArgumentNullException.ThrowIfNull(parametersSchema);
-
-        Name = name;
-        Description = description;
-        ParametersSchema = parametersSchema;
+        ArgumentNullException.ThrowIfNull(definition);
+        Definition = definition;
     }
 
     public abstract Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct);
 
     public override string ToString()
     {
-        var args = string.Join(", ", ParametersSchema.ParameterNames);
+        var args = string.Join(", ", Definition.ParametersSchema.ParameterNames);
         var argPart = args.Length > 0 ? $"({args})" : "()";
-        return !string.IsNullOrWhiteSpace(Description) ? $"{Name}{argPart} => {Description}" : $"{Name}{argPart}";
+        return !string.IsNullOrWhiteSpace(Definition.Description) ? $"{Definition.Name}{argPart} => {Definition.Description}" : $"{Definition.Name}{argPart}";
     }
 }

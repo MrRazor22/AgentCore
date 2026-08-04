@@ -158,7 +158,14 @@ public class MEAITests
         Assert.NotNull(agent);
         var llm = builder.GetService<ILLM>();
         Assert.NotNull(llm);
-        Assert.IsType<MEAILLM>(llm);
+        if (llm is LLMLayer layer)
+        {
+            Assert.IsType<MEAILLM>(layer.Inner);
+        }
+        else
+        {
+            Assert.IsType<MEAILLM>(llm);
+        }
     }
 
     private class TestAIFunction : AIFunction
@@ -186,9 +193,9 @@ public class MEAITests
         var tool = new MEAIFunctionTool(aiFunction);
 
         // Act & Assert 1: Fidelity
-        Assert.Equal("test_fn", tool.Name);
-        Assert.Equal("a description", tool.Description);
-        var schemaJson = tool.ParametersSchema.ToString();
+        Assert.Equal("test_fn", tool.Definition.Name);
+        Assert.Equal("a description", tool.Definition.Description);
+        var schemaJson = tool.Definition.ParametersSchema.ToString();
         Assert.Contains("input", schemaJson);
 
         // Act & Assert 2: Execution and token propagation

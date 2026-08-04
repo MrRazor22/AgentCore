@@ -17,6 +17,6 @@ public interface ILLM
     IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,
         LLMOptions? options = null,
-        IReadOnlyList<Tool>? tools = null,
+        IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default);
 }
