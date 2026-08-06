@@ -49,16 +49,24 @@ public class ChatContext : IContext
         int stagedEstimate;
         int currentUsage;
         lock (_lock)
-        {
+        { 
             currentUsage = TokenUsage.InputTokens + TokenUsage.OutputTokens;
             stagedEstimate = _staged.Sum(m => Estimate(m));
         }
 
         int estimatedTotal = currentUsage + stagedEstimate;
 
+        _logger?.LogInformation(
+             "Preparing prompt. Strategy={Strategy}, StagedMessages={StagedMessages}, StagedTokens={StagedTokens}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
+             _summarizer != null ? "Summary" : "Trim",
+             _staged.Count,
+             stagedEstimate,
+             estimatedTotal,
+             _limit);
+
         if (estimatedTotal > _limit)
         {
-            _logger?.LogInformation("Compaction triggered. EstimatedTotal={Count}, Limit={Limit}", estimatedTotal, _limit);
+            _logger?.LogInformation("Compacting conversation...");
             await CompactChatAsync(ct).ConfigureAwait(false);
         }
 
@@ -71,8 +79,8 @@ public class ChatContext : IContext
     }
 
     public Task CommitAsync(
-        TokenUsage usage,
         IReadOnlyList<Message> response,
+        TokenUsage? usage = null,
         CancellationToken ct = default)
     {
         if (response == null) throw new ArgumentNullException(nameof(response));
@@ -81,13 +89,26 @@ public class ChatContext : IContext
         {
             _chat.AddRange(_staged);
             _chat.AddRange(response);
-            _staged.Clear();
 
             if (usage != null)
             {
                 TokenUsage = usage;
             }
+            else
+            {
+                TokenUsage = new TokenUsage(
+                    InputTokens: TokenUsage.InputTokens + _staged.Sum(Estimate),
+                    OutputTokens: TokenUsage.OutputTokens + response.Sum(Estimate)
+                );
+            }
+
+            _staged.Clear();
         }
+        _logger?.LogInformation(
+            "Conversation committed. Messages={Messages}, In Tokens={InputTokens}, Out Tokens={OutputTokens}",
+            _chat.Count,
+            TokenUsage.InputTokens,
+            TokenUsage.OutputTokens);
 
         return Task.CompletedTask;
     }
@@ -96,8 +117,8 @@ public class ChatContext : IContext
     {
         if (_summarizer != null)
         {
-            string summary = await ConsolidateAsync(ct).ConfigureAwait(false);
-            ReplaceWithSummary(summary);
+            string summary = await GenerateChatSummary(ct).ConfigureAwait(false);
+            ReplaceChatWithSummary(summary);
         }
         else
         {
@@ -116,7 +137,7 @@ public class ChatContext : IContext
         }
     }
 
-    private async Task<string> ConsolidateAsync(CancellationToken ct)
+    private async Task<string> GenerateChatSummary(CancellationToken ct)
     {
         if (_summarizer == null) return string.Empty;
 
@@ -128,19 +149,44 @@ public class ChatContext : IContext
 
         tempChat.Add(new Message(Role.User, new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
 
-        var sb = new StringBuilder();
-        await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
+        while (true)
         {
-            if (evt is TextDelta t)
+            try
             {
-                sb.Append(t.Value);
+                var sb = new StringBuilder();
+                await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
+                {
+                    if (evt is TextDelta t)
+                    {
+                        sb.Append(t.Value);
+                    }
+                }
+
+                return sb.ToString().Trim();
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                int oldestIndex = tempChat.Count > 0 && tempChat[0].Role == Role.System ? 1 : 0;
+                if (tempChat.Count > oldestIndex + 1)
+                {
+                    var removedMessage = tempChat[oldestIndex];
+                    tempChat.RemoveAt(oldestIndex);
+
+                    _logger?.LogWarning(
+                        ex,
+                        "Failed to generate chat summary due to exception. Retrying with reduced message history. Removed oldest message: {Role} ({Length} chars).",
+                        removedMessage.Role,
+                        removedMessage.Contents.FirstOrDefault()?.ForLlm()?.Length ?? 0);
+                }
+                else
+                {
+                    throw;
+                }
             }
         }
-
-        return sb.ToString().Trim();
     }
 
-    private void ReplaceWithSummary(string summary)
+    private void ReplaceChatWithSummary(string summary)
     {
         lock (_lock)
         {

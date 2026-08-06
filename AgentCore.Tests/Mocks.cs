@@ -74,7 +74,7 @@ public class MockLLMProvider : ILLM
         IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        CapturedMessages.Add(messages);
+        CapturedMessages.Add(messages.ToList());
         CapturedTools.Add(tools);
         CapturedResponseSchemas.Add(responseSchema);
 
@@ -124,8 +124,8 @@ public class MockMemoryProvider : IContext
     }
 
     public Task CommitAsync(
-        TokenUsage usage,
         IReadOnlyList<Message> response,
+        TokenUsage? usage = null,
         CancellationToken ct = default)
     {
         _internalMessages.Clear();

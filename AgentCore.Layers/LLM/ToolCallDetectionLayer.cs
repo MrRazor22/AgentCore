@@ -3,7 +3,6 @@ using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -18,16 +17,13 @@ public class ToolCallDetectionLayer : LLMLayer
 {
     private readonly ToolCallDetectionOptions _options;
 
-    // Matches any tag like <tool_call>...</tool_call>, [TOOLCALL]...[/TOOLCALL], etc.
-    // Specifically looking for open tag enclosing JSON, followed by corresponding closing tag.
     private static readonly Regex TagPattern = new Regex(
-        @"^[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<json>\{[\s\S]*?\})\s*[\[\(<]/\k<tag>[\]\)>]",
+        @"[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<content>[\s\S]*?)\s*[\[\(<]/\k<tag>[\]\)>]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
     );
 
-    // Matches markdown json block: ```json ... ```
     private static readonly Regex MarkdownBlockPattern = new Regex(
-        @"^```json\s*(?<json>\{[\s\S]*?\})\s*```",
+        @"```json\s*(?<json>\{[\s\S]*?\})\s*```",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
     );
 
@@ -43,11 +39,10 @@ public class ToolCallDetectionLayer : LLMLayer
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var innerStream = Inner.StreamAsync(messages, responseSchema, tools, ct);
-        var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
+        var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
 
         if (toolNames.Count == 0)
         {
-            // No tools registered, bypass completely
             await foreach (var item in innerStream.WithCancellation(ct).ConfigureAwait(false))
             {
                 yield return item;
@@ -55,147 +50,84 @@ public class ToolCallDetectionLayer : LLMLayer
             yield break;
         }
 
-        var deltaBuffer = new List<IContentDelta>();
-        var isBuffering = false;
+        Type? currentType = null;
+        var segmentBuffer = new List<IContentDelta>();
         var totalToolCallsEmitted = 0;
 
         await foreach (var item in innerStream.WithCancellation(ct).ConfigureAwait(false))
         {
-            if (item is ToolCallDelta)
-            {
-                // Native ToolCallDeltas pass through untouched
-                yield return item;
-                totalToolCallsEmitted++;
-                continue;
-            }
+            var isTextOrReasoning = item is TextDelta or ReasoningDelta;
+            var itemType = isTextOrReasoning ? item.GetType() : null;
 
-            if (item is not IContentDelta contentDelta)
+            if (currentType != null && (itemType != currentType || !isTextOrReasoning))
             {
-                yield return item;
-                continue;
-            }
-
-            var chunk = GetDeltaText(contentDelta);
-            if (string.IsNullOrEmpty(chunk))
-            {
-                continue;
-            }
-
-            if (!isBuffering)
-            {
-                if (HasTriggerMarker(chunk))
+                foreach (var emitted in FlushSegment(segmentBuffer, currentType, toolNames))
                 {
-                    isBuffering = true;
-                    deltaBuffer.Add(contentDelta);
+                    yield return emitted;
+                    if (emitted is ToolCallDelta) totalToolCallsEmitted++;
                 }
-                else
+                segmentBuffer.Clear();
+                currentType = null;
+
+                if (_options.StopAfterFirstToolCall && totalToolCallsEmitted > 0 && isTextOrReasoning)
                 {
-                    yield return item;
+                    yield break;
                 }
+            }
+
+            if (isTextOrReasoning)
+            {
+                currentType = itemType;
+                segmentBuffer.Add((IContentDelta)item);
             }
             else
             {
-                deltaBuffer.Add(contentDelta);
-            }
-
-            if (isBuffering)
-            {
-                bool processedToolCall;
-                do
+                yield return item;
+                if (_options.StopAfterFirstToolCall && totalToolCallsEmitted > 0)
                 {
-                    processedToolCall = false;
-                    var fullBufferedText = string.Concat(deltaBuffer.Select(GetDeltaText));
-                    var parseResult = TryParseToolCall(fullBufferedText, toolNames);
-
-                    if (parseResult.Success && parseResult.ToolCall != null)
-                    {
-                        // Yield any leading text before the tool call start
-                        if (parseResult.LeadingTextIndex > 0)
-                        {
-                            var (leading, _) = SplitBuffer(deltaBuffer, parseResult.LeadingTextIndex);
-                            foreach (var l in leading)
-                            {
-                                yield return l;
-                            }
-                        }
-
-                        // Yield the parsed tool call
-                        yield return parseResult.ToolCall;
-                        totalToolCallsEmitted++;
-
-                        // Consume the matched portion from the buffer
-                        var (_, remaining) = SplitBuffer(deltaBuffer, parseResult.MatchedEndIndex);
-                        deltaBuffer.Clear();
-                        deltaBuffer.AddRange(remaining);
-
-                        processedToolCall = true;
-
-                        if (_options.StopAfterFirstToolCall && totalToolCallsEmitted > 0)
-                        {
-                            yield break;
-                        }
-                    }
-                    else if (parseResult.IsDefiniteFailure)
-                    {
-                        // Flush the buffer and reset buffering state
-                        foreach (var d in deltaBuffer)
-                        {
-                            yield return d;
-                        }
-                        deltaBuffer.Clear();
-                        isBuffering = false;
-                        break;
-                    }
-                    else
-                    {
-                        // To prevent unbounded buffering, flush if it grows too large
-                        if (fullBufferedText.Length > 8192)
-                        {
-                            foreach (var d in deltaBuffer)
-                            {
-                                yield return d;
-                            }
-                            deltaBuffer.Clear();
-                            isBuffering = false;
-                        }
-                        break;
-                    }
-                } while (processedToolCall && deltaBuffer.Count > 0);
-
-                if (deltaBuffer.Count > 0 && !isBuffering)
-                {
-                    foreach (var d in deltaBuffer)
-                    {
-                        yield return d;
-                    }
-                    deltaBuffer.Clear();
+                    yield break;
                 }
             }
         }
 
-        // End of stream cleanup: flush any remaining buffered candidate
-        if (deltaBuffer.Count > 0)
+        if (segmentBuffer.Count > 0)
         {
-            var finalBufferedText = string.Concat(deltaBuffer.Select(GetDeltaText));
-            var finalParseResult = TryParseToolCall(finalBufferedText, toolNames);
-            if (finalParseResult.Success && finalParseResult.ToolCall != null)
+            foreach (var emitted in FlushSegment(segmentBuffer, currentType!, toolNames))
             {
-                if (finalParseResult.LeadingTextIndex > 0)
+                yield return emitted;
+            }
+        }
+    }
+
+    private static IEnumerable<ILLMOutput> FlushSegment(List<IContentDelta> buffer, Type type, HashSet<string> toolNames)
+    {
+        if (buffer.Count == 0) yield break;
+
+        var combinedText = string.Concat(buffer.Select(GetDeltaText));
+        int lastIndex = 0;
+
+        while (lastIndex < combinedText.Length)
+        {
+            var parseResult = TryParseToolCall(combinedText.Substring(lastIndex), toolNames);
+            if (parseResult.Success && parseResult.ToolCall != null)
+            {
+                if (parseResult.LeadingTextIndex > 0)
                 {
-                    var (leading, _) = SplitBuffer(deltaBuffer, finalParseResult.LeadingTextIndex);
-                    foreach (var l in leading)
-                    {
-                        yield return l;
-                    }
+                    var leadingText = combinedText.Substring(lastIndex, parseResult.LeadingTextIndex);
+                    yield return CreateDelta(type, leadingText);
                 }
-                yield return finalParseResult.ToolCall;
+
+                yield return parseResult.ToolCall;
+                lastIndex += parseResult.MatchedEndIndex;
             }
             else
             {
-                foreach (var d in deltaBuffer)
+                var remainingText = combinedText.Substring(lastIndex);
+                if (!string.IsNullOrEmpty(remainingText))
                 {
-                    yield return d;
+                    yield return CreateDelta(type, remainingText);
                 }
+                break;
             }
         }
     }
@@ -210,66 +142,9 @@ public class ToolCallDetectionLayer : LLMLayer
         };
     }
 
-    private static (List<IContentDelta> Leading, List<IContentDelta> Remaining) SplitBuffer(List<IContentDelta> buffer, int splitIndex)
+    private static IContentDelta CreateDelta(Type type, string text)
     {
-        var leading = new List<IContentDelta>();
-        var remaining = new List<IContentDelta>();
-        int currentIndex = 0;
-
-        foreach (var delta in buffer)
-        {
-            var text = GetDeltaText(delta);
-            if (currentIndex + text.Length <= splitIndex)
-            {
-                leading.Add(delta);
-                currentIndex += text.Length;
-            }
-            else if (currentIndex < splitIndex)
-            {
-                int take = splitIndex - currentIndex;
-                var pref = text.Substring(0, take);
-                var suff = text.Substring(take);
-
-                if (delta is TextDelta)
-                {
-                    leading.Add(new TextDelta(pref));
-                    if (!string.IsNullOrEmpty(suff)) remaining.Add(new TextDelta(suff));
-                }
-                else
-                {
-                    leading.Add(new ReasoningDelta(pref));
-                    if (!string.IsNullOrEmpty(suff)) remaining.Add(new ReasoningDelta(suff));
-                }
-                currentIndex = splitIndex;
-            }
-            else
-            {
-                remaining.Add(delta);
-            }
-        }
-
-        return (leading, remaining);
-    }
-
-    private static bool HasTriggerMarker(string text)
-    {
-        if (text.Contains("<tool", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("<function", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("<call", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("[TOOL", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("[CALL", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("```json", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        int braceIdx = text.IndexOf('{');
-        if (braceIdx >= 0 && IsPotentialJsonCandidate(text, braceIdx))
-        {
-            return true;
-        }
-
-        return false;
+        return type == typeof(ReasoningDelta) ? new ReasoningDelta(text) : new TextDelta(text);
     }
 
     private struct ParseResult
@@ -290,130 +165,42 @@ public class ToolCallDetectionLayer : LLMLayer
         for (int i = startIndex; i < text.Length; i++)
         {
             char c = text[i];
-
-            if (escaped)
-            {
-                escaped = false;
-                continue;
-            }
-
-            if (inString && c == '\\')
-            {
-                escaped = true;
-                continue;
-            }
-
-            if (c == '"')
-            {
-                inString = !inString;
-                continue;
-            }
+            if (escaped) { escaped = false; continue; }
+            if (inString && c == '\\') { escaped = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
 
             if (!inString)
             {
-                if (c == '{')
-                {
-                    braceCount++;
-                }
+                if (c == '{') braceCount++;
                 else if (c == '}')
                 {
                     braceCount--;
-                    if (braceCount == 0)
-                    {
-                        return i;
-                    }
+                    if (braceCount == 0) return i;
                 }
             }
         }
-
         return -1;
-    }
-
-    private static bool IsPotentialJsonCandidate(string text, int startIndex)
-    {
-        int idx = startIndex + 1;
-        while (idx < text.Length && char.IsWhiteSpace(text[idx]))
-        {
-            idx++;
-        }
-
-        if (idx >= text.Length)
-        {
-            return true; // Still waiting for property characters, keep buffering
-        }
-
-        var remaining = text.Substring(idx);
-        
-        // Match partial starts of '"name"' or '"tool"'
-        if ("\"name\"".StartsWith(remaining, StringComparison.OrdinalIgnoreCase) ||
-            "\"tool\"".StartsWith(remaining, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (remaining.StartsWith("\"name\"", StringComparison.OrdinalIgnoreCase) ||
-            remaining.StartsWith("\"tool\"", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     private static ParseResult TryParseToolCall(string text, HashSet<string> toolNames)
     {
-        // 1. Check for XML/Bracket tag structures
-        int openTagStart = -1;
-        int openTagEnd = -1;
-
-        for (int i = 0; i < text.Length; i++)
+        var tagMatch = TagPattern.Match(text);
+        if (tagMatch.Success)
         {
-            if (text[i] == '<' || text[i] == '[')
+            var innerContent = tagMatch.Groups["content"].Value;
+            var toolCall = TryExtractFromJson(innerContent, toolNames) ?? TryExtractFromXmlTags(innerContent, toolNames);
+            if (toolCall != null)
             {
-                openTagStart = i;
-            }
-            else if (openTagStart >= 0 && (text[i] == '>' || text[i] == ']'))
-            {
-                openTagEnd = i;
-                var rawTagName = text.Substring(openTagStart + 1, openTagEnd - openTagStart - 1).Trim();
-                var spaceIdx = rawTagName.IndexOf(' ');
-                var tagName = spaceIdx >= 0 ? rawTagName.Substring(0, spaceIdx) : rawTagName;
-
-                if (tagName.Contains("tool", StringComparison.OrdinalIgnoreCase))
+                return new ParseResult
                 {
-                    var closingTag = (text[openTagStart] == '<') ? $"</{tagName}>" : $"[/{tagName}]";
-                    var closeTagIdx = text.IndexOf(closingTag, openTagEnd + 1, StringComparison.OrdinalIgnoreCase);
-                    
-                    if (closeTagIdx >= 0)
-                    {
-                        var matchedEndIdx = closeTagIdx + closingTag.Length;
-                        var innerContent = text.Substring(openTagEnd + 1, closeTagIdx - openTagEnd - 1);
-
-                        // Try JSON extraction first
-                        var toolCall = TryExtractFromJson(innerContent, toolNames);
-                        if (toolCall == null)
-                        {
-                            // Try XML function/parameter tags extraction
-                            toolCall = TryExtractFromXmlTags(innerContent, toolNames);
-                        }
-
-                        if (toolCall != null)
-                        {
-                            return new ParseResult
-                            {
-                                Success = true,
-                                ToolCall = toolCall,
-                                LeadingTextIndex = openTagStart,
-                                MatchedEndIndex = matchedEndIdx
-                            };
-                        }
-                    }
-                }
-                openTagStart = -1;
+                    Success = true,
+                    ToolCall = toolCall,
+                    LeadingTextIndex = tagMatch.Index,
+                    MatchedEndIndex = tagMatch.Index + tagMatch.Length
+                };
             }
         }
 
-        // 2. Check for markdown json block
         var mdMatch = MarkdownBlockPattern.Match(text);
         if (mdMatch.Success)
         {
@@ -431,16 +218,9 @@ public class ToolCallDetectionLayer : LLMLayer
             }
         }
 
-        // 3. Raw JSON brace matching (using string-aware matcher)
         int firstBrace = text.IndexOf('{');
         if (firstBrace >= 0)
         {
-            // Verify if it looks like a valid tool call property shape: {"name" or {"tool"
-            if (!IsPotentialJsonCandidate(text, firstBrace))
-            {
-                return new ParseResult { IsDefiniteFailure = true };
-            }
-
             int lastBrace = FindMatchingBrace(text, firstBrace);
             if (lastBrace >= 0)
             {
@@ -456,20 +236,14 @@ public class ToolCallDetectionLayer : LLMLayer
                         MatchedEndIndex = lastBrace + 1
                     };
                 }
-                else
-                {
-                    // Found a complete brace-matched JSON object but it doesn't contain a registered tool
-                    return new ParseResult { IsDefiniteFailure = true };
-                }
+                return new ParseResult { IsDefiniteFailure = true };
             }
         }
 
-        // Check if the current buffer is invalid/definite failure
         if (text.Contains("</tool_call>") || text.Contains("[/TOOLCALL]") || text.Contains("```"))
         {
             return new ParseResult { IsDefiniteFailure = true };
         }
-
         return new ParseResult { Success = false };
     }
 
@@ -477,89 +251,39 @@ public class ToolCallDetectionLayer : LLMLayer
     {
         try
         {
-            var node = JsonNode.Parse(jsonStr);
-            if (node is JsonObject obj)
+            if (JsonNode.Parse(jsonStr) is JsonObject obj)
             {
-                string? name = null;
-                if (obj.TryGetPropertyValue("name", out var nameNode) && nameNode != null)
-                {
-                    name = nameNode.ToString();
-                }
-                else if (obj.TryGetPropertyValue("tool", out var toolNode) && toolNode != null)
-                {
-                    name = toolNode.ToString();
-                }
-
+                var name = (obj["name"] ?? obj["tool"])?.ToString();
                 if (!string.IsNullOrEmpty(name) && toolNames.Contains(name))
                 {
-                    JsonObject? args = null;
-                    if (obj.TryGetPropertyValue("arguments", out var argsNode) && argsNode is JsonObject argsObj)
-                    {
-                        args = argsObj;
-                    }
-                    else if (obj.TryGetPropertyValue("parameters", out var paramsNode) && paramsNode is JsonObject paramsObj)
-                    {
-                        args = paramsObj;
-                    }
-                    else
-                    {
-                        args = new JsonObject();
-                    }
-
-                    return new ToolCallDelta(
-                        Id: Guid.NewGuid().ToString(),
-                        NameDelta: name,
-                        ArgumentsDelta: args.ToJsonString()
-                    );
+                    var args = (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new JsonObject();
+                    return new ToolCallDelta(Guid.NewGuid().ToString(), name, args.ToJsonString());
                 }
             }
         }
-        catch
-        {
-            // Parse failed, ignore
-        }
-
+        catch { }
         return null;
     }
 
     private static ToolCallDelta? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
     {
-        var functionMatch = Regex.Match(content, @"<function\s*=\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>", RegexOptions.IgnoreCase);
-        if (!functionMatch.Success)
-        {
-            functionMatch = Regex.Match(content, @"<function\s+name\s*=\s*""(?<name>[a-zA-Z0-9_\-]+)""\s*>", RegexOptions.IgnoreCase);
-        }
-
+        var functionMatch = Regex.Match(content, @"(?i)<function\s*(?:=|\bname\s*=)\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>");
         if (!functionMatch.Success) return null;
 
         string funcName = functionMatch.Groups["name"].Value;
         if (!toolNames.Contains(funcName)) return null;
 
-        var paramPattern = @"<parameter\s*=\s*""?(?<paramName>[a-zA-Z0-9_\-]+)""?\s*>(?<paramValue>[\s\S]*?)</parameter>";
-        var paramMatches = Regex.Matches(content, paramPattern, RegexOptions.IgnoreCase);
-        
+        var paramMatches = Regex.Matches(content, @"<parameter\s*=\s*""?(?<paramName>[a-zA-Z0-9_\-]+)""?\s*>(?<paramValue>[\s\S]*?)</parameter>", RegexOptions.IgnoreCase);
         var argsObj = new JsonObject();
 
         foreach (Match pm in paramMatches)
         {
-            var paramName = pm.Groups["paramName"].Value;
-            var paramValueStr = pm.Groups["paramValue"].Value.Trim();
-
-            try
-            {
-                var node = JsonNode.Parse(paramValueStr);
-                argsObj[paramName] = node?.DeepClone();
-            }
-            catch
-            {
-                argsObj[paramName] = paramValueStr;
-            }
+            var pName = pm.Groups["paramName"].Value;
+            var val = pm.Groups["paramValue"].Value.Trim();
+            try { argsObj[pName] = JsonNode.Parse(val)?.DeepClone(); }
+            catch { argsObj[pName] = val; }
         }
 
-        return new ToolCallDelta(
-            Id: Guid.NewGuid().ToString(),
-            NameDelta: funcName,
-            ArgumentsDelta: argsObj.ToJsonString()
-        );
+        return new ToolCallDelta(Guid.NewGuid().ToString(), funcName, argsObj.ToJsonString());
     }
 }

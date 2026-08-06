@@ -25,7 +25,7 @@ public class AgentTests
         );
         await memory.StageAsync(new[] { new Message(Role.User, new Text("Old message")) });
         var prompt = await memory.PreparePromptAsync();
-        await memory.CommitAsync(new TokenUsage(10, 0), Array.Empty<Message>());
+        await memory.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
 
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)

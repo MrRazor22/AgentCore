@@ -101,12 +101,12 @@ public class AgentBuilderTests
         }
 
         public override async Task CommitAsync(
-            TokenUsage usage,
             IReadOnlyList<Message> response,
+            TokenUsage? usage = null,
             CancellationToken ct = default)
         {
             CallLog.Add("Commit");
-            await base.CommitAsync(usage, response, ct).ConfigureAwait(false);
+            await base.CommitAsync(response, usage, ct).ConfigureAwait(false);
         }
     }
 
@@ -178,12 +178,12 @@ public class AgentBuilderTests
         }
 
         public override async Task CommitAsync(
-            TokenUsage usage,
             IReadOnlyList<Message> response,
+            TokenUsage? usage = null,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            await base.CommitAsync(usage, response, ct).ConfigureAwait(false);
+            await base.CommitAsync(response, usage, ct).ConfigureAwait(false);
         }
     }
 

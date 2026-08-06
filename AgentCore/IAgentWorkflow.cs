@@ -74,8 +74,7 @@ namespace AgentCore
                 }
 
                 // Save LLM response to context immediately (authoritative commit!)
-                var finalUsage = tokenUsage ?? new TokenUsage(0, 0);
-                await context.CommitAsync(finalUsage, new[] { assistantMessage }, ct).ConfigureAwait(false);
+                await context.CommitAsync(new[] { assistantMessage }, tokenUsage, ct).ConfigureAwait(false);
 
                 // Yield all contents produced by LLM assistant response (Text, Reasoning, ToolCall)
                 foreach (var content in assistantMessage.Contents)
