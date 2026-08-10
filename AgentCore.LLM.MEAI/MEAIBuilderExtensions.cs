@@ -1,6 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.MEAI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore;
 
@@ -19,7 +20,7 @@ public static class MEAIBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(client);
 
-        return builder.WithLLM(lf => new MEAILLM(client));
+        return builder.WithLLM(lf => new MEAILLM(client, lf.CreateLogger<MEAILLM>()));
     }
 
     /// <summary>

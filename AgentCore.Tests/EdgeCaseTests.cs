@@ -226,30 +226,30 @@ namespace AgentCore.Tests
             var list = new List<Message>();
 
             // Test null content
-            list.AddMessage(Role.System, (IContent?)null);
+            list.AddIfValid(Role.System, (IContent?)null);
             Assert.Empty(list);
 
             // Test null / empty Text
-            list.AddMessage(Role.User, new Text(""))
-                .AddMessage(Role.User, new Text(null!));
+            list.AddIfValid(Role.User, new Text(""))
+                .AddIfValid(Role.User, new Text(null!));
             Assert.Empty(list);
 
             // Test valid Text
-            list.AddMessage(Role.User, new Text("hello"));
+            list.AddIfValid(Role.User, new Text("hello"));
             Assert.Single(list);
             Assert.Equal("hello", list[0].Contents[0].ForLlm());
 
             // Test null Message
-            MessageExtensions.AddMessage(list, (Message?)null);
+            MessageExtensions.AddIfValid(list, (Message?)null);
             Assert.Single(list);
 
             // Test Message with empty contents
-            MessageExtensions.AddMessage(list, new Message(Role.Assistant, Array.Empty<IContent>()));
+            MessageExtensions.AddIfValid(list, new Message(Role.Assistant, Array.Empty<IContent>()));
             Assert.Single(list);
 
             // Test valid Message addition & method chaining
-            MessageExtensions.AddMessage(list, new Message(Role.Assistant, new Text("hi")))
-                .AddMessage(Role.User, new Text("fluent"));
+            MessageExtensions.AddIfValid(list, new Message(Role.Assistant, new Text("hi")))
+                .AddIfValid(Role.User, new Text("fluent"));
             Assert.Equal(3, list.Count);
             Assert.Equal("fluent", list[2].Contents[0].ForLlm());
         }

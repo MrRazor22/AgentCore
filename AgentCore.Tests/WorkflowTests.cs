@@ -202,4 +202,50 @@ public class WorkflowTests
             }
         });
     }
+
+    [Fact]
+    public async Task ExecuteAsync_OnStreamCancellation_PersistsAssistantMessageAndPropagatesCancellation()
+    {
+        // Arrange
+        var cts = new CancellationTokenSource();
+
+        async IAsyncEnumerable<ILLMOutput> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ReasoningDelta("Thinking...");
+            yield return new TextDelta("Hello world partial");
+            cts.Cancel();
+            ct.ThrowIfCancellationRequested();
+        }
+
+        var provider = new MockLLMProvider();
+        provider.Enqueue(ct => CancellationStream(ct));
+
+        var (llm, tooling) = CreateServices(provider, new MockTooling());
+        var executor = new ReActWorkflow(llm, tooling);
+        var context = new MockMemoryProvider();
+        var input = new Text("User input");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null, ct: cts.Token))
+            {
+                // Consume stream
+            }
+        });
+
+        // Assert that Assistant message with accumulated content WAS persisted to context despite cancellation
+        var messages = context.Messages;
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(Role.User, messages[0].Role);
+        Assert.Equal(Role.Assistant, messages[1].Role);
+
+        var reasoning = messages[1].Contents.OfType<Reasoning>().FirstOrDefault();
+        Assert.NotNull(reasoning);
+        Assert.Equal("Thinking...", reasoning.Thought);
+
+        var text = messages[1].Contents.OfType<Text>().FirstOrDefault();
+        Assert.NotNull(text);
+        Assert.Equal("Hello world partial", text.Value);
+    }
 }

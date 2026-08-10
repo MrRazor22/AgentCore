@@ -56,17 +56,14 @@ internal sealed class Tooling : ITooling
 
         if (string.IsNullOrWhiteSpace(call.Name))
         {
-            _logger.LogWarning("Tool validation failed: Tool name cannot be empty.");
+            _logger.LogWarning("Tool validation failed. Reason='Tool name empty'");
             return Failed(call.Id, "Unknown", "Tool name cannot be empty.");
         }
-
-        var argsJson = call.Arguments?.ToString() ?? "{}";
-        _logger.LogDebug("Executing tool: {Name} Args={ArgsJson}", call.Name, argsJson.Length > 500 ? argsJson[..500] + "..." : argsJson);
 
         _tools.TryGetValue(call.Name, out var tool);
         if (tool == null)
         {
-            _logger.LogWarning("Tool validation failed: Tool '{Name}' not registered.", call.Name);
+            _logger.LogWarning("Tool validation failed. ToolName={ToolName}, Reason='Not registered'", call.Name);
             return Failed(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
         }
 
@@ -74,7 +71,7 @@ internal sealed class Tooling : ITooling
         if (errors.Any())
         {
             var errorMessage = string.Join("; ", errors);
-            _logger.LogWarning("Tool validation failed: {Name} Error={Message}", call.Name, errorMessage);
+            _logger.LogWarning("Tool validation failed. ToolName={ToolName}, Error={Error}", call.Name, errorMessage);
             return Failed(call.Id, call.Name, errorMessage);
         }
 
@@ -93,8 +90,7 @@ internal sealed class Tooling : ITooling
             };
 
             sw.Stop();
-            _logger.LogDebug("Tool completed: {Name} Duration={Ms}ms", call.Name, sw.ElapsedMilliseconds);
-            _logger.LogTrace("Tool result: {Name} Result={Content}", call.Name, result?.ForLlm()?.Length > 200 ? result.ForLlm()[..200] + "..." : result?.ForLlm());
+            _logger.LogInformation("Tool executed. ToolName={ToolName}, DurationMs={DurationMs}", call.Name, sw.ElapsedMilliseconds);
             return new ToolResult(call.Id, result);
         }
         catch (OperationCanceledException) { throw; }
@@ -105,7 +101,7 @@ internal sealed class Tooling : ITooling
                 ? tie.InnerException
                 : ex;
 
-            _logger.LogError(actualEx, "Tool execution failed: {Name} Error={Message}", call.Name, actualEx.Message);
+            _logger.LogError(actualEx, "Tool execution failed. ToolName={ToolName}, DurationMs={DurationMs}, Error={Message}", call.Name, sw.ElapsedMilliseconds, actualEx.Message);
             return Failed(call.Id, call.Name, actualEx.Message);
         }
     }

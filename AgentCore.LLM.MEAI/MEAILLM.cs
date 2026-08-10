@@ -1,6 +1,7 @@
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
@@ -12,11 +13,13 @@ namespace AgentCore.LLM.MEAI;
 public class MEAILLM : ILLM
 {
     private readonly IChatClient _client;
+    private readonly ILogger<MEAILLM>? _logger;
 
-    public MEAILLM(IChatClient client)
+    public MEAILLM(IChatClient client, ILogger<MEAILLM>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         _client = client;
+        _logger = logger;
     }
 
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
@@ -36,8 +39,9 @@ public class MEAILLM : ILLM
                 var jsonElement = JsonSerializer.Deserialize<JsonElement>(schemaJson);
                 chatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(jsonElement);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger?.LogWarning(ex, "Failed to configure ChatResponseFormat.ForJsonSchema. Falling back to standard Json response format.");
                 chatOptions.ResponseFormat = ChatResponseFormat.Json;
             }
         }
@@ -81,7 +85,10 @@ public class MEAILLM : ILLM
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Unexpected error parsing raw tool call updates from provider response.");
+                }
             }
 
             bool yieldedReasoning = false;
@@ -131,7 +138,7 @@ public class MEAILLM : ILLM
 
             if (!yieldedReasoning)
             {
-                var rawReasoning = TryExtractReasoning(update.RawRepresentation);
+                var rawReasoning = TryExtractReasoning(update.RawRepresentation, _logger);
                 if (!string.IsNullOrEmpty(rawReasoning))
                 {
                     yield return new ReasoningDelta(rawReasoning);
@@ -161,7 +168,7 @@ public class MEAILLM : ILLM
         }
     }
 
-    public static string? TryExtractReasoning(object? rawRepresentation)
+    public static string? TryExtractReasoning(object? rawRepresentation, ILogger<MEAILLM>? logger = null)
     {
         if (rawRepresentation is null) return null;
 
@@ -203,9 +210,9 @@ public class MEAILLM : ILLM
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fail-safe reflection exception handling
+            logger?.LogWarning(ex, "Unexpected error extracting reasoning content from raw provider response.");
         }
 
         return null;

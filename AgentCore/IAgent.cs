@@ -79,16 +79,9 @@ public sealed partial class Agent : IAgent
         JsonSchema? responseSchema,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        using var scope = _logger.BeginScope(new[]
-        {
-            new KeyValuePair<string, object?>("Agent", nameof(Agent))
-        });
-
         await foreach (var content in _workflow.ExecuteAsync(_context, input, responseSchema, ct))
         {
             yield return content;
         }
-
-        _logger.LogInformation("Agent completed.");
     }
 }

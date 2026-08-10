@@ -51,43 +51,67 @@ namespace AgentCore
 
                 if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
                 {
-                    _logger?.LogError("Execution exceeded the maximum limit of {MaxIterations} iterations.", _maxIterations.Value);
+                    _logger?.LogError("Workflow execution exceeded iteration limit. MaxIterations={MaxIterations}", _maxIterations.Value);
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
                 // Prepare context: handles internal compaction policy, returning the full candidate prompt
                 var currentMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
 
-                _logger?.LogDebug("Starting execution iteration {Iteration} (Conversation message count: {MessageCount}).", iterations, currentMessages.Count);
+                _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
-                _logger?.LogDebug("Calling LLM StreamAsync...");
+                var contents = new List<IContent>();
+                TokenUsage? tokenUsage = null;
+                FinishReason? finishReason = null;
 
-                var (assistantMessage, tokenUsage, _) = await _llm
-                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
-                    .AccumulateAsync(ct)
-                    .ConfigureAwait(false);
-
-                if (assistantMessage == null)
+                try
                 {
-                    _logger?.LogError("LLM returned null response.");
-                    throw new InvalidOperationException("LLM returned a null assistant message.");
+                    await foreach (var item in _llm
+                        .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
+                        .ConfigureAwait(false))
+                    {
+                        switch (item)
+                        {
+                            case IContentDelta delta:
+                                if (contents.AccumulateDelta(delta) is IContent completed)
+                                {
+                                    yield return completed;
+                                }
+                                break;
+
+                            case TokenUsage usage:
+                                tokenUsage = usage;
+                                break;
+
+                            case FinishReason reason:
+                                finishReason = reason;
+                                break;
+                        }
+                    }
+
+                    foreach (var completed in contents.FlushCompleted())
+                    {
+                        yield return completed;
+                    }
+                }
+                finally
+                {
+                    var consolidated = contents.Consolidate();
+                    if (consolidated.Count > 0)
+                    {
+                        var assistantMessage = new Message(Role.Assistant, consolidated);
+                        await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
+                    }
                 }
 
-                // Save LLM response to context immediately (authoritative commit!)
-                await context.CommitAsync(new[] { assistantMessage }, tokenUsage, ct).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
 
-                // Yield all contents produced by LLM assistant response (Text, Reasoning, ToolCall)
-                foreach (var content in assistantMessage.Contents)
-                {
-                    yield return content;
-                }
-
-                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
+                var toolCalls = contents.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
 
-                    _logger?.LogDebug("ReActWorkflow: Iteration {Iteration} executing {Count} tool calls.", iterations, toolCalls.Count);
+                    _logger?.LogInformation("Executing tools. Iteration={Iteration}, ToolCount={ToolCount}", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
                     foreach (var result in toolResults)

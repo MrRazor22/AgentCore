@@ -29,10 +29,10 @@ public class MockLLMProvider : ILLM
     {
         return evt switch
         {
-            ILLMOutput output => output,
             Text t => new TextDelta(t.Value),
             Reasoning r => new ReasoningDelta(r.Thought),
             ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString()),
+            ILLMOutput output => output,
             _ => throw new NotSupportedException()
         };
     }

@@ -103,7 +103,6 @@ public sealed partial class Agent
 
         public Agent Build()
         {
-            _logger.LogInformation("Agent build started");
             _builtComponents.Clear();
 
             var lf = _loggerFactory ?? NullLoggerFactory.Instance;
@@ -121,7 +120,6 @@ public sealed partial class Agent
             }
 
             var frozenTools = _tools.ToArray();
-            _logger.LogDebug("Tool registration: TotalTools={ToolCount}", frozenTools.Length);
 
             ITooling tooling = _toolingFactory != null
                 ? _toolingFactory(lf)
@@ -147,13 +145,18 @@ public sealed partial class Agent
                 memory.StageAsync([new Message(Role.System, _instructions)]).GetAwaiter().GetResult();
             }
 
-            _logger.LogInformation("Agent build completed: Tools={ToolCount} ProviderType={ProviderType}",
-                frozenTools.Length,
-                provider.GetType().Name);
-
             var workflow = _workflowFactory != null
                 ? _workflowFactory(provider, tooling, lf)
                 : new ReActWorkflow(provider, tooling, logger: lf.CreateLogger<ReActWorkflow>());
+
+            _logger.LogInformation("Agent built: Tools={ToolCount} Provider={ProviderType} Context={ContextType} Workflow={WorkflowType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
+                frozenTools.Length,
+                provider.GetType().Name,
+                memory.GetType().Name,
+                workflow.GetType().Name,
+                _llmLayers.Count,
+                _toolingLayers.Count,
+                _contextLayers.Count);
 
             _builtComponents.Add(provider);
             _builtComponents.Add(tooling);

@@ -66,7 +66,11 @@ public class ChatContext : IContext
 
         if (estimatedTotal > _limit)
         {
-            _logger?.LogInformation("Compacting conversation...");
+            _logger?.LogInformation(
+                "Compacting conversation context. Strategy={Strategy}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
+                _summarizer != null ? "Summary" : "Trim",
+                estimatedTotal,
+                _limit);
             await CompactChatAsync(ct).ConfigureAwait(false);
         }
 
@@ -105,7 +109,7 @@ public class ChatContext : IContext
             _staged.Clear();
         }
         _logger?.LogInformation(
-            "Conversation committed. Messages={Messages}, In Tokens={InputTokens}, Out Tokens={OutputTokens}",
+            "Conversation updated. TotalMessages={TotalMessages}, InputTokens={InputTokens}, OutputTokens={OutputTokens}",
             _chat.Count,
             TokenUsage.InputTokens,
             TokenUsage.OutputTokens);
@@ -174,7 +178,7 @@ public class ChatContext : IContext
 
                     _logger?.LogWarning(
                         ex,
-                        "Failed to generate chat summary due to exception. Retrying with reduced message history. Removed oldest message: {Role} ({Length} chars).",
+                        "Chat summary generation failed. Retrying with reduced message history. RemovedMessageRole={Role}, RemovedChars={Length}",
                         removedMessage.Role,
                         removedMessage.Contents.FirstOrDefault()?.ForLlm()?.Length ?? 0);
                 }
@@ -192,10 +196,10 @@ public class ChatContext : IContext
         {
             var systemMessage = _chat.FirstOrDefault(m => m.Role == Role.System);
             _chat.Clear();
-            _chat.AddMessage(systemMessage);
+            _chat.AddIfValid(systemMessage);
 
             var summaryMessage = new Message(Role.User, new CompactedSummary(summary));
-            _chat.AddMessage(summaryMessage);
+            _chat.AddIfValid(summaryMessage);
 
             TokenUsage = new TokenUsage(_chat.Sum(Estimate), 0);
         }

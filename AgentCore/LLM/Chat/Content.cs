@@ -36,7 +36,7 @@ public record FinishReason(string Value) : ILLMOutput;
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
 [JsonDerivedType(typeof(AgentCore.Context.CompactedSummary), "compactedSummary")]
-public interface IContent
+public interface IContent : ILLMOutput
 {
     string ForLlm();
 }
