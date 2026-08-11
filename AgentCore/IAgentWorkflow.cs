@@ -61,8 +61,7 @@ namespace AgentCore
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
                 var contents = new List<IContent>();
-                TokenUsage? tokenUsage = null;
-                FinishReason? finishReason = null;
+                TokenUsage? tokenUsage = null; 
 
                 try
                 {
@@ -81,11 +80,7 @@ namespace AgentCore
 
                             case TokenUsage usage:
                                 tokenUsage = usage;
-                                break;
-
-                            case FinishReason reason:
-                                finishReason = reason;
-                                break;
+                                break; 
                         }
                     }
 
