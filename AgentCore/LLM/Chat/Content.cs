@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace AgentCore.LLM.Chat;
 
+public interface IAgentResponse { }
+
 /// <summary>
 /// Root interface for any output emitted by an ILLM provider stream.
 /// </summary>
@@ -17,14 +19,19 @@ public record TextDelta(string Value) : IContentDelta;
 
 public record ReasoningDelta(string Thought) : IContentDelta;
 
-public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null) : IContentDelta;
+public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null) : IContentDelta
+{
+    internal System.Text.StringBuilder Name { get; } = new();
+    internal System.Text.StringBuilder Args { get; } = new();
+    internal string AccumulatedId { get; set; } = Id;
+}
 
 public record TokenUsage(
     int InputTokens = 0,
     int OutputTokens = 0,
-    int? ReasoningTokens = null) : ILLMOutput;
+    int? ReasoningTokens = null) : ILLMOutput, IAgentResponse;
 
-public record FinishReason(string Value) : ILLMOutput;
+public record FinishReason(string Value) : ILLMOutput, IAgentResponse;
 
 /// <summary>
 /// Root interface for settled, fully validated semantic content items.
@@ -36,7 +43,7 @@ public record FinishReason(string Value) : ILLMOutput;
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
 [JsonDerivedType(typeof(AgentCore.Context.CompactedSummary), "compactedSummary")]
-public interface IContent : ILLMOutput
+public interface IContent : IAgentResponse
 {
     string ForLlm();
 }

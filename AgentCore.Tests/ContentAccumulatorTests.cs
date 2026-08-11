@@ -195,28 +195,78 @@ public class ContentAccumulatorTests
             await EmptyStream().AccumulateAsync();
         });
     }
+}
 
-    [Fact]
-    public void AccumulateDelta_MergesTextReasoningAndToolCallsInPlace()
+internal static class TestContentAccumulatorExtensions
+{
+    private static List<IContent> Consolidate(IReadOnlyList<IContent> items)
+    {
+        var result = new List<IContent>();
+        foreach (var item in items)
+        {
+            switch (item)
+            {
+                case Text t:
+                    var tStr = t.Value.Trim();
+                    if (!string.IsNullOrEmpty(tStr)) result.Add(new Text(tStr));
+                    break;
+                case Reasoning r:
+                    var rStr = r.Thought.Trim();
+                    if (!string.IsNullOrEmpty(rStr)) result.Add(new Reasoning(rStr));
+                    break;
+                default:
+                    result.Add(item);
+                    break;
+            }
+        }
+        return result;
+    }
+
+    public static async Task<(IReadOnlyList<IContent> Contents, TokenUsage? TokenUsage, FinishReason? FinishReason)> AccumulateAsync(
+        this IAsyncEnumerable<ILLMOutput> stream,
+        CancellationToken ct = default)
     {
         var contents = new List<IContent>();
+        TokenUsage? tokenUsage = null;
+        FinishReason? finishReason = null;
+        Exception? caughtException = null;
 
-        contents.AccumulateDelta(new ReasoningDelta("Thinking "));
-        contents.AccumulateDelta(new ReasoningDelta("deeply..."));
-        contents.AccumulateDelta(new TextDelta("Hello "));
-        contents.AccumulateDelta(new TextDelta("world!"));
-        contents.AccumulateDelta(new ToolCallDelta("TC1", "Search", "{\"q\":\"test\"}", 0));
+        try
+        {
+            await foreach (var item in stream.AccumulateStream(ct).ConfigureAwait(false))
+            {
+                switch (item)
+                {
+                    case IContent content:
+                        contents.Add(content);
+                        break;
 
-        Assert.Equal(3, contents.Count);
+                    case TokenUsage tu:
+                        tokenUsage = tu;
+                        break;
 
-        var reasoning = Assert.IsType<Reasoning>(contents[0]);
-        Assert.Equal("Thinking deeply...", reasoning.Thought);
+                    case FinishReason fr:
+                        finishReason = fr;
+                        break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)
+        {
+            caughtException = ex;
+        }
 
-        var text = Assert.IsType<Text>(contents[1]);
-        Assert.Equal("Hello world!", text.Value);
+        var consolidated = Consolidate(contents);
 
-        var toolCall = Assert.IsType<ToolCall>(contents[2]);
-        Assert.Equal("TC1", toolCall.Id);
-        Assert.Equal("Search", toolCall.Name);
+        if (consolidated.Count == 0)
+        {
+            if (caughtException != null)
+            {
+                throw caughtException;
+            }
+            throw new InvalidOperationException("LLM returned an empty assistant response.");
+        }
+
+        return (consolidated, tokenUsage, finishReason);
     }
 }

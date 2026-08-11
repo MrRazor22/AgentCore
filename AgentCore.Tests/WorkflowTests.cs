@@ -24,7 +24,7 @@ public class WorkflowTests
         var input = new Text("Hello");
 
         // Act
-        var contents = new List<IContent>();
+        var contents = new List<IAgentResponse>();
         await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
         {
             contents.Add(item);
@@ -72,7 +72,7 @@ public class WorkflowTests
         var input = new Text("Weather in London?");
 
         // Act
-        var contents = new List<IContent>();
+        var contents = new List<IAgentResponse>();
         await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
         {
             contents.Add(item);

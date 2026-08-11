@@ -10,7 +10,7 @@ namespace AgentCore
 {
     public interface IAgentWorkflow
     {
-        IAsyncEnumerable<IContent> ExecuteAsync(
+        IAsyncEnumerable<IAgentResponse> ExecuteAsync(
             IContext context,
             IContent input,
             JsonSchema? responseSchema,
@@ -36,7 +36,7 @@ namespace AgentCore
             _logger = logger;
         }
 
-        public async IAsyncEnumerable<IContent> ExecuteAsync(
+        public async IAsyncEnumerable<IAgentResponse> ExecuteAsync(
             IContext context,
             IContent input,
             JsonSchema? responseSchema,
@@ -67,34 +67,27 @@ namespace AgentCore
                 {
                     await foreach (var item in _llm
                         .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
+                        .AccumulateStream()
                         .ConfigureAwait(false))
                     {
                         switch (item)
                         {
-                            case IContentDelta delta:
-                                if (contents.AccumulateDelta(delta) is IContent completed)
-                                {
-                                    yield return completed;
-                                }
+                            case IContent content:
+                                contents.Add(content);
                                 break;
 
                             case TokenUsage usage:
                                 tokenUsage = usage;
-                                break; 
+                                break;
                         }
-                    }
-
-                    foreach (var completed in contents.FlushCompleted())
-                    {
-                        yield return completed;
+                        yield return item;
                     }
                 }
                 finally
                 {
-                    var consolidated = contents.Consolidate();
-                    if (consolidated.Count > 0)
+                    if (contents.Count > 0)
                     {
-                        var assistantMessage = new Message(Role.Assistant, consolidated);
+                        var assistantMessage = new Message(Role.Assistant, contents);
                         await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
@@ -109,10 +102,8 @@ namespace AgentCore
                     _logger?.LogInformation("Executing tools. Iteration={Iteration}, ToolCount={ToolCount}", iterations, toolCalls.Count);
                     var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
 
-                    foreach (var result in toolResults)
-                    {
-                        yield return result;
-                    }
+                    foreach (var result in toolResults) yield return result; 
+
                     await context.StageAsync(
                         toolResults.Select(r => new Message(Role.Tool, r)).ToList(),
                         ct).ConfigureAwait(false);
