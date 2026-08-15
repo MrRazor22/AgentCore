@@ -214,6 +214,9 @@ internal static class TestContentAccumulatorExtensions
                     var rStr = r.Thought.Trim();
                     if (!string.IsNullOrEmpty(rStr)) result.Add(new Reasoning(rStr));
                     break;
+                case ToolCall tc:
+                    if (!string.IsNullOrEmpty(tc.Name)) result.Add(tc);
+                    break;
                 default:
                     result.Add(item);
                     break;
@@ -233,12 +236,12 @@ internal static class TestContentAccumulatorExtensions
 
         try
         {
-            await foreach (var item in stream.AccumulateStream(ct).ConfigureAwait(false))
+            await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
             {
                 switch (item)
                 {
-                    case IContent content:
-                        contents.Add(content);
+                    case IContentDelta delta:
+                        delta.AccumulateInto(contents);
                         break;
 
                     case TokenUsage tu:

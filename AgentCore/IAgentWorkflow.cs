@@ -67,20 +67,28 @@ namespace AgentCore
                 {
                     await foreach (var item in _llm
                         .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
-                        .AccumulateStream()
                         .ConfigureAwait(false))
                     {
                         switch (item)
                         {
-                            case IContent content:
-                                contents.Add(content);
+                            case IContentDelta delta:
+                                delta.AccumulateInto(contents);
                                 break;
 
                             case TokenUsage usage:
                                 tokenUsage = usage;
+                                yield return usage;
+                                break;
+
+                            case IAgentResponse response:
+                                yield return response;
                                 break;
                         }
-                        yield return item;
+                    }
+
+                    foreach (var content in contents)
+                    {
+                        yield return content;
                     }
                 }
                 finally
