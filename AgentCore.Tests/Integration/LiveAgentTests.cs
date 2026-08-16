@@ -98,7 +98,7 @@ public class LiveAgentTests
         var meaiLlm = new MEAILLM(resolvedLlm);
         
         var rawOutputs = new List<ILLMOutput>();
-        await foreach (var rawOut in meaiLlm.StreamAsync(new[] { new Message(Role.User, new Text("Say ok")) }))
+        await foreach (var rawOut in meaiLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
         {
             rawOutputs.Add(rawOut);
         }

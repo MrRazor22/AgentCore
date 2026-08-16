@@ -142,7 +142,7 @@ public sealed partial class Agent
 
             if (_instructions != null)
             {
-                memory.StageAsync([new Message(Role.System, _instructions)]).GetAwaiter().GetResult();
+                memory.StageAsync([new Message(Role.System, [_instructions])]).GetAwaiter().GetResult();
             }
 
             var workflow = _workflowFactory != null

@@ -12,9 +12,9 @@ public class MemoryTests
     {
         // Arrange
         var context = new ChatContext(contextWindow: 1000, reserveTokens: 100);
-        var system = new Message(Role.System, new Text("Be helpful."));
-        var user = new Message(Role.User, new Text("Hello"));
-        var assistant = new Message(Role.Assistant, new Text("Hi, how are you?"));
+        var system = new Message(Role.System, [new Text("Be helpful.")]);
+        var user = new Message(Role.User, [new Text("Hello")]);
+        var assistant = new Message(Role.Assistant, [new Text("Hi, how are you?")]);
 
         // Act
         await context.StageAsync(new[] { system, user, assistant });
@@ -45,7 +45,7 @@ public class MemoryTests
             summarizer: mockLlm
         );
 
-        var system = new Message(Role.System, new Text("System instructions"));
+        var system = new Message(Role.System, [new Text("System instructions")]);
         await context.StageAsync(new[] { system });
         var prompt = await context.PreparePromptAsync();
         
@@ -72,13 +72,13 @@ public class MemoryTests
             summarizer: mockLlm
         );
 
-        var system = new Message(Role.System, new Text("Be helpful."));
-        var firstUser = new Message(Role.User, new Text("Hello"));
+        var system = new Message(Role.System, [new Text("Be helpful.")]);
+        var firstUser = new Message(Role.User, [new Text("Hello")]);
         await context.StageAsync(new[] { system, firstUser });
         var prompt1 = await context.PreparePromptAsync();
         await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
 
-        var secondUser = new Message(Role.User, new Text(new string('B', 300)));
+        var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
 
         // Act - Prepare triggering compaction
         await context.StageAsync(new[] { secondUser });
@@ -103,10 +103,10 @@ public class MemoryTests
             summarizer: null // no summarizer
         );
 
-        var system = new Message(Role.System, new Text("Be helpful."));
-        var msg1 = new Message(Role.User, new Text("First message"));
-        var msg2 = new Message(Role.User, new Text("Second message"));
-        var msg3 = new Message(Role.User, new Text("Third message that will definitely cause overflow and force eviction"));
+        var system = new Message(Role.System, [new Text("Be helpful.")]);
+        var msg1 = new Message(Role.User, [new Text("First message")]);
+        var msg2 = new Message(Role.User, [new Text("Second message")]);
+        var msg3 = new Message(Role.User, [new Text("Third message that will definitely cause overflow and force eviction")]);
 
         // Commit first two messages to committed history
         await context.StageAsync(new[] { system, msg1, msg2 });
@@ -136,15 +136,15 @@ public class MemoryTests
             summarizer: mockLlm
         );
 
-        var system = new Message(Role.System, new Text("Be helpful."));
-        var firstUser = new Message(Role.User, new Text("Hello"));
-        var assistant = new Message(Role.Assistant, new Text("Hi"));
+        var system = new Message(Role.System, [new Text("Be helpful.")]);
+        var firstUser = new Message(Role.User, [new Text("Hello")]);
+        var assistant = new Message(Role.Assistant, [new Text("Hi")]);
         
         await context.StageAsync(new[] { system, firstUser, assistant });
         var prompt1 = await context.PreparePromptAsync();
         await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
 
-        var secondUser = new Message(Role.User, new Text(new string('B', 300)));
+        var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
         await context.StageAsync(new[] { secondUser });
 
         // Act

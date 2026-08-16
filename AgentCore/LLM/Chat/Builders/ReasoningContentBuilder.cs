@@ -5,21 +5,16 @@ namespace AgentCore.LLM.Chat.Builders;
 
 public sealed class ReasoningContentBuilder : IContentBuilder
 {
-    private readonly StringBuilder _sb = new();
+    private readonly StringBuilder _builder = new();
 
-    public bool CanAccept(IContentDelta delta) => delta is ReasoningDelta;
-
-    public void Append(IContentDelta delta)
+    public bool TryAppend(IContentDelta delta)
     {
-        if (delta is ReasoningDelta rd && !string.IsNullOrEmpty(rd.Thought))
-        {
-            _sb.Append(rd.Thought);
-        }
+        if (delta is not ReasoningDelta reasoning) return false;
+        if (!string.IsNullOrEmpty(reasoning.Thought))
+            _builder.Append(reasoning.Thought);
+        return true;
     }
 
-    public IReadOnlyList<IContent> Build()
-    {
-        var thought = _sb.ToString();
-        return string.IsNullOrEmpty(thought) ? Array.Empty<IContent>() : new IContent[] { new Reasoning(thought) };
-    }
+    public IReadOnlyList<IContent> ToContents() =>
+        _builder.Length == 0 ? [] : [new Reasoning(_builder.ToString())];
 }

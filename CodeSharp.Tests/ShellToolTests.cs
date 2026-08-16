@@ -70,10 +70,16 @@ public class ShellToolTests : IDisposable
         Assert.Contains("Status: Running", runningStatus);
 
         // Wait for exit
-        await Task.Delay(1800);
+        string completedStatus = "";
+        for (int i = 0; i < 20; i++)
+        {
+            await Task.Delay(250);
+            completedStatus = await tool.RunCommand(commandId: commandId);
+            if (completedStatus.Contains("Status: Completed"))
+                break;
+        }
 
         // Check completed status
-        var completedStatus = await tool.RunCommand(commandId: commandId);
         Assert.Contains("Status: Completed (Exit code: 0)", completedStatus);
         Assert.Contains("bg-finished", completedStatus);
     }

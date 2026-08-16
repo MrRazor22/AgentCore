@@ -100,7 +100,7 @@ public class MockMemoryProvider : IContext
             var list = new List<Message>();
             if (!string.IsNullOrEmpty(RecallResult))
             {
-                list.Add(new Message(Role.System, new Text(RecallResult)));
+                list.Add(new Message(Role.System, [new Text(RecallResult)]));
             }
             list.AddRange(_internalMessages);
             return list;

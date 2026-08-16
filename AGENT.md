@@ -20,7 +20,7 @@ Reducing code that introduces smell is worse than the bloat it replaced. If a si
 
 ### Use Intended Abstractions
 
-If the framework provides an abstraction specifically for building valid message collections (such as `AddIfValid`), but the framework's own default workflow doesn't use it, then either the abstraction is wrong or the workflow is bypassing the intended design. Framework abstractions must be used consistently across all default implementations.
+If the framework provides an abstraction specifically for a task, but the framework's own default workflow doesn't use it, then either the abstraction is wrong or the workflow is bypassing the intended design. Framework abstractions must be used consistently across all default implementations.
 
 ## Architectural Decisions
 

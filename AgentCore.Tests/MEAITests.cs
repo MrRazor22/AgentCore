@@ -63,7 +63,7 @@ public class MEAITests
 
         // Act
         var events = new List<ILLMOutput>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("Hi"))]))
+        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]))
         {
             events.Add(evt);
         }
@@ -99,7 +99,7 @@ public class MEAITests
 
         // Act
         var events = new List<ILLMOutput>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("Hi"))]))
+        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]))
         {
             events.Add(evt);
         }
@@ -131,7 +131,7 @@ public class MEAITests
 
         // Act
         var events = new List<ILLMOutput>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, new Text("What is the weather?"))]))
+        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("What is the weather?")])]))
         {
             events.Add(evt);
         }

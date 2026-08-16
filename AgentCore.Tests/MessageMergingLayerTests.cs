@@ -11,8 +11,8 @@ public class MessageMergingLayerTests
     {
         var input = new List<Message>
         {
-            new Message(Role.User, new Text("help me understand architecture")),
-            new Message(Role.User, new Text("no i mean the class diagram"))
+            new Message(Role.User, [new Text("help me understand architecture")]),
+            new Message(Role.User, [new Text("no i mean the class diagram")])
         };
 
         var output = MessageMergingLayer.MergeTextMessages(input);
@@ -34,10 +34,10 @@ public class MessageMergingLayerTests
 
         var input = new List<Message>
         {
-            new Message(Role.User, new Text("find files")),
+            new Message(Role.User, [new Text("find files")]),
             new Message(Role.Assistant, [toolCall]),
             new Message(Role.Tool, [toolResult]),
-            new Message(Role.Assistant, new Text("here are the files"))
+            new Message(Role.Assistant, [new Text("here are the files")])
         };
 
         var output = MessageMergingLayer.MergeTextMessages(input);
@@ -57,7 +57,7 @@ public class MessageMergingLayerTests
         var input = new List<Message>
         {
             new Message(Role.Assistant, [toolCall]),
-            new Message(Role.Assistant, new Text("I'm searching for files."))
+            new Message(Role.Assistant, [new Text("I'm searching for files.")])
         };
 
         var output = MessageMergingLayer.MergeTextMessages(input);

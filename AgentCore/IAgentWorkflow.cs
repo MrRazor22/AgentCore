@@ -43,7 +43,7 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
-            await context.StageAsync(new[] { new Message(Role.User, input) }, ct).ConfigureAwait(false);
+            await context.StageAsync(new[] { new Message(Role.User, [input]) }, ct).ConfigureAwait(false);
 
             while (true)
             {
@@ -62,6 +62,7 @@ namespace AgentCore
 
                 var assistantMessage = new Message(Role.Assistant);
                 TokenUsage? tokenUsage = null; 
+                IReadOnlyList<IContent> lastSnapshot = [];
 
                 try
                 {
@@ -72,10 +73,7 @@ namespace AgentCore
                         switch (item)
                         {
                             case IContentDelta delta:
-                                foreach (var content in assistantMessage.Append(delta))
-                                {
-                                    yield return content;
-                                }
+                                lastSnapshot = assistantMessage.AddContentDelta(delta);
                                 break;
 
                             case TokenUsage usage:
@@ -84,23 +82,23 @@ namespace AgentCore
                         }
                     }
 
-                    foreach (var content in assistantMessage.Complete())
+                    foreach (var content in lastSnapshot)
                     {
                         yield return content;
                     }
                 }
                 finally
                 {
-                    assistantMessage.Complete();
-                    if (assistantMessage.Contents.Count > 0)
+                    if (lastSnapshot.Count > 0)
                     {
-                        await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
+                        var finalMessage = new Message(Role.Assistant, lastSnapshot);
+                        await context.CommitAsync(new[] { finalMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
                 ct.ThrowIfCancellationRequested();
 
-                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
+                var toolCalls = lastSnapshot.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
@@ -111,7 +109,7 @@ namespace AgentCore
                     foreach (var result in toolResults) yield return result; 
 
                     await context.StageAsync(
-                        toolResults.Select(r => new Message(Role.Tool, r)).ToList(),
+                        toolResults.Select(r => new Message(Role.Tool, [r])).ToList(),
                         ct).ConfigureAwait(false);
 
                     continue;

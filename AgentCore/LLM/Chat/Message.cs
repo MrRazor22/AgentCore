@@ -6,92 +6,61 @@ namespace AgentCore.LLM.Chat;
 
 public class Message
 {
-    private readonly List<IContent> _contents = new();
     private IContentBuilder? _activeBuilder;
+    private readonly List<IContent> _contents = new();
 
     [JsonPropertyName("role")]
-    public Role Role { get; set; }
+    public Role Role { get; }
 
     [JsonPropertyName("contents")]
-    public IReadOnlyList<IContent> Contents
-    {
-        get => _contents;
-        set
-        {
-            _contents.Clear();
-            _contents.AddRange(value);
-            _activeBuilder = null;
-        }
-    }
-
-    public Message(Role role)
-    {
-        Role = role;
-    }
+    public IReadOnlyList<IContent> Contents => _contents;
 
     [JsonConstructor]
-    public Message(Role role, IReadOnlyList<IContent> contents)
+    public Message(Role role, IReadOnlyList<IContent>? contents = null)
     {
         Role = role;
-        _contents.AddRange(contents);
+        _contents.AddRange(contents ?? []);
     }
 
-    public Message(Role role, IContent content) : this(role, [content]) { }
+    /// <summary>
+    /// Appends content directly to the message, committing any active streaming content builder first.
+    /// </summary>
+    /// <param name="content">The settled content item to add.</param>
+    /// <returns>The current <see cref="Message"/> instance for fluent chaining.</returns>
+    public Message AddContent(IContent content)
+    {
+        ArgumentNullException.ThrowIfNull(content); 
+        CommitActiveContent();
+        _contents.Add(content);
+        return this;
+    }
 
     /// <summary>
-    /// Appends a streaming delta to the active content builder, settling and returning completed content items when a boundary is reached.
+    /// Appends a streaming delta to the active content builder and returns the full current content state after applying the delta.
     /// </summary>
     /// <param name="delta">The incoming streaming delta.</param>
-    /// <returns>Any settled <see cref="IContent"/> item(s) that completed as a result of this delta.</returns>
-    public IReadOnlyList<IContent> Append(IContentDelta delta)
+    /// <returns>The current content state after this delta.</returns>
+    public IReadOnlyList<IContent> AddContentDelta(IContentDelta delta)
     {
-        IReadOnlyList<IContent> completed = Array.Empty<IContent>();
+        ArgumentNullException.ThrowIfNull(delta);
 
-        if (_activeBuilder != null && !_activeBuilder.CanAccept(delta))
+        if (_activeBuilder?.TryAppend(delta) != true)
         {
-            completed = FlushActiveBuilder();
+            CommitActiveContent();
+            _activeBuilder = ContentBuilderFactory.Create(delta);
+            _activeBuilder.TryAppend(delta);
         }
 
-        _activeBuilder ??= ContentBuilderFactory.Create(delta);
-        _activeBuilder.Append(delta);
-
-        return completed;
+        return [.. _contents, .. _activeBuilder.ToContents()];
     }
 
-    /// <summary>
-    /// Settles and returns all remaining active content items at the end of the stream.
-    /// </summary>
-    /// <returns>The final settled <see cref="IContent"/> item(s).</returns>
-    public IReadOnlyList<IContent> Complete()
+    private void CommitActiveContent()
     {
-        return FlushActiveBuilder();
-    }
-
-    private IReadOnlyList<IContent> FlushActiveBuilder()
-    {
-        if (_activeBuilder == null) return Array.Empty<IContent>();
-
-        var built = _activeBuilder.Build();
-        _contents.AddRange(built);
+        if (_activeBuilder is null) return;
+        _contents.AddRange(_activeBuilder.ToContents());
         _activeBuilder = null;
-        return built;
     }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
-
-public static class MessageExtensions
-{
-    public static T AddIfValid<T>(this T list, Role role, IContent? content) where T : ICollection<Message>
-    {
-        if (content is not null && (content is not Text t || !string.IsNullOrEmpty(t.Value))) list.Add(new Message(role, content));
-        return list;
-    }
-
-    public static T AddIfValid<T>(this T list, Message? message) where T : ICollection<Message>
-    {
-        if (message?.Contents.Count > 0) list.Add(message);
-        return list;
-    }
-}

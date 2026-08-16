@@ -121,8 +121,8 @@ namespace AgentCore.Tests
             // Add some messages to trigger pruning. 
             // The budget is roughly: 120 - (Instructions (12 chars + overhead) + ReservedTokens (10)) -> budget is ~80 tokens (~400 characters).
             // Let's add multiple large messages so it exceeds the budget.
-            var system = new Message(Role.System, new Text("Instructions"));
-            await context.StageAsync(new[] { system, new Message(Role.User, new Text(new string('A', 300))), new Message(Role.Assistant, new Text(new string('B', 300))) });
+            var system = new Message(Role.System, [new Text("Instructions")]);
+            await context.StageAsync(new[] { system, new Message(Role.User, [new Text(new string('A', 300))]), new Message(Role.Assistant, [new Text(new string('B', 300))]) });
             var p1 = await context.PreparePromptAsync();
             await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(50, 0));
 
@@ -156,8 +156,8 @@ namespace AgentCore.Tests
                 reserveTokens: 40
             );
 
-            var system = new Message(Role.System, new Text("Instructions"));
-            await context.StageAsync(new[] { system, new Message(Role.User, new Text("First")), new Message(Role.Assistant, new Text("Second")) });
+            var system = new Message(Role.System, [new Text("Instructions")]);
+            await context.StageAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")]) });
             var p1 = await context.PreparePromptAsync();
             await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
 
@@ -220,39 +220,6 @@ namespace AgentCore.Tests
             Assert.True(idxCompleted2 >= 0);
         }
 
-        [Fact]
-        public void TestMessageExtensionsAddIfValid()
-        {
-            var list = new List<Message>();
-
-            // Test null content
-            list.AddIfValid(Role.System, (IContent?)null);
-            Assert.Empty(list);
-
-            // Test null / empty Text
-            list.AddIfValid(Role.User, new Text(""))
-                .AddIfValid(Role.User, new Text(null!));
-            Assert.Empty(list);
-
-            // Test valid Text
-            list.AddIfValid(Role.User, new Text("hello"));
-            Assert.Single(list);
-            Assert.Equal("hello", list[0].Contents[0].ForLlm());
-
-            // Test null Message
-            MessageExtensions.AddIfValid(list, (Message?)null);
-            Assert.Single(list);
-
-            // Test Message with empty contents
-            MessageExtensions.AddIfValid(list, new Message(Role.Assistant, Array.Empty<IContent>()));
-            Assert.Single(list);
-
-            // Test valid Message addition & method chaining
-            MessageExtensions.AddIfValid(list, new Message(Role.Assistant, new Text("hi")))
-                .AddIfValid(Role.User, new Text("fluent"));
-            Assert.Equal(3, list.Count);
-            Assert.Equal("fluent", list[2].Contents[0].ForLlm());
-        }
     }
 
     internal static class AsyncEnumerableExtensions

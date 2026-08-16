@@ -5,21 +5,16 @@ namespace AgentCore.LLM.Chat.Builders;
 
 public sealed class TextContentBuilder : IContentBuilder
 {
-    private readonly StringBuilder _sb = new();
+    private readonly StringBuilder _builder = new();
 
-    public bool CanAccept(IContentDelta delta) => delta is TextDelta;
-
-    public void Append(IContentDelta delta)
+    public bool TryAppend(IContentDelta delta)
     {
-        if (delta is TextDelta td && !string.IsNullOrEmpty(td.Value))
-        {
-            _sb.Append(td.Value);
-        }
+        if (delta is not TextDelta text) return false;
+        if (!string.IsNullOrEmpty(text.Value))
+            _builder.Append(text.Value);
+        return true;
     }
 
-    public IReadOnlyList<IContent> Build()
-    {
-        var text = _sb.ToString();
-        return string.IsNullOrEmpty(text) ? Array.Empty<IContent>() : new IContent[] { new Text(text) };
-    }
+    public IReadOnlyList<IContent> ToContents() =>
+        _builder.Length == 0 ? [] : [new Text(_builder.ToString())];
 }

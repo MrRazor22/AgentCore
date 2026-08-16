@@ -43,7 +43,7 @@ public class MessageMergingLayer : LLMLayer
             if (CanMerge(prev, msg))
             {
                 var combinedText = GetTextOnlyValue(prev) + "\n" + GetTextOnlyValue(msg);
-                result[^1] = new Message(prev.Role, new Text(combinedText));
+                result[^1] = new Message(prev.Role, [new Text(combinedText)]);
             }
             else
             {

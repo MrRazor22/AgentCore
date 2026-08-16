@@ -196,6 +196,87 @@ public class MessageAssemblyTests
             await EmptyStream().AssembleAsync();
         });
     }
+    [Fact]
+    public void Message_Contents_MidStream_ReturnsSnapshotWithoutDisruptingStream()
+    {
+        var message = new Message(Role.Assistant);
+        Assert.Empty(message.Contents);
+
+        var snap1 = message.AddContentDelta(new TextDelta("Hello "));
+        Assert.Empty(message.Contents);
+        Assert.Single(snap1);
+        Assert.Equal("Hello ", Assert.IsType<Text>(snap1[0]).Value);
+
+        // Stream continues with the same active builder
+        var snap2 = message.AddContentDelta(new TextDelta("world!"));
+        Assert.Empty(message.Contents);
+        Assert.Single(snap2);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(snap2[0]).Value);
+    }
+
+    [Fact]
+    public void Message_AddContentDelta_BoundaryTransition_CommitsToContents()
+    {
+        var message = new Message(Role.Assistant);
+
+        var snap1 = message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
+        Assert.Single(snap1);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(snap1[0]).Thought);
+        Assert.Empty(message.Contents);
+
+        // Boundary switch: ReasoningDelta -> TextDelta
+        var snap2 = message.AddContentDelta(new TextDelta("Here is the answer."));
+        Assert.Equal(2, snap2.Count);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(snap2[0]).Thought);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(snap2[1]).Value);
+
+        // Contents snapshot includes only committed Reasoning
+        Assert.Single(message.Contents);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+    }
+
+    [Fact]
+    public void Message_Serialization_SerializesCommittedContents()
+    {
+        var message = new Message(Role.Assistant);
+        message.AddContent(new Text("Committed message"));
+
+        var json = System.Text.Json.JsonSerializer.Serialize(message);
+        Assert.Contains("\"role\":\"Assistant\"", json);
+        Assert.Contains("Committed message", json);
+    }
+
+    [Fact]
+    public void Message_AddContent_FluentChaining_AppendsSettledContent()
+    {
+        var message = new Message(Role.Assistant)
+            .AddContent(new Text("Hello"))
+            .AddContent(new ToolResult("call_1", new Text("Done")));
+
+        Assert.Equal(2, message.Contents.Count);
+        Assert.Equal("Hello", Assert.IsType<Text>(message.Contents[0]).Value);
+        Assert.Equal("call_1", Assert.IsType<ToolResult>(message.Contents[1]).CallId);
+    }
+
+    [Fact]
+    public void Message_AddContent_WithActiveStreamingBuilder_CommitsActiveContentFirst()
+    {
+        var message = new Message(Role.Assistant);
+        message.AddContentDelta(new TextDelta("Streaming start..."));
+
+        message.AddContent(new ToolResult("call_1", new Text("Settled result")));
+
+        Assert.Equal(2, message.Contents.Count);
+        Assert.Equal("Streaming start...", Assert.IsType<Text>(message.Contents[0]).Value);
+        Assert.Equal("call_1", Assert.IsType<ToolResult>(message.Contents[1]).CallId);
+    }
+
+    [Fact]
+    public void Message_AddContent_Null_ThrowsArgumentNullException()
+    {
+        var message = new Message(Role.Assistant);
+        Assert.Throws<ArgumentNullException>(() => message.AddContent(null!));
+    }
 }
 
 internal static class TestMessageAssemblyExtensions
@@ -231,7 +312,7 @@ internal static class TestMessageAssemblyExtensions
         CancellationToken ct = default)
     {
         var message = new Message(Role.Assistant);
-        var streamedContents = new List<IContent>();
+        IReadOnlyList<IContent> lastSnapshot = [];
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
         Exception? caughtException = null;
@@ -243,10 +324,7 @@ internal static class TestMessageAssemblyExtensions
                 switch (item)
                 {
                     case IContentDelta delta:
-                        foreach (var content in message.Append(delta))
-                        {
-                            streamedContents.Add(content);
-                        }
+                        lastSnapshot = message.AddContentDelta(delta);
                         break;
 
                     case TokenUsage tu:
@@ -258,22 +336,13 @@ internal static class TestMessageAssemblyExtensions
                         break;
                 }
             }
-
-            foreach (var content in message.Complete())
-            {
-                streamedContents.Add(content);
-            }
         }
         catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)
         {
             caughtException = ex;
-            foreach (var content in message.Complete())
-            {
-                streamedContents.Add(content);
-            }
         }
 
-        var consolidated = Consolidate(message.Contents);
+        var consolidated = Consolidate(lastSnapshot);
 
         if (consolidated.Count == 0)
         {

@@ -16,27 +16,24 @@ public sealed class ToolCallContentBuilder : IContentBuilder
 
     private readonly List<ToolCallState> _calls = new();
 
-    public bool CanAccept(IContentDelta delta) => delta is ToolCallDelta;
-
-    public void Append(IContentDelta delta)
+    public bool TryAppend(IContentDelta contentDelta)
     {
-        if (delta is not ToolCallDelta tcd) return;
-
+        if (contentDelta is not ToolCallDelta delta) return false;
         ToolCallState? state = null;
 
-        if (tcd.Index.HasValue)
+        if (delta.Index.HasValue)
         {
-            state = _calls.FirstOrDefault(tc => tc.Index == tcd.Index.Value)
-                 ?? _calls.FirstOrDefault(tc => tc.Id == tcd.Id && !string.IsNullOrEmpty(tcd.Id));
+            state = _calls.FirstOrDefault(tc => tc.Index == delta.Index.Value)
+                 ?? _calls.FirstOrDefault(tc => tc.Id == delta.Id && !string.IsNullOrEmpty(delta.Id));
         }
-        else if (!string.IsNullOrEmpty(tcd.Id))
+        else if (!string.IsNullOrEmpty(delta.Id))
         {
-            state = _calls.FirstOrDefault(tc => tc.Id == tcd.Id);
+            state = _calls.FirstOrDefault(tc => tc.Id == delta.Id);
         }
 
         if (state == null)
         {
-            if (!tcd.Index.HasValue && string.IsNullOrEmpty(tcd.Id))
+            if (!delta.Index.HasValue && string.IsNullOrEmpty(delta.Id))
             {
                 if (_calls.Count > 1)
                     throw new InvalidOperationException("Ambiguous tool call delta: multiple active tool calls exist.");
@@ -47,34 +44,36 @@ public sealed class ToolCallContentBuilder : IContentBuilder
             {
                 state = new ToolCallState
                 {
-                    Id = tcd.Id ?? "",
-                    Index = tcd.Index
+                    Id = delta.Id ?? "",
+                    Index = delta.Index
                 };
                 _calls.Add(state);
             }
         }
 
-        if (!string.IsNullOrEmpty(tcd.Id) && state.Id != tcd.Id)
+        if (!string.IsNullOrEmpty(delta.Id) && state.Id != delta.Id)
         {
-            state.Id = tcd.Id;
+            state.Id = delta.Id;
         }
 
-        if (!string.IsNullOrEmpty(tcd.NameDelta))
+        if (!string.IsNullOrEmpty(delta.NameDelta))
         {
             var cur = state.Name.ToString();
-            if (string.IsNullOrEmpty(cur) || (cur != tcd.NameDelta && !cur.EndsWith(tcd.NameDelta)))
+            if (string.IsNullOrEmpty(cur) || (cur != delta.NameDelta && !cur.EndsWith(delta.NameDelta)))
             {
-                state.Name.Append(tcd.NameDelta);
+                state.Name.Append(delta.NameDelta);
             }
         }
 
-        if (!string.IsNullOrEmpty(tcd.ArgumentsDelta))
+        if (!string.IsNullOrEmpty(delta.ArgumentsDelta))
         {
-            state.Args.Append(tcd.ArgumentsDelta);
+            state.Args.Append(delta.ArgumentsDelta);
         }
+
+        return true;
     }
 
-    public IReadOnlyList<IContent> Build()
+    public IReadOnlyList<IContent> ToContents()
     {
         var results = new List<IContent>();
 

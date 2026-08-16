@@ -1,3 +1,4 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using CodeSharp.UI;
 using Xunit;
