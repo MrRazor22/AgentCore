@@ -1,4 +1,5 @@
 using System.Text;
+using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat.Builders;
 

@@ -1,3 +1,5 @@
+using AgentCore.LLM;
+
 namespace AgentCore.LLM.Chat.Builders;
 
 public static class ContentBuilderFactory

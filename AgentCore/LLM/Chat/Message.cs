@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat.Builders;
 
 namespace AgentCore.LLM.Chat;

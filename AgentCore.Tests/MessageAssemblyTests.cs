@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Xunit;
 

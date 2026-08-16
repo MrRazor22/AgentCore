@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat.Builders;
 
