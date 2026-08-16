@@ -202,16 +202,14 @@ public class MessageAssemblyTests
         var message = new Message(Role.Assistant);
         Assert.Empty(message.Contents);
 
-        var snap1 = message.AddContentDelta(new TextDelta("Hello "));
-        Assert.Empty(message.Contents);
-        Assert.Single(snap1);
-        Assert.Equal("Hello ", Assert.IsType<Text>(snap1[0]).Value);
+        message.AddContentDelta(new TextDelta("Hello "));
+        Assert.Single(message.Contents);
+        Assert.Equal("Hello ", Assert.IsType<Text>(message.Contents[0]).Value);
 
         // Stream continues with the same active builder
-        var snap2 = message.AddContentDelta(new TextDelta("world!"));
-        Assert.Empty(message.Contents);
-        Assert.Single(snap2);
-        Assert.Equal("Hello world!", Assert.IsType<Text>(snap2[0]).Value);
+        message.AddContentDelta(new TextDelta("world!"));
+        Assert.Single(message.Contents);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(message.Contents[0]).Value);
     }
 
     [Fact]
@@ -219,20 +217,15 @@ public class MessageAssemblyTests
     {
         var message = new Message(Role.Assistant);
 
-        var snap1 = message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
-        Assert.Single(snap1);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(snap1[0]).Thought);
-        Assert.Empty(message.Contents);
-
-        // Boundary switch: ReasoningDelta -> TextDelta
-        var snap2 = message.AddContentDelta(new TextDelta("Here is the answer."));
-        Assert.Equal(2, snap2.Count);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(snap2[0]).Thought);
-        Assert.Equal("Here is the answer.", Assert.IsType<Text>(snap2[1]).Value);
-
-        // Contents snapshot includes only committed Reasoning
+        message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
         Assert.Single(message.Contents);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+
+        // Boundary switch: ReasoningDelta -> TextDelta
+        message.AddContentDelta(new TextDelta("Here is the answer."));
+        Assert.Equal(2, message.Contents.Count);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
     }
 
     [Fact]
@@ -312,7 +305,6 @@ internal static class TestMessageAssemblyExtensions
         CancellationToken ct = default)
     {
         var message = new Message(Role.Assistant);
-        IReadOnlyList<IContent> lastSnapshot = [];
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
         Exception? caughtException = null;
@@ -324,7 +316,7 @@ internal static class TestMessageAssemblyExtensions
                 switch (item)
                 {
                     case IContentDelta delta:
-                        lastSnapshot = message.AddContentDelta(delta);
+                        message.AddContentDelta(delta);
                         break;
 
                     case TokenUsage tu:
@@ -342,7 +334,7 @@ internal static class TestMessageAssemblyExtensions
             caughtException = ex;
         }
 
-        var consolidated = Consolidate(lastSnapshot);
+        var consolidated = Consolidate(message.Contents);
 
         if (consolidated.Count == 0)
         {

@@ -13,7 +13,10 @@ public class Message
     public Role Role { get; }
 
     [JsonPropertyName("contents")]
-    public IReadOnlyList<IContent> Contents => _contents;
+    public IReadOnlyList<IContent> Contents =>
+        _activeBuilder is null
+            ? _contents
+            : [.. _contents, .. _activeBuilder.ToContents()];
 
     [JsonConstructor]
     public Message(Role role, IReadOnlyList<IContent>? contents = null)
@@ -36,11 +39,11 @@ public class Message
     }
 
     /// <summary>
-    /// Appends a streaming delta to the active content builder and returns the full current content state after applying the delta.
+    /// Appends a streaming delta to the active content builder.
     /// </summary>
     /// <param name="delta">The incoming streaming delta.</param>
-    /// <returns>The current content state after this delta.</returns>
-    public IReadOnlyList<IContent> AddContentDelta(IContentDelta delta)
+    /// <returns>The current <see cref="Message"/> instance for fluent chaining.</returns>
+    public Message AddContentDelta(IContentDelta delta)
     {
         ArgumentNullException.ThrowIfNull(delta);
 
@@ -51,7 +54,7 @@ public class Message
             _activeBuilder.TryAppend(delta);
         }
 
-        return [.. _contents, .. _activeBuilder.ToContents()];
+        return this;
     }
 
     private void CommitActiveContent()

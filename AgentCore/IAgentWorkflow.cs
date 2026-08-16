@@ -61,8 +61,7 @@ namespace AgentCore
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
                 var assistantMessage = new Message(Role.Assistant);
-                TokenUsage? tokenUsage = null; 
-                IReadOnlyList<IContent> lastSnapshot = [];
+                TokenUsage? tokenUsage = null;
 
                 try
                 {
@@ -73,7 +72,7 @@ namespace AgentCore
                         switch (item)
                         {
                             case IContentDelta delta:
-                                lastSnapshot = assistantMessage.AddContentDelta(delta);
+                                assistantMessage.AddContentDelta(delta);
                                 break;
 
                             case TokenUsage usage:
@@ -82,23 +81,22 @@ namespace AgentCore
                         }
                     }
 
-                    foreach (var content in lastSnapshot)
+                    foreach (var content in assistantMessage.Contents)
                     {
                         yield return content;
                     }
                 }
                 finally
                 {
-                    if (lastSnapshot.Count > 0)
+                    if (assistantMessage.Contents.Count > 0)
                     {
-                        var finalMessage = new Message(Role.Assistant, lastSnapshot);
-                        await context.CommitAsync(new[] { finalMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
+                        await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
                 ct.ThrowIfCancellationRequested();
 
-                var toolCalls = lastSnapshot.OfType<ToolCall>().ToList();
+                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
