@@ -6,7 +6,7 @@ using Xunit;
 
 namespace AgentCore.Tests;
 
-public class ContentAccumulatorTests
+public class MessageAssemblyTests
 {
     private static async IAsyncEnumerable<ILLMOutput> ToAsyncStream(IEnumerable<ILLMOutput> items)
     {
@@ -18,7 +18,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_IndexAndIdPermutations_MergesCorrectly()
+    public async Task AssembleAsync_IndexAndIdPermutations_MergesCorrectly()
     {
         // RAW stream sequence 1: Index + ID -> later ID only
         var sequence1 = new List<ILLMOutput>
@@ -27,7 +27,7 @@ public class ContentAccumulatorTests
             new ToolCallDelta("ABC", null, "{\"commandLine\":\"ls\"}", null)
         };
 
-        var (contents1, _, _) = await ToAsyncStream(sequence1).AccumulateAsync();
+        var (contents1, _, _) = await ToAsyncStream(sequence1).AssembleAsync();
         Assert.NotNull(contents1);
         var calls1 = contents1.OfType<ToolCall>().ToList();
         Assert.Single(calls1);
@@ -42,7 +42,7 @@ public class ContentAccumulatorTests
             new ToolCallDelta("XYZ", null, "{\"query\":\"test\"}", 1)
         };
 
-        var (contents2, _, _) = await ToAsyncStream(sequence2).AccumulateAsync();
+        var (contents2, _, _) = await ToAsyncStream(sequence2).AssembleAsync();
         Assert.NotNull(contents2);
         var calls2 = contents2.OfType<ToolCall>().ToList();
         Assert.Single(calls2);
@@ -52,7 +52,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_IndexAndId_ReconcilesWithoutIdDuplication()
+    public async Task AssembleAsync_IndexAndId_ReconcilesWithoutIdDuplication()
     {
         var sequence = new List<ILLMOutput>
         {
@@ -61,7 +61,7 @@ public class ContentAccumulatorTests
             new ToolCallDelta("ABC", "RunCommand", "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}", null)
         };
 
-        var (contents, _, _) = await ToAsyncStream(sequence).AccumulateAsync();
+        var (contents, _, _) = await ToAsyncStream(sequence).AssembleAsync();
         Assert.NotNull(contents);
         var calls = contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
@@ -70,7 +70,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
+    public async Task AssembleAsync_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
     {
         var sequence = new List<ILLMOutput>
         {
@@ -82,7 +82,7 @@ public class ContentAccumulatorTests
             new ToolCallDelta("", null, "\"test\"}", 1)
         };
 
-        var (contents, _, _) = await ToAsyncStream(sequence).AccumulateAsync();
+        var (contents, _, _) = await ToAsyncStream(sequence).AssembleAsync();
         Assert.NotNull(contents);
         var calls = contents.OfType<ToolCall>().ToList();
 
@@ -98,7 +98,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_AmbiguousDeltaWithMultipleActiveGroups_ThrowsInvalidOperationException()
+    public async Task AssembleAsync_AmbiguousDeltaWithMultipleActiveGroups_ThrowsInvalidOperationException()
     {
         var sequence = new List<ILLMOutput>
         {
@@ -109,12 +109,12 @@ public class ContentAccumulatorTests
 
         await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
         {
-            await ToAsyncStream(sequence).AccumulateAsync();
+            await ToAsyncStream(sequence).AssembleAsync();
         });
     }
 
     [Fact]
-    public async Task AccumulateAsync_OnCancellation_ReturnsAccumulatedTextAndReasoning()
+    public async Task AssembleAsync_OnCancellation_ReturnsAccumulatedTextAndReasoning()
     {
         var cts = new System.Threading.CancellationTokenSource();
 
@@ -127,7 +127,7 @@ public class ContentAccumulatorTests
             yield return new TextDelta("Unreachable text");
         }
 
-        var (contents, _, _) = await CancellationStream().AccumulateAsync(cts.Token);
+        var (contents, _, _) = await CancellationStream().AssembleAsync(cts.Token);
 
         Assert.NotNull(contents);
         Assert.Equal(2, contents.Count);
@@ -142,7 +142,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_OnCancellation_DiscardsNamelessToolCalls()
+    public async Task AssembleAsync_OnCancellation_DiscardsNamelessToolCalls()
     {
         var cts = new System.Threading.CancellationTokenSource();
 
@@ -154,7 +154,7 @@ public class ContentAccumulatorTests
             ct.ThrowIfCancellationRequested();
         }
 
-        var (contents, _, _) = await CancellationStream().AccumulateAsync(cts.Token);
+        var (contents, _, _) = await CancellationStream().AssembleAsync(cts.Token);
 
         Assert.NotNull(contents);
         Assert.Single(contents);
@@ -164,7 +164,7 @@ public class ContentAccumulatorTests
     }
 
     [Fact]
-    public async Task AccumulateAsync_OnCancellationWithNoContent_ThrowsCancellation()
+    public async Task AssembleAsync_OnCancellationWithNoContent_ThrowsCancellation()
     {
         var cts = new System.Threading.CancellationTokenSource();
         await cts.CancelAsync();
@@ -177,12 +177,12 @@ public class ContentAccumulatorTests
 
         await Assert.ThrowsAsync<System.OperationCanceledException>(async () =>
         {
-            await EmptyStream().AccumulateAsync(cts.Token);
+            await EmptyStream().AssembleAsync(cts.Token);
         });
     }
 
     [Fact]
-    public async Task AccumulateAsync_OnEmptyNormalCompletion_ThrowsInvalidOperationException()
+    public async Task AssembleAsync_OnEmptyNormalCompletion_ThrowsInvalidOperationException()
     {
         async IAsyncEnumerable<ILLMOutput> EmptyStream()
         {
@@ -192,12 +192,12 @@ public class ContentAccumulatorTests
 
         await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
         {
-            await EmptyStream().AccumulateAsync();
+            await EmptyStream().AssembleAsync();
         });
     }
 }
 
-internal static class TestContentAccumulatorExtensions
+internal static class TestMessageAssemblyExtensions
 {
     private static List<IContent> Consolidate(IReadOnlyList<IContent> items)
     {
@@ -225,11 +225,12 @@ internal static class TestContentAccumulatorExtensions
         return result;
     }
 
-    public static async Task<(IReadOnlyList<IContent> Contents, TokenUsage? TokenUsage, FinishReason? FinishReason)> AccumulateAsync(
+    public static async Task<(IReadOnlyList<IContent> Contents, TokenUsage? TokenUsage, FinishReason? FinishReason)> AssembleAsync(
         this IAsyncEnumerable<ILLMOutput> stream,
         CancellationToken ct = default)
     {
-        var contents = new List<IContent>();
+        var message = new Message(Role.Assistant);
+        var streamedContents = new List<IContent>();
         TokenUsage? tokenUsage = null;
         FinishReason? finishReason = null;
         Exception? caughtException = null;
@@ -241,7 +242,10 @@ internal static class TestContentAccumulatorExtensions
                 switch (item)
                 {
                     case IContentDelta delta:
-                        delta.AccumulateInto(contents);
+                        foreach (var content in message.Append(delta))
+                        {
+                            streamedContents.Add(content);
+                        }
                         break;
 
                     case TokenUsage tu:
@@ -253,13 +257,22 @@ internal static class TestContentAccumulatorExtensions
                         break;
                 }
             }
+
+            foreach (var content in message.Complete())
+            {
+                streamedContents.Add(content);
+            }
         }
         catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)
         {
             caughtException = ex;
+            foreach (var content in message.Complete())
+            {
+                streamedContents.Add(content);
+            }
         }
 
-        var consolidated = Consolidate(contents);
+        var consolidated = Consolidate(message.Contents);
 
         if (consolidated.Count == 0)
         {

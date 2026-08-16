@@ -129,7 +129,7 @@ public class AgentTests
             .WithLLM(lf => mockProvider)
             .Build();
 
-        var contents = new List<IAgentResponse>();
+        var contents = new List<IContent>();
         await foreach (var ev in agent.InvokeStreamingAsync(new Text("Hi")))
         {
             contents.Add(ev);

@@ -11,7 +11,7 @@ public interface IAgent
 {
     Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<IAgentResponse> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
 
 public sealed partial class Agent : IAgent
@@ -49,11 +49,7 @@ public sealed partial class Agent : IAgent
         var sb = new StringBuilder();
         await foreach (var content in InvokeStreamingAsyncInternal<T>(input, ct))
         {
-            if (content is TextDelta td)
-            {
-                sb.Append(td.Value);
-            }
-            else if (content is Text t)
+            if (content is Text t)
             {
                 sb.Append(t.Value);
             }
@@ -63,9 +59,9 @@ public sealed partial class Agent : IAgent
         return Deserialize<T>(fullText);
     }
 
-    public IAsyncEnumerable<IAgentResponse> InvokeStreamingAsync(IContent input, CancellationToken ct = default) => ExecuteStreamAsync(input, null, ct);
+    public IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default) => ExecuteStreamAsync(input, null, ct);
 
-    private IAsyncEnumerable<IAgentResponse> InvokeStreamingAsyncInternal<T>(
+    private IAsyncEnumerable<IContent> InvokeStreamingAsyncInternal<T>(
         IContent input,
         CancellationToken ct = default)
     {
@@ -78,7 +74,7 @@ public sealed partial class Agent : IAgent
         return ExecuteStreamAsync(input, schema, ct);
     }
 
-    private async IAsyncEnumerable<IAgentResponse> ExecuteStreamAsync(
+    private async IAsyncEnumerable<IContent> ExecuteStreamAsync(
         IContent input,
         JsonSchema? responseSchema,
         [EnumeratorCancellation] CancellationToken ct = default)

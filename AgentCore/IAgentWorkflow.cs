@@ -10,7 +10,7 @@ namespace AgentCore
 {
     public interface IAgentWorkflow
     {
-        IAsyncEnumerable<IAgentResponse> ExecuteAsync(
+        IAsyncEnumerable<IContent> ExecuteAsync(
             IContext context,
             IContent input,
             JsonSchema? responseSchema,
@@ -36,7 +36,7 @@ namespace AgentCore
             _logger = logger;
         }
 
-        public async IAsyncEnumerable<IAgentResponse> ExecuteAsync(
+        public async IAsyncEnumerable<IContent> ExecuteAsync(
             IContext context,
             IContent input,
             JsonSchema? responseSchema,
@@ -60,7 +60,7 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
-                var contents = new List<IContent>();
+                var assistantMessage = new Message(Role.Assistant);
                 TokenUsage? tokenUsage = null; 
 
                 try
@@ -72,37 +72,35 @@ namespace AgentCore
                         switch (item)
                         {
                             case IContentDelta delta:
-                                delta.AccumulateInto(contents);
+                                foreach (var content in assistantMessage.Append(delta))
+                                {
+                                    yield return content;
+                                }
                                 break;
 
                             case TokenUsage usage:
                                 tokenUsage = usage;
-                                yield return usage;
-                                break;
-
-                            case IAgentResponse response:
-                                yield return response;
                                 break;
                         }
                     }
 
-                    foreach (var content in contents)
+                    foreach (var content in assistantMessage.Complete())
                     {
                         yield return content;
                     }
                 }
                 finally
                 {
-                    if (contents.Count > 0)
+                    assistantMessage.Complete();
+                    if (assistantMessage.Contents.Count > 0)
                     {
-                        var assistantMessage = new Message(Role.Assistant, contents);
                         await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
 
                 ct.ThrowIfCancellationRequested();
 
-                var toolCalls = contents.OfType<ToolCall>().ToList();
+                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)
                 {
                     iterations++;
