@@ -44,9 +44,8 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
-            bool hasTools;
-
-            await context.StageAsync(new[] { new Message(Role.User, [input]) }, ct).ConfigureAwait(false);
+            Message assistantMessage;
+            await context.StageAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
 
             do
             {
@@ -62,8 +61,8 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
-                var assistantMessage = new Message(Role.Assistant);
-                TokenUsage? tokenUsage = null;
+                assistantMessage = new Message(Role.Assistant);
+                TokenUsage? tokenUsage = null; 
 
                 await foreach (var item in _llm
                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
@@ -76,9 +75,7 @@ namespace AgentCore
                             yield return content;
 
                             if (content is ToolCall toolCall)
-                            {
-                                _ = _tooling.ExecuteAsync(toolCall, ct);
-                            }
+                                _ = _tooling.ExecuteAsync(toolCall, ct); 
                         }
                     }
                     else if (item is TokenUsage usage)
@@ -89,17 +86,15 @@ namespace AgentCore
 
                 await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);
 
-                hasTools = false;
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {
-                    hasTools = true;
                     await context.StageAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
                     yield return result;
                 }
 
                 iterations++;
             }
-            while (hasTools);
+            while (assistantMessage.Contents.OfType<ToolCall>().Any());
         }
     }
 }
