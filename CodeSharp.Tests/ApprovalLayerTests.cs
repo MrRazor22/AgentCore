@@ -23,15 +23,25 @@ public class ApprovalLayerTests
 
     private class MockTooling : ITooling
     {
+        private readonly List<Task<ToolResult>> _tasks = new();
         public bool ExecuteCalled { get; private set; }
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
-        public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+        public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
             ExecuteCalled = true;
-            return Task.FromResult<IReadOnlyList<ToolResult>>(
-                calls.Select(c => new ToolResult(c.Id, new Text("Execution Ok"))).ToList()
-            );
+            _tasks.Add(Task.FromResult(new ToolResult(call.Id, new Text("Execution Ok"))));
+            return Task.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            var tasks = new List<Task<ToolResult>>(_tasks);
+            _tasks.Clear();
+            foreach (var t in tasks)
+            {
+                yield return await t.ConfigureAwait(false);
+            }
         }
     }
 
@@ -77,8 +87,13 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
-        var results = await layer.ExecuteAsync(calls);
+        var call = new ToolCall("1", "test_tool", new JsonObject());
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.True(mockInner.ExecuteCalled);
         Assert.Single(results);
@@ -94,8 +109,13 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
-        var results = await layer.ExecuteAsync(calls);
+        var call = new ToolCall("1", "test_tool", new JsonObject());
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.False(mockInner.ExecuteCalled);
         Assert.Single(results);
@@ -111,8 +131,13 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.TrustModel, prompt);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "test_tool", new JsonObject { ["SafeToAutoRun"] = true }) };
-        var results = await layer.ExecuteAsync(calls);
+        var call = new ToolCall("1", "test_tool", new JsonObject { ["SafeToAutoRun"] = true });
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.True(mockInner.ExecuteCalled);
         Assert.Single(results);
@@ -128,8 +153,13 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
-        var results = await layer.ExecuteAsync(calls);
+        var call = new ToolCall("1", "test_tool", new JsonObject());
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.True(mockInner.ExecuteCalled);
         Assert.Single(results);
@@ -148,8 +178,13 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt, guardrails);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" }) };
-        var results = await layer.ExecuteAsync(calls);
+        var call = new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" });
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.False(mockInner.ExecuteCalled);
         Assert.Single(results);
@@ -166,14 +201,17 @@ public class ApprovalLayerTests
         var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
         AttachInner(layer, mockInner);
 
-        var calls = new[] { new ToolCall("1", "test_tool", new JsonObject()) };
+        var call = new ToolCall("1", "test_tool", new JsonObject());
         
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Pre-cancel
 
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await layer.ExecuteAsync(calls, cts.Token);
+            await layer.ExecuteAsync(call, cts.Token);
+            await foreach (var r in layer.StreamResultsAsync(cts.Token))
+            {
+            }
         });
         
         Assert.False(mockInner.ExecuteCalled);

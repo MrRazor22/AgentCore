@@ -24,7 +24,12 @@ public class ToolingTests
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
-        var results = await tooling.ExecuteAsync(new[] { toolCall });
+        await tooling.ExecuteAsync(toolCall);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var toolResult = results[0];
@@ -44,7 +49,12 @@ public class ToolingTests
         var args = new JsonObject { ["a"] = 10 };
         var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
-        var results = await tooling.ExecuteAsync(new[] { toolCall });
+        await tooling.ExecuteAsync(toolCall);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -71,7 +81,12 @@ public class ToolingTests
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", "Weather_Lookup", args);
-        var results = await tooling.ExecuteAsync(new[] { toolCall });
+        await tooling.ExecuteAsync(toolCall);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var toolResult = results[0];

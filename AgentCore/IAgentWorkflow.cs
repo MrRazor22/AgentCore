@@ -44,9 +44,11 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
+            bool hasTools;
+
             await context.StageAsync(new[] { new Message(Role.User, [input]) }, ct).ConfigureAwait(false);
 
-            while (true)
+            do
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -56,7 +58,6 @@ namespace AgentCore
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
-                // Prepare context: handles internal compaction policy, returning the full candidate prompt
                 var currentMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
@@ -68,42 +69,37 @@ namespace AgentCore
                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
                     .ConfigureAwait(false))
                 {
-                    switch (item)
+                    if (item is IContentDelta delta)
                     {
-                        case IContentDelta delta:
-                            foreach (var content in assistantMessage.AddContentDelta(delta))
-                            {
-                                yield return content;
-                            }
-                            break;
+                        foreach (var content in assistantMessage.AddContentDelta(delta))
+                        {
+                            yield return content;
 
-                        case TokenUsage usage:
-                            tokenUsage = usage;
-                            break;
+                            if (content is ToolCall toolCall)
+                            {
+                                _ = _tooling.ExecuteAsync(toolCall, ct);
+                            }
+                        }
+                    }
+                    else if (item is TokenUsage usage)
+                    {
+                        tokenUsage = usage;
                     }
                 }
 
-                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);  
+                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);
 
-                var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
-                if (toolCalls.Count > 0)
+                hasTools = false;
+                await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {
-                    iterations++;
-
-                    _logger?.LogInformation("Executing tools. Iteration={Iteration}, ToolCount={ToolCount}", iterations, toolCalls.Count);
-                    var toolResults = await _tooling.ExecuteAsync(toolCalls, ct).ConfigureAwait(false);
-
-                    foreach (var result in toolResults) yield return result; 
-
-                    await context.StageAsync(
-                        toolResults.Select(r => new Message(Role.Tool, [r])).ToList(),
-                        ct).ConfigureAwait(false);
-
-                    continue;
+                    hasTools = true;
+                    await context.StageAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
+                    yield return result;
                 }
 
-                break;
+                iterations++;
             }
+            while (hasTools);
         }
     }
 }

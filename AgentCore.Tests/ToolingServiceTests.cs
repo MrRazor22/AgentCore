@@ -21,9 +21,14 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_UnregisteredToolName_ReturnsErrorMessage()
     {
         var tooling = new Tooling(Array.Empty<Tool>());
-        var calls = new[] { new ToolCall("call_1", "missing_tool", new JsonObject()) };
+        var call = new ToolCall("call_1", "missing_tool", new JsonObject());
 
-        var results = await tooling.ExecuteAsync(calls);
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -34,9 +39,14 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_EmptyToolName_ReturnsErrorMessage()
     {
         var tooling = new Tooling(Array.Empty<Tool>());
-        var calls = new[] { new ToolCall("call_1", "", new JsonObject()) };
+        var call = new ToolCall("call_1", "", new JsonObject());
 
-        var results = await tooling.ExecuteAsync(calls);
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -53,11 +63,16 @@ public class ToolingServiceTests
         };
         var tooling = new Tooling(new[] { tool });
 
-        var calls = new[] { new ToolCall("call_1", "crash_tool", new JsonObject()) };
+        var call = new ToolCall("call_1", "crash_tool", new JsonObject());
+
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         // Should NOT throw, but return error text
-        var results = await tooling.ExecuteAsync(calls);
-
         Assert.Single(results);
         var resultText = results[0].ForLlm();
         Assert.Contains("Tool implementation crashed", resultText);
@@ -70,8 +85,13 @@ public class ToolingServiceTests
         var tool = new FakeTool("null_tool", schema) { Invoker = (args, ct) => Task.FromResult<object?>(null) };
         var tooling = new Tooling(new[] { tool });
 
-        var calls = new[] { new ToolCall("call_1", "null_tool", new JsonObject()) };
-        var results = await tooling.ExecuteAsync(calls);
+        var call = new ToolCall("call_1", "null_tool", new JsonObject());
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -88,8 +108,13 @@ public class ToolingServiceTests
         };
         var tooling = new Tooling(new[] { tool });
 
-        var calls = new[] { new ToolCall("call_1", "content_tool", new JsonObject()) };
-        var results = await tooling.ExecuteAsync(calls);
+        var call = new ToolCall("call_1", "content_tool", new JsonObject());
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -106,8 +131,13 @@ public class ToolingServiceTests
         };
         var tooling = new Tooling(new[] { tool });
 
-        var calls = new[] { new ToolCall("call_1", "object_tool", new JsonObject()) };
-        var results = await tooling.ExecuteAsync(calls);
+        var call = new ToolCall("call_1", "object_tool", new JsonObject());
+        await tooling.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in tooling.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Single(results);
         var resultText = results[0].ForLlm();
@@ -124,13 +154,16 @@ public class ToolingServiceTests
         };
         var tooling = new Tooling(new[] { tool });
 
-        var calls = new[] { new ToolCall("call_1", "slow_tool", new JsonObject()) };
+        var call = new ToolCall("call_1", "slow_tool", new JsonObject());
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await tooling.ExecuteAsync(calls, cts.Token);
+            await tooling.ExecuteAsync(call, cts.Token);
+            await foreach (var r in tooling.StreamResultsAsync(cts.Token))
+            {
+            }
         });
     }
 }

@@ -238,5 +238,56 @@ public class WorkflowTests
         // Assert that uncompleted Assistant message was NOT persisted to context upon cancellation
         Assert.Empty(context.Messages);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_MultipleToolCalls_ExecutesConcurrentlyAndYieldsAsCompleted()
+    {
+        // Arrange
+        var provider = new MockLLMProvider();
+        provider.Enqueue(
+            new ToolCallDelta("call_slow", "slow_tool", "{}"),
+            new ToolCallDelta("call_fast", "fast_tool", "{}"),
+            new FinishReason("tool_calls")
+        );
+        provider.Enqueue(
+            new TextDelta("Both done."),
+            new FinishReason("stop")
+        );
+
+        var tooling = new MockTooling();
+        tooling.Handler = async (calls, ct) =>
+        {
+            var call = calls.First();
+            if (call.Name == "slow_tool")
+            {
+                await Task.Delay(150, ct);
+                return new List<ToolResult> { new(call.Id, new Text("SlowResult")) };
+            }
+            else
+            {
+                await Task.Delay(20, ct);
+                return new List<ToolResult> { new(call.Id, new Text("FastResult")) };
+            }
+        };
+
+        var (llm, _) = CreateServices(provider, tooling);
+        var executor = new ReActWorkflow(llm, tooling);
+        var context = new MockMemoryProvider();
+        var input = new Text("Run concurrent tools");
+
+        // Act
+        var contents = new List<IContent>();
+        await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
+        {
+            contents.Add(item);
+        }
+
+        // Assert
+        var results = contents.OfType<ToolResult>().ToList();
+        Assert.Equal(2, results.Count);
+        // Fast tool should finish first and yield first even though it was emitted second
+        Assert.Equal("call_fast", results[0].CallId);
+        Assert.Equal("call_slow", results[1].CallId);
+    }
 }
 

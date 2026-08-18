@@ -145,6 +145,9 @@ public class MockMemoryProvider : IContext
 
 public class MockTooling : ITooling
 {
+    private readonly List<Task<ToolResult>> _tasks = new();
+    private readonly object _lock = new();
+
     public IReadOnlyList<ToolDefinition> Definitions { get; set; } = Array.Empty<ToolDefinition>();
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
@@ -154,8 +157,43 @@ public class MockTooling : ITooling
             calls.Select(c => new ToolResult(c.Id, new Text("Success"))).ToList()
         );
 
-    public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
-        return Handler(calls, ct);
+        Task<ToolResult> task;
+        try
+        {
+            task = Handler(new[] { call }, ct).ContinueWith(t =>
+            {
+                if (t.IsFaulted) throw t.Exception!.InnerException ?? t.Exception!;
+                return t.Result[0];
+            }, ct, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+        catch (Exception ex)
+        {
+            task = Task.FromException<ToolResult>(ex);
+        }
+
+        lock (_lock)
+        {
+            _tasks.Add(task);
+        }
+        return Task.CompletedTask;
+    }
+
+    public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        List<Task<ToolResult>> tasks;
+        lock (_lock)
+        {
+            tasks = new List<Task<ToolResult>>(_tasks);
+            _tasks.Clear();
+        }
+
+        while (tasks.Count > 0)
+        {
+            var completed = await Task.WhenAny(tasks).ConfigureAwait(false);
+            tasks.Remove(completed);
+            yield return await completed.ConfigureAwait(false);
+        }
     }
 }

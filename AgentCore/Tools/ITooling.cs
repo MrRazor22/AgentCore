@@ -9,7 +9,8 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default);
+    Task ExecuteAsync(ToolCall call, CancellationToken ct = default);
+    IAsyncEnumerable<ToolResult> StreamResultsAsync(CancellationToken ct = default);
 }
 
 internal sealed class Tooling : ITooling
@@ -17,6 +18,8 @@ internal sealed class Tooling : ITooling
     private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<Tooling> _logger;
+    private readonly List<Task<ToolResult>> _runningTasks = new();
+    private readonly object _lock = new();
 
     public Tooling(
         IReadOnlyList<Tool> tools,
@@ -42,9 +45,31 @@ internal sealed class Tooling : ITooling
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _toolDefinitions;
 
-    public async Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
-        return await Task.WhenAll(calls.Select(c => HandleInternalAsync(c, ct))).ConfigureAwait(false);
+        var task = HandleInternalAsync(call, ct);
+        lock (_lock)
+        {
+            _runningTasks.Add(task);
+        }
+        return Task.CompletedTask;
+    }
+
+    public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        List<Task<ToolResult>> tasks;
+        lock (_lock)
+        {
+            tasks = new List<Task<ToolResult>>(_runningTasks);
+            _runningTasks.Clear();
+        }
+
+        while (tasks.Count > 0)
+        {
+            var completedTask = await Task.WhenAny(tasks).ConfigureAwait(false);
+            tasks.Remove(completedTask);
+            yield return await completedTask.ConfigureAwait(false);
+        }
     }
 
     private static ToolResult Failed(string callId, string toolName, string message)

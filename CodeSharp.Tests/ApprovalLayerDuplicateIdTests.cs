@@ -21,13 +21,22 @@ public class ApprovalLayerDuplicateIdTests
     private class MockTooling : ITooling
     {
         private readonly Tool _tool;
+        private readonly List<Task<ToolResult>> _tasks = new();
         public MockTooling(Tool tool) => _tool = tool;
         public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { _tool.Definition };
-        public Task<IReadOnlyList<ToolResult>> ExecuteAsync(IEnumerable<ToolCall> calls, CancellationToken ct = default)
+        public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
-            return Task.FromResult<IReadOnlyList<ToolResult>>(
-                calls.Select(c => new ToolResult(c.Id, new Text($"Output for {c.Name}"))).ToList()
-            );
+            _tasks.Add(Task.FromResult(new ToolResult(call.Id, new Text($"Output for {call.Name}"))));
+            return Task.CompletedTask;
+        }
+        public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            var tasks = new List<Task<ToolResult>>(_tasks);
+            _tasks.Clear();
+            foreach (var t in tasks)
+            {
+                yield return await t.ConfigureAwait(false);
+            }
         }
     }
 
@@ -61,7 +70,16 @@ public class ApprovalLayerDuplicateIdTests
             new ToolCall("1", "test_tool", new JsonObject())
         };
 
-        var results = await approvalLayer.ExecuteAsync(calls);
+        foreach (var call in calls)
+        {
+            await approvalLayer.ExecuteAsync(call);
+        }
+
+        var results = new List<ToolResult>();
+        await foreach (var r in approvalLayer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
 
         Assert.Equal(4, results.Count);
         Assert.Equal("", results[0].CallId);

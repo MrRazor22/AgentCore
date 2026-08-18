@@ -56,6 +56,9 @@ public sealed class ApprovalLayer : ToolingLayer
     private readonly ExecutionPolicy _policy;
     private readonly IApprovalPrompt _prompt;
     private readonly DenyRule? _guardrailDeny;
+    private readonly List<Task> _inFlightEvaluations = new();
+    private readonly List<ToolResult> _deniedResults = new();
+    private readonly object _lock = new();
 
     public ApprovalLayer(
         IReadOnlyDictionary<string, ToolPermission> permissions,
@@ -70,57 +73,79 @@ public sealed class ApprovalLayer : ToolingLayer
         _guardrailDeny = guardrailDeny;
     }
 
-    public override async Task<IReadOnlyList<ToolResult>> ExecuteAsync(
-        IEnumerable<ToolCall> calls, CancellationToken ct = default)
+    public override Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
-        var callList = calls as IReadOnlyList<ToolCall> ?? calls.ToList();
-        var results = new ToolResult[callList.Count];
-
-        var approvedIndices = new List<int>();
-        var approvedCalls = new List<ToolCall>();
-
-        for (int i = 0; i < callList.Count; i++)
+        var evalTask = ProcessCallAsync(call, ct);
+        lock (_lock)
         {
-            var call = callList[i];
-            var verdict = Evaluate(call, out var reason);
+            _inFlightEvaluations.Add(evalTask);
+        }
+        return evalTask;
+    }
 
-            switch (verdict)
-            {
-                case Verdict.Allow:
-                    approvedIndices.Add(i);
-                    approvedCalls.Add(call);
-                    break;
+    private async Task ProcessCallAsync(ToolCall call, CancellationToken ct)
+    {
+        var verdict = Evaluate(call, out var reason);
 
-                case Verdict.Prompt:
-                    if (await _prompt.RequestApprovalAsync(call, ct).ConfigureAwait(false))
+        switch (verdict)
+        {
+            case Verdict.Allow:
+                await Inner.ExecuteAsync(call, ct).ConfigureAwait(false);
+                break;
+
+            case Verdict.Prompt:
+                if (await _prompt.RequestApprovalAsync(call, ct).ConfigureAwait(false))
+                {
+                    await Inner.ExecuteAsync(call, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    lock (_lock)
                     {
-                        approvedIndices.Add(i);
-                        approvedCalls.Add(call);
+                        _deniedResults.Add(Denied(call, "User rejected execution."));
                     }
-                    else
-                    {
-                        results[i] = Denied(call, "User rejected execution.");
-                    }
-                    break;
+                }
+                break;
 
-                case Verdict.Deny:
-                    results[i] = Denied(call, reason ?? "Blocked by policy guardrail.");
-                    break;
-            }
+            case Verdict.Deny:
+            default:
+                lock (_lock)
+                {
+                    _deniedResults.Add(Denied(call, reason ?? "Blocked by policy guardrail."));
+                }
+                break;
+        }
+    }
+
+    public override async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        // 1. Wait for all in-flight evaluations to complete
+        Task[] evaluationsToWait;
+        lock (_lock)
+        {
+            evaluationsToWait = _inFlightEvaluations.ToArray();
+            _inFlightEvaluations.Clear();
+        }
+        await Task.WhenAll(evaluationsToWait).ConfigureAwait(false);
+
+        // 2. Yield any denied results recorded by this layer
+        List<ToolResult> denied;
+        lock (_lock)
+        {
+            denied = new List<ToolResult>(_deniedResults);
+            _deniedResults.Clear();
         }
 
-        if (approvedCalls.Count > 0)
+        foreach (var item in denied)
         {
-            var executedResults = await Inner.ExecuteAsync(approvedCalls, ct).ConfigureAwait(false);
-            for (int j = 0; j < approvedCalls.Count; j++)
-            {
-                results[approvedIndices[j]] = j < executedResults.Count
-                    ? executedResults[j]
-                    : Denied(approvedCalls[j], "Tool execution produced no result.");
-            }
+            yield return item;
         }
 
-        return results;
+        // 3. Stream inner results as they finish
+        await foreach (var result in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
+        {
+            yield return result;
+        }
     }
 
     private Verdict Evaluate(ToolCall call, out string? denyReason)
