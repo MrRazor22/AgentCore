@@ -12,13 +12,17 @@ public sealed class ToolCallContentBuilder : IContentBuilder
         public int? Index { get; set; }
         public StringBuilder Name { get; } = new();
         public StringBuilder Args { get; } = new();
+        public bool Emitted { get; set; }
     }
 
     private readonly List<ToolCallState> _calls = new();
 
-    public bool TryAppend(IContentDelta contentDelta)
+    public bool CanHandle(IContentDelta delta) => delta is ToolCallDelta;
+
+    public IEnumerable<IContent> Append(IContentDelta contentDelta)
     {
-        if (contentDelta is not ToolCallDelta delta) return false;
+        if (contentDelta is not ToolCallDelta delta) yield break;
+
         ToolCallState? state = null;
 
         if (delta.Index.HasValue)
@@ -70,36 +74,36 @@ public sealed class ToolCallContentBuilder : IContentBuilder
             state.Args.Append(delta.ArgumentsDelta);
         }
 
-        return true;
-    }
-
-    public IReadOnlyList<IContent> ToContents()
-    {
-        var results = new List<IContent>();
-
+        // Check if any tool call reached complete JSON and can be settled immediately
         foreach (var call in _calls)
         {
+            if (call.Emitted) continue;
             var name = call.Name.ToString().Trim();
             if (string.IsNullOrEmpty(name)) continue;
 
             var argsStr = call.Args.ToString().Trim();
-            JsonObject? parsedArgs = null;
-            if (!string.IsNullOrEmpty(argsStr))
+            if (argsStr.Length > 0 && argsStr.StartsWith('{') && argsStr.EndsWith('}'))
             {
+                JsonObject? parsed = null;
                 try
                 {
-                    parsedArgs = JsonNode.Parse(argsStr)?.AsObject();
+                    parsed = JsonNode.Parse(argsStr)?.AsObject();
                 }
                 catch { }
+
+                if (parsed != null)
+                {
+                    call.Emitted = true;
+                    yield return new ToolCall(call.Id, name, parsed)
+                    {
+                        Index = call.Index,
+                        RawArguments = argsStr
+                    };
+                }
             }
-
-            results.Add(new ToolCall(call.Id, name, parsedArgs ?? new JsonObject())
-            {
-                Index = call.Index,
-                RawArguments = argsStr
-            });
         }
-
-        return results;
     }
 }
+
+
+

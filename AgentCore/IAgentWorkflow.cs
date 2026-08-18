@@ -1,6 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Chat.Builders;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
@@ -63,38 +64,26 @@ namespace AgentCore
                 var assistantMessage = new Message(Role.Assistant);
                 TokenUsage? tokenUsage = null;
 
-                try
+                await foreach (var item in _llm
+                    .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
+                    .ConfigureAwait(false))
                 {
-                    await foreach (var item in _llm
-                        .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
-                        .ConfigureAwait(false))
+                    switch (item)
                     {
-                        switch (item)
-                        {
-                            case IContentDelta delta:
-                                assistantMessage.AddContentDelta(delta);
-                                break;
+                        case IContentDelta delta:
+                            foreach (var content in assistantMessage.AddContentDelta(delta))
+                            {
+                                yield return content;
+                            }
+                            break;
 
-                            case TokenUsage usage:
-                                tokenUsage = usage;
-                                break;
-                        }
-                    }
-
-                    foreach (var content in assistantMessage.Contents)
-                    {
-                        yield return content;
-                    }
-                }
-                finally
-                {
-                    if (assistantMessage.Contents.Count > 0)
-                    {
-                        await context.CommitAsync(new[] { assistantMessage }, tokenUsage, CancellationToken.None).ConfigureAwait(false);
+                        case TokenUsage usage:
+                            tokenUsage = usage;
+                            break;
                     }
                 }
 
-                ct.ThrowIfCancellationRequested();
+                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);  
 
                 var toolCalls = assistantMessage.Contents.OfType<ToolCall>().ToList();
                 if (toolCalls.Count > 0)

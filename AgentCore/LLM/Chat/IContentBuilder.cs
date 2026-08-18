@@ -1,19 +1,20 @@
 namespace AgentCore.LLM.Chat;
 
 /// <summary>
-/// Settles and materializes accumulated streaming content into <see cref="IContent"/> items.
+/// Settles and streams <see cref="IContent"/> items from incoming deltas.
 /// </summary>
 public interface IContentBuilder
 {
     /// <summary>
-    /// Attempts to append the streaming delta if it belongs to this builder.
+    /// Checks whether this builder handles the incoming delta type.
     /// </summary>
-    /// <param name="delta">The incoming streaming delta.</param>
-    /// <returns><c>true</c> if the delta was accepted and appended; otherwise, <c>false</c>.</returns>
-    bool TryAppend(IContentDelta delta);
+    bool CanHandle(IContentDelta delta);
 
     /// <summary>
-    /// Materializes the builder's current state into a list of <see cref="IContent"/> items.
+    /// Feeds the delta into the builder and immediately yields any settled <see cref="IContent"/> items.
     /// </summary>
-    IReadOnlyList<IContent> ToContents();
+    IEnumerable<IContent> Append(IContentDelta delta);
 }
+
+
+

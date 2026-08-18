@@ -3,13 +3,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Chat.Builders;
 using Xunit;
 
 namespace AgentCore.Tests;
 
 public class MessageAssemblyTests
 {
-    private static async IAsyncEnumerable<ILLMOutput> ToAsyncStream(IEnumerable<ILLMOutput> items)
+    private static async IAsyncEnumerable<T> ToAsyncStream<T>(IEnumerable<T> items)
     {
         foreach (var item in items)
         {
@@ -17,6 +18,7 @@ public class MessageAssemblyTests
         }
         await Task.CompletedTask;
     }
+
 
     [Fact]
     public async Task AssembleAsync_IndexAndIdPermutations_MergesCorrectly()
@@ -197,35 +199,102 @@ public class MessageAssemblyTests
         });
     }
     [Fact]
-    public void Message_Contents_MidStream_ReturnsSnapshotWithoutDisruptingStream()
+    public async Task BuildContentsAsync_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var message = new Message(Role.Assistant);
-        Assert.Empty(message.Contents);
+        var deltas = new List<IContentDelta>
+        {
+            new ReasoningDelta("Thinking deeply..."),
+            new TextDelta("Here is the answer.")
+        };
 
-        message.AddContentDelta(new TextDelta("Hello "));
-        Assert.Single(message.Contents);
-        Assert.Equal("Hello ", Assert.IsType<Text>(message.Contents[0]).Value);
+        var results = new List<IContent>();
+        await foreach (var content in ToAsyncStream(deltas).BuildContentsAsync())
+        {
+            results.Add(content);
+        }
 
-        // Stream continues with the same active builder
-        message.AddContentDelta(new TextDelta("world!"));
-        Assert.Single(message.Contents);
-        Assert.Equal("Hello world!", Assert.IsType<Text>(message.Contents[0]).Value);
+        Assert.Equal(2, results.Count);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(results[0]).Thought);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(results[1]).Value);
     }
 
     [Fact]
-    public void Message_AddContentDelta_BoundaryTransition_CommitsToContents()
+    public async Task BuildContentsAsync_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    {
+        var deltas = new List<IContentDelta>
+        {
+            new ReasoningDelta("Step 1: Analyze"),
+            new ToolCallDelta("call_1", "lookup", "{\"q\":"),
+            new ToolCallDelta("call_1", null, "\"test\"}"),
+            new TextDelta("The result is ready.")
+        };
+
+        var results = new List<IContent>();
+        await foreach (var content in ToAsyncStream(deltas).BuildContentsAsync())
+        {
+            results.Add(content);
+        }
+
+        Assert.Equal(3, results.Count);
+        Assert.IsType<Reasoning>(results[0]);
+        var tc = Assert.IsType<ToolCall>(results[1]);
+        Assert.Equal("call_1", tc.Id);
+        Assert.Equal("lookup", tc.Name);
+        Assert.IsType<Text>(results[2]);
+    }
+
+    [Fact]
+    public void ToolCallContentBuilder_InterleavedParallelToolCalls_EmitsEachWhenJsonCompletes()
+    {
+        var builder = new AgentCore.LLM.Chat.Builders.ToolCallContentBuilder();
+        
+        var y0 = builder.Append(new ToolCallDelta("call_0", "get_weather", "{\"loc\":", Index: 0)).ToList();
+        Assert.Empty(y0);
+
+        var y1 = builder.Append(new ToolCallDelta("call_1", "get_stock", "{\"sym\":", Index: 1)).ToList();
+        Assert.Empty(y1);
+
+        var y2 = builder.Append(new ToolCallDelta("call_0", null, "\"Paris\"}", Index: 0)).ToList();
+        Assert.Single(y2);
+        var tc0 = Assert.IsType<ToolCall>(y2[0]);
+        Assert.Equal("call_0", tc0.Id);
+        Assert.Equal("get_weather", tc0.Name);
+
+        var y3 = builder.Append(new ToolCallDelta("call_1", null, "\"MSFT\"}", Index: 1)).ToList();
+        Assert.Single(y3);
+        var tc1 = Assert.IsType<ToolCall>(y3[0]);
+        Assert.Equal("call_1", tc1.Id);
+        Assert.Equal("get_stock", tc1.Name);
+    }
+
+
+
+    [Fact]
+    public void Message_AddContentDelta_StreamsSettledContents()
     {
         var message = new Message(Role.Assistant);
 
-        message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
-        Assert.Single(message.Contents);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+        var c1 = message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
+        Assert.Single(c1);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(c1[0]).Thought);
 
-        // Boundary switch: ReasoningDelta -> TextDelta
-        message.AddContentDelta(new TextDelta("Here is the answer."));
-        Assert.Equal(2, message.Contents.Count);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
-        Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
+        var c2 = message.AddContentDelta(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
+        Assert.Empty(c2);
+
+        var c3 = message.AddContentDelta(new ToolCallDelta("call_1", null, "\"test\"}"));
+        Assert.Single(c3);
+        var tc = Assert.IsType<ToolCall>(c3[0]);
+        Assert.Equal("call_1", tc.Id);
+        Assert.Equal("lookup", tc.Name);
+
+        var c4 = message.AddContentDelta(new TextDelta("Done"));
+        Assert.Single(c4);
+        Assert.Equal("Done", Assert.IsType<Text>(c4[0]).Value);
+
+        Assert.Equal(3, message.Contents.Count);
+        Assert.IsType<Reasoning>(message.Contents[0]);
+        Assert.IsType<ToolCall>(message.Contents[1]);
+        Assert.IsType<Text>(message.Contents[2]);
     }
 
     [Fact]
@@ -248,19 +317,6 @@ public class MessageAssemblyTests
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal("Hello", Assert.IsType<Text>(message.Contents[0]).Value);
-        Assert.Equal("call_1", Assert.IsType<ToolResult>(message.Contents[1]).CallId);
-    }
-
-    [Fact]
-    public void Message_AddContent_WithActiveStreamingBuilder_CommitsActiveContentFirst()
-    {
-        var message = new Message(Role.Assistant);
-        message.AddContentDelta(new TextDelta("Streaming start..."));
-
-        message.AddContent(new ToolResult("call_1", new Text("Settled result")));
-
-        Assert.Equal(2, message.Contents.Count);
-        Assert.Equal("Streaming start...", Assert.IsType<Text>(message.Contents[0]).Value);
         Assert.Equal("call_1", Assert.IsType<ToolResult>(message.Contents[1]).CallId);
     }
 
@@ -309,14 +365,15 @@ internal static class TestMessageAssemblyExtensions
         FinishReason? finishReason = null;
         Exception? caughtException = null;
 
-        try
+        async IAsyncEnumerable<IContentDelta> ExtractDeltas(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
+            await foreach (var item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
                 switch (item)
                 {
                     case IContentDelta delta:
-                        message.AddContentDelta(delta);
+                        yield return delta;
                         break;
 
                     case TokenUsage tu:
@@ -327,6 +384,14 @@ internal static class TestMessageAssemblyExtensions
                         finishReason = fr;
                         break;
                 }
+            }
+        }
+
+        try
+        {
+            await foreach (var content in ExtractDeltas(ct).BuildContentsAsync(cancellationToken: ct).ConfigureAwait(false))
+            {
+                message.AddContent(content);
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)

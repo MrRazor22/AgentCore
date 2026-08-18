@@ -204,7 +204,7 @@ public class WorkflowTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_OnStreamCancellation_PersistsAssistantMessageAndPropagatesCancellation()
+    public async Task ExecuteAsync_OnStreamCancellation_DoesNotPersistUncompletedAssistantMessage()
     {
         // Arrange
         var cts = new CancellationTokenSource();
@@ -215,6 +215,7 @@ public class WorkflowTests
             yield return new TextDelta("Hello world partial");
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
+            yield return new TextDelta(" unreached");
         }
 
         var provider = new MockLLMProvider();
@@ -234,18 +235,8 @@ public class WorkflowTests
             }
         });
 
-        // Assert that Assistant message with accumulated content WAS persisted to context despite cancellation
-        var messages = context.Messages;
-        Assert.Equal(2, messages.Count);
-        Assert.Equal(Role.User, messages[0].Role);
-        Assert.Equal(Role.Assistant, messages[1].Role);
-
-        var reasoning = messages[1].Contents.OfType<Reasoning>().FirstOrDefault();
-        Assert.NotNull(reasoning);
-        Assert.Equal("Thinking...", reasoning.Thought);
-
-        var text = messages[1].Contents.OfType<Text>().FirstOrDefault();
-        Assert.NotNull(text);
-        Assert.Equal("Hello world partial", text.Value);
+        // Assert that uncompleted Assistant message was NOT persisted to context upon cancellation
+        Assert.Empty(context.Messages);
     }
 }
+

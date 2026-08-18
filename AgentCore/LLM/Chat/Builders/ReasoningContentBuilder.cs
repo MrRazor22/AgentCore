@@ -1,20 +1,19 @@
-using System.Text;
 using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat.Builders;
 
 public sealed class ReasoningContentBuilder : IContentBuilder
 {
-    private readonly StringBuilder _builder = new();
+    public bool CanHandle(IContentDelta delta) => delta is ReasoningDelta;
 
-    public bool TryAppend(IContentDelta delta)
+    public IEnumerable<IContent> Append(IContentDelta delta)
     {
-        if (delta is not ReasoningDelta reasoning) return false;
-        if (!string.IsNullOrEmpty(reasoning.Thought))
-            _builder.Append(reasoning.Thought);
-        return true;
+        if (delta is ReasoningDelta reasoning && !string.IsNullOrEmpty(reasoning.Thought))
+        {
+            yield return new Reasoning(reasoning.Thought);
+        }
     }
-
-    public IReadOnlyList<IContent> ToContents() =>
-        _builder.Length == 0 ? [] : [new Reasoning(_builder.ToString())];
 }
+
+
+

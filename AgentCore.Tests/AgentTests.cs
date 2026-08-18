@@ -135,8 +135,8 @@ public class AgentTests
             contents.Add(ev);
         }
 
-        var textContent = contents.OfType<Text>().Single();
-        Assert.Equal("Streaming reply", textContent.Value);
+        var fullText = string.Concat(contents.OfType<Text>().Select(t => t.Value));
+        Assert.Equal("Streaming reply", fullText);
     }
 
     [Fact]
