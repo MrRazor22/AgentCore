@@ -4,52 +4,57 @@ using AgentCore.LLM.Chat.Builders;
 
 namespace AgentCore.LLM.Chat;
 
-public class Message
+public class Message(Role role, IReadOnlyList<IContent>? contents = null)
 {
-    private readonly List<IContent> _contents = new();
+    private readonly List<IContent> _contents = contents != null ? [.. contents] : [];
     private IContentBuilder? _activeBuilder;
 
     [JsonPropertyName("role")]
-    public Role Role { get; }
+    public Role Role { get; } = role;
 
     [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents => _contents;
 
-    [JsonConstructor]
-    public Message(Role role, IReadOnlyList<IContent>? contents = null)
-    {
-        Role = role;
-        if (contents != null)
-        {
-            _contents.AddRange(contents);
-        }
-    }
+    public Message(Role role, IContent content) : this(role, [content]) { }
+    public Message(Role role, params IContent[] contents) : this(role, (IReadOnlyList<IContent>)contents) { }
 
     /// <summary>
-    /// Appends content directly to the message.
+    /// Appends content to the message, automatically consolidating with adjacent compatible content items.
     /// </summary>
     public Message AddContent(IContent content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        _contents.Add(content);
+
+        if (_contents.Count > 0 && _contents[^1].CanConsolidateWith(content))
+        {
+            _contents[^1] = _contents[^1].Consolidate(content);
+        }
+        else
+        {
+            _contents.Add(content);
+        }
+
         return this;
     }
 
     /// <summary>
-    /// Appends multiple settled content items directly to the message.
+    /// Appends multiple content items to the message.
     /// </summary>
     public Message AddContents(IEnumerable<IContent> contents)
     {
         ArgumentNullException.ThrowIfNull(contents);
-        _contents.AddRange(contents);
+        foreach (var content in contents)
+        {
+            AddContent(content);
+        }
         return this;
     }
 
     /// <summary>
-    /// Feeds a streaming delta into the active content builder,
-    /// committing and returning any settled <see cref="IContent"/> items.
+    /// Ingests a streaming delta, returning the real-time <see cref="IContent"/> chunk immediately
+    /// while maintaining a clean, consolidated internal representation.
     /// </summary>
-    public IReadOnlyList<IContent> AddContentDelta(IContentDelta delta)
+    public IReadOnlyList<IContent> Receive(IContentDelta delta)
     {
         ArgumentNullException.ThrowIfNull(delta);
 
@@ -59,17 +64,22 @@ public class Message
         }
 
         var settled = _activeBuilder.Append(delta).ToList();
-        if (settled.Count > 0)
+        foreach (var item in settled)
         {
-            _contents.AddRange(settled);
+            AddContent(item);
         }
 
         return settled;
     }
+
+
+
+
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
+
 
 
 

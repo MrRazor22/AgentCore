@@ -18,12 +18,29 @@ namespace AgentCore.LLM.Chat;
 public interface IContent
 {
     string ForLlm();
+
+    /// <summary>
+    /// Determines whether this content item can be consolidated with another incoming content item.
+    /// </summary>
+    bool CanConsolidateWith(IContent other) => false;
+
+    /// <summary>
+    /// Consolidates this content item with another compatible incoming content item into a single content item.
+    /// </summary>
+    IContent Consolidate(IContent other) => throw new NotSupportedException($"Consolidation is not supported for {GetType().Name}.");
 }
 
 public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent
 {
     public static implicit operator Text(string text) => new(text);
     public string ForLlm() => Value;
+
+    public bool CanConsolidateWith(IContent other) => other is Text;
+
+    public IContent Consolidate(IContent other) =>
+        other is Text t
+            ? new Text(Value + t.Value)
+            : throw new InvalidOperationException("Cannot consolidate Text with non-Text content.");
 }
 
 public sealed record ToolCall(
@@ -57,4 +74,12 @@ public sealed record ToolResult(
 public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
 {
     public string ForLlm() => Thought;
+
+    public bool CanConsolidateWith(IContent other) => other is Reasoning;
+
+    public IContent Consolidate(IContent other) =>
+        other is Reasoning r
+            ? new Reasoning(Thought + r.Thought)
+            : throw new InvalidOperationException("Cannot consolidate Reasoning with non-Reasoning content.");
 }
+

@@ -68,23 +68,26 @@ namespace AgentCore
                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
                     .ConfigureAwait(false))
                 {
-                    if (item is IContentDelta delta)
+                    switch (item)
                     {
-                        foreach (var content in assistantMessage.AddContentDelta(delta))
-                        {
-                            yield return content;
+                        case IContentDelta delta:
+                            foreach (var content in assistantMessage.Receive(delta))
+                            {
+                                yield return content;
 
-                            if (content is ToolCall toolCall)
-                                _ = _tooling.ExecuteAsync(toolCall, ct); 
-                        }
-                    }
-                    else if (item is TokenUsage usage)
-                    {
-                        tokenUsage = usage;
+                                if (content is ToolCall toolCall)
+                                    _ = _tooling.ExecuteAsync(toolCall, ct);
+                            }
+                            break;
+                        case TokenUsage usage:
+                            tokenUsage = usage;
+                            break;
                     }
                 }
 
                 await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);
+
+
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {

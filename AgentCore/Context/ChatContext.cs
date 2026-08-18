@@ -151,7 +151,7 @@ public class ChatContext : IContext
             tempChat = _chat.ToList();
         }
 
-        tempChat.Add(new Message(Role.User).AddContent(new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
+        tempChat.Add(new Message(Role.User, new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
 
         while (true)
         {
@@ -197,7 +197,7 @@ public class ChatContext : IContext
             var systemMessage = _chat.FirstOrDefault(m => m.Role == Role.System);
             _chat.Clear();
             if (systemMessage != null) _chat.Add(systemMessage);
-            _chat.Add(new Message(Role.User).AddContent(new CompactedSummary(summary)));
+            _chat.Add(new Message(Role.User, new CompactedSummary(summary)));
 
             TokenUsage = new TokenUsage(_chat.Sum(Estimate), 0);
         }

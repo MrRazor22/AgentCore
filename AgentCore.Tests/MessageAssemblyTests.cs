@@ -199,49 +199,58 @@ public class MessageAssemblyTests
         });
     }
     [Fact]
-    public async Task BuildContentsAsync_FluidAndStructuralStreaming_BehavesCorrectly()
+    public void Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var deltas = new List<IContentDelta>
-        {
-            new ReasoningDelta("Thinking deeply..."),
-            new TextDelta("Here is the answer.")
-        };
+        var message = new Message(Role.Assistant);
+        var r1 = message.Receive(new ReasoningDelta("Thinking "));
+        Assert.Single(r1);
+        Assert.Equal("Thinking ", Assert.IsType<Reasoning>(r1[0]).Thought);
 
-        var results = new List<IContent>();
-        await foreach (var content in ToAsyncStream(deltas).BuildContentsAsync())
-        {
-            results.Add(content);
-        }
+        var r2 = message.Receive(new ReasoningDelta("deeply..."));
+        Assert.Single(r2);
+        Assert.Equal("deeply...", Assert.IsType<Reasoning>(r2[0]).Thought);
 
-        Assert.Equal(2, results.Count);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(results[0]).Thought);
-        Assert.Equal("Here is the answer.", Assert.IsType<Text>(results[1]).Value);
+        var r3 = message.Receive(new TextDelta("Here is the answer."));
+        Assert.Single(r3);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(r3[0]).Value);
+
+        // Internal representation is automatically consolidated
+        Assert.Equal(2, message.Contents.Count);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
     }
 
     [Fact]
-    public async Task BuildContentsAsync_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public void Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
     {
-        var deltas = new List<IContentDelta>
-        {
-            new ReasoningDelta("Step 1: Analyze"),
-            new ToolCallDelta("call_1", "lookup", "{\"q\":"),
-            new ToolCallDelta("call_1", null, "\"test\"}"),
-            new TextDelta("The result is ready.")
-        };
+        var message = new Message(Role.Assistant);
 
-        var results = new List<IContent>();
-        await foreach (var content in ToAsyncStream(deltas).BuildContentsAsync())
-        {
-            results.Add(content);
-        }
+        var r1 = message.Receive(new ReasoningDelta("Step 1: Analyze"));
+        Assert.Single(r1);
+        Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
 
-        Assert.Equal(3, results.Count);
-        Assert.IsType<Reasoning>(results[0]);
-        var tc = Assert.IsType<ToolCall>(results[1]);
+        // ToolCall JSON streaming
+        var r2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
+        Assert.Empty(r2);
+
+        // ToolCall JSON completes -> ToolCall emitted
+        var r3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}"));
+        Assert.Single(r3);
+        var tc = Assert.IsType<ToolCall>(r3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
-        Assert.IsType<Text>(results[2]);
+
+        // Text streaming
+        var r4 = message.Receive(new TextDelta("The result is ready."));
+        Assert.Single(r4);
+        Assert.Equal("The result is ready.", Assert.IsType<Text>(r4[0]).Value);
+
+        Assert.Equal(3, message.Contents.Count);
+        Assert.IsType<Reasoning>(message.Contents[0]);
+        Assert.IsType<ToolCall>(message.Contents[1]);
+        Assert.IsType<Text>(message.Contents[2]);
     }
+
 
     [Fact]
     public void ToolCallContentBuilder_InterleavedParallelToolCalls_EmitsEachWhenJsonCompletes()
@@ -270,24 +279,24 @@ public class MessageAssemblyTests
 
 
     [Fact]
-    public void Message_AddContentDelta_StreamsSettledContents()
+    public void Message_Receive_StreamsSettledContents()
     {
         var message = new Message(Role.Assistant);
 
-        var c1 = message.AddContentDelta(new ReasoningDelta("Thinking deeply..."));
+        var c1 = message.Receive(new ReasoningDelta("Thinking deeply..."));
         Assert.Single(c1);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(c1[0]).Thought);
 
-        var c2 = message.AddContentDelta(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
+        var c2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
         Assert.Empty(c2);
 
-        var c3 = message.AddContentDelta(new ToolCallDelta("call_1", null, "\"test\"}"));
+        var c3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}"));
         Assert.Single(c3);
         var tc = Assert.IsType<ToolCall>(c3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
-        var c4 = message.AddContentDelta(new TextDelta("Done"));
+        var c4 = message.Receive(new TextDelta("Done"));
         Assert.Single(c4);
         Assert.Equal("Done", Assert.IsType<Text>(c4[0]).Value);
 
@@ -297,11 +306,11 @@ public class MessageAssemblyTests
         Assert.IsType<Text>(message.Contents[2]);
     }
 
+
     [Fact]
     public void Message_Serialization_SerializesCommittedContents()
     {
-        var message = new Message(Role.Assistant);
-        message.AddContent(new Text("Committed message"));
+        var message = new Message(Role.Assistant, new Text("Committed message"));
 
         var json = System.Text.Json.JsonSerializer.Serialize(message);
         Assert.Contains("\"role\":\"Assistant\"", json);
@@ -309,22 +318,16 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void Message_AddContent_FluentChaining_AppendsSettledContent()
+    public void Message_Constructor_InitializesContentsCorrectly()
     {
-        var message = new Message(Role.Assistant)
-            .AddContent(new Text("Hello"))
-            .AddContent(new ToolResult("call_1", new Text("Done")));
+        var message = new Message(
+            Role.Assistant,
+            new Text("Hello"),
+            new ToolResult("call_1", new Text("Done")));
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal("Hello", Assert.IsType<Text>(message.Contents[0]).Value);
         Assert.Equal("call_1", Assert.IsType<ToolResult>(message.Contents[1]).CallId);
-    }
-
-    [Fact]
-    public void Message_AddContent_Null_ThrowsArgumentNullException()
-    {
-        var message = new Message(Role.Assistant);
-        Assert.Throws<ArgumentNullException>(() => message.AddContent(null!));
     }
 }
 
@@ -365,15 +368,14 @@ internal static class TestMessageAssemblyExtensions
         FinishReason? finishReason = null;
         Exception? caughtException = null;
 
-        async IAsyncEnumerable<IContentDelta> ExtractDeltas(
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        try
         {
-            await foreach (var item in stream.WithCancellation(cancellationToken).ConfigureAwait(false))
+            await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
             {
                 switch (item)
                 {
                     case IContentDelta delta:
-                        yield return delta;
+                        message.Receive(delta);
                         break;
 
                     case TokenUsage tu:
@@ -384,14 +386,6 @@ internal static class TestMessageAssemblyExtensions
                         finishReason = fr;
                         break;
                 }
-            }
-        }
-
-        try
-        {
-            await foreach (var content in ExtractDeltas(ct).BuildContentsAsync(cancellationToken: ct).ConfigureAwait(false))
-            {
-                message.AddContent(content);
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)
@@ -413,3 +407,6 @@ internal static class TestMessageAssemblyExtensions
         return (consolidated, tokenUsage, finishReason);
     }
 }
+
+
+

@@ -4,13 +4,6 @@ namespace AgentCore.LLM.Chat.Builders;
 
 public static class ContentBuilderFactory
 {
-    public static readonly IReadOnlyList<IContentBuilder> DefaultBuilders =
-    [
-        new TextContentBuilder(),
-        new ReasoningContentBuilder(),
-        new ToolCallContentBuilder()
-    ];
-
     public static IContentBuilder Create(IContentDelta delta) => delta switch
     {
         TextDelta => new TextContentBuilder(),
@@ -19,4 +12,5 @@ public static class ContentBuilderFactory
         _ => throw new NotSupportedException($"No content builder registered for delta type '{delta?.GetType().FullName}'.")
     };
 }
+
 
