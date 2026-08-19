@@ -8,13 +8,18 @@ public interface ILLMOutput { }
 /// <summary>
 /// Sub-interface for transient token-level streaming content fragments emitted by ILLM providers.
 /// </summary>
-public interface IContentDelta : ILLMOutput { }
+public interface IContentDelta : ILLMOutput
+{
+    string? Id { get; }
+    int? Index { get; }
+    bool IsFinal { get; }
+}
 
-public record TextDelta(string Value) : IContentDelta;
+public record TextDelta(string Value, string? Id = null, int? Index = null, bool IsFinal = false) : IContentDelta;
 
-public record ReasoningDelta(string Thought) : IContentDelta;
+public record ReasoningDelta(string Thought, string? Id = null, int? Index = null, bool IsFinal = false) : IContentDelta;
 
-public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null) : IContentDelta;
+public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null, bool IsFinal = false) : IContentDelta;
 
 public record TokenUsage(
     int InputTokens = 0,
@@ -22,3 +27,4 @@ public record TokenUsage(
     int? ReasoningTokens = null) : ILLMOutput;
 
 public record FinishReason(string Value) : ILLMOutput;
+

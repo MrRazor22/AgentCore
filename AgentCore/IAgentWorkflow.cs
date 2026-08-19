@@ -71,7 +71,7 @@ namespace AgentCore
                     switch (item)
                     {
                         case IContentDelta delta:
-                            foreach (var content in assistantMessage.Receive(delta))
+                            await foreach (var content in assistantMessage.ReceiveAsync(delta, ct).ConfigureAwait(false))
                             {
                                 yield return content;
 
@@ -79,15 +79,14 @@ namespace AgentCore
                                     _ = _tooling.ExecuteAsync(toolCall, ct);
                             }
                             break;
+
                         case TokenUsage usage:
                             tokenUsage = usage;
                             break;
                     }
                 }
 
-                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false);
-
-
+                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {

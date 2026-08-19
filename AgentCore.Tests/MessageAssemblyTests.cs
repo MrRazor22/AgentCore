@@ -199,49 +199,47 @@ public class MessageAssemblyTests
         });
     }
     [Fact]
-    public void Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
+    public async Task Message_ReceiveAsync_FluidAndStructuralStreaming_BehavesCorrectly()
     {
         var message = new Message(Role.Assistant);
-        var r1 = message.Receive(new ReasoningDelta("Thinking "));
-        Assert.Single(r1);
-        Assert.Equal("Thinking ", Assert.IsType<Reasoning>(r1[0]).Thought);
+        var r1 = await message.ReceiveAsync(new ReasoningDelta("Thinking ", IsFinal: false)).ToListAsync();
+        Assert.Empty(r1);
 
-        var r2 = message.Receive(new ReasoningDelta("deeply..."));
+        var r2 = await message.ReceiveAsync(new ReasoningDelta("deeply...", IsFinal: true)).ToListAsync();
         Assert.Single(r2);
-        Assert.Equal("deeply...", Assert.IsType<Reasoning>(r2[0]).Thought);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(r2[0]).Thought);
 
-        var r3 = message.Receive(new TextDelta("Here is the answer."));
+        var r3 = await message.ReceiveAsync(new TextDelta("Here is the answer.", IsFinal: true)).ToListAsync();
         Assert.Single(r3);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(r3[0]).Value);
 
-        // Internal representation is automatically consolidated
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
     }
 
     [Fact]
-    public void Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public async Task Message_ReceiveAsync_MultiBoundaryTransition_YieldsSettledContentsInOrder()
     {
         var message = new Message(Role.Assistant);
 
-        var r1 = message.Receive(new ReasoningDelta("Step 1: Analyze"));
+        var r1 = await message.ReceiveAsync(new ReasoningDelta("Step 1: Analyze", IsFinal: true)).ToListAsync();
         Assert.Single(r1);
         Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
 
         // ToolCall JSON streaming
-        var r2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
+        var r2 = await message.ReceiveAsync(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToListAsync();
         Assert.Empty(r2);
 
-        // ToolCall JSON completes -> ToolCall emitted
-        var r3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}"));
+        // ToolCall JSON completes with IsFinal -> ToolCall emitted
+        var r3 = await message.ReceiveAsync(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToListAsync();
         Assert.Single(r3);
         var tc = Assert.IsType<ToolCall>(r3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
         // Text streaming
-        var r4 = message.Receive(new TextDelta("The result is ready."));
+        var r4 = await message.ReceiveAsync(new TextDelta("The result is ready.", IsFinal: true)).ToListAsync();
         Assert.Single(r4);
         Assert.Equal("The result is ready.", Assert.IsType<Text>(r4[0]).Value);
 
@@ -253,23 +251,23 @@ public class MessageAssemblyTests
 
 
     [Fact]
-    public void ToolCallContentBuilder_InterleavedParallelToolCalls_EmitsEachWhenJsonCompletes()
+    public async Task ToolCallContentBuilder_InterleavedParallelToolCalls_EmitsEachWhenJsonCompletes()
     {
         var builder = new AgentCore.LLM.Chat.Builders.ToolCallContentBuilder();
         
-        var y0 = builder.Append(new ToolCallDelta("call_0", "get_weather", "{\"loc\":", Index: 0)).ToList();
+        var y0 = await builder.AppendAsync(new ToolCallDelta("call_0", "get_weather", "{\"loc\":", Index: 0, IsFinal: false)).ToListAsync();
         Assert.Empty(y0);
 
-        var y1 = builder.Append(new ToolCallDelta("call_1", "get_stock", "{\"sym\":", Index: 1)).ToList();
+        var y1 = await builder.AppendAsync(new ToolCallDelta("call_1", "get_stock", "{\"sym\":", Index: 1, IsFinal: false)).ToListAsync();
         Assert.Empty(y1);
 
-        var y2 = builder.Append(new ToolCallDelta("call_0", null, "\"Paris\"}", Index: 0)).ToList();
+        var y2 = await builder.AppendAsync(new ToolCallDelta("call_0", null, "\"Paris\"}", Index: 0, IsFinal: true)).ToListAsync();
         Assert.Single(y2);
         var tc0 = Assert.IsType<ToolCall>(y2[0]);
         Assert.Equal("call_0", tc0.Id);
         Assert.Equal("get_weather", tc0.Name);
 
-        var y3 = builder.Append(new ToolCallDelta("call_1", null, "\"MSFT\"}", Index: 1)).ToList();
+        var y3 = await builder.AppendAsync(new ToolCallDelta("call_1", null, "\"MSFT\"}", Index: 1, IsFinal: true)).ToListAsync();
         Assert.Single(y3);
         var tc1 = Assert.IsType<ToolCall>(y3[0]);
         Assert.Equal("call_1", tc1.Id);
@@ -279,24 +277,24 @@ public class MessageAssemblyTests
 
 
     [Fact]
-    public void Message_Receive_StreamsSettledContents()
+    public async Task Message_ReceiveAsync_StreamsSettledContents()
     {
         var message = new Message(Role.Assistant);
 
-        var c1 = message.Receive(new ReasoningDelta("Thinking deeply..."));
+        var c1 = await message.ReceiveAsync(new ReasoningDelta("Thinking deeply...", IsFinal: true)).ToListAsync();
         Assert.Single(c1);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(c1[0]).Thought);
 
-        var c2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":"));
+        var c2 = await message.ReceiveAsync(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToListAsync();
         Assert.Empty(c2);
 
-        var c3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}"));
+        var c3 = await message.ReceiveAsync(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToListAsync();
         Assert.Single(c3);
         var tc = Assert.IsType<ToolCall>(c3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
-        var c4 = message.Receive(new TextDelta("Done"));
+        var c4 = await message.ReceiveAsync(new TextDelta("Done", IsFinal: true)).ToListAsync();
         Assert.Single(c4);
         Assert.Equal("Done", Assert.IsType<Text>(c4[0]).Value);
 
@@ -333,6 +331,16 @@ public class MessageAssemblyTests
 
 internal static class TestMessageAssemblyExtensions
 {
+    public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
+    {
+        var list = new List<T>();
+        await foreach (var item in source)
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+
     private static List<IContent> Consolidate(IReadOnlyList<IContent> items)
     {
         var result = new List<IContent>();
@@ -368,29 +376,44 @@ internal static class TestMessageAssemblyExtensions
         FinishReason? finishReason = null;
         Exception? caughtException = null;
 
+        var items = new List<ILLMOutput>();
         try
         {
             await foreach (var item in stream.WithCancellation(ct).ConfigureAwait(false))
             {
-                switch (item)
-                {
-                    case IContentDelta delta:
-                        message.Receive(delta);
-                        break;
-
-                    case TokenUsage tu:
-                        tokenUsage = tu;
-                        break;
-
-                    case FinishReason fr:
-                        finishReason = fr;
-                        break;
-                }
+                items.Add(item);
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException || ex is System.IO.IOException || ex is System.Net.Http.HttpRequestException)
         {
             caughtException = ex;
+        }
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            switch (item)
+            {
+                case IContentDelta delta:
+                    bool isLastDelta = !items.Skip(i + 1).OfType<IContentDelta>().Any(d => d.GetType() == delta.GetType());
+                    var finalDelta = delta switch
+                    {
+                        TextDelta td => td with { IsFinal = td.IsFinal || isLastDelta },
+                        ReasoningDelta rd => rd with { IsFinal = rd.IsFinal || isLastDelta },
+                        ToolCallDelta tcd => tcd with { IsFinal = tcd.IsFinal || isLastDelta },
+                        _ => delta
+                    };
+                    await foreach (var content in message.ReceiveAsync(finalDelta, ct)) { }
+                    break;
+
+                case TokenUsage tu:
+                    tokenUsage = tu;
+                    break;
+
+                case FinishReason fr:
+                    finishReason = fr;
+                    break;
+            }
         }
 
         var consolidated = Consolidate(message.Contents);
@@ -407,6 +430,8 @@ internal static class TestMessageAssemblyExtensions
         return (consolidated, tokenUsage, finishReason);
     }
 }
+
+
 
 
 

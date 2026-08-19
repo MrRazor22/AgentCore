@@ -91,6 +91,8 @@ public class MEAILLM : ILLM
                 }
             }
 
+            bool hasFinishReason = update.FinishReason != null;
+
             bool yieldedReasoning = false;
             if (update.Contents != null)
             {
@@ -98,12 +100,12 @@ public class MEAILLM : ILLM
                 {
                     if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
                     {
-                        yield return new TextDelta(textContent.Text);
+                        yield return new TextDelta(textContent.Text, IsFinal: hasFinishReason);
                     }
                     else if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
                     {
                         yieldedReasoning = true;
-                        yield return new ReasoningDelta(reasoningContent.Text);
+                        yield return new ReasoningDelta(reasoningContent.Text, IsFinal: hasFinishReason);
                     }
                     else if (content is FunctionCallContent fnCall)
                     {
@@ -121,7 +123,7 @@ public class MEAILLM : ILLM
                             }
                             catch { }
                         }
-                        yield return new ToolCallDelta(fnCall.CallId ?? "", fnCall.Name, argsStr);
+                        yield return new ToolCallDelta(fnCall.CallId ?? "", fnCall.Name, argsStr, IsFinal: true);
                     }
                     else if (content is UsageContent usageContent)
                     {
@@ -141,7 +143,7 @@ public class MEAILLM : ILLM
                 var rawReasoning = TryExtractReasoning(update.RawRepresentation, _logger);
                 if (!string.IsNullOrEmpty(rawReasoning))
                 {
-                    yield return new ReasoningDelta(rawReasoning);
+                    yield return new ReasoningDelta(rawReasoning, IsFinal: hasFinishReason);
                 }
             }
 
@@ -155,6 +157,7 @@ public class MEAILLM : ILLM
                 finalFinishReason = finishReason.Value;
             }
         }
+
 
         yield return new TokenUsage(
             InputTokens: inputTokens,

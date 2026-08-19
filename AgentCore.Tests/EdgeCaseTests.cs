@@ -41,9 +41,10 @@ namespace AgentCore.Tests
             public void EnqueueSimpleText(string text)
             {
                 Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
-                    new[] { new TextDelta(text) }.ToAsyncEnumerable()
+                    new[] { new TextDelta(text, IsFinal: true) }.ToAsyncEnumerable()
                 ));
             }
+
 
             public IAsyncEnumerable<ILLMOutput> StreamAsync(
                 IReadOnlyList<Message> messages,
@@ -188,10 +189,11 @@ namespace AgentCore.Tests
             mockLlm.Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
                 new ILLMOutput[]
                 {
-                    new ToolCallDelta("call-1", "Tool1", "{}"),
-                    new ToolCallDelta("call-2", "Tool2", "{}")
+                    new ToolCallDelta("call-1", "Tool1", "{}", IsFinal: true),
+                    new ToolCallDelta("call-2", "Tool2", "{}", IsFinal: true)
                 }.ToAsyncEnumerable()
             ));
+
 
             // Step 2: Enqueue final text response
             mockLlm.EnqueueSimpleText("Tools executed successfully.");

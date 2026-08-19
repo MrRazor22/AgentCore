@@ -29,13 +29,14 @@ public class MockLLMProvider : ILLM
     {
         return evt switch
         {
-            Text t => new TextDelta(t.Value),
-            Reasoning r => new ReasoningDelta(r.Thought),
-            ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString()),
+            Text t => new TextDelta(t.Value, IsFinal: true),
+            Reasoning r => new ReasoningDelta(r.Thought, IsFinal: true),
+            ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString(), IsFinal: true),
             ILLMOutput output => output,
             _ => throw new NotSupportedException()
         };
     }
+
 
     public void Enqueue(params object[] items)
     {
@@ -61,12 +62,27 @@ public class MockLLMProvider : ILLM
 
     private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
     {
-        foreach (var item in items)
+        var list = items.ToList();
+        for (int i = 0; i < list.Count; i++)
         {
             await Task.Yield();
-            yield return ConvertToDelta(item);
+            bool isLastDelta = !list.Skip(i + 1).Any(x => x is IContentDelta or Text or Reasoning or ToolCall);
+            var converted = ConvertToDelta(list[i]);
+            if (isLastDelta)
+            {
+                converted = converted switch
+                {
+                    TextDelta td => td with { IsFinal = true },
+                    ReasoningDelta rd => rd with { IsFinal = true },
+                    ToolCallDelta tcd => tcd with { IsFinal = true },
+                    _ => converted
+                };
+            }
+            yield return converted;
         }
     }
+
+
 
     public async IAsyncEnumerable<ILLMOutput> StreamAsync(
         IReadOnlyList<Message> messages,

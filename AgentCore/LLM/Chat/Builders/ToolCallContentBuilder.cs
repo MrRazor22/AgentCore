@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.LLM;
@@ -17,9 +18,7 @@ public sealed class ToolCallContentBuilder : IContentBuilder
 
     private readonly List<ToolCallState> _calls = new();
 
-    public bool CanHandle(IContentDelta delta) => delta is ToolCallDelta;
-
-    public IEnumerable<IContent> Append(IContentDelta contentDelta)
+    public async IAsyncEnumerable<IContent> AppendAsync(IContentDelta contentDelta, [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (contentDelta is not ToolCallDelta delta) yield break;
 
@@ -74,7 +73,7 @@ public sealed class ToolCallContentBuilder : IContentBuilder
             state.Args.Append(delta.ArgumentsDelta);
         }
 
-        // Check if any tool call reached complete JSON and can be settled immediately
+        // Check if any tool call reached complete JSON or is signaled as final
         foreach (var call in _calls)
         {
             if (call.Emitted) continue;
@@ -82,28 +81,34 @@ public sealed class ToolCallContentBuilder : IContentBuilder
             if (string.IsNullOrEmpty(name)) continue;
 
             var argsStr = call.Args.ToString().Trim();
-            if (argsStr.Length > 0 && argsStr.StartsWith('{') && argsStr.EndsWith('}'))
+            bool isCompleteJson = argsStr.Length > 0 && argsStr.StartsWith('{') && argsStr.EndsWith('}');
+
+            if (isCompleteJson || (delta.IsFinal && call == state))
             {
                 JsonObject? parsed = null;
-                try
+                if (!string.IsNullOrEmpty(argsStr))
                 {
-                    parsed = JsonNode.Parse(argsStr)?.AsObject();
-                }
-                catch { }
-
-                if (parsed != null)
-                {
-                    call.Emitted = true;
-                    yield return new ToolCall(call.Id, name, parsed)
+                    try
                     {
-                        Index = call.Index,
-                        RawArguments = argsStr
-                    };
+                        parsed = JsonNode.Parse(argsStr)?.AsObject();
+                    }
+                    catch { }
                 }
+
+                call.Emitted = true;
+                await Task.Yield();
+                yield return new ToolCall(call.Id, name, parsed ?? new JsonObject())
+                {
+                    Index = call.Index,
+                    RawArguments = argsStr
+                };
             }
         }
     }
 }
+
+
+
 
 
 
