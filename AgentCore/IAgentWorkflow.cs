@@ -71,7 +71,7 @@ namespace AgentCore
                     switch (item)
                     {
                         case IContentDelta delta:
-                            await foreach (var content in assistantMessage.ReceiveAsync(delta, ct).ConfigureAwait(false))
+                            foreach (var content in assistantMessage.Receive(delta))
                             {
                                 yield return content;
 
@@ -79,6 +79,7 @@ namespace AgentCore
                                     _ = _tooling.ExecuteAsync(toolCall, ct);
                             }
                             break;
+
 
                         case TokenUsage usage:
                             tokenUsage = usage;

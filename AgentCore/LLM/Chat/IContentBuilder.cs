@@ -1,15 +1,16 @@
 namespace AgentCore.LLM.Chat;
 
 /// <summary>
-/// Streams completed <see cref="IContent"/> items asynchronously from incoming deltas.
+/// Settles and streams completed <see cref="IContent"/> items from incoming deltas.
 /// </summary>
 public interface IContentBuilder
 {
     /// <summary>
-    /// Feeds the delta into the builder and streams any completed <see cref="IContent"/> items asynchronously.
+    /// Feeds the delta into the builder and yields any completed <see cref="IContent"/> items.
     /// </summary>
-    IAsyncEnumerable<IContent> AppendAsync(IContentDelta delta, CancellationToken ct = default);
+    IEnumerable<IContent> Append(IContentDelta delta);
 }
+
 
 
 

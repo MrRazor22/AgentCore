@@ -34,9 +34,8 @@ public class MEAILLM : ILLM
         if (responseSchema != null)
         {
             try
-            {
-                var schemaJson = responseSchema.ToString();
-                var jsonElement = JsonSerializer.Deserialize<JsonElement>(schemaJson);
+            { 
+                var jsonElement = responseSchema.ToJsonElement();
                 chatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema(jsonElement);
             }
             catch (Exception ex)
@@ -91,21 +90,33 @@ public class MEAILLM : ILLM
                 }
             }
 
-            bool hasFinishReason = update.FinishReason != null;
+            int? choiceIndex = null;
+            if (update.RawRepresentation != null)
+            {
+                try
+                {
+                    dynamic raw = update.RawRepresentation;
+                    choiceIndex = (int?)raw.Index ?? (int?)raw.ChoiceIndex;
+                }
+                catch { }
+            }
 
+
+            bool hasFinishReason = update.FinishReason != null;
             bool yieldedReasoning = false;
+
             if (update.Contents != null)
             {
                 foreach (var content in update.Contents)
                 {
                     if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
                     {
-                        yield return new TextDelta(textContent.Text, IsFinal: hasFinishReason);
+                        yield return new TextDelta(textContent.Text, Index: choiceIndex, IsFinal: hasFinishReason);
                     }
                     else if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
                     {
                         yieldedReasoning = true;
-                        yield return new ReasoningDelta(reasoningContent.Text, IsFinal: hasFinishReason);
+                        yield return new ReasoningDelta(reasoningContent.Text, Index: choiceIndex, IsFinal: hasFinishReason);
                     }
                     else if (content is FunctionCallContent fnCall)
                     {
@@ -123,7 +134,7 @@ public class MEAILLM : ILLM
                             }
                             catch { }
                         }
-                        yield return new ToolCallDelta(fnCall.CallId ?? "", fnCall.Name, argsStr, IsFinal: true);
+                        yield return new ToolCallDelta(fnCall.CallId ?? "", fnCall.Name, argsStr, Index: choiceIndex, IsFinal: true);
                     }
                     else if (content is UsageContent usageContent)
                     {
@@ -143,13 +154,14 @@ public class MEAILLM : ILLM
                 var rawReasoning = TryExtractReasoning(update.RawRepresentation, _logger);
                 if (!string.IsNullOrEmpty(rawReasoning))
                 {
-                    yield return new ReasoningDelta(rawReasoning, IsFinal: hasFinishReason);
+                    yield return new ReasoningDelta(rawReasoning, Index: choiceIndex, IsFinal: hasFinishReason);
                 }
             }
 
+
             foreach (var d in rawDeltas)
             {
-                yield return d;
+                yield return d with { IsFinal = d.IsFinal || hasFinishReason };
             }
 
             if (update.FinishReason is { } finishReason)
@@ -157,6 +169,7 @@ public class MEAILLM : ILLM
                 finalFinishReason = finishReason.Value;
             }
         }
+
 
 
         yield return new TokenUsage(

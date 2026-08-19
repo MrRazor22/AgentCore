@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.LLM;
@@ -7,105 +6,62 @@ namespace AgentCore.LLM.Chat.Builders;
 
 public sealed class ToolCallContentBuilder : IContentBuilder
 {
-    private class ToolCallState
+    private string _id = "";
+    private readonly StringBuilder _name = new();
+    private readonly StringBuilder _args = new();
+
+    public IEnumerable<IContent> Append(IContentDelta delta)
     {
-        public string Id { get; set; } = "";
-        public int? Index { get; set; }
-        public StringBuilder Name { get; } = new();
-        public StringBuilder Args { get; } = new();
-        public bool Emitted { get; set; }
-    }
-
-    private readonly List<ToolCallState> _calls = new();
-
-    public async IAsyncEnumerable<IContent> AppendAsync(IContentDelta contentDelta, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        if (contentDelta is not ToolCallDelta delta) yield break;
-
-        ToolCallState? state = null;
-
-        if (delta.Index.HasValue)
+        if (delta is ToolCallDelta tcd)
         {
-            state = _calls.FirstOrDefault(tc => tc.Index == delta.Index.Value)
-                 ?? _calls.FirstOrDefault(tc => tc.Id == delta.Id && !string.IsNullOrEmpty(delta.Id));
-        }
-        else if (!string.IsNullOrEmpty(delta.Id))
-        {
-            state = _calls.FirstOrDefault(tc => tc.Id == delta.Id);
-        }
-
-        if (state == null)
-        {
-            if (!delta.Index.HasValue && string.IsNullOrEmpty(delta.Id))
+            if (!string.IsNullOrEmpty(tcd.Id))
             {
-                if (_calls.Count > 1)
-                    throw new InvalidOperationException("Ambiguous tool call delta: multiple active tool calls exist.");
-                state = _calls.Count == 1 ? _calls[0] : null;
+                _id = tcd.Id;
             }
 
-            if (state == null)
+            if (!string.IsNullOrEmpty(tcd.NameDelta))
             {
-                state = new ToolCallState
+                var cur = _name.ToString();
+                if (string.IsNullOrEmpty(cur) || (cur != tcd.NameDelta && !cur.EndsWith(tcd.NameDelta)))
                 {
-                    Id = delta.Id ?? "",
-                    Index = delta.Index
-                };
-                _calls.Add(state);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(delta.Id) && state.Id != delta.Id)
-        {
-            state.Id = delta.Id;
-        }
-
-        if (!string.IsNullOrEmpty(delta.NameDelta))
-        {
-            var cur = state.Name.ToString();
-            if (string.IsNullOrEmpty(cur) || (cur != delta.NameDelta && !cur.EndsWith(delta.NameDelta)))
-            {
-                state.Name.Append(delta.NameDelta);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(delta.ArgumentsDelta))
-        {
-            state.Args.Append(delta.ArgumentsDelta);
-        }
-
-        // Check if any tool call reached complete JSON or is signaled as final
-        foreach (var call in _calls)
-        {
-            if (call.Emitted) continue;
-            var name = call.Name.ToString().Trim();
-            if (string.IsNullOrEmpty(name)) continue;
-
-            var argsStr = call.Args.ToString().Trim();
-            bool isCompleteJson = argsStr.Length > 0 && argsStr.StartsWith('{') && argsStr.EndsWith('}');
-
-            if (isCompleteJson || (delta.IsFinal && call == state))
-            {
-                JsonObject? parsed = null;
-                if (!string.IsNullOrEmpty(argsStr))
-                {
-                    try
-                    {
-                        parsed = JsonNode.Parse(argsStr)?.AsObject();
-                    }
-                    catch { }
+                    _name.Append(tcd.NameDelta);
                 }
-
-                call.Emitted = true;
-                await Task.Yield();
-                yield return new ToolCall(call.Id, name, parsed ?? new JsonObject())
-                {
-                    Index = call.Index,
-                    RawArguments = argsStr
-                };
             }
+
+            if (!string.IsNullOrEmpty(tcd.ArgumentsDelta))
+            {
+                _args.Append(tcd.ArgumentsDelta);
+            }
+        }
+
+        if (delta.IsFinal)
+        {
+            var finalId = !string.IsNullOrEmpty(_id) ? _id : (delta.Id ?? "");
+            var name = _name.ToString().Trim();
+            var argsStr = _args.ToString().Trim();
+
+            JsonObject? parsed = null;
+            if (!string.IsNullOrEmpty(argsStr))
+            {
+                try
+                {
+                    parsed = JsonNode.Parse(argsStr)?.AsObject();
+                }
+                catch { }
+            }
+
+            yield return new ToolCall(finalId, name, parsed ?? new JsonObject())
+            {
+                Index = delta.Index,
+                RawArguments = argsStr
+            };
         }
     }
 }
+
+
+
+
 
 
 

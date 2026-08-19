@@ -18,15 +18,13 @@ public class Message(Role role, IReadOnlyList<IContent>? contents = null)
     public Message(Role role, IContent content) : this(role, [content]) { }
     public Message(Role role, params IContent[] contents) : this(role, (IReadOnlyList<IContent>)contents) { }
     /// <summary>
-    /// Ingests a streaming delta asynchronously, committing and streaming any completed <see cref="IContent"/> items.
+    /// Ingests a streaming delta, committing and yielding any completed <see cref="IContent"/> items.
     /// </summary>
-    public async IAsyncEnumerable<IContent> ReceiveAsync(
-        IContentDelta delta,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    public IEnumerable<IContent> Receive(IContentDelta delta)
     {
         ArgumentNullException.ThrowIfNull(delta);
 
-        await foreach (var item in _builder.AppendAsync(delta, ct).WithCancellation(ct).ConfigureAwait(false))
+        foreach (var item in _builder.Append(delta))
         {
             _contents.Add(item);
             yield return item;
@@ -34,9 +32,9 @@ public class Message(Role role, IReadOnlyList<IContent>? contents = null)
     }
 }
 
-
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
+
 
 
 

@@ -66,21 +66,38 @@ public class MockLLMProvider : ILLM
         for (int i = 0; i < list.Count; i++)
         {
             await Task.Yield();
-            bool isLastDelta = !list.Skip(i + 1).Any(x => x is IContentDelta or Text or Reasoning or ToolCall);
-            var converted = ConvertToDelta(list[i]);
-            if (isLastDelta)
+            var item = list[i];
+            var converted = ConvertToDelta(item);
+
+            if (converted is IContentDelta cd)
             {
-                converted = converted switch
+                bool hasSubsequentSameStream = list.Skip(i + 1).Any(next =>
                 {
-                    TextDelta td => td with { IsFinal = true },
-                    ReasoningDelta rd => rd with { IsFinal = true },
-                    ToolCallDelta tcd => tcd with { IsFinal = true },
-                    _ => converted
-                };
+                    var nextConverted = ConvertToDelta(next);
+                    if (nextConverted is not IContentDelta nextCd) return false;
+                    if (!string.IsNullOrEmpty(cd.Id) && !string.IsNullOrEmpty(nextCd.Id))
+                        return string.Equals(cd.Id, nextCd.Id, StringComparison.Ordinal);
+                    if (cd.Index.HasValue && nextCd.Index.HasValue)
+                        return cd.Index.Value == nextCd.Index.Value;
+                    return cd.GetType() == nextCd.GetType();
+                });
+
+                if (!hasSubsequentSameStream)
+                {
+                    converted = cd switch
+                    {
+                        TextDelta td => td with { IsFinal = true },
+                        ReasoningDelta rd => rd with { IsFinal = true },
+                        ToolCallDelta tcd => tcd with { IsFinal = true },
+                        _ => converted
+                    };
+                }
             }
+
             yield return converted;
         }
     }
+
 
 
 

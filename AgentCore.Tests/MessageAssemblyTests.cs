@@ -199,17 +199,17 @@ public class MessageAssemblyTests
         });
     }
     [Fact]
-    public async Task Message_ReceiveAsync_FluidAndStructuralStreaming_BehavesCorrectly()
+    public void Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
     {
         var message = new Message(Role.Assistant);
-        var r1 = await message.ReceiveAsync(new ReasoningDelta("Thinking ", IsFinal: false)).ToListAsync();
+        var r1 = message.Receive(new ReasoningDelta("Thinking ", IsFinal: false)).ToList();
         Assert.Empty(r1);
 
-        var r2 = await message.ReceiveAsync(new ReasoningDelta("deeply...", IsFinal: true)).ToListAsync();
+        var r2 = message.Receive(new ReasoningDelta("deeply...", IsFinal: true)).ToList();
         Assert.Single(r2);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(r2[0]).Thought);
 
-        var r3 = await message.ReceiveAsync(new TextDelta("Here is the answer.", IsFinal: true)).ToListAsync();
+        var r3 = message.Receive(new TextDelta("Here is the answer.", IsFinal: true)).ToList();
         Assert.Single(r3);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(r3[0]).Value);
 
@@ -219,27 +219,27 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public async Task Message_ReceiveAsync_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public void Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
     {
         var message = new Message(Role.Assistant);
 
-        var r1 = await message.ReceiveAsync(new ReasoningDelta("Step 1: Analyze", IsFinal: true)).ToListAsync();
+        var r1 = message.Receive(new ReasoningDelta("Step 1: Analyze", IsFinal: true)).ToList();
         Assert.Single(r1);
         Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
 
         // ToolCall JSON streaming
-        var r2 = await message.ReceiveAsync(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToListAsync();
+        var r2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToList();
         Assert.Empty(r2);
 
         // ToolCall JSON completes with IsFinal -> ToolCall emitted
-        var r3 = await message.ReceiveAsync(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToListAsync();
+        var r3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToList();
         Assert.Single(r3);
         var tc = Assert.IsType<ToolCall>(r3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
         // Text streaming
-        var r4 = await message.ReceiveAsync(new TextDelta("The result is ready.", IsFinal: true)).ToListAsync();
+        var r4 = message.Receive(new TextDelta("The result is ready.", IsFinal: true)).ToList();
         Assert.Single(r4);
         Assert.Equal("The result is ready.", Assert.IsType<Text>(r4[0]).Value);
 
@@ -249,61 +249,76 @@ public class MessageAssemblyTests
         Assert.IsType<Text>(message.Contents[2]);
     }
 
-
     [Fact]
-    public async Task ToolCallContentBuilder_InterleavedParallelToolCalls_EmitsEachWhenJsonCompletes()
+    public void CompositeContentBuilder_InterleavedTextAndReasoning_MaintainsIndependentBuffers()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.ToolCallContentBuilder();
-        
-        var y0 = await builder.AppendAsync(new ToolCallDelta("call_0", "get_weather", "{\"loc\":", Index: 0, IsFinal: false)).ToListAsync();
-        Assert.Empty(y0);
+        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
 
-        var y1 = await builder.AppendAsync(new ToolCallDelta("call_1", "get_stock", "{\"sym\":", Index: 1, IsFinal: false)).ToListAsync();
+        // Interleave Text A and Reasoning B
+        var y1 = builder.Append(new TextDelta("Hello ", Id: "stream_text", IsFinal: false)).ToList();
         Assert.Empty(y1);
 
-        var y2 = await builder.AppendAsync(new ToolCallDelta("call_0", null, "\"Paris\"}", Index: 0, IsFinal: true)).ToListAsync();
-        Assert.Single(y2);
-        var tc0 = Assert.IsType<ToolCall>(y2[0]);
-        Assert.Equal("call_0", tc0.Id);
-        Assert.Equal("get_weather", tc0.Name);
+        var y2 = builder.Append(new ReasoningDelta("Thinking ", Id: "stream_thought", IsFinal: false)).ToList();
+        Assert.Empty(y2);
 
-        var y3 = await builder.AppendAsync(new ToolCallDelta("call_1", null, "\"MSFT\"}", Index: 1, IsFinal: true)).ToListAsync();
+        var y3 = builder.Append(new TextDelta("world!", Id: "stream_text", IsFinal: true)).ToList();
         Assert.Single(y3);
-        var tc1 = Assert.IsType<ToolCall>(y3[0]);
-        Assert.Equal("call_1", tc1.Id);
-        Assert.Equal("get_stock", tc1.Name);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(y3[0]).Value);
+
+        // Thought stream continues after Text stream finished!
+        var y4 = builder.Append(new ReasoningDelta("more...", Id: "stream_thought", IsFinal: true)).ToList();
+        Assert.Single(y4);
+        Assert.Equal("Thinking more...", Assert.IsType<Reasoning>(y4[0]).Thought);
     }
-
-
 
     [Fact]
-    public async Task Message_ReceiveAsync_StreamsSettledContents()
+    public void CompositeContentBuilder_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
     {
-        var message = new Message(Role.Assistant);
+        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
 
-        var c1 = await message.ReceiveAsync(new ReasoningDelta("Thinking deeply...", IsFinal: true)).ToListAsync();
-        Assert.Single(c1);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(c1[0]).Thought);
+        // Start 3 parallel tool calls
+        builder.Append(new ToolCallDelta("call_A", "ToolA", "{\"a\":", Index: 0, IsFinal: false)).ToList();
+        builder.Append(new ToolCallDelta("call_B", "ToolB", "{\"b\":", Index: 1, IsFinal: false)).ToList();
+        builder.Append(new ToolCallDelta("call_C", "ToolC", "{\"c\":", Index: 2, IsFinal: false)).ToList();
 
-        var c2 = await message.ReceiveAsync(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToListAsync();
-        Assert.Empty(c2);
+        // ToolCall B finishes FIRST
+        var bFinish = builder.Append(new ToolCallDelta("call_B", null, "2}", Index: 1, IsFinal: true)).ToList();
+        Assert.Single(bFinish);
+        var tcB = Assert.IsType<ToolCall>(bFinish[0]);
+        Assert.Equal("call_B", tcB.Id);
+        Assert.Equal("ToolB", tcB.Name);
 
-        var c3 = await message.ReceiveAsync(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToListAsync();
-        Assert.Single(c3);
-        var tc = Assert.IsType<ToolCall>(c3[0]);
-        Assert.Equal("call_1", tc.Id);
-        Assert.Equal("lookup", tc.Name);
+        // ToolCall A and C continue accumulation
+        builder.Append(new ToolCallDelta("call_A", null, "1}", Index: 0, IsFinal: false)).ToList();
+        builder.Append(new ToolCallDelta("call_C", null, "3}", Index: 2, IsFinal: false)).ToList();
 
-        var c4 = await message.ReceiveAsync(new TextDelta("Done", IsFinal: true)).ToListAsync();
-        Assert.Single(c4);
-        Assert.Equal("Done", Assert.IsType<Text>(c4[0]).Value);
+        // ToolCall C finishes SECOND
+        var cFinish = builder.Append(new ToolCallDelta("call_C", null, "", Index: 2, IsFinal: true)).ToList();
+        Assert.Single(cFinish);
+        Assert.Equal("call_C", Assert.IsType<ToolCall>(cFinish[0]).Id);
 
-        Assert.Equal(3, message.Contents.Count);
-        Assert.IsType<Reasoning>(message.Contents[0]);
-        Assert.IsType<ToolCall>(message.Contents[1]);
-        Assert.IsType<Text>(message.Contents[2]);
+        // ToolCall A finishes LAST
+        var aFinish = builder.Append(new ToolCallDelta("call_A", null, "", Index: 0, IsFinal: true)).ToList();
+        Assert.Single(aFinish);
+        Assert.Equal("call_A", Assert.IsType<ToolCall>(aFinish[0]).Id);
     }
 
+    [Fact]
+    public void CompositeContentBuilder_ZeroJsonShapeHeuristics_OnlyEmitsOnIsFinal()
+    {
+        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
+
+        // Send a complete JSON string but with IsFinal: false -> MUST NOT EMIT!
+        var y1 = builder.Append(new ToolCallDelta("call_1", "lookup", "{\"valid\":\"json\"}", IsFinal: false)).ToList();
+        Assert.Empty(y1);
+
+        // Now send IsFinal: true -> EMITS!
+        var y2 = builder.Append(new ToolCallDelta("call_1", null, "", IsFinal: true)).ToList();
+        Assert.Single(y2);
+        var tc = Assert.IsType<ToolCall>(y2[0]);
+        Assert.Equal("call_1", tc.Id);
+        Assert.Equal("lookup", tc.Name);
+    }
 
     [Fact]
     public void Message_Serialization_SerializesCommittedContents()
@@ -331,16 +346,6 @@ public class MessageAssemblyTests
 
 internal static class TestMessageAssemblyExtensions
 {
-    public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
-    {
-        var list = new List<T>();
-        await foreach (var item in source)
-        {
-            list.Add(item);
-        }
-        return list;
-    }
-
     private static List<IContent> Consolidate(IReadOnlyList<IContent> items)
     {
         var result = new List<IContent>();
@@ -395,16 +400,25 @@ internal static class TestMessageAssemblyExtensions
             switch (item)
             {
                 case IContentDelta delta:
-                    bool isLastDelta = !items.Skip(i + 1).OfType<IContentDelta>().Any(d => d.GetType() == delta.GetType());
+                    bool hasSubsequentSameStream = items.Skip(i + 1).OfType<IContentDelta>().Any(next =>
+                    {
+                        if (!string.IsNullOrEmpty(delta.Id) && !string.IsNullOrEmpty(next.Id))
+                            return string.Equals(delta.Id, next.Id, StringComparison.Ordinal);
+                        if (delta.Index.HasValue && next.Index.HasValue)
+                            return delta.Index.Value == next.Index.Value;
+                        return delta.GetType() == next.GetType();
+                    });
+
                     var finalDelta = delta switch
                     {
-                        TextDelta td => td with { IsFinal = td.IsFinal || isLastDelta },
-                        ReasoningDelta rd => rd with { IsFinal = rd.IsFinal || isLastDelta },
-                        ToolCallDelta tcd => tcd with { IsFinal = tcd.IsFinal || isLastDelta },
+                        TextDelta td => td with { IsFinal = td.IsFinal || !hasSubsequentSameStream },
+                        ReasoningDelta rd => rd with { IsFinal = rd.IsFinal || !hasSubsequentSameStream },
+                        ToolCallDelta tcd => tcd with { IsFinal = tcd.IsFinal || !hasSubsequentSameStream },
                         _ => delta
                     };
-                    await foreach (var content in message.ReceiveAsync(finalDelta, ct)) { }
+                    foreach (var content in message.Receive(finalDelta)) { }
                     break;
+
 
                 case TokenUsage tu:
                     tokenUsage = tu;
@@ -430,6 +444,7 @@ internal static class TestMessageAssemblyExtensions
         return (consolidated, tokenUsage, finishReason);
     }
 }
+
 
 
 
