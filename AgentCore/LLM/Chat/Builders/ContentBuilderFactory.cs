@@ -6,7 +6,7 @@ namespace AgentCore.LLM.Chat.Builders;
 /// Composite builder that dynamically dispatches incoming deltas to specialized modality builders,
 /// managing multi-stream lifecycle, demuxing, and deterministic IsFinal completion.
 /// </summary>
-public sealed class CompositeContentBuilder : IContentBuilder
+public sealed class ContentBuilder : IContentBuilder
 {
     private class ActiveStream
     {
@@ -74,14 +74,6 @@ public sealed class CompositeContentBuilder : IContentBuilder
         }
     }
 
-    private static Type GetBuilderType(IContentDelta delta) => delta switch
-    {
-        TextDelta => typeof(TextContentBuilder),
-        ReasoningDelta => typeof(ReasoningContentBuilder),
-        ToolCallDelta => typeof(ToolCallContentBuilder),
-        _ => throw new NotSupportedException($"No content builder registered for delta type '{delta.GetType().FullName}'.")
-    };
-
     private static IContentBuilder CreateBuilder(IContentDelta delta) => delta switch
     {
         TextDelta => new TextContentBuilder(),
@@ -89,6 +81,9 @@ public sealed class CompositeContentBuilder : IContentBuilder
         ToolCallDelta => new ToolCallContentBuilder(),
         _ => throw new NotSupportedException($"No content builder registered for delta type '{delta.GetType().FullName}'.")
     };
+
+    // If Type is occasionally needed:
+    private static Type GetBuilderType(IContentDelta delta) => CreateBuilder(delta).GetType();
 }
 
 

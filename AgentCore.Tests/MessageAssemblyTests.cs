@@ -252,7 +252,7 @@ public class MessageAssemblyTests
     [Fact]
     public void CompositeContentBuilder_InterleavedTextAndReasoning_MaintainsIndependentBuffers()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
+        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
 
         // Interleave Text A and Reasoning B
         var y1 = builder.Append(new TextDelta("Hello ", Id: "stream_text", IsFinal: false)).ToList();
@@ -274,7 +274,7 @@ public class MessageAssemblyTests
     [Fact]
     public void CompositeContentBuilder_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
+        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
 
         // Start 3 parallel tool calls
         builder.Append(new ToolCallDelta("call_A", "ToolA", "{\"a\":", Index: 0, IsFinal: false)).ToList();
@@ -306,7 +306,7 @@ public class MessageAssemblyTests
     [Fact]
     public void CompositeContentBuilder_ZeroJsonShapeHeuristics_OnlyEmitsOnIsFinal()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.CompositeContentBuilder();
+        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
 
         // Send a complete JSON string but with IsFinal: false -> MUST NOT EMIT!
         var y1 = builder.Append(new ToolCallDelta("call_1", "lookup", "{\"valid\":\"json\"}", IsFinal: false)).ToList();

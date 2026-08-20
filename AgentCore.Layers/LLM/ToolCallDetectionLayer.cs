@@ -257,7 +257,7 @@ public class ToolCallDetectionLayer : LLMLayer
                 if (!string.IsNullOrEmpty(name) && toolNames.Contains(name))
                 {
                     var args = (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new JsonObject();
-                    return new ToolCallDelta(Guid.NewGuid().ToString(), name, args.ToJsonString());
+                    return new ToolCallDelta(Guid.NewGuid().ToString(), name, args.ToJsonString(), IsFinal: true);
                 }
             }
         }
@@ -284,6 +284,6 @@ public class ToolCallDetectionLayer : LLMLayer
             catch { argsObj[pName] = val; }
         }
 
-        return new ToolCallDelta(Guid.NewGuid().ToString(), funcName, argsObj.ToJsonString());
+        return new ToolCallDelta(Guid.NewGuid().ToString(), funcName, argsObj.ToJsonString(), IsFinal: true);
     }
 }

@@ -7,7 +7,7 @@ namespace AgentCore.LLM.Chat;
 public class Message(Role role, IReadOnlyList<IContent>? contents = null)
 {
     private readonly List<IContent> _contents = contents != null ? [.. contents] : [];
-    private readonly IContentBuilder _builder = new CompositeContentBuilder();
+    private readonly IContentBuilder _builder = new ContentBuilder();
 
     [JsonPropertyName("role")]
     public Role Role { get; } = role;

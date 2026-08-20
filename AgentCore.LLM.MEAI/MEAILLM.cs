@@ -56,6 +56,7 @@ public class MEAILLM : ILLM
         string? finalFinishReason = null;
 
         var rawYieldedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activeRawToolCallIds = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
 
         await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, chatOptions, ct).ConfigureAwait(false))
         {
@@ -79,6 +80,7 @@ public class MEAILLM : ILLM
                             if (!string.IsNullOrEmpty(callId))
                             {
                                 rawYieldedIds.Add(callId);
+                                activeRawToolCallIds[callId] = index;
                             }
                             rawDeltas.Add(new ToolCallDelta(callId ?? "", funcName, argDelta, index));
                         }
@@ -162,6 +164,19 @@ public class MEAILLM : ILLM
             foreach (var d in rawDeltas)
             {
                 yield return d with { IsFinal = d.IsFinal || hasFinishReason };
+                if (hasFinishReason && !string.IsNullOrEmpty(d.Id))
+                {
+                    activeRawToolCallIds.Remove(d.Id);
+                }
+            }
+
+            if (hasFinishReason && activeRawToolCallIds.Count > 0)
+            {
+                foreach (var (callId, idx) in activeRawToolCallIds.ToList())
+                {
+                    yield return new ToolCallDelta(callId, null, null, Index: idx, IsFinal: true);
+                }
+                activeRawToolCallIds.Clear();
             }
 
             if (update.FinishReason is { } finishReason)
@@ -170,7 +185,14 @@ public class MEAILLM : ILLM
             }
         }
 
-
+        if (activeRawToolCallIds.Count > 0)
+        {
+            foreach (var (callId, idx) in activeRawToolCallIds)
+            {
+                yield return new ToolCallDelta(callId, null, null, Index: idx, IsFinal: true);
+            }
+            activeRawToolCallIds.Clear();
+        }
 
         yield return new TokenUsage(
             InputTokens: inputTokens,
