@@ -48,7 +48,7 @@ public class ToolCallDetectionLayerTests
     {
         // Arrange
         var mockLlm = new MockLLM();
-        var expectedCall = new ToolCallDelta("call-1", "TestTool", "{}");
+        var expectedCall = new StreamChunk(new ToolCallChunk("TestTool", "{}"), Id: "call-1");
         mockLlm.EmittedOutputs = new ILLMOutput[] { expectedCall }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -62,9 +62,10 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         var single = Assert.Single(results);
-        var actualCall = Assert.IsType<ToolCallDelta>(single);
-        Assert.Equal("TestTool", actualCall.NameDelta);
-        Assert.Equal("call-1", actualCall.Id);
+        var actualChunk = Assert.IsType<StreamChunk>(single);
+        var actualCall = Assert.IsType<ToolCallChunk>(actualChunk.Content);
+        Assert.Equal("TestTool", actualCall.Name);
+        Assert.Equal("call-1", actualChunk.Id);
     }
 
     [Fact]
@@ -74,8 +75,8 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>\n"),
-            new TextDelta("<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>")
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>\n")),
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -88,15 +89,18 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        Assert.Equal(3, results.Count); // Two ToolCallDeltas and a trailing newline TextDelta
-        var callA = Assert.IsType<ToolCallDelta>(results[0]);
-        Assert.Equal("ToolA", callA.NameDelta);
+        Assert.Equal(3, results.Count); // Two ToolCallChunks and a trailing newline TextChunk
+        var callAChunk = Assert.IsType<StreamChunk>(results[0]);
+        var callA = Assert.IsType<ToolCallChunk>(callAChunk.Content);
+        Assert.Equal("ToolA", callA.Name);
 
-        var nl = Assert.IsType<TextDelta>(results[1]);
-        Assert.Equal("\n", nl.Value);
+        var nlChunk = Assert.IsType<StreamChunk>(results[1]);
+        var nl = Assert.IsType<TextChunk>(nlChunk.Content);
+        Assert.Equal("\n", nl.Text);
 
-        var callB = Assert.IsType<ToolCallDelta>(results[2]);
-        Assert.Equal("ToolB", callB.NameDelta);
+        var callBChunk = Assert.IsType<StreamChunk>(results[2]);
+        var callB = Assert.IsType<ToolCallChunk>(callBChunk.Content);
+        Assert.Equal("ToolB", callB.Name);
     }
 
     [Fact]
@@ -106,7 +110,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>")
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -120,11 +124,13 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         Assert.Equal(2, results.Count);
-        var callA = Assert.IsType<ToolCallDelta>(results[0]);
-        Assert.Equal("ToolA", callA.NameDelta);
+        var callAChunk = Assert.IsType<StreamChunk>(results[0]);
+        var callA = Assert.IsType<ToolCallChunk>(callAChunk.Content);
+        Assert.Equal("ToolA", callA.Name);
 
-        var callB = Assert.IsType<ToolCallDelta>(results[1]);
-        Assert.Equal("ToolB", callB.NameDelta);
+        var callBChunk = Assert.IsType<StreamChunk>(results[1]);
+        var callB = Assert.IsType<ToolCallChunk>(callBChunk.Content);
+        Assert.Equal("ToolB", callB.Name);
     }
 
     [Fact]
@@ -134,9 +140,9 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("Before tool "),
-            new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>"),
-            new TextDelta(" After tool")
+            new StreamChunk(new TextChunk("Before tool ")),
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>")),
+            new StreamChunk(new TextChunk(" After tool"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -150,9 +156,14 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         Assert.Equal(3, results.Count);
-        Assert.Equal("Before tool ", Assert.IsType<TextDelta>(results[0]).Value);
-        Assert.Equal("ToolA", Assert.IsType<ToolCallDelta>(results[1]).NameDelta);
-        Assert.Equal(" After tool", Assert.IsType<TextDelta>(results[2]).Value);
+        var r0 = Assert.IsType<StreamChunk>(results[0]);
+        Assert.Equal("Before tool ", Assert.IsType<TextChunk>(r0.Content).Text);
+
+        var r1 = Assert.IsType<StreamChunk>(results[1]);
+        Assert.Equal("ToolA", Assert.IsType<ToolCallChunk>(r1.Content).Name);
+
+        var r2 = Assert.IsType<StreamChunk>(results[2]);
+        Assert.Equal(" After tool", Assert.IsType<TextChunk>(r2.Content).Text);
     }
 
     [Fact]
@@ -162,7 +173,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("{\"name\": \"UnregisteredTool\", \"arguments\": {}}")
+            new StreamChunk(new TextChunk("{\"name\": \"UnregisteredTool\", \"arguments\": {}}"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -176,8 +187,9 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         var single = Assert.Single(results);
-        var text = Assert.IsType<TextDelta>(single);
-        Assert.Equal("{\"name\": \"UnregisteredTool\", \"arguments\": {}}", text.Value);
+        var chunk = Assert.IsType<StreamChunk>(single);
+        var text = Assert.IsType<TextChunk>(chunk.Content);
+        Assert.Equal("{\"name\": \"UnregisteredTool\", \"arguments\": {}}", text.Text);
     }
 
     [Fact]
@@ -187,7 +199,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("You can use a List<string> here: {\"something\": 123}")
+            new StreamChunk(new TextChunk("You can use a List<string> here: {\"something\": 123}"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -200,9 +212,7 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        // The first brace `{` has `"something"` after it. Since it doesn't start with `"name"` or `"tool"`,
-        // it shouldn't buffer or should immediately flush it.
-        var text = string.Concat(results.OfType<TextDelta>().Select(d => d.Value));
+        var text = string.Concat(results.OfType<StreamChunk>().Select(d => ((TextChunk)d.Content).Text));
         Assert.Contains("List<string>", text);
         Assert.Contains("{\"something\": 123}", text);
     }
@@ -216,7 +226,7 @@ public class ToolCallDetectionLayerTests
         var rawText = "{\"name\":\"ToolA\",\"arguments\":{\"text\":\"var x = \\\"{ hello }\\\"; \\\\\\\\ test\"}}";
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta(rawText)
+            new StreamChunk(new TextChunk(rawText))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -229,9 +239,10 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var call = Assert.Single(results.OfType<ToolCallDelta>());
-        Assert.Equal("ToolA", call.NameDelta);
-        Assert.Contains("hello", call.ArgumentsDelta);
+        var single = Assert.Single(results.OfType<StreamChunk>());
+        var call = Assert.IsType<ToolCallChunk>(single.Content);
+        Assert.Equal("ToolA", call.Name);
+        Assert.Contains("hello", call.Arguments);
     }
 
     [Fact]
@@ -241,7 +252,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>")
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -254,7 +265,7 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var text = string.Concat(results.OfType<TextDelta>().Select(d => d.Value));
+        var text = string.Concat(results.OfType<StreamChunk>().Select(d => ((TextChunk)d.Content).Text));
         Assert.Contains("malformed", text);
     }
 
@@ -265,7 +276,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": ")
+            new StreamChunk(new TextChunk("<tool_call>{\"name\": \"ToolA\", \"arguments\": "))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -278,7 +289,7 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var text = string.Concat(results.OfType<TextDelta>().Select(d => d.Value));
+        var text = string.Concat(results.OfType<StreamChunk>().Select(d => ((TextChunk)d.Content).Text));
         Assert.Equal("<tool_call>{\"name\": \"ToolA\", \"arguments\": ", text);
     }
 
@@ -297,8 +308,8 @@ public class ToolCallDetectionLayerTests
             var mockLlm = new MockLLM();
             mockLlm.EmittedOutputs = new ILLMOutput[]
             {
-                new TextDelta(chunk1),
-                new TextDelta(chunk2)
+                new StreamChunk(new TextChunk(chunk1)),
+                new StreamChunk(new TextChunk(chunk2))
             }.ToAsyncEnumerable();
 
             var layer = new ToolCallDetectionLayer();
@@ -311,8 +322,9 @@ public class ToolCallDetectionLayerTests
             ).ToListAsync();
 
             // Assert
-            var call = Assert.Single(results.OfType<ToolCallDelta>());
-            Assert.Equal("ToolA", call.NameDelta);
+            var single = Assert.Single(results.OfType<StreamChunk>());
+            var call = Assert.IsType<ToolCallChunk>(single.Content);
+            Assert.Equal("ToolA", call.Name);
         }
     }
 
@@ -323,7 +335,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new ReasoningDelta("Thinking process: { \"name\": \"NotATool\" }")
+            new StreamChunk(new ReasoningChunk("Thinking process: { \"name\": \"NotATool\" }"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -337,7 +349,8 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         var single = Assert.Single(results);
-        var reasoning = Assert.IsType<ReasoningDelta>(single);
+        var chunk = Assert.IsType<StreamChunk>(single);
+        var reasoning = Assert.IsType<ReasoningChunk>(chunk.Content);
         Assert.Equal("Thinking process: { \"name\": \"NotATool\" }", reasoning.Thought);
     }
 
@@ -348,7 +361,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>")
+            new StreamChunk(new TextChunk("<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -361,9 +374,10 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var call = Assert.Single(results.OfType<ToolCallDelta>());
-        Assert.Equal("TodoList", call.NameDelta);
-        Assert.Contains("ReadFile", call.ArgumentsDelta);
+        var single = Assert.Single(results.OfType<StreamChunk>());
+        var call = Assert.IsType<ToolCallChunk>(single.Content);
+        Assert.Equal("TodoList", call.Name);
+        Assert.Contains("ReadFile", call.Arguments);
     }
 
     [Fact]
@@ -373,7 +387,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>")
+            new StreamChunk(new TextChunk("<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -386,10 +400,11 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var call = Assert.Single(results.OfType<ToolCallDelta>());
-        Assert.Equal("EditFile", call.NameDelta);
-        Assert.Contains("test.txt", call.ArgumentsDelta);
-        Assert.Contains("hello world", call.ArgumentsDelta);
+        var single = Assert.Single(results.OfType<StreamChunk>());
+        var call = Assert.IsType<ToolCallChunk>(single.Content);
+        Assert.Equal("EditFile", call.Name);
+        Assert.Contains("test.txt", call.Arguments);
+        Assert.Contains("hello world", call.Arguments);
     }
 
     [Fact]
@@ -399,9 +414,9 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta("<tool_call><function=TodoList>"),
-            new TextDelta("<parameter=todos>[\"Search\"]</parameter>"),
-            new TextDelta("</function></tool_call>")
+            new StreamChunk(new TextChunk("<tool_call><function=TodoList>")),
+            new StreamChunk(new TextChunk("<parameter=todos>[\"Search\"]</parameter>")),
+            new StreamChunk(new TextChunk("</function></tool_call>"))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -414,9 +429,10 @@ public class ToolCallDetectionLayerTests
         ).ToListAsync();
 
         // Assert
-        var call = Assert.Single(results.OfType<ToolCallDelta>());
-        Assert.Equal("TodoList", call.NameDelta);
-        Assert.Contains("Search", call.ArgumentsDelta);
+        var single = Assert.Single(results.OfType<StreamChunk>());
+        var call = Assert.IsType<ToolCallChunk>(single.Content);
+        Assert.Equal("TodoList", call.Name);
+        Assert.Contains("Search", call.Arguments);
     }
 
     [Fact]
@@ -427,7 +443,7 @@ public class ToolCallDetectionLayerTests
         var rawText = "<tool_call><function=FakeDangerousThing><parameter=todos>[\"Search\"]</parameter></function></tool_call>";
         mockLlm.EmittedOutputs = new ILLMOutput[]
         {
-            new TextDelta(rawText)
+            new StreamChunk(new TextChunk(rawText))
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -441,9 +457,9 @@ public class ToolCallDetectionLayerTests
 
         // Assert
         // Should replay the unknown tool call back as raw text
-        var text = string.Concat(results.OfType<TextDelta>().Select(d => d.Value));
+        var text = string.Concat(results.OfType<StreamChunk>().Select(d => ((TextChunk)d.Content).Text));
         Assert.Equal(rawText, text);
-        Assert.Empty(results.OfType<ToolCallDelta>());
+        Assert.Empty(results.OfType<StreamChunk>().Where(d => d.Content is ToolCallChunk));
     }
 }
 

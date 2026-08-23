@@ -70,8 +70,8 @@ namespace AgentCore
                 {
                     switch (item)
                     {
-                        case IContentDelta delta:
-                            foreach (var content in assistantMessage.Receive(delta))
+                        case StreamChunk chunk:
+                            foreach (var content in assistantMessage.Receive(chunk))
                             {
                                 yield return content;
 

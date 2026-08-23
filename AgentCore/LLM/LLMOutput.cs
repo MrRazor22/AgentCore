@@ -6,20 +6,28 @@ namespace AgentCore.LLM;
 public interface ILLMOutput { }
 
 /// <summary>
-/// Sub-interface for transient token-level streaming content fragments emitted by ILLM providers.
+/// Marker interface for the actual inner payload (text, tool call, reasoning, audio, image, etc.).
 /// </summary>
-public interface IContentDelta : ILLMOutput
-{
-    string? Id { get; }
-    int? Index { get; }
-    bool IsFinal { get; }
-}
+public interface IContentChunk { }
 
-public record TextDelta(string Value, string? Id = null, int? Index = null, bool IsFinal = false) : IContentDelta;
+/// <summary>
+/// Stream envelope holding streaming metadata and the actual content chunk.
+/// </summary>
+public record StreamChunk(
+    IContentChunk Content,
+    int? Index = null,
+    string? Id = null,
+    bool IsFinal = false
+) : ILLMOutput;
 
-public record ReasoningDelta(string Thought, string? Id = null, int? Index = null, bool IsFinal = false) : IContentDelta;
+public record TextChunk(string Text) : IContentChunk;
 
-public record ToolCallDelta(string Id, string? NameDelta, string? ArgumentsDelta, int? Index = null, bool IsFinal = false) : IContentDelta;
+public record ReasoningChunk(string Thought) : IContentChunk;
+
+public record ToolCallChunk(
+    string? Name = null,
+    string? Arguments = null
+) : IContentChunk;
 
 public record TokenUsage(
     int InputTokens = 0,

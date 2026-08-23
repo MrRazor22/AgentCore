@@ -81,90 +81,95 @@ namespace CodeSharp.UI
                 return;
             }
 
-            if (output is ReasoningDelta reasoning)
+            if (output is StreamChunk chunk)
             {
-                FinalizeAllToolCalls();
-
-                string thought = reasoning.Thought;
-                if (string.IsNullOrEmpty(thought))
+                switch (chunk.Content)
                 {
-                    return;
-                }
+                    case ReasoningChunk reasoning:
+                        FinalizeAllToolCalls();
 
-                if (_thinkingWriter == null)
-                {
-                    StopSpinner();
-                    AnsiConsole.WriteLine();
-                    _thinkingSw.Reset();
-                    _thinkingSw.Start();
-                    var style = new Style(Color.Grey, decoration: Decoration.Italic);
-                    _thinkingWriter = new ConsoleTreeWriter(style);
-                    _thinkingWriter.Start("Thinking...");
-                }
+                        string thought = reasoning.Thought;
+                        if (string.IsNullOrEmpty(thought))
+                        {
+                            return;
+                        }
 
-                _thinkingWriter.Write(thought);
-            }
-            else if (output is TextDelta text)
-            {
-                if (!_answerStarted)
-                {
-                    StopSpinner();
+                        if (_thinkingWriter == null)
+                        {
+                            StopSpinner();
+                            AnsiConsole.WriteLine();
+                            _thinkingSw.Reset();
+                            _thinkingSw.Start();
+                            var style = new Style(Color.Grey, decoration: Decoration.Italic);
+                            _thinkingWriter = new ConsoleTreeWriter(style);
+                            _thinkingWriter.Start("Thinking...");
+                        }
 
-                    bool hadThinking = _thinkingWriter != null;
-                    FinalizeThinking();
-                    FinalizeAllToolCalls();
+                        _thinkingWriter.Write(thought);
+                        break;
 
-                    if (!hadThinking)
-                    {
-                        AnsiConsole.WriteLine();
-                    }
+                    case TextChunk text:
+                        if (!_answerStarted)
+                        {
+                            StopSpinner();
 
-                    _answerStarted = true;
+                            bool hadThinking = _thinkingWriter != null;
+                            FinalizeThinking();
+                            FinalizeAllToolCalls();
 
-                    var trimmed = text.Value.TrimStart('\r', '\n');
-                    AnsiConsole.Write(new Spectre.Console.Text(trimmed));
-                }
-                else
-                {
-                    AnsiConsole.Write(new Spectre.Console.Text(text.Value));
-                }
-            }
-            else if (output is ToolCallDelta tc)
-            {
-                StopSpinner();
-                FinalizeThinking();
+                            if (!hadThinking)
+                            {
+                                AnsiConsole.WriteLine();
+                            }
 
-                AccumulatedToolCall? toolCall = null;
-                if (!string.IsNullOrEmpty(tc.Id))
-                {
-                    toolCall = _toolCalls.FirstOrDefault(t => t.Id == tc.Id);
-                }
-                else if (tc.Index.HasValue)
-                {
-                    toolCall = _toolCalls.FirstOrDefault(t => t.Index == tc.Index.Value);
-                }
+                            _answerStarted = true;
 
-                if (toolCall == null)
-                {
-                    // A new tool call is starting. Finalize previous ones
-                    FinalizeAllToolCalls();
+                            var trimmed = text.Text.TrimStart('\r', '\n');
+                            AnsiConsole.Write(new Spectre.Console.Text(trimmed));
+                        }
+                        else
+                        {
+                            AnsiConsole.Write(new Spectre.Console.Text(text.Text));
+                        }
+                        break;
 
-                    toolCall = new AccumulatedToolCall
-                    {
-                        Id = tc.Id ?? "",
-                        Index = tc.Index
-                    };
-                    _toolCalls.Add(toolCall);
-                }
+                    case ToolCallChunk tc:
+                        StopSpinner();
+                        FinalizeThinking();
 
-                if (!string.IsNullOrEmpty(tc.NameDelta))
-                {
-                    toolCall.Name.Append(tc.NameDelta);
-                }
+                        AccumulatedToolCall? toolCall = null;
+                        if (!string.IsNullOrEmpty(chunk.Id))
+                        {
+                            toolCall = _toolCalls.FirstOrDefault(t => t.Id == chunk.Id);
+                        }
+                        else if (chunk.Index.HasValue)
+                        {
+                            toolCall = _toolCalls.FirstOrDefault(t => t.Index == chunk.Index.Value);
+                        }
 
-                if (!string.IsNullOrEmpty(tc.ArgumentsDelta))
-                {
-                    toolCall.Arguments.Append(tc.ArgumentsDelta);
+                        if (toolCall == null)
+                        {
+                            // A new tool call is starting. Finalize previous ones
+                            FinalizeAllToolCalls();
+
+                            toolCall = new AccumulatedToolCall
+                            {
+                                Id = chunk.Id ?? "",
+                                Index = chunk.Index
+                            };
+                            _toolCalls.Add(toolCall);
+                        }
+
+                        if (!string.IsNullOrEmpty(tc.Name))
+                        {
+                            toolCall.Name.Append(tc.Name);
+                        }
+
+                        if (!string.IsNullOrEmpty(tc.Arguments))
+                        {
+                            toolCall.Arguments.Append(tc.Arguments);
+                        }
+                        break;
                 }
             }
             else if (output is ToolResultOutput tro)

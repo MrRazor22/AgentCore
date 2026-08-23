@@ -16,7 +16,7 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new TextDelta("Today is sunny."));
+        provider.Enqueue(new StreamChunk(new TextChunk("Today is sunny.")));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
@@ -50,12 +50,12 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // First LLM call yields tool call
         provider.Enqueue(
-            new ToolCallDelta("call_1", "get_weather", "{\"location\": \"London\"}"),
+            new StreamChunk(new ToolCallChunk("get_weather", "{\"location\": \"London\"}"), Id: "call_1"),
             new FinishReason("tool_calls")
         );
         // Second LLM call yields final response
         provider.Enqueue(
-            new TextDelta("It is sunny in London."),
+            new StreamChunk(new TextChunk("It is sunny in London.")),
             new FinishReason("stop")
         );
 
@@ -103,11 +103,11 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // Return tool call indefinitely
         provider.Enqueue(
-            new ToolCallDelta("call_1", "looping_tool", "{}"),
+            new StreamChunk(new ToolCallChunk("looping_tool", "{}"), Id: "call_1"),
             new FinishReason("tool_calls")
         );
         provider.Enqueue(
-            new ToolCallDelta("call_2", "looping_tool", "{}"),
+            new StreamChunk(new ToolCallChunk("looping_tool", "{}"), Id: "call_2"),
             new FinishReason("tool_calls")
         );
 
@@ -134,7 +134,7 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCallDelta("call_1", "broken_tool", "{}"),
+            new StreamChunk(new ToolCallChunk("broken_tool", "{}"), Id: "call_1"),
             new FinishReason("tool_calls")
         );
 
@@ -183,7 +183,7 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new TextDelta("Never streamed"));
+        provider.Enqueue(new StreamChunk(new TextChunk("Never streamed")));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
@@ -211,11 +211,11 @@ public class WorkflowTests
 
         async IAsyncEnumerable<ILLMOutput> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ReasoningDelta("Thinking...");
-            yield return new TextDelta("Hello world partial");
+            yield return new StreamChunk(new ReasoningChunk("Thinking..."));
+            yield return new StreamChunk(new TextChunk("Hello world partial"));
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
-            yield return new TextDelta(" unreached");
+            yield return new StreamChunk(new TextChunk(" unreached"));
         }
 
         var provider = new MockLLMProvider();
@@ -245,12 +245,12 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCallDelta("call_slow", "slow_tool", "{}"),
-            new ToolCallDelta("call_fast", "fast_tool", "{}"),
+            new StreamChunk(new ToolCallChunk("slow_tool", "{}"), Id: "call_slow"),
+            new StreamChunk(new ToolCallChunk("fast_tool", "{}"), Id: "call_fast"),
             new FinishReason("tool_calls")
         );
         provider.Enqueue(
-            new TextDelta("Both done."),
+            new StreamChunk(new TextChunk("Both done.")),
             new FinishReason("stop")
         );
 

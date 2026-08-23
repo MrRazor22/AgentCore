@@ -10,33 +10,33 @@ public sealed class ToolCallContentBuilder : IContentBuilder
     private readonly StringBuilder _name = new();
     private readonly StringBuilder _args = new();
 
-    public IEnumerable<IContent> Append(IContentDelta delta)
+    public IEnumerable<IContent> Append(StreamChunk chunk)
     {
-        if (delta is ToolCallDelta tcd)
+        if (!string.IsNullOrEmpty(chunk.Id))
         {
-            if (!string.IsNullOrEmpty(tcd.Id))
-            {
-                _id = tcd.Id;
-            }
+            _id = chunk.Id;
+        }
 
-            if (!string.IsNullOrEmpty(tcd.NameDelta))
+        if (chunk.Content is ToolCallChunk tcd)
+        {
+            if (!string.IsNullOrEmpty(tcd.Name))
             {
                 var cur = _name.ToString();
-                if (string.IsNullOrEmpty(cur) || (cur != tcd.NameDelta && !cur.EndsWith(tcd.NameDelta)))
+                if (string.IsNullOrEmpty(cur) || (cur != tcd.Name && !cur.EndsWith(tcd.Name)))
                 {
-                    _name.Append(tcd.NameDelta);
+                    _name.Append(tcd.Name);
                 }
             }
 
-            if (!string.IsNullOrEmpty(tcd.ArgumentsDelta))
+            if (!string.IsNullOrEmpty(tcd.Arguments))
             {
-                _args.Append(tcd.ArgumentsDelta);
+                _args.Append(tcd.Arguments);
             }
         }
 
-        if (delta.IsFinal)
+        if (chunk.IsFinal)
         {
-            var finalId = !string.IsNullOrEmpty(_id) ? _id : (delta.Id ?? "");
+            var finalId = !string.IsNullOrEmpty(_id) ? _id : (chunk.Id ?? "");
             var name = _name.ToString().Trim();
             var argsStr = _args.ToString().Trim();
 
@@ -52,7 +52,7 @@ public sealed class ToolCallContentBuilder : IContentBuilder
 
             yield return new ToolCall(finalId, name, parsed ?? new JsonObject())
             {
-                Index = delta.Index,
+                Index = chunk.Index,
                 RawArguments = argsStr
             };
         }

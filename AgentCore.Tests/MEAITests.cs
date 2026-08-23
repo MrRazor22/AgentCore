@@ -70,9 +70,15 @@ public class MEAITests
 
         // Assert
         Assert.Equal(4, events.Count);
-        Assert.Equal("Hello", Assert.IsType<TextDelta>(events[0]).Value);
-        Assert.Equal("Thinking about reply...", Assert.IsType<ReasoningDelta>(events[1]).Thought);
-        Assert.Equal(" World!", Assert.IsType<TextDelta>(events[2]).Value);
+        var chunk0 = Assert.IsType<StreamChunk>(events[0]);
+        Assert.Equal("Hello", Assert.IsType<TextChunk>(chunk0.Content).Text);
+
+        var chunk1 = Assert.IsType<StreamChunk>(events[1]);
+        Assert.Equal("Thinking about reply...", Assert.IsType<ReasoningChunk>(chunk1.Content).Thought);
+
+        var chunk2 = Assert.IsType<StreamChunk>(events[2]);
+        Assert.Equal(" World!", Assert.IsType<TextChunk>(chunk2.Content).Text);
+
         Assert.IsType<TokenUsage>(events[3]);
     }
 
@@ -138,9 +144,10 @@ public class MEAITests
 
         // Assert
         Assert.Equal(3, events.Count);
-        var toolCallDelta = Assert.IsType<ToolCallDelta>(events[0]);
-        Assert.Equal("call_1", toolCallDelta.Id);
-        Assert.Equal("get_weather", toolCallDelta.NameDelta);
+        var toolCallChunk = Assert.IsType<StreamChunk>(events[0]);
+        Assert.Equal("call_1", toolCallChunk.Id);
+        var toolPayload = Assert.IsType<ToolCallChunk>(toolCallChunk.Content);
+        Assert.Equal("get_weather", toolPayload.Name);
         Assert.IsType<TokenUsage>(events[2]);
     }
 

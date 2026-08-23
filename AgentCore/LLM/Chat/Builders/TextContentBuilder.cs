@@ -7,14 +7,14 @@ public sealed class TextContentBuilder : IContentBuilder
 {
     private readonly StringBuilder _buffer = new();
 
-    public IEnumerable<IContent> Append(IContentDelta delta)
+    public IEnumerable<IContent> Append(StreamChunk chunk)
     {
-        if (delta is TextDelta text && !string.IsNullOrEmpty(text.Value))
+        if (chunk.Content is TextChunk text && !string.IsNullOrEmpty(text.Text))
         {
-            _buffer.Append(text.Value);
+            _buffer.Append(text.Text);
         }
 
-        if (delta.IsFinal && _buffer.Length > 0)
+        if (chunk.IsFinal && _buffer.Length > 0)
         {
             yield return new Text(_buffer.ToString());
             _buffer.Clear();

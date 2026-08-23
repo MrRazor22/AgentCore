@@ -160,9 +160,9 @@ public class ChatContext : IContext
                 var sb = new StringBuilder();
                 await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
                 {
-                    if (evt is TextDelta t)
+                    if (evt is StreamChunk { Content: TextChunk t })
                     {
-                        sb.Append(t.Value);
+                        sb.Append(t.Text);
                     }
                 }
 

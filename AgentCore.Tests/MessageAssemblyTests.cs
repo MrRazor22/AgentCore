@@ -26,8 +26,8 @@ public class MessageAssemblyTests
         // RAW stream sequence 1: Index + ID -> later ID only
         var sequence1 = new List<ILLMOutput>
         {
-            new ToolCallDelta("ABC", "RunCommand", "", 0),
-            new ToolCallDelta("ABC", null, "{\"commandLine\":\"ls\"}", null)
+            new StreamChunk(new ToolCallChunk("RunCommand", ""), Index: 0, Id: "ABC"),
+            new StreamChunk(new ToolCallChunk(null, "{\"commandLine\":\"ls\"}"), Id: "ABC")
         };
 
         var (contents1, _, _) = await ToAsyncStream(sequence1).AssembleAsync();
@@ -41,8 +41,8 @@ public class MessageAssemblyTests
         // RAW stream sequence 2: ID only -> later Index + ID
         var sequence2 = new List<ILLMOutput>
         {
-            new ToolCallDelta("XYZ", "SearchWeb", "", null),
-            new ToolCallDelta("XYZ", null, "{\"query\":\"test\"}", 1)
+            new StreamChunk(new ToolCallChunk("SearchWeb", ""), Id: "XYZ"),
+            new StreamChunk(new ToolCallChunk(null, "{\"query\":\"test\"}"), Index: 1, Id: "XYZ")
         };
 
         var (contents2, _, _) = await ToAsyncStream(sequence2).AssembleAsync();
@@ -59,9 +59,9 @@ public class MessageAssemblyTests
     {
         var sequence = new List<ILLMOutput>
         {
-            new ToolCallDelta("ABC", "RunCommand", "", 0),
-            new ToolCallDelta("", null, "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}", 0),
-            new ToolCallDelta("ABC", "RunCommand", "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}", null)
+            new StreamChunk(new ToolCallChunk("RunCommand", ""), Index: 0, Id: "ABC"),
+            new StreamChunk(new ToolCallChunk(null, "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}"), Index: 0, Id: ""),
+            new StreamChunk(new ToolCallChunk("RunCommand", "{\"commandLine\":\"Get-ChildItem -Path $PWD\",\"outputCharacterCount\":2000}"), Id: "ABC")
         };
 
         var (contents, _, _) = await ToAsyncStream(sequence).AssembleAsync();
@@ -77,12 +77,12 @@ public class MessageAssemblyTests
     {
         var sequence = new List<ILLMOutput>
         {
-            new ToolCallDelta("A", "RunCommand", "", 0),
-            new ToolCallDelta("B", "SearchWeb", "", 1),
-            new ToolCallDelta("", null, "{\"commandLine\":", 0),
-            new ToolCallDelta("", null, "{\"query\":", 1),
-            new ToolCallDelta("", null, "\"ls\"}", 0),
-            new ToolCallDelta("", null, "\"test\"}", 1)
+            new StreamChunk(new ToolCallChunk("RunCommand", ""), Index: 0, Id: "A"),
+            new StreamChunk(new ToolCallChunk("SearchWeb", ""), Index: 1, Id: "B"),
+            new StreamChunk(new ToolCallChunk(null, "{\"commandLine\":"), Index: 0, Id: ""),
+            new StreamChunk(new ToolCallChunk(null, "{\"query\":"), Index: 1, Id: ""),
+            new StreamChunk(new ToolCallChunk(null, "\"ls\"}"), Index: 0, Id: ""),
+            new StreamChunk(new ToolCallChunk(null, "\"test\"}"), Index: 1, Id: "")
         };
 
         var (contents, _, _) = await ToAsyncStream(sequence).AssembleAsync();
@@ -105,9 +105,9 @@ public class MessageAssemblyTests
     {
         var sequence = new List<ILLMOutput>
         {
-            new ToolCallDelta("A", "RunCommand", "", 0),
-            new ToolCallDelta("B", "SearchWeb", "", 1),
-            new ToolCallDelta("", null, "{\"commandLine\":\"ls\"}", null)
+            new StreamChunk(new ToolCallChunk("RunCommand", ""), Index: 0, Id: "A"),
+            new StreamChunk(new ToolCallChunk("SearchWeb", ""), Index: 1, Id: "B"),
+            new StreamChunk(new ToolCallChunk(null, "{\"commandLine\":\"ls\"}"))
         };
 
         await Assert.ThrowsAsync<System.InvalidOperationException>(async () =>
@@ -123,11 +123,11 @@ public class MessageAssemblyTests
 
         async IAsyncEnumerable<ILLMOutput> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct = default)
         {
-            yield return new ReasoningDelta("Thinking deeply...");
-            yield return new TextDelta("Hello ");
+            yield return new StreamChunk(new ReasoningChunk("Thinking deeply..."));
+            yield return new StreamChunk(new TextChunk("Hello "));
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
-            yield return new TextDelta("Unreachable text");
+            yield return new StreamChunk(new TextChunk("Unreachable text"));
         }
 
         var (contents, _, _) = await CancellationStream().AssembleAsync(cts.Token);
@@ -151,8 +151,8 @@ public class MessageAssemblyTests
 
         async IAsyncEnumerable<ILLMOutput> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct = default)
         {
-            yield return new TextDelta("Calling tool ");
-            yield return new ToolCallDelta("TC1", "", "{\"query\": \"incomp\"", 0);
+            yield return new StreamChunk(new TextChunk("Calling tool "));
+            yield return new StreamChunk(new ToolCallChunk("", "{\"query\": \"incomp\""), Index: 0, Id: "TC1");
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
         }
@@ -202,14 +202,14 @@ public class MessageAssemblyTests
     public void Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
     {
         var message = new Message(Role.Assistant);
-        var r1 = message.Receive(new ReasoningDelta("Thinking ", IsFinal: false)).ToList();
+        var r1 = message.Receive(new StreamChunk(new ReasoningChunk("Thinking "), IsFinal: false)).ToList();
         Assert.Empty(r1);
 
-        var r2 = message.Receive(new ReasoningDelta("deeply...", IsFinal: true)).ToList();
+        var r2 = message.Receive(new StreamChunk(new ReasoningChunk("deeply..."), IsFinal: true)).ToList();
         Assert.Single(r2);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(r2[0]).Thought);
 
-        var r3 = message.Receive(new TextDelta("Here is the answer.", IsFinal: true)).ToList();
+        var r3 = message.Receive(new StreamChunk(new TextChunk("Here is the answer."), IsFinal: true)).ToList();
         Assert.Single(r3);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(r3[0]).Value);
 
@@ -223,23 +223,23 @@ public class MessageAssemblyTests
     {
         var message = new Message(Role.Assistant);
 
-        var r1 = message.Receive(new ReasoningDelta("Step 1: Analyze", IsFinal: true)).ToList();
+        var r1 = message.Receive(new StreamChunk(new ReasoningChunk("Step 1: Analyze"), IsFinal: true)).ToList();
         Assert.Single(r1);
         Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
 
         // ToolCall JSON streaming
-        var r2 = message.Receive(new ToolCallDelta("call_1", "lookup", "{\"q\":", IsFinal: false)).ToList();
+        var r2 = message.Receive(new StreamChunk(new ToolCallChunk("lookup", "{\"q\":"), Id: "call_1", IsFinal: false)).ToList();
         Assert.Empty(r2);
 
         // ToolCall JSON completes with IsFinal -> ToolCall emitted
-        var r3 = message.Receive(new ToolCallDelta("call_1", null, "\"test\"}", IsFinal: true)).ToList();
+        var r3 = message.Receive(new StreamChunk(new ToolCallChunk(null, "\"test\"}"), Id: "call_1", IsFinal: true)).ToList();
         Assert.Single(r3);
         var tc = Assert.IsType<ToolCall>(r3[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
         // Text streaming
-        var r4 = message.Receive(new TextDelta("The result is ready.", IsFinal: true)).ToList();
+        var r4 = message.Receive(new StreamChunk(new TextChunk("The result is ready."), IsFinal: true)).ToList();
         Assert.Single(r4);
         Assert.Equal("The result is ready.", Assert.IsType<Text>(r4[0]).Value);
 
@@ -250,74 +250,119 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void CompositeContentBuilder_InterleavedTextAndReasoning_MaintainsIndependentBuffers()
+    public void ContentAssembler_InterleavedTextAndReasoning_MaintainsIndependentBuffers()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
+        var assembler = new AgentCore.LLM.Chat.Builders.ContentAssembler();
 
         // Interleave Text A and Reasoning B
-        var y1 = builder.Append(new TextDelta("Hello ", Id: "stream_text", IsFinal: false)).ToList();
+        var y1 = assembler.Receive(new StreamChunk(new TextChunk("Hello "), Id: "stream_text", IsFinal: false)).ToList();
         Assert.Empty(y1);
 
-        var y2 = builder.Append(new ReasoningDelta("Thinking ", Id: "stream_thought", IsFinal: false)).ToList();
+        var y2 = assembler.Receive(new StreamChunk(new ReasoningChunk("Thinking "), Id: "stream_thought", IsFinal: false)).ToList();
         Assert.Empty(y2);
 
-        var y3 = builder.Append(new TextDelta("world!", Id: "stream_text", IsFinal: true)).ToList();
+        var y3 = assembler.Receive(new StreamChunk(new TextChunk("world!"), Id: "stream_text", IsFinal: true)).ToList();
         Assert.Single(y3);
         Assert.Equal("Hello world!", Assert.IsType<Text>(y3[0]).Value);
 
         // Thought stream continues after Text stream finished!
-        var y4 = builder.Append(new ReasoningDelta("more...", Id: "stream_thought", IsFinal: true)).ToList();
+        var y4 = assembler.Receive(new StreamChunk(new ReasoningChunk("more..."), Id: "stream_thought", IsFinal: true)).ToList();
         Assert.Single(y4);
         Assert.Equal("Thinking more...", Assert.IsType<Reasoning>(y4[0]).Thought);
     }
 
     [Fact]
-    public void CompositeContentBuilder_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
+    public void ContentAssembler_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
+        var assembler = new AgentCore.LLM.Chat.Builders.ContentAssembler();
 
         // Start 3 parallel tool calls
-        builder.Append(new ToolCallDelta("call_A", "ToolA", "{\"a\":", Index: 0, IsFinal: false)).ToList();
-        builder.Append(new ToolCallDelta("call_B", "ToolB", "{\"b\":", Index: 1, IsFinal: false)).ToList();
-        builder.Append(new ToolCallDelta("call_C", "ToolC", "{\"c\":", Index: 2, IsFinal: false)).ToList();
+        assembler.Receive(new StreamChunk(new ToolCallChunk("ToolA", "{\"a\":"), Index: 0, Id: "call_A", IsFinal: false)).ToList();
+        assembler.Receive(new StreamChunk(new ToolCallChunk("ToolB", "{\"b\":"), Index: 1, Id: "call_B", IsFinal: false)).ToList();
+        assembler.Receive(new StreamChunk(new ToolCallChunk("ToolC", "{\"c\":"), Index: 2, Id: "call_C", IsFinal: false)).ToList();
 
         // ToolCall B finishes FIRST
-        var bFinish = builder.Append(new ToolCallDelta("call_B", null, "2}", Index: 1, IsFinal: true)).ToList();
+        var bFinish = assembler.Receive(new StreamChunk(new ToolCallChunk(null, "2}"), Index: 1, Id: "call_B", IsFinal: true)).ToList();
         Assert.Single(bFinish);
         var tcB = Assert.IsType<ToolCall>(bFinish[0]);
         Assert.Equal("call_B", tcB.Id);
         Assert.Equal("ToolB", tcB.Name);
 
         // ToolCall A and C continue accumulation
-        builder.Append(new ToolCallDelta("call_A", null, "1}", Index: 0, IsFinal: false)).ToList();
-        builder.Append(new ToolCallDelta("call_C", null, "3}", Index: 2, IsFinal: false)).ToList();
+        assembler.Receive(new StreamChunk(new ToolCallChunk(null, "1}"), Index: 0, Id: "call_A", IsFinal: false)).ToList();
+        assembler.Receive(new StreamChunk(new ToolCallChunk(null, "3}"), Index: 2, Id: "call_C", IsFinal: false)).ToList();
 
         // ToolCall C finishes SECOND
-        var cFinish = builder.Append(new ToolCallDelta("call_C", null, "", Index: 2, IsFinal: true)).ToList();
+        var cFinish = assembler.Receive(new StreamChunk(new ToolCallChunk(null, ""), Index: 2, Id: "call_C", IsFinal: true)).ToList();
         Assert.Single(cFinish);
         Assert.Equal("call_C", Assert.IsType<ToolCall>(cFinish[0]).Id);
 
         // ToolCall A finishes LAST
-        var aFinish = builder.Append(new ToolCallDelta("call_A", null, "", Index: 0, IsFinal: true)).ToList();
+        var aFinish = assembler.Receive(new StreamChunk(new ToolCallChunk(null, ""), Index: 0, Id: "call_A", IsFinal: true)).ToList();
         Assert.Single(aFinish);
         Assert.Equal("call_A", Assert.IsType<ToolCall>(aFinish[0]).Id);
     }
 
     [Fact]
-    public void CompositeContentBuilder_ZeroJsonShapeHeuristics_OnlyEmitsOnIsFinal()
+    public void ContentAssembler_ZeroJsonShapeHeuristics_OnlyEmitsOnIsFinal()
     {
-        var builder = new AgentCore.LLM.Chat.Builders.ContentBuilder();
+        var assembler = new AgentCore.LLM.Chat.Builders.ContentAssembler();
 
         // Send a complete JSON string but with IsFinal: false -> MUST NOT EMIT!
-        var y1 = builder.Append(new ToolCallDelta("call_1", "lookup", "{\"valid\":\"json\"}", IsFinal: false)).ToList();
+        var y1 = assembler.Receive(new StreamChunk(new ToolCallChunk("lookup", "{\"valid\":\"json\"}"), Id: "call_1", IsFinal: false)).ToList();
         Assert.Empty(y1);
 
         // Now send IsFinal: true -> EMITS!
-        var y2 = builder.Append(new ToolCallDelta("call_1", null, "", IsFinal: true)).ToList();
+        var y2 = assembler.Receive(new StreamChunk(new ToolCallChunk(null, ""), Id: "call_1", IsFinal: true)).ToList();
         Assert.Single(y2);
         var tc = Assert.IsType<ToolCall>(y2[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
+    }
+
+    private record TestImageChunk(string Base64Data, string MimeType) : IContentChunk;
+    private record TestImageContent(string Data, string MimeType) : IContent
+    {
+        public string ForLlm() => $"[Image: {MimeType}]";
+    }
+
+    private class TestImageBuilder : IContentBuilder
+    {
+        private readonly System.Text.StringBuilder _data = new();
+        private string _mimeType = "image/png";
+
+        public IEnumerable<IContent> Append(StreamChunk chunk)
+        {
+            if (chunk.Content is TestImageChunk img)
+            {
+                _data.Append(img.Base64Data);
+                if (!string.IsNullOrEmpty(img.MimeType)) _mimeType = img.MimeType;
+            }
+
+            if (chunk.IsFinal)
+            {
+                yield return new TestImageContent(_data.ToString(), _mimeType);
+            }
+        }
+    }
+
+    [Fact]
+    public void ContentAssembler_MultimodalExtensibility_SupportsCustomChunkAndBuilderRegistration()
+    {
+        var assembler = new AgentCore.LLM.Chat.Builders.ContentAssembler()
+            .RegisterBuilder<TestImageChunk>(() => new TestImageBuilder());
+
+        // Stream image chunks
+        var r1 = assembler.Receive(new StreamChunk(new TestImageChunk("iVBORw0K", "image/png"), Id: "img_1", IsFinal: false)).ToList();
+        Assert.Empty(r1);
+
+        var r2 = assembler.Receive(new StreamChunk(new TestImageChunk("GgoAAAANSUhEUg==", "image/png"), Id: "img_1", IsFinal: true)).ToList();
+        Assert.Single(r2);
+
+        var imgContent = Assert.IsType<TestImageContent>(r2[0]);
+        Assert.Equal("iVBORw0KGgoAAAANSUhEUg==", imgContent.Data);
+        Assert.Equal("image/png", imgContent.MimeType);
+        Assert.Equal("[Image: image/png]", imgContent.ForLlm());
     }
 
     [Fact]
@@ -399,24 +444,18 @@ internal static class TestMessageAssemblyExtensions
             var item = items[i];
             switch (item)
             {
-                case IContentDelta delta:
-                    bool hasSubsequentSameStream = items.Skip(i + 1).OfType<IContentDelta>().Any(next =>
+                case StreamChunk chunk:
+                    bool hasSubsequentSameStream = items.Skip(i + 1).OfType<StreamChunk>().Any(next =>
                     {
-                        if (!string.IsNullOrEmpty(delta.Id) && !string.IsNullOrEmpty(next.Id))
-                            return string.Equals(delta.Id, next.Id, StringComparison.Ordinal);
-                        if (delta.Index.HasValue && next.Index.HasValue)
-                            return delta.Index.Value == next.Index.Value;
-                        return delta.GetType() == next.GetType();
+                        if (!string.IsNullOrEmpty(chunk.Id) && !string.IsNullOrEmpty(next.Id))
+                            return string.Equals(chunk.Id, next.Id, StringComparison.Ordinal);
+                        if (chunk.Index.HasValue && next.Index.HasValue)
+                            return chunk.Index.Value == next.Index.Value;
+                        return chunk.Content.GetType() == next.Content.GetType();
                     });
 
-                    var finalDelta = delta switch
-                    {
-                        TextDelta td => td with { IsFinal = td.IsFinal || !hasSubsequentSameStream },
-                        ReasoningDelta rd => rd with { IsFinal = rd.IsFinal || !hasSubsequentSameStream },
-                        ToolCallDelta tcd => tcd with { IsFinal = tcd.IsFinal || !hasSubsequentSameStream },
-                        _ => delta
-                    };
-                    foreach (var content in message.Receive(finalDelta)) { }
+                    var finalChunk = chunk with { IsFinal = chunk.IsFinal || !hasSubsequentSameStream };
+                    foreach (var content in message.Receive(finalChunk)) { }
                     break;
 
 

@@ -49,10 +49,10 @@ public class StreamingLLMLayerTests
     {
         var expectedOutputs = new List<ILLMOutput>
         {
-            new ReasoningDelta("Thinking hard"),
-            new TextDelta("Hello "),
-            new TextDelta("world!"),
-            new ToolCallDelta("tc-1", "test_tool", "{}"),
+            new StreamChunk(new ReasoningChunk("Thinking hard")),
+            new StreamChunk(new TextChunk("Hello ")),
+            new StreamChunk(new TextChunk("world!")),
+            new StreamChunk(new ToolCallChunk("test_tool", "{}"), Id: "tc-1"),
             new TokenUsage(10, 20, null),
             new FinishReason("stop")
         };
@@ -93,10 +93,10 @@ public class StreamingLLMLayerTests
             Assert.Equal(expectedOutputs[i].GetType(), channelResults[i].GetType());
         }
 
-        Assert.Equal("Thinking hard", ((ReasoningDelta)channelResults[0]).Thought);
-        Assert.Equal("Hello ", ((TextDelta)channelResults[1]).Value);
-        Assert.Equal("world!", ((TextDelta)channelResults[2]).Value);
-        Assert.Equal("tc-1", ((ToolCallDelta)channelResults[3]).Id);
+        Assert.Equal("Thinking hard", ((ReasoningChunk)((StreamChunk)channelResults[0]).Content).Thought);
+        Assert.Equal("Hello ", ((TextChunk)((StreamChunk)channelResults[1]).Content).Text);
+        Assert.Equal("world!", ((TextChunk)((StreamChunk)channelResults[2]).Content).Text);
+        Assert.Equal("tc-1", ((StreamChunk)channelResults[3]).Id);
         Assert.Equal(10, ((TokenUsage)channelResults[4]).InputTokens);
         Assert.Equal("stop", ((FinishReason)channelResults[5]).Value);
     }
@@ -104,7 +104,7 @@ public class StreamingLLMLayerTests
     [Fact]
     public async Task StreamAsync_CancellationPropagatesCorrectly()
     {
-        var outputs = new List<ILLMOutput> { new TextDelta("hi") };
+        var outputs = new List<ILLMOutput> { new StreamChunk(new TextChunk("hi")) };
         var mockInner = new MockLLM(outputs);
         var layer = new StreamingLLMLayer();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);

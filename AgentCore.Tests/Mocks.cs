@@ -29,9 +29,9 @@ public class MockLLMProvider : ILLM
     {
         return evt switch
         {
-            Text t => new TextDelta(t.Value, IsFinal: true),
-            Reasoning r => new ReasoningDelta(r.Thought, IsFinal: true),
-            ToolCall tc => new ToolCallDelta(tc.Id, tc.Name, tc.Arguments?.ToJsonString(), IsFinal: true),
+            Text t => new StreamChunk(new TextChunk(t.Value), IsFinal: true),
+            Reasoning r => new StreamChunk(new ReasoningChunk(r.Thought), IsFinal: true),
+            ToolCall tc => new StreamChunk(new ToolCallChunk(tc.Name, tc.Arguments?.ToJsonString()), Id: tc.Id, IsFinal: true),
             ILLMOutput output => output,
             _ => throw new NotSupportedException()
         };
@@ -69,28 +69,22 @@ public class MockLLMProvider : ILLM
             var item = list[i];
             var converted = ConvertToDelta(item);
 
-            if (converted is IContentDelta cd)
+            if (converted is StreamChunk cd)
             {
                 bool hasSubsequentSameStream = list.Skip(i + 1).Any(next =>
                 {
                     var nextConverted = ConvertToDelta(next);
-                    if (nextConverted is not IContentDelta nextCd) return false;
+                    if (nextConverted is not StreamChunk nextCd) return false;
                     if (!string.IsNullOrEmpty(cd.Id) && !string.IsNullOrEmpty(nextCd.Id))
                         return string.Equals(cd.Id, nextCd.Id, StringComparison.Ordinal);
                     if (cd.Index.HasValue && nextCd.Index.HasValue)
                         return cd.Index.Value == nextCd.Index.Value;
-                    return cd.GetType() == nextCd.GetType();
+                    return cd.Content.GetType() == nextCd.Content.GetType();
                 });
 
                 if (!hasSubsequentSameStream)
                 {
-                    converted = cd switch
-                    {
-                        TextDelta td => td with { IsFinal = true },
-                        ReasoningDelta rd => rd with { IsFinal = true },
-                        ToolCallDelta tcd => tcd with { IsFinal = true },
-                        _ => converted
-                    };
+                    converted = cd with { IsFinal = true };
                 }
             }
 
