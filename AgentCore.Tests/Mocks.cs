@@ -9,7 +9,7 @@ namespace AgentCore.Tests;
 
 public class MockLLMProvider : ILLM
 {
-    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<ILLMOutput>>> _responses = new();
+    private readonly Queue<Func<CancellationToken, IAsyncEnumerable<IMessageEvent>>> _responses = new();
 
     public int ContextWindow { get; set; } = 4096;
     public int ReservedTokens { get; set; } = 512;
@@ -20,36 +20,36 @@ public class MockLLMProvider : ILLM
 
     public int CallCount => CapturedMessages.Count;
 
-    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<ILLMOutput>> generator)
+    public void Enqueue(Func<CancellationToken, IAsyncEnumerable<IMessageEvent>> generator)
     {
         _responses.Enqueue(generator);
     }
 
-    private static IEnumerable<ILLMOutput> ConvertToEvents(object evt)
+    private static IEnumerable<IMessageEvent> ConvertToEvents(object evt)
     {
         switch (evt)
         {
             case Text t:
-                yield return new TextDelta(t.Value);
-                yield return new TextEnd();
+                yield return new TextContentDelta(t.Value);
+                yield return new TextContentEnd();
                 break;
             case Reasoning r:
-                yield return new ReasoningDelta(r.Thought);
-                yield return new ReasoningEnd();
+                yield return new ReasoningContentDelta(r.Thought);
+                yield return new ReasoningContentEnd();
                 break;
             case ToolCall tc:
             {
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
-                yield return new ToolCallStart(id, tc.Name, tc.Index);
+                yield return new ToolCallContentStart(id, tc.Name, tc.Index);
                 var args = tc.Arguments?.ToJsonString() ?? tc.RawArguments ?? "";
                 if (!string.IsNullOrEmpty(args))
                 {
-                    yield return new ToolCallDelta(id, args, tc.Index);
+                    yield return new ToolCallContentDelta(id, args, tc.Index);
                 }
-                yield return new ToolCallEnd(id, tc.Index);
+                yield return new ToolCallContentEnd(id, tc.Index);
                 break;
             }
-            case ILLMOutput output:
+            case IMessageEvent output:
                 yield return output;
                 break;
             default:
@@ -72,15 +72,16 @@ public class MockLLMProvider : ILLM
         Enqueue(ct => ThrowException(ex, ct));
     }
 
-    private static async IAsyncEnumerable<ILLMOutput> ThrowException(Exception ex, [EnumeratorCancellation] CancellationToken ct)
+    private static async IAsyncEnumerable<IMessageEvent> ThrowException(Exception ex, [EnumeratorCancellation] CancellationToken ct)
     {
         await Task.Yield();
         throw ex;
         yield break;
     }
 
-    private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
+    private static async IAsyncEnumerable<IMessageEvent> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
     {
+        yield return new MessageStart(Role.Assistant);
         foreach (var item in items)
         {
             await Task.Yield();
@@ -89,12 +90,13 @@ public class MockLLMProvider : ILLM
                 yield return evt;
             }
         }
+        yield return new MessageEnd();
     }
 
 
 
 
-    public async IAsyncEnumerable<ILLMOutput> StreamAsync(
+    public async IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -104,7 +106,7 @@ public class MockLLMProvider : ILLM
         CapturedTools.Add(tools);
         CapturedResponseSchemas.Add(responseSchema);
 
-        var generator = _responses.Count > 0 ? _responses.Dequeue() : (ct => ToAsyncEnumerable(Enumerable.Empty<ILLMOutput>(), ct));
+        var generator = _responses.Count > 0 ? _responses.Dequeue() : (ct => ToAsyncEnumerable(Enumerable.Empty<IMessageEvent>(), ct));
         await foreach (var item in generator(ct).WithCancellation(ct).ConfigureAwait(false))
         {
             yield return item;
@@ -150,8 +152,12 @@ public class MockMemoryProvider : IContext
     }
 
     public Task CommitAsync(
+        Message response,
+        CancellationToken ct = default)
+        => CommitAsync([response], ct);
+
+    public Task CommitAsync(
         IReadOnlyList<Message> response,
-        TokenUsage? usage = null,
         CancellationToken ct = default)
     {
         _internalMessages.Clear();

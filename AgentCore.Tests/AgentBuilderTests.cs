@@ -102,11 +102,10 @@ public class AgentBuilderTests
 
         public override async Task CommitAsync(
             IReadOnlyList<Message> response,
-            TokenUsage? usage = null,
             CancellationToken ct = default)
         {
             CallLog.Add("Commit");
-            await base.CommitAsync(response, usage, ct).ConfigureAwait(false);
+            await base.CommitAsync(response, ct).ConfigureAwait(false);
         }
     }
 
@@ -145,7 +144,7 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override IAsyncEnumerable<ILLMOutput> StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<IMessageEvent> StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
             return base.StreamAsync(messages, responseSchema, tools, ct);
@@ -179,11 +178,10 @@ public class AgentBuilderTests
 
         public override async Task CommitAsync(
             IReadOnlyList<Message> response,
-            TokenUsage? usage = null,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            await base.CommitAsync(response, usage, ct).ConfigureAwait(false);
+            await base.CommitAsync(response, ct).ConfigureAwait(false);
         }
     }
 

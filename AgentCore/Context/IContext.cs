@@ -13,7 +13,10 @@ public interface IContext
         CancellationToken ct = default);
 
     Task CommitAsync(
+        Message response,
+        CancellationToken ct = default);
+
+    Task CommitAsync(
         IReadOnlyList<Message> response,
-        TokenUsage? usage = null,
         CancellationToken ct = default);
 }

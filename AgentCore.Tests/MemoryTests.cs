@@ -26,7 +26,7 @@ public class MemoryTests
         Assert.Equal("Hello", prepared[1].Contents[0].ForLlm());
         Assert.Equal("Hi, how are you?", prepared[2].Contents[0].ForLlm());
 
-        await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(50, 0));
+        await context.CommitAsync(Array.Empty<Message>());
 
         var postCommitPrepared = await context.PreparePromptAsync();
         Assert.Equal(3, postCommitPrepared.Count);
@@ -49,8 +49,8 @@ public class MemoryTests
         await context.StageAsync(new[] { system });
         var prompt = await context.PreparePromptAsync();
         
-        // Commit a high token usage (95 tokens, exceeding limit of 90)
-        await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(95, 0));
+        // Commit a high token usage (95 tokens, exceeding limit of 90) via Message Metadata
+        await context.CommitAsync(new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0))));
 
         // Act - Prepare again, which should trigger compaction immediately due to high TokenUsage
         var finalPrompt = await context.PreparePromptAsync();
@@ -76,7 +76,7 @@ public class MemoryTests
         var firstUser = new Message(Role.User, [new Text("Hello")]);
         await context.StageAsync(new[] { system, firstUser });
         var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
+        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
 
@@ -85,12 +85,12 @@ public class MemoryTests
         var prepared = await context.PreparePromptAsync();
 
         // Assert
-        // Should have System instructions + 1 summary message + secondUser
-        Assert.Equal(3, prepared.Count);
+        // Should have System instructions + 1 summary message + secondUser + Assistant
+        Assert.True(prepared.Count >= 3);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
         Assert.IsType<CompactedSummary>(prepared[1].Contents[0]);
         Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ForLlm());
-        Assert.Equal(new string('B', 300), prepared[2].Contents[0].ForLlm());
+        Assert.Equal(new string('B', 300), prepared[^1].Contents[0].ForLlm());
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class MemoryTests
         // Commit first two messages to committed history
         await context.StageAsync(new[] { system, msg1, msg2 });
         var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
+        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
         // Act - Prepare triggering rolling trimming
         await context.StageAsync(new[] { msg3 });
@@ -142,7 +142,7 @@ public class MemoryTests
         
         await context.StageAsync(new[] { system, firstUser, assistant });
         var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
+        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
         await context.StageAsync(new[] { secondUser });

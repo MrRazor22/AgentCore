@@ -15,13 +15,12 @@ public class ChatContext : IContext
     private readonly int _contextWindow;
     private readonly int _reserveTokens;
     private readonly int _limit;
+    private int _committedTokens;
 
     private const double CharsPerToken = 4.0;
     private const double SafetyMargin = 1.15;
 
     private readonly object _lock = new();
-
-    private TokenUsage TokenUsage { get; set; } = new(0, 0);
 
     public ChatContext(int contextWindow = 50000, int? reserveTokens = null, ILLM? summarizer = null, ILogger<ChatContext>? logger = null)
     {
@@ -47,14 +46,12 @@ public class ChatContext : IContext
         CancellationToken ct = default)
     {
         int stagedEstimate;
-        int currentUsage;
+        int estimatedTotal;
         lock (_lock)
-        { 
-            currentUsage = TokenUsage.InputTokens + TokenUsage.OutputTokens;
-            stagedEstimate = _staged.Sum(m => Estimate(m));
+        {
+            stagedEstimate = _staged.Sum(Estimate);
+            estimatedTotal = _committedTokens + stagedEstimate;
         }
-
-        int estimatedTotal = currentUsage + stagedEstimate;
 
         _logger?.LogInformation(
              "Preparing prompt. Strategy={Strategy}, StagedMessages={StagedMessages}, StagedTokens={StagedTokens}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
@@ -83,8 +80,32 @@ public class ChatContext : IContext
     }
 
     public Task CommitAsync(
+        Message response,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        lock (_lock)
+        {
+            _chat.AddRange(_staged);
+            _chat.Add(response);
+            _staged.Clear();
+
+            _committedTokens = response.Metadata?.Usage != null
+                ? (response.Metadata.Usage.InputTokens + response.Metadata.Usage.OutputTokens)
+                : _chat.Sum(Estimate);
+        }
+
+        _logger?.LogInformation(
+            "Conversation updated. TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
+            _chat.Count,
+            _committedTokens);
+
+        return Task.CompletedTask;
+    }
+
+    public Task CommitAsync(
         IReadOnlyList<Message> response,
-        TokenUsage? usage = null,
         CancellationToken ct = default)
     {
         if (response == null) throw new ArgumentNullException(nameof(response));
@@ -93,26 +114,18 @@ public class ChatContext : IContext
         {
             _chat.AddRange(_staged);
             _chat.AddRange(response);
-
-            if (usage != null)
-            {
-                TokenUsage = usage;
-            }
-            else
-            {
-                TokenUsage = new TokenUsage(
-                    InputTokens: TokenUsage.InputTokens + _staged.Sum(Estimate),
-                    OutputTokens: TokenUsage.OutputTokens + response.Sum(Estimate)
-                );
-            }
-
             _staged.Clear();
+
+            var lastUsage = response.LastOrDefault(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
+            _committedTokens = lastUsage != null
+                ? (lastUsage.InputTokens + lastUsage.OutputTokens)
+                : _chat.Sum(Estimate);
         }
+
         _logger?.LogInformation(
-            "Conversation updated. TotalMessages={TotalMessages}, InputTokens={InputTokens}, OutputTokens={OutputTokens}",
+            "Conversation updated. TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
             _chat.Count,
-            TokenUsage.InputTokens,
-            TokenUsage.OutputTokens);
+            _committedTokens);
 
         return Task.CompletedTask;
     }
@@ -136,7 +149,7 @@ public class ChatContext : IContext
                 {
                     _chat.RemoveAt(startIndex);
                 }
-                TokenUsage = new TokenUsage(_chat.Sum(Estimate), 0);
+                _committedTokens = _chat.Sum(Estimate);
             }
         }
     }
@@ -157,19 +170,8 @@ public class ChatContext : IContext
         {
             try
             {
-                var assembler = new AgentCore.LLM.Chat.ContentAssembler();
-                string summary = string.Empty;
-                await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
-                {
-                    foreach (var content in assembler.Receive(evt))
-                    {
-                        if (content is Text t)
-                        {
-                            summary = t.Value;
-                        }
-                    }
-                }
-
+                var message = await _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ToMessageAsync(ct).ConfigureAwait(false);
+                var summary = message.Contents.OfType<Text>().FirstOrDefault()?.Value ?? string.Empty;
                 return summary.Trim();
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -202,8 +204,7 @@ public class ChatContext : IContext
             _chat.Clear();
             if (systemMessage != null) _chat.Add(systemMessage);
             _chat.Add(new Message(Role.User, new CompactedSummary(summary)));
-
-            TokenUsage = new TokenUsage(_chat.Sum(Estimate), 0);
+            _committedTokens = _chat.Sum(Estimate);
         }
     }
 

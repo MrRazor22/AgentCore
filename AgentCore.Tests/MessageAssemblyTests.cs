@@ -20,17 +20,17 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void ContentAssembler_SequentialToolCalls_MergesCorrectly()
+    public void MessageAccumulator_SequentialToolCalls_MergesCorrectly()
     {
-        var assembler = new ContentAssembler();
-        var sequence = new List<ILLMOutput>
+        var accumulator = new MessageAccumulator();
+        var sequence = new List<IMessageEvent>
         {
-            new ToolCallStart("ABC", "RunCommand", Index: 0),
-            new ToolCallDelta("ABC", "{\"commandLine\":\"ls\"}", Index: 0),
-            new ToolCallEnd("ABC", Index: 0)
+            new ToolCallContentStart("ABC", "RunCommand", Index: 0),
+            new ToolCallContentDelta("ABC", "{\"commandLine\":\"ls\"}", Index: 0),
+            new ToolCallContentEnd("ABC", Index: 0)
         };
 
-        var contents = sequence.SelectMany(assembler.Receive).ToList();
+        var contents = sequence.SelectMany(accumulator.Receive).ToList();
         Assert.NotNull(contents);
         var calls = contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
@@ -40,22 +40,22 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void ContentAssembler_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
+    public void MessageAccumulator_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
     {
-        var assembler = new ContentAssembler();
-        var sequence = new List<ILLMOutput>
+        var accumulator = new MessageAccumulator();
+        var sequence = new List<IMessageEvent>
         {
-            new ToolCallStart("A", "RunCommand", Index: 0),
-            new ToolCallStart("B", "SearchWeb", Index: 1),
-            new ToolCallDelta("A", "{\"commandLine\":", Index: 0),
-            new ToolCallDelta("B", "{\"query\":", Index: 1),
-            new ToolCallDelta("A", "\"ls\"}", Index: 0),
-            new ToolCallDelta("B", "\"test\"}", Index: 1),
-            new ToolCallEnd("A", Index: 0),
-            new ToolCallEnd("B", Index: 1)
+            new ToolCallContentStart("A", "RunCommand", Index: 0),
+            new ToolCallContentStart("B", "SearchWeb", Index: 1),
+            new ToolCallContentDelta("A", "{\"commandLine\":", Index: 0),
+            new ToolCallContentDelta("B", "{\"query\":", Index: 1),
+            new ToolCallContentDelta("A", "\"ls\"}", Index: 0),
+            new ToolCallContentDelta("B", "\"test\"}", Index: 1),
+            new ToolCallContentEnd("A", Index: 0),
+            new ToolCallContentEnd("B", Index: 1)
         };
 
-        var contents = sequence.SelectMany(assembler.Receive).ToList();
+        var contents = sequence.SelectMany(accumulator.Receive).ToList();
         Assert.NotNull(contents);
         var calls = contents.OfType<ToolCall>().ToList();
 
@@ -71,52 +71,64 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
+    public void MessageAccumulator_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var message = new Message(Role.Assistant);
+        var accumulator = new MessageAccumulator();
 
-        message.Receive(new ReasoningDelta("Thinking deeply..."));
-        var r1 = message.Receive(new ReasoningEnd()).ToList();
+        accumulator.Receive(new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"));
+        accumulator.Receive(new ReasoningContentDelta("Thinking deeply..."));
+        var r1 = accumulator.Receive(new ReasoningContentEnd()).ToList();
         Assert.Single(r1);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(r1[0]).Thought);
 
-        message.Receive(new TextDelta("Here is the answer."));
-        var r2 = message.Receive(new TextEnd()).ToList();
+        accumulator.Receive(new TextContentDelta("Here is the answer."));
+        var r2 = accumulator.Receive(new TextContentEnd()).ToList();
         Assert.Single(r2);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(r2[0]).Value);
 
+        accumulator.Receive(new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20)));
+        var message = accumulator.ToMessage();
+
         Assert.Equal(2, message.Contents.Count);
+        Assert.Equal(Role.Assistant, message.Role);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
+        Assert.NotNull(message.Metadata);
+        Assert.Equal("msg_123", message.Metadata.Id);
+        Assert.Equal("gpt-4o", message.Metadata.Model);
+        Assert.Equal("stop", message.Metadata.FinishReason);
+        Assert.Equal(10, message.Metadata.Usage?.InputTokens);
+        Assert.Equal(20, message.Metadata.Usage?.OutputTokens);
     }
 
     [Fact]
-    public void Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public void MessageAccumulator_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
     {
-        var message = new Message(Role.Assistant);
+        var accumulator = new MessageAccumulator();
 
         // Reasoning
-        message.Receive(new ReasoningDelta("Step 1: Analyze"));
-        var r1 = message.Receive(new ReasoningEnd()).ToList();
+        accumulator.Receive(new ReasoningContentDelta("Step 1: Analyze"));
+        var r1 = accumulator.Receive(new ReasoningContentEnd()).ToList();
         Assert.Single(r1);
         Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
 
         // ToolCall
-        message.Receive(new ToolCallStart("call_1", "lookup"));
-        message.Receive(new ToolCallDelta("call_1", "{\"q\":"));
-        message.Receive(new ToolCallDelta("call_1", "\"test\"}"));
-        var r2 = message.Receive(new ToolCallEnd("call_1")).ToList();
+        accumulator.Receive(new ToolCallContentStart("call_1", "lookup"));
+        accumulator.Receive(new ToolCallContentDelta("call_1", "{\"q\":"));
+        accumulator.Receive(new ToolCallContentDelta("call_1", "\"test\"}"));
+        var r2 = accumulator.Receive(new ToolCallContentEnd("call_1")).ToList();
         Assert.Single(r2);
         var tc = Assert.IsType<ToolCall>(r2[0]);
         Assert.Equal("call_1", tc.Id);
         Assert.Equal("lookup", tc.Name);
 
         // Text
-        message.Receive(new TextDelta("The result is ready."));
-        var r3 = message.Receive(new TextEnd()).ToList();
+        accumulator.Receive(new TextContentDelta("The result is ready."));
+        var r3 = accumulator.Receive(new TextContentEnd()).ToList();
         Assert.Single(r3);
         Assert.Equal("The result is ready.", Assert.IsType<Text>(r3[0]).Value);
 
+        var message = accumulator.ToMessage();
         Assert.Equal(3, message.Contents.Count);
         Assert.IsType<Reasoning>(message.Contents[0]);
         Assert.IsType<ToolCall>(message.Contents[1]);
@@ -124,39 +136,39 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void ContentAssembler_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
+    public void MessageAccumulator_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
     {
-        var assembler = new ContentAssembler();
+        var accumulator = new MessageAccumulator();
 
         // Start 3 parallel tool calls
-        assembler.Receive(new ToolCallStart("call_A", "ToolA", Index: 0)).ToList();
-        assembler.Receive(new ToolCallDelta("call_A", "{\"a\":", Index: 0)).ToList();
+        accumulator.Receive(new ToolCallContentStart("call_A", "ToolA", Index: 0)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_A", "{\"a\":", Index: 0)).ToList();
 
-        assembler.Receive(new ToolCallStart("call_B", "ToolB", Index: 1)).ToList();
-        assembler.Receive(new ToolCallDelta("call_B", "{\"b\":", Index: 1)).ToList();
+        accumulator.Receive(new ToolCallContentStart("call_B", "ToolB", Index: 1)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_B", "{\"b\":", Index: 1)).ToList();
 
-        assembler.Receive(new ToolCallStart("call_C", "ToolC", Index: 2)).ToList();
-        assembler.Receive(new ToolCallDelta("call_C", "{\"c\":", Index: 2)).ToList();
+        accumulator.Receive(new ToolCallContentStart("call_C", "ToolC", Index: 2)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_C", "{\"c\":", Index: 2)).ToList();
 
         // ToolCall B finishes FIRST
-        assembler.Receive(new ToolCallDelta("call_B", "2}", Index: 1)).ToList();
-        var bFinish = assembler.Receive(new ToolCallEnd("call_B", Index: 1)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_B", "2}", Index: 1)).ToList();
+        var bFinish = accumulator.Receive(new ToolCallContentEnd("call_B", Index: 1)).ToList();
         Assert.Single(bFinish);
         var tcB = Assert.IsType<ToolCall>(bFinish[0]);
         Assert.Equal("call_B", tcB.Id);
         Assert.Equal("ToolB", tcB.Name);
 
         // ToolCall A and C continue accumulation
-        assembler.Receive(new ToolCallDelta("call_A", "1}", Index: 0)).ToList();
-        assembler.Receive(new ToolCallDelta("call_C", "3}", Index: 2)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_A", "1}", Index: 0)).ToList();
+        accumulator.Receive(new ToolCallContentDelta("call_C", "3}", Index: 2)).ToList();
 
         // ToolCall C finishes SECOND
-        var cFinish = assembler.Receive(new ToolCallEnd("call_C", Index: 2)).ToList();
+        var cFinish = accumulator.Receive(new ToolCallContentEnd("call_C", Index: 2)).ToList();
         Assert.Single(cFinish);
         Assert.Equal("call_C", Assert.IsType<ToolCall>(cFinish[0]).Id);
 
         // ToolCall A finishes LAST
-        var aFinish = assembler.Receive(new ToolCallEnd("call_A", Index: 0)).ToList();
+        var aFinish = accumulator.Receive(new ToolCallContentEnd("call_A", Index: 0)).ToList();
         Assert.Single(aFinish);
         Assert.Equal("call_A", Assert.IsType<ToolCall>(aFinish[0]).Id);
     }

@@ -14,9 +14,9 @@ public sealed class StreamingLLMLayer : LLMLayer
 {
 
 
-    internal ChannelWriter<ILLMOutput>? Writer { get; set; }
+    internal ChannelWriter<IMessageEvent>? Writer { get; set; }
 
-    public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
+    public override async IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,

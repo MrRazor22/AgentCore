@@ -17,16 +17,16 @@ public class StreamingLLMLayerTests
 {
     private class MockLLM : ILLM
     {
-        private readonly List<ILLMOutput> _outputs;
+        private readonly List<IMessageEvent> _outputs;
 
-        public MockLLM(List<ILLMOutput> outputs)
+        public MockLLM(List<IMessageEvent> outputs)
         {
             _outputs = outputs;
         }
 
 
 
-        public async IAsyncEnumerable<ILLMOutput> StreamAsync(
+        public async IAsyncEnumerable<IMessageEvent> StreamAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
             IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
@@ -47,15 +47,15 @@ public class StreamingLLMLayerTests
     [Fact]
     public async Task StreamAsync_ForwardsOutputsInOrderToChannelAndStream()
     {
-        var expectedOutputs = new List<ILLMOutput>
+        var expectedOutputs = new List<IMessageEvent>
         {
-            new ReasoningDelta("Thinking hard"),
-            new TextDelta("Hello "),
-            new TextDelta("world!"),
-            new ToolCallStart("tc-1", "test_tool"),
-            new ToolCallEnd("tc-1"),
-            new TokenUsage(10, 20, null),
-            new FinishReason("stop")
+            new MessageStart(Role.Assistant),
+            new ReasoningContentDelta("Thinking hard"),
+            new TextContentDelta("Hello "),
+            new TextContentDelta("world!"),
+            new ToolCallContentStart("tc-1", "test_tool"),
+            new ToolCallContentEnd("tc-1"),
+            new MessageEnd("stop", new TokenUsage(10, 20))
         };
 
         var mockInner = new MockLLM(expectedOutputs);
@@ -63,11 +63,11 @@ public class StreamingLLMLayerTests
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
-        var channel = Channel.CreateUnbounded<ILLMOutput>();
+        var channel = Channel.CreateUnbounded<IMessageEvent>();
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var streamedResults = new List<ILLMOutput>();
+        var streamedResults = new List<IMessageEvent>();
 
         await foreach (var output in layer.StreamAsync(messages))
         {
@@ -75,7 +75,7 @@ public class StreamingLLMLayerTests
         }
 
         channel.Writer.Complete();
-        var channelResults = new List<ILLMOutput>();
+        var channelResults = new List<IMessageEvent>();
         await foreach (var output in channel.Reader.ReadAllAsync())
         {
             channelResults.Add(output);
@@ -90,18 +90,20 @@ public class StreamingLLMLayerTests
             Assert.Same(expectedOutputs[i], channelResults[i]);
         }
 
-        Assert.Equal("Thinking hard", ((ReasoningDelta)channelResults[0]).Thought);
-        Assert.Equal("Hello ", ((TextDelta)channelResults[1]).Text);
-        Assert.Equal("world!", ((TextDelta)channelResults[2]).Text);
-        Assert.Equal("tc-1", ((ToolCallStart)channelResults[3]).Id);
-        Assert.Equal(10, ((TokenUsage)channelResults[5]).InputTokens);
-        Assert.Equal("stop", ((FinishReason)channelResults[6]).Value);
+        Assert.Equal("Thinking hard", ((ReasoningContentDelta)channelResults[1]).Thought);
+        Assert.Equal("Hello ", ((TextContentDelta)channelResults[2]).Text);
+        Assert.Equal("world!", ((TextContentDelta)channelResults[3]).Text);
+        Assert.Equal("tc-1", ((ToolCallContentStart)channelResults[4]).Id);
+        var end = (MessageEnd)channelResults[6];
+        Assert.Equal("stop", end.FinishReason);
+        Assert.Equal(10, end.Usage?.InputTokens);
+        Assert.Equal(20, end.Usage?.OutputTokens);
     }
 
     [Fact]
     public async Task StreamAsync_CancellationPropagatesCorrectly()
     {
-        var outputs = new List<ILLMOutput> { new TextDelta("hi") };
+        var outputs = new List<IMessageEvent> { new TextContentDelta("hi") };
         var mockInner = new MockLLM(outputs);
         var layer = new StreamingLLMLayer();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);

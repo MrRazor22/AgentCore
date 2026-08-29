@@ -3,34 +3,35 @@ using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat;
 
-public class Message(Role role, IReadOnlyList<IContent>? contents = null)
+public sealed record MessageMetadata(
+    [property: JsonPropertyName("id")] string? Id = null,
+    [property: JsonPropertyName("model")] string? Model = null,
+    [property: JsonPropertyName("finish_reason")] string? FinishReason = null,
+    [property: JsonPropertyName("usage")] TokenUsage? Usage = null
+);
+
+public class Message
 {
-    private readonly List<IContent> _contents = contents != null ? [.. contents] : [];
-    private readonly ContentAssembler _assembler = new();
+    private readonly List<IContent> _contents;
 
     [JsonPropertyName("role")]
-    public Role Role { get; } = role;
+    public Role Role { get; }
 
     [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents => _contents;
 
-    public Message(Role role, IContent content) : this(role, [content]) { }
-    public Message(Role role, params IContent[] contents) : this(role, (IReadOnlyList<IContent>)contents) { }
+    [JsonPropertyName("metadata")]
+    public MessageMetadata? Metadata { get; }
 
-    /// <summary>
-    /// Ingests a streaming lifecycle event, committing and returning any completed <see cref="IContent"/> items.
-    /// </summary>
-    public IReadOnlyList<IContent> Receive(ILLMOutput output)
+    public Message(Role role, IReadOnlyList<IContent>? contents = null, MessageMetadata? metadata = null)
     {
-        ArgumentNullException.ThrowIfNull(output);
-
-        var completed = _assembler.Receive(output);
-        if (completed.Count > 0)
-        {
-            _contents.AddRange(completed);
-        }
-        return completed;
+        Role = role;
+        _contents = contents != null ? [.. contents] : [];
+        Metadata = metadata;
     }
+
+    public Message(Role role, IContent content) : this(role, [content], null) { }
+    public Message(Role role, params IContent[] contents) : this(role, (IReadOnlyList<IContent>)contents, null) { }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]

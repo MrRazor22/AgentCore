@@ -25,7 +25,7 @@ public class AgentTests
         );
         await memory.StageAsync(new[] { new Message(Role.User, [new Text("Old message")]) });
         var prompt = await memory.PreparePromptAsync();
-        await memory.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
+        await memory.CommitAsync(Array.Empty<Message>());
 
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)
@@ -120,10 +120,10 @@ public class AgentTests
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(
-            new TextDelta("Streaming "),
-            new TextDelta("reply"),
-            new TextEnd(),
-            new FinishReason("stop")
+            new TextContentDelta("Streaming "),
+            new TextContentDelta("reply"),
+            new TextContentEnd(),
+            new MessageEnd(FinishReason: "stop")
         );
 
         var agent = Agent.Create()

@@ -32,7 +32,7 @@ public class ToolCallDetectionLayer : LLMLayer
         _options = options ?? new ToolCallDetectionOptions();
     }
 
-    public override async IAsyncEnumerable<ILLMOutput> StreamAsync(
+    public override async IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -51,12 +51,12 @@ public class ToolCallDetectionLayer : LLMLayer
         }
 
         Type? currentType = null;
-        var segmentBuffer = new List<ILLMOutput>();
+        var segmentBuffer = new List<IMessageEvent>();
         var totalToolCallsEmitted = 0;
 
         await foreach (var item in innerStream.WithCancellation(ct).ConfigureAwait(false))
         {
-            var isTextOrReasoning = item is TextDelta or ReasoningDelta;
+            var isTextOrReasoning = item is TextContentDelta or ReasoningContentDelta;
             var itemType = isTextOrReasoning ? item.GetType() : null;
 
             if (currentType != null && (itemType != currentType || !isTextOrReasoning))
@@ -64,7 +64,7 @@ public class ToolCallDetectionLayer : LLMLayer
                 foreach (var emitted in FlushSegment(segmentBuffer, currentType, toolNames))
                 {
                     yield return emitted;
-                    if (emitted is ToolCallStart) totalToolCallsEmitted++;
+                    if (emitted is ToolCallContentStart) totalToolCallsEmitted++;
                 }
                 segmentBuffer.Clear();
                 currentType = null;
@@ -99,7 +99,7 @@ public class ToolCallDetectionLayer : LLMLayer
         }
     }
 
-    private static IEnumerable<ILLMOutput> FlushSegment(List<ILLMOutput> buffer, Type type, HashSet<string> toolNames)
+    private static IEnumerable<IMessageEvent> FlushSegment(List<IMessageEvent> buffer, Type type, HashSet<string> toolNames)
     {
         if (buffer.Count == 0) yield break;
 
@@ -135,28 +135,28 @@ public class ToolCallDetectionLayer : LLMLayer
         }
     }
 
-    private static string GetChunkText(ILLMOutput chunk)
+    private static string GetChunkText(IMessageEvent chunk)
     {
         return chunk switch
         {
-            TextDelta tc => tc.Text,
-            ReasoningDelta rc => rc.Thought,
+            TextContentDelta tc => tc.Text,
+            ReasoningContentDelta rc => rc.Thought,
             _ => ""
         };
     }
 
-    private static ILLMOutput CreateDelta(Type type, string text)
+    private static IMessageEvent CreateDelta(Type type, string text)
     {
-        return type == typeof(ReasoningDelta)
-            ? new ReasoningDelta(text)
-            : new TextDelta(text);
+        return type == typeof(ReasoningContentDelta)
+            ? new ReasoningContentDelta(text)
+            : new TextContentDelta(text);
     }
 
     private struct ParseResult
     {
         public bool Success;
         public bool IsDefiniteFailure;
-        public List<ILLMOutput>? ToolCallEvents;
+        public List<IMessageEvent>? ToolCallEvents;
         public int LeadingTextIndex;
         public int MatchedEndIndex;
     }
@@ -252,7 +252,7 @@ public class ToolCallDetectionLayer : LLMLayer
         return new ParseResult { Success = false };
     }
 
-    private static List<ILLMOutput>? TryExtractFromJson(string jsonStr, HashSet<string> toolNames)
+    private static List<IMessageEvent>? TryExtractFromJson(string jsonStr, HashSet<string> toolNames)
     {
         try
         {
@@ -265,9 +265,9 @@ public class ToolCallDetectionLayer : LLMLayer
                     var callId = Guid.NewGuid().ToString("N");
                     return
                     [
-                        new ToolCallStart(callId, name),
-                        new ToolCallDelta(callId, args.ToJsonString()),
-                        new ToolCallEnd(callId)
+                        new ToolCallContentStart(callId, name),
+                        new ToolCallContentDelta(callId, args.ToJsonString()),
+                        new ToolCallContentEnd(callId)
                     ];
                 }
             }
@@ -276,7 +276,7 @@ public class ToolCallDetectionLayer : LLMLayer
         return null;
     }
 
-    private static List<ILLMOutput>? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
+    private static List<IMessageEvent>? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
     {
         var functionMatch = Regex.Match(content, @"(?i)<function\s*(?:=|\bname\s*=)\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>");
         if (!functionMatch.Success) return null;
@@ -298,9 +298,9 @@ public class ToolCallDetectionLayer : LLMLayer
         var callId = Guid.NewGuid().ToString("N");
         return
         [
-            new ToolCallStart(callId, funcName),
-            new ToolCallDelta(callId, argsObj.ToJsonString()),
-            new ToolCallEnd(callId)
+            new ToolCallContentStart(callId, funcName),
+            new ToolCallContentDelta(callId, argsObj.ToJsonString()),
+            new ToolCallContentEnd(callId)
         ];
     }
 }

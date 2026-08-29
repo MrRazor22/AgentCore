@@ -13,12 +13,12 @@ using System.Threading.Tasks;
 namespace CodeSharp.UI
 {
     /// <summary>
-    /// Wraps a completed <see cref="ToolResult"/> as an <see cref="ILLMOutput"/> so it can be
+    /// Wraps a completed <see cref="ToolResult"/> as an <see cref="IMessageEvent"/> so it can be
     /// written into the same channel as raw LLM token deltas. Because the channel is FIFO and has
     /// a single reader, this guarantees the result is rendered strictly after every preceding LLM
     /// token for that iteration — with no locking or timing assumptions required.
     /// </summary>
-    internal sealed record ToolResultOutput(ToolResult Result) : ILLMOutput;
+    internal sealed record ToolResultOutput(ToolResult Result) : IMessageEvent;
 
     public sealed class ConsoleStreamRenderer
     {
@@ -73,9 +73,9 @@ namespace CodeSharp.UI
             _answerStarted = false;
         }
 
-        public void Write(ILLMOutput output)
+        public void Write(IMessageEvent output)
         {
-            if (output is FinishReason)
+            if (output is MessageEnd)
             {
                 ResetForNextStep();
                 return;
@@ -83,7 +83,9 @@ namespace CodeSharp.UI
 
             switch (output)
             {
-                case ReasoningDelta reasoning:
+                case MessageStart:
+                    break;
+                case ReasoningContentDelta reasoning:
                     FinalizeAllToolCalls();
                     if (_thinkingWriter == null)
                     {
@@ -101,11 +103,11 @@ namespace CodeSharp.UI
                     }
                     break;
 
-                case ReasoningEnd:
+                case ReasoningContentEnd:
                     FinalizeThinking();
                     break;
 
-                case TextDelta text:
+                case TextContentDelta text:
                     if (!_answerStarted)
                     {
                         StopSpinner();
@@ -126,7 +128,7 @@ namespace CodeSharp.UI
                     }
                     break;
 
-                case ToolCallStart tcStart:
+                case ToolCallContentStart tcStart:
                     StopSpinner();
                     FinalizeThinking();
                     FinalizeAllToolCalls();
@@ -143,7 +145,7 @@ namespace CodeSharp.UI
                     _toolCalls.Add(newToolCall);
                     break;
 
-                case ToolCallDelta tcDelta:
+                case ToolCallContentDelta tcDelta:
                     StopSpinner();
                     FinalizeThinking();
 
@@ -166,7 +168,7 @@ namespace CodeSharp.UI
                     }
                     break;
 
-                case ToolCallEnd end:
+                case ToolCallContentEnd end:
                     var endingCall = _toolCalls.FirstOrDefault(t => t.Id == end.Id);
                     if (endingCall != null)
                     {

@@ -97,13 +97,13 @@ public class LiveAgentTests
         var resolvedLlm = OpenAICompatibleFixture.CreateChatClient();
         var meaiLlm = new MEAILLM(resolvedLlm);
         
-        var rawOutputs = new List<ILLMOutput>();
+        var rawOutputs = new List<IMessageEvent>();
         await foreach (var rawOut in meaiLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
         {
             rawOutputs.Add(rawOut);
         }
 
-        var metadataItem = rawOutputs.OfType<TokenUsage>().FirstOrDefault();
+        var metadataItem = rawOutputs.OfType<MessageEnd>().FirstOrDefault()?.Usage;
         if (metadataItem != null)
         {
             // If the provider supports token usage extraction, verify it captures it

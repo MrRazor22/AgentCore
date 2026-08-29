@@ -31,8 +31,12 @@ public abstract class ContextLayer : IContext
         => Inner.PreparePromptAsync(ct);
 
     public virtual Task CommitAsync(
-        IReadOnlyList<Message> response,
-        TokenUsage? usage = null,
+        Message response,
         CancellationToken ct = default)
-        => Inner.CommitAsync(response, usage, ct);
+        => CommitAsync([response], ct);
+
+    public virtual Task CommitAsync(
+        IReadOnlyList<Message> response,
+        CancellationToken ct = default)
+        => Inner.CommitAsync(response, ct);
 }

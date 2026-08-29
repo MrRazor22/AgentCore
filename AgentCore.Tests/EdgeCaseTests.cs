@@ -24,7 +24,7 @@ namespace AgentCore.Tests
 
         private class MockLLM : ILLM
         {
-            private readonly Queue<Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<ILLMOutput>>>> _responses = new();
+            private readonly Queue<Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<IMessageEvent>>>> _responses = new();
 
             public int ContextWindow { get; set; } = 4096;
             public int ReservedTokens { get; set; } = 512;
@@ -33,25 +33,26 @@ namespace AgentCore.Tests
 
 
 
-            public void Enqueue(Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<ILLMOutput>>> responseGenerator)
+            public void Enqueue(Func<IReadOnlyList<Message>, Task<IAsyncEnumerable<IMessageEvent>>> responseGenerator)
             {
                 _responses.Enqueue(responseGenerator);
             }
 
             public void EnqueueSimpleText(string text)
             {
-                Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
-                    new ILLMOutput[]
+                Enqueue(messages => Task.FromResult<IAsyncEnumerable<IMessageEvent>>(
+                    new IMessageEvent[]
                     {
-                        new TextDelta(text),
-                        new TextEnd(),
-                        new FinishReason("stop")
+                        new MessageStart(Role.Assistant),
+                        new TextContentDelta(text),
+                        new TextContentEnd(),
+                        new MessageEnd("stop")
                     }.ToAsyncEnumerable()
                 ));
             }
 
 
-            public IAsyncEnumerable<ILLMOutput> StreamAsync(
+            public IAsyncEnumerable<IMessageEvent> StreamAsync(
                 IReadOnlyList<Message> messages,
                 JsonSchema? responseSchema = null,
                 IReadOnlyList<ToolDefinition>? tools = null,
@@ -63,7 +64,7 @@ namespace AgentCore.Tests
                     var generator = _responses.Dequeue();
                     return generator(messages).GetAwaiter().GetResult();
                 }
-                return Array.Empty<ILLMOutput>().ToAsyncEnumerable();
+                return Array.Empty<IMessageEvent>().ToAsyncEnumerable();
             }
         }
 
@@ -128,9 +129,9 @@ namespace AgentCore.Tests
             // The budget is roughly: 120 - (Instructions (12 chars + overhead) + ReservedTokens (10)) -> budget is ~80 tokens (~400 characters).
             // Let's add multiple large messages so it exceeds the budget.
             var system = new Message(Role.System, [new Text("Instructions")]);
-            await context.StageAsync(new[] { system, new Message(Role.User, [new Text(new string('A', 300))]), new Message(Role.Assistant, [new Text(new string('B', 300))]) });
-            var p1 = await context.PreparePromptAsync();
-            await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(50, 0));
+            var user = new Message(Role.User, [new Text(new string('A', 300))]);
+            var assistant = new Message(Role.Assistant, [new Text(new string('B', 300))], new MessageMetadata(Usage: new TokenUsage(105, 0)));
+            await context.CommitAsync(new[] { system, user, assistant });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)
@@ -163,9 +164,9 @@ namespace AgentCore.Tests
             );
 
             var system = new Message(Role.System, [new Text("Instructions")]);
-            await context.StageAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")]) });
+            await context.StageAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], new MessageMetadata(Usage: new TokenUsage(10, 0))) });
             var p1 = await context.PreparePromptAsync();
-            await context.CommitAsync(Array.Empty<Message>(), new TokenUsage(10, 0));
+            await context.CommitAsync(Array.Empty<Message>());
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)
@@ -191,15 +192,17 @@ namespace AgentCore.Tests
             var tool2 = new TestExecutionTool("Tool2", delayMs: 10);
 
             // Step 1: Enqueue two parallel tool calls
-            mockLlm.Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
-                new ILLMOutput[]
+            mockLlm.Enqueue(messages => Task.FromResult<IAsyncEnumerable<IMessageEvent>>(
+                new IMessageEvent[]
                 {
-                    new ToolCallStart("call-1", "Tool1"),
-                    new ToolCallDelta("call-1", "{}"),
-                    new ToolCallEnd("call-1"),
-                    new ToolCallStart("call-2", "Tool2"),
-                    new ToolCallDelta("call-2", "{}"),
-                    new ToolCallEnd("call-2")
+                    new MessageStart(Role.Assistant),
+                    new ToolCallContentStart("call-1", "Tool1"),
+                    new ToolCallContentDelta("call-1", "{}"),
+                    new ToolCallContentEnd("call-1"),
+                    new ToolCallContentStart("call-2", "Tool2"),
+                    new ToolCallContentDelta("call-2", "{}"),
+                    new ToolCallContentEnd("call-2"),
+                    new MessageEnd()
                 }.ToAsyncEnumerable()
             ));
 

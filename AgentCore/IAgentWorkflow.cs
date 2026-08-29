@@ -60,24 +60,20 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
-                assistantMessage = new Message(Role.Assistant);
-                TokenUsage? tokenUsage = null; 
+                var accumulator = new MessageAccumulator();
 
-                await foreach (var item in _llm
+                await foreach (var content in _llm
                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
+                    .ToContentsAsync(accumulator, ct)
                     .ConfigureAwait(false))
                 { 
-                    foreach(var content in assistantMessage.Receive(item))
-                    {
-                        yield return content;
-                        if (content is ToolCall toolCall)
-                            _ = _tooling.ExecuteAsync(toolCall, ct);
-                    }
-
-                    if (item is TokenUsage usage) tokenUsage = usage;
+                    yield return content;
+                    if (content is ToolCall toolCall)
+                        _ = _tooling.ExecuteAsync(toolCall, ct);
                 }
 
-                await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false); 
+                assistantMessage = accumulator.ToMessage();
+                await context.CommitAsync(assistantMessage, ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {
