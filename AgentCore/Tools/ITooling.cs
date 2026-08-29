@@ -60,7 +60,7 @@ internal sealed class Tooling : ITooling
         List<Task<ToolResult>> tasks;
         lock (_lock)
         {
-            tasks = _runningTasks;
+            tasks = [.. _runningTasks];
             _runningTasks.Clear();
         }
 

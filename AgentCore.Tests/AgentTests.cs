@@ -18,7 +18,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new StreamChunk(new TextChunk("Acknowledged")));
+        mockProvider.Enqueue(new Text("Acknowledged"));
 
         var memory = new ChatContext(
             contextWindow: 50000
@@ -54,7 +54,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new StreamChunk(new TextChunk("Model reply")));
+        mockProvider.Enqueue(new Text("Model reply"));
 
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
@@ -81,7 +81,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new StreamChunk(new TextChunk("{\"Name\":\"John Doe\",\"Age\":30}")));
+        mockProvider.Enqueue(new Text("{\"Name\":\"John Doe\",\"Age\":30}"));
 
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)
@@ -120,8 +120,9 @@ public class AgentTests
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(
-            new StreamChunk(new TextChunk("Streaming ")),
-            new StreamChunk(new TextChunk("reply")),
+            new TextDelta("Streaming "),
+            new TextDelta("reply"),
+            new TextEnd(),
             new FinishReason("stop")
         );
 
@@ -143,7 +144,7 @@ public class AgentTests
     public async Task InvokeAsync_PrependsSystemInstructionsToHistory()
     {
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new StreamChunk(new TextChunk("Success")));
+        mockProvider.Enqueue(new Text("Success"));
 
         var agent = Agent.Create()
             .WithInstructions("System instruction baseline")

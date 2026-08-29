@@ -5,34 +5,23 @@ namespace AgentCore.LLM;
 /// </summary>
 public interface ILLMOutput { }
 
-/// <summary>
-/// Marker interface for the actual inner payload (text, tool call, reasoning, audio, image, etc.).
-/// </summary>
-public interface IContentChunk { }
+// 1. Text Streaming
+public sealed record TextDelta(string Text) : ILLMOutput;
+public sealed record TextEnd() : ILLMOutput;
 
-/// <summary>
-/// Stream envelope holding streaming metadata and the actual content chunk.
-/// </summary>
-public record StreamChunk(
-    IContentChunk Content,
-    int? Index = null,
-    string? Id = null,
-    bool IsFinal = false
-) : ILLMOutput;
+// 2. Reasoning / Thinking Streaming
+public sealed record ReasoningDelta(string Thought) : ILLMOutput;
+public sealed record ReasoningEnd() : ILLMOutput;
 
-public record TextChunk(string Text) : IContentChunk;
+// 3. Tool Call Streaming (LLMs provide real IDs for parallel tool calls)
+public sealed record ToolCallStart(string Id, string Name, int? Index = null) : ILLMOutput;
+public sealed record ToolCallDelta(string Id, string Arguments, int? Index = null) : ILLMOutput;
+public sealed record ToolCallEnd(string Id, int? Index = null) : ILLMOutput;
 
-public record ReasoningChunk(string Thought) : IContentChunk;
-
-public record ToolCallChunk(
-    string? Name = null,
-    string? Arguments = null
-) : IContentChunk;
-
-public record TokenUsage(
+// 4. Telemetry & Turn Completion
+public sealed record TokenUsage(
     int InputTokens = 0,
     int OutputTokens = 0,
     int? ReasoningTokens = null) : ILLMOutput;
 
-public record FinishReason(string Value) : ILLMOutput;
-
+public sealed record FinishReason(string Value) : ILLMOutput;

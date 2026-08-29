@@ -81,100 +81,103 @@ namespace CodeSharp.UI
                 return;
             }
 
-            if (output is StreamChunk chunk)
+            switch (output)
             {
-                switch (chunk.Content)
-                {
-                    case ReasoningChunk reasoning:
-                        FinalizeAllToolCalls();
-
-                        string thought = reasoning.Thought;
-                        if (string.IsNullOrEmpty(thought))
-                        {
-                            return;
-                        }
-
-                        if (_thinkingWriter == null)
-                        {
-                            StopSpinner();
-                            AnsiConsole.WriteLine();
-                            _thinkingSw.Reset();
-                            _thinkingSw.Start();
-                            var style = new Style(Color.Grey, decoration: Decoration.Italic);
-                            _thinkingWriter = new ConsoleTreeWriter(style);
-                            _thinkingWriter.Start("Thinking...");
-                        }
-
-                        _thinkingWriter.Write(thought);
-                        break;
-
-                    case TextChunk text:
-                        if (!_answerStarted)
-                        {
-                            StopSpinner();
-
-                            bool hadThinking = _thinkingWriter != null;
-                            FinalizeThinking();
-                            FinalizeAllToolCalls();
-
-                            if (!hadThinking)
-                            {
-                                AnsiConsole.WriteLine();
-                            }
-
-                            _answerStarted = true;
-
-                            var trimmed = text.Text.TrimStart('\r', '\n');
-                            AnsiConsole.Write(new Spectre.Console.Text(trimmed));
-                        }
-                        else
-                        {
-                            AnsiConsole.Write(new Spectre.Console.Text(text.Text));
-                        }
-                        break;
-
-                    case ToolCallChunk tc:
+                case ReasoningDelta reasoning:
+                    FinalizeAllToolCalls();
+                    if (_thinkingWriter == null)
+                    {
                         StopSpinner();
+                        AnsiConsole.WriteLine();
+                        _thinkingSw.Reset();
+                        _thinkingSw.Start();
+                        var style = new Style(Color.Grey, decoration: Decoration.Italic);
+                        _thinkingWriter = new ConsoleTreeWriter(style);
+                        _thinkingWriter.Start("Thinking...");
+                    }
+                    if (!string.IsNullOrEmpty(reasoning.Thought))
+                    {
+                        _thinkingWriter.Write(reasoning.Thought);
+                    }
+                    break;
+
+                case ReasoningEnd:
+                    FinalizeThinking();
+                    break;
+
+                case TextDelta text:
+                    if (!_answerStarted)
+                    {
+                        StopSpinner();
+                        bool hadThinking = _thinkingWriter != null;
                         FinalizeThinking();
-
-                        AccumulatedToolCall? toolCall = null;
-                        if (!string.IsNullOrEmpty(chunk.Id))
+                        FinalizeAllToolCalls();
+                        if (!hadThinking)
                         {
-                            toolCall = _toolCalls.FirstOrDefault(t => t.Id == chunk.Id);
+                            AnsiConsole.WriteLine();
                         }
-                        else if (chunk.Index.HasValue)
-                        {
-                            toolCall = _toolCalls.FirstOrDefault(t => t.Index == chunk.Index.Value);
-                        }
+                        _answerStarted = true;
+                        var trimmed = text.Text.TrimStart('\r', '\n');
+                        AnsiConsole.Write(new Spectre.Console.Text(trimmed));
+                    }
+                    else
+                    {
+                        AnsiConsole.Write(new Spectre.Console.Text(text.Text));
+                    }
+                    break;
 
-                        if (toolCall == null)
-                        {
-                            // A new tool call is starting. Finalize previous ones
-                            FinalizeAllToolCalls();
+                case ToolCallStart tcStart:
+                    StopSpinner();
+                    FinalizeThinking();
+                    FinalizeAllToolCalls();
 
-                            toolCall = new AccumulatedToolCall
-                            {
-                                Id = chunk.Id ?? "",
-                                Index = chunk.Index
-                            };
-                            _toolCalls.Add(toolCall);
-                        }
+                    var newToolCall = new AccumulatedToolCall
+                    {
+                        Id = tcStart.Id,
+                        Index = tcStart.Index
+                    };
+                    if (!string.IsNullOrEmpty(tcStart.Name))
+                    {
+                        newToolCall.Name.Append(tcStart.Name);
+                    }
+                    _toolCalls.Add(newToolCall);
+                    break;
 
-                        if (!string.IsNullOrEmpty(tc.Name))
-                        {
-                            toolCall.Name.Append(tc.Name);
-                        }
+                case ToolCallDelta tcDelta:
+                    StopSpinner();
+                    FinalizeThinking();
 
-                        if (!string.IsNullOrEmpty(tc.Arguments))
+                    var toolCall = _toolCalls.FirstOrDefault(t => t.Id == tcDelta.Id)
+                                ?? (tcDelta.Index.HasValue ? _toolCalls.FirstOrDefault(t => t.Index == tcDelta.Index.Value) : null);
+
+                    if (toolCall == null)
+                    {
+                        toolCall = new AccumulatedToolCall
                         {
-                            toolCall.Arguments.Append(tc.Arguments);
-                        }
-                        break;
-                }
-            }
-            else if (output is ToolResultOutput tro)
-            {
-                WriteToolResultCore(tro.Result);
+                            Id = tcDelta.Id,
+                            Index = tcDelta.Index
+                        };
+                        _toolCalls.Add(toolCall);
+                    }
+
+                    if (!string.IsNullOrEmpty(tcDelta.Arguments))
+                    {
+                        toolCall.Arguments.Append(tcDelta.Arguments);
+                    }
+                    break;
+
+                case ToolCallEnd end:
+                    var endingCall = _toolCalls.FirstOrDefault(t => t.Id == end.Id);
+                    if (endingCall != null)
+                    {
+                        FinalizeToolCall(endingCall);
+                        _toolCalls.Remove(endingCall);
+                    }
+                    break;
+
+                case ToolResultOutput tro:
+                    WriteToolResultCore(tro.Result);
+                    break;
             }
         }
 

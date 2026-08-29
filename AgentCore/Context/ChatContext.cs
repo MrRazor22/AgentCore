@@ -157,16 +157,20 @@ public class ChatContext : IContext
         {
             try
             {
-                var sb = new StringBuilder();
+                var assembler = new AgentCore.LLM.Chat.ContentAssembler();
+                string summary = string.Empty;
                 await foreach (var evt in _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct).ConfigureAwait(false))
                 {
-                    if (evt is StreamChunk { Content: TextChunk t })
+                    foreach (var content in assembler.Receive(evt))
                     {
-                        sb.Append(t.Text);
+                        if (content is Text t)
+                        {
+                            summary = t.Value;
+                        }
                     }
                 }
 
-                return sb.ToString().Trim();
+                return summary.Trim();
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {

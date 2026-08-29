@@ -16,7 +16,7 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new StreamChunk(new TextChunk("Today is sunny.")));
+        provider.Enqueue(new Text("Today is sunny."));
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
@@ -50,12 +50,14 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // First LLM call yields tool call
         provider.Enqueue(
-            new StreamChunk(new ToolCallChunk("get_weather", "{\"location\": \"London\"}"), Id: "call_1"),
+            new ToolCallStart("call_1", "get_weather"),
+            new ToolCallDelta("call_1", "{\"location\": \"London\"}"),
+            new ToolCallEnd("call_1"),
             new FinishReason("tool_calls")
         );
         // Second LLM call yields final response
         provider.Enqueue(
-            new StreamChunk(new TextChunk("It is sunny in London.")),
+            new Text("It is sunny in London."),
             new FinishReason("stop")
         );
 
@@ -103,11 +105,15 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // Return tool call indefinitely
         provider.Enqueue(
-            new StreamChunk(new ToolCallChunk("looping_tool", "{}"), Id: "call_1"),
+            new ToolCallStart("call_1", "looping_tool"),
+            new ToolCallDelta("call_1", "{}"),
+            new ToolCallEnd("call_1"),
             new FinishReason("tool_calls")
         );
         provider.Enqueue(
-            new StreamChunk(new ToolCallChunk("looping_tool", "{}"), Id: "call_2"),
+            new ToolCallStart("call_2", "looping_tool"),
+            new ToolCallDelta("call_2", "{}"),
+            new ToolCallEnd("call_2"),
             new FinishReason("tool_calls")
         );
 
@@ -134,7 +140,9 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new StreamChunk(new ToolCallChunk("broken_tool", "{}"), Id: "call_1"),
+            new ToolCallStart("call_1", "broken_tool"),
+            new ToolCallDelta("call_1", "{}"),
+            new ToolCallEnd("call_1"),
             new FinishReason("tool_calls")
         );
 
@@ -183,7 +191,10 @@ public class WorkflowTests
     {
         // Arrange
         var provider = new MockLLMProvider();
-        provider.Enqueue(new StreamChunk(new TextChunk("Never streamed")));
+        provider.Enqueue(
+            new TextDelta("Never streamed"),
+            new FinishReason("stop")
+        );
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var executor = new ReActWorkflow(llm, tooling);
@@ -211,11 +222,12 @@ public class WorkflowTests
 
         async IAsyncEnumerable<ILLMOutput> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new StreamChunk(new ReasoningChunk("Thinking..."));
-            yield return new StreamChunk(new TextChunk("Hello world partial"));
+            yield return new ReasoningDelta("Thinking...");
+            yield return new TextDelta("Hello world partial");
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
-            yield return new StreamChunk(new TextChunk(" unreached"));
+            yield return new TextDelta(" unreached");
+            yield return new FinishReason("stop");
         }
 
         var provider = new MockLLMProvider();
@@ -245,12 +257,16 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new StreamChunk(new ToolCallChunk("slow_tool", "{}"), Id: "call_slow"),
-            new StreamChunk(new ToolCallChunk("fast_tool", "{}"), Id: "call_fast"),
+            new ToolCallStart("call_slow", "slow_tool"),
+            new ToolCallDelta("call_slow", "{}"),
+            new ToolCallEnd("call_slow"),
+            new ToolCallStart("call_fast", "fast_tool"),
+            new ToolCallDelta("call_fast", "{}"),
+            new ToolCallEnd("call_fast"),
             new FinishReason("tool_calls")
         );
         provider.Enqueue(
-            new StreamChunk(new TextChunk("Both done.")),
+            new TextDelta("Both done."),
             new FinishReason("stop")
         );
 

@@ -56,11 +56,24 @@ public class MEAILLM : ILLM
         string? finalFinishReason = null;
 
         var rawYieldedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var activeRawToolCallIds = new Dictionary<string, int?>(StringComparer.OrdinalIgnoreCase);
+        var activeToolCallStreams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool hasActiveText = false;
+        bool hasActiveReasoning = false;
 
         await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, chatOptions, ct).ConfigureAwait(false))
         {
-            var rawDeltas = new List<StreamChunk>();
+            int? choiceIndex = null;
+            if (update.RawRepresentation != null)
+            {
+                try
+                {
+                    dynamic raw = update.RawRepresentation;
+                    choiceIndex = (int?)raw.Index ?? (int?)raw.ChoiceIndex;
+                }
+                catch { }
+            }
+
+            var rawToolCallEvents = new List<ILLMOutput>();
             if (update.RawRepresentation is not null)
             {
                 try
@@ -80,9 +93,18 @@ public class MEAILLM : ILLM
                             if (!string.IsNullOrEmpty(callId))
                             {
                                 rawYieldedIds.Add(callId);
-                                activeRawToolCallIds[callId] = index;
+                                if (activeToolCallStreams.Add(callId))
+                                {
+                                    if (hasActiveReasoning) { rawToolCallEvents.Add(new ReasoningEnd()); hasActiveReasoning = false; }
+                                    if (hasActiveText) { rawToolCallEvents.Add(new TextEnd()); hasActiveText = false; }
+                                    rawToolCallEvents.Add(new ToolCallStart(callId, funcName ?? "", index ?? choiceIndex));
+                                }
                             }
-                            rawDeltas.Add(new StreamChunk(new ToolCallChunk(funcName, argDelta), Index: index, Id: callId ?? ""));
+
+                            if (!string.IsNullOrEmpty(argDelta) && !string.IsNullOrEmpty(callId))
+                            {
+                                rawToolCallEvents.Add(new ToolCallDelta(callId, argDelta, index ?? choiceIndex));
+                            }
                         }
                     }
                 }
@@ -92,36 +114,36 @@ public class MEAILLM : ILLM
                 }
             }
 
-            int? choiceIndex = null;
-            if (update.RawRepresentation != null)
+            foreach (var evt in rawToolCallEvents)
             {
-                try
-                {
-                    dynamic raw = update.RawRepresentation;
-                    choiceIndex = (int?)raw.Index ?? (int?)raw.ChoiceIndex;
-                }
-                catch { }
+                yield return evt;
             }
 
-
-            bool hasFinishReason = update.FinishReason != null;
             bool yieldedReasoning = false;
 
             if (update.Contents != null)
             {
                 foreach (var content in update.Contents)
                 {
-                    if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
-                    {
-                        yield return new StreamChunk(new TextChunk(textContent.Text), Index: choiceIndex, IsFinal: hasFinishReason);
-                    }
-                    else if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
+                    if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
                     {
                         yieldedReasoning = true;
-                        yield return new StreamChunk(new ReasoningChunk(reasoningContent.Text), Index: choiceIndex, IsFinal: hasFinishReason);
+                        hasActiveReasoning = true;
+                        yield return new ReasoningDelta(reasoningContent.Text);
+                    }
+                    else if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
+                    {
+                        if (hasActiveReasoning)
+                        {
+                            yield return new ReasoningEnd();
+                            hasActiveReasoning = false;
+                        }
+                        hasActiveText = true;
+                        yield return new TextDelta(textContent.Text);
                     }
                     else if (content is FunctionCallContent fnCall)
                     {
+                        var callId = fnCall.CallId ?? Guid.NewGuid().ToString("N");
                         if (!string.IsNullOrEmpty(fnCall.CallId) && rawYieldedIds.Contains(fnCall.CallId))
                         {
                             continue;
@@ -136,7 +158,17 @@ public class MEAILLM : ILLM
                             }
                             catch { }
                         }
-                        yield return new StreamChunk(new ToolCallChunk(fnCall.Name, argsStr), Index: choiceIndex, Id: fnCall.CallId ?? "", IsFinal: true);
+
+                        if (activeToolCallStreams.Add(callId))
+                        {
+                            if (hasActiveReasoning) { yield return new ReasoningEnd(); hasActiveReasoning = false; }
+                            if (hasActiveText) { yield return new TextEnd(); hasActiveText = false; }
+                            yield return new ToolCallStart(callId, fnCall.Name, choiceIndex);
+                        }
+                        if (!string.IsNullOrEmpty(argsStr))
+                        {
+                            yield return new ToolCallDelta(callId, argsStr, choiceIndex);
+                        }
                     }
                     else if (content is UsageContent usageContent)
                     {
@@ -156,27 +188,9 @@ public class MEAILLM : ILLM
                 var rawReasoning = TryExtractReasoning(update.RawRepresentation, _logger);
                 if (!string.IsNullOrEmpty(rawReasoning))
                 {
-                    yield return new StreamChunk(new ReasoningChunk(rawReasoning), Index: choiceIndex, IsFinal: hasFinishReason);
+                    hasActiveReasoning = true;
+                    yield return new ReasoningDelta(rawReasoning);
                 }
-            }
-
-
-            foreach (var d in rawDeltas)
-            {
-                yield return d with { IsFinal = d.IsFinal || hasFinishReason };
-                if (hasFinishReason && !string.IsNullOrEmpty(d.Id))
-                {
-                    activeRawToolCallIds.Remove(d.Id);
-                }
-            }
-
-            if (hasFinishReason && activeRawToolCallIds.Count > 0)
-            {
-                foreach (var (callId, idx) in activeRawToolCallIds.ToList())
-                {
-                    yield return new StreamChunk(new ToolCallChunk(), Index: idx, Id: callId, IsFinal: true);
-                }
-                activeRawToolCallIds.Clear();
             }
 
             if (update.FinishReason is { } finishReason)
@@ -185,14 +199,21 @@ public class MEAILLM : ILLM
             }
         }
 
-        if (activeRawToolCallIds.Count > 0)
+        if (hasActiveReasoning)
         {
-            foreach (var (callId, idx) in activeRawToolCallIds)
-            {
-                yield return new StreamChunk(new ToolCallChunk(), Index: idx, Id: callId, IsFinal: true);
-            }
-            activeRawToolCallIds.Clear();
+            yield return new ReasoningEnd();
         }
+
+        if (hasActiveText)
+        {
+            yield return new TextEnd();
+        }
+
+        foreach (var callId in activeToolCallStreams)
+        {
+            yield return new ToolCallEnd(callId);
+        }
+        activeToolCallStreams.Clear();
 
         yield return new TokenUsage(
             InputTokens: inputTokens,

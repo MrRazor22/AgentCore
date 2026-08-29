@@ -25,18 +25,37 @@ public class MockLLMProvider : ILLM
         _responses.Enqueue(generator);
     }
 
-    private static ILLMOutput ConvertToDelta(object evt)
+    private static IEnumerable<ILLMOutput> ConvertToEvents(object evt)
     {
-        return evt switch
+        switch (evt)
         {
-            Text t => new StreamChunk(new TextChunk(t.Value), IsFinal: true),
-            Reasoning r => new StreamChunk(new ReasoningChunk(r.Thought), IsFinal: true),
-            ToolCall tc => new StreamChunk(new ToolCallChunk(tc.Name, tc.Arguments?.ToJsonString()), Id: tc.Id, IsFinal: true),
-            ILLMOutput output => output,
-            _ => throw new NotSupportedException()
-        };
+            case Text t:
+                yield return new TextDelta(t.Value);
+                yield return new TextEnd();
+                break;
+            case Reasoning r:
+                yield return new ReasoningDelta(r.Thought);
+                yield return new ReasoningEnd();
+                break;
+            case ToolCall tc:
+            {
+                var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
+                yield return new ToolCallStart(id, tc.Name, tc.Index);
+                var args = tc.Arguments?.ToJsonString() ?? tc.RawArguments ?? "";
+                if (!string.IsNullOrEmpty(args))
+                {
+                    yield return new ToolCallDelta(id, args, tc.Index);
+                }
+                yield return new ToolCallEnd(id, tc.Index);
+                break;
+            }
+            case ILLMOutput output:
+                yield return output;
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported mock item type {evt?.GetType().FullName}");
+        }
     }
-
 
     public void Enqueue(params object[] items)
     {
@@ -62,33 +81,13 @@ public class MockLLMProvider : ILLM
 
     private static async IAsyncEnumerable<ILLMOutput> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
     {
-        var list = items.ToList();
-        for (int i = 0; i < list.Count; i++)
+        foreach (var item in items)
         {
             await Task.Yield();
-            var item = list[i];
-            var converted = ConvertToDelta(item);
-
-            if (converted is StreamChunk cd)
+            foreach (var evt in ConvertToEvents(item))
             {
-                bool hasSubsequentSameStream = list.Skip(i + 1).Any(next =>
-                {
-                    var nextConverted = ConvertToDelta(next);
-                    if (nextConverted is not StreamChunk nextCd) return false;
-                    if (!string.IsNullOrEmpty(cd.Id) && !string.IsNullOrEmpty(nextCd.Id))
-                        return string.Equals(cd.Id, nextCd.Id, StringComparison.Ordinal);
-                    if (cd.Index.HasValue && nextCd.Index.HasValue)
-                        return cd.Index.Value == nextCd.Index.Value;
-                    return cd.Content.GetType() == nextCd.Content.GetType();
-                });
-
-                if (!hasSubsequentSameStream)
-                {
-                    converted = cd with { IsFinal = true };
-                }
+                yield return evt;
             }
-
-            yield return converted;
         }
     }
 

@@ -1,7 +1,6 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Chat.Builders;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using Microsoft.Extensions.Logging;
@@ -67,24 +66,15 @@ namespace AgentCore
                 await foreach (var item in _llm
                     .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
                     .ConfigureAwait(false))
-                {
-                    switch (item)
+                { 
+                    foreach(var content in assistantMessage.Receive(item))
                     {
-                        case StreamChunk chunk:
-                            foreach (var content in assistantMessage.Receive(chunk))
-                            {
-                                yield return content;
-
-                                if (content is ToolCall toolCall)
-                                    _ = _tooling.ExecuteAsync(toolCall, ct);
-                            }
-                            break;
-
-
-                        case TokenUsage usage:
-                            tokenUsage = usage;
-                            break;
+                        yield return content;
+                        if (content is ToolCall toolCall)
+                            _ = _tooling.ExecuteAsync(toolCall, ct);
                     }
+
+                    if (item is TokenUsage usage) tokenUsage = usage;
                 }
 
                 await context.CommitAsync([assistantMessage], tokenUsage, ct).ConfigureAwait(false); 

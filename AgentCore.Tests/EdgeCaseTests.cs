@@ -41,7 +41,12 @@ namespace AgentCore.Tests
             public void EnqueueSimpleText(string text)
             {
                 Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
-                    new[] { new StreamChunk(new TextChunk(text), IsFinal: true) }.ToAsyncEnumerable()
+                    new ILLMOutput[]
+                    {
+                        new TextDelta(text),
+                        new TextEnd(),
+                        new FinishReason("stop")
+                    }.ToAsyncEnumerable()
                 ));
             }
 
@@ -189,8 +194,12 @@ namespace AgentCore.Tests
             mockLlm.Enqueue(messages => Task.FromResult<IAsyncEnumerable<ILLMOutput>>(
                 new ILLMOutput[]
                 {
-                    new StreamChunk(new ToolCallChunk("Tool1", "{}"), Id: "call-1", IsFinal: true),
-                    new StreamChunk(new ToolCallChunk("Tool2", "{}"), Id: "call-2", IsFinal: true)
+                    new ToolCallStart("call-1", "Tool1"),
+                    new ToolCallDelta("call-1", "{}"),
+                    new ToolCallEnd("call-1"),
+                    new ToolCallStart("call-2", "Tool2"),
+                    new ToolCallDelta("call-2", "{}"),
+                    new ToolCallEnd("call-2")
                 }.ToAsyncEnumerable()
             ));
 

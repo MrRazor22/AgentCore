@@ -13,11 +13,11 @@ public class ConsoleStreamRendererTests
         var renderer = new ConsoleStreamRenderer(new GenericFallbackToolFormatter());
 
         // Deliberately test text containing square brackets and indexer patterns that crash raw AnsiConsole.Write()
-        var textDeltas = new[]
+        var textDeltas = new ILLMOutput[]
         {
-            new StreamChunk(new TextChunk("Here is C# code: List<AccumulatedToolCall> _toolCalls = new();\n")),
-            new StreamChunk(new TextChunk("public class AccumulatedToolCall [0] { public string Id { get; set; } }\n")),
-            new StreamChunk(new TextChunk("var value = dict[\"key\"]; // [bold red] unescaped markup test\n"))
+            new TextDelta("Here is C# code: List<AccumulatedToolCall> _toolCalls = new();\n"),
+            new TextDelta("public class AccumulatedToolCall [0] { public string Id { get; set; } }\n"),
+            new TextDelta("var value = dict[\"key\"]; // [bold red] unescaped markup test\n")
         };
 
         var exception = Record.Exception(() =>
