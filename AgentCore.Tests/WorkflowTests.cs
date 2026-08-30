@@ -50,9 +50,9 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // First LLM call yields tool call
         provider.Enqueue(
-            new ToolCallContentStart(0, "call_1", "get_weather"),
-            new ToolCallContentDelta(0, "{\"location\": \"London\"}"),
-            new ToolCallContentEnd(0),
+            new ToolCallStart(0, "call_1", "get_weather"),
+            new ToolCallDelta(0, "{\"location\": \"London\"}"),
+            new ToolCallEnd(0),
             new MessageEnd(FinishReason: "tool_calls")
         );
         // Second LLM call yields final response
@@ -105,15 +105,15 @@ public class WorkflowTests
         var provider = new MockLLMProvider();
         // Return tool call indefinitely
         provider.Enqueue(
-            new ToolCallContentStart(0, "call_1", "looping_tool"),
-            new ToolCallContentDelta(0, "{}"),
-            new ToolCallContentEnd(0),
+            new ToolCallStart(0, "call_1", "looping_tool"),
+            new ToolCallDelta(0, "{}"),
+            new ToolCallEnd(0),
             new MessageEnd(FinishReason: "tool_calls")
         );
         provider.Enqueue(
-            new ToolCallContentStart(0, "call_2", "looping_tool"),
-            new ToolCallContentDelta(0, "{}"),
-            new ToolCallContentEnd(0),
+            new ToolCallStart(0, "call_2", "looping_tool"),
+            new ToolCallDelta(0, "{}"),
+            new ToolCallEnd(0),
             new MessageEnd(FinishReason: "tool_calls")
         );
 
@@ -140,9 +140,9 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCallContentStart(0, "call_1", "broken_tool"),
-            new ToolCallContentDelta(0, "{}"),
-            new ToolCallContentEnd(0),
+            new ToolCallStart(0, "call_1", "broken_tool"),
+            new ToolCallDelta(0, "{}"),
+            new ToolCallEnd(0),
             new MessageEnd(FinishReason: "tool_calls")
         );
 
@@ -192,9 +192,9 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new TextContentStart(0),
-            new TextContentDelta(0, "Never streamed"),
-            new TextContentEnd(0),
+            new TextStart(0),
+            new TextDelta(0, "Never streamed"),
+            new TextEnd(0),
             new MessageEnd(FinishReason: "stop")
         );
 
@@ -225,15 +225,15 @@ public class WorkflowTests
         async IAsyncEnumerable<IMessageEvent> CancellationStream([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             yield return new MessageStart(Role.Assistant);
-            yield return new ReasoningContentStart(0);
-            yield return new ReasoningContentDelta(0, "Thinking...");
-            yield return new ReasoningContentEnd(0);
-            yield return new TextContentStart(1);
-            yield return new TextContentDelta(1, "Hello world partial");
+            yield return new ReasoningStart(0);
+            yield return new ReasoningDelta(0, "Thinking...");
+            yield return new ReasoningEnd(0);
+            yield return new TextStart(1);
+            yield return new TextDelta(1, "Hello world partial");
             cts.Cancel();
             ct.ThrowIfCancellationRequested();
-            yield return new TextContentDelta(1, " unreached");
-            yield return new TextContentEnd(1);
+            yield return new TextDelta(1, " unreached");
+            yield return new TextEnd(1);
             yield return new MessageEnd(FinishReason: "stop");
         }
 
@@ -264,18 +264,18 @@ public class WorkflowTests
         // Arrange
         var provider = new MockLLMProvider();
         provider.Enqueue(
-            new ToolCallContentStart(0, "call_slow", "slow_tool"),
-            new ToolCallContentDelta(0, "{}"),
-            new ToolCallContentEnd(0),
-            new ToolCallContentStart(1, "call_fast", "fast_tool"),
-            new ToolCallContentDelta(1, "{}"),
-            new ToolCallContentEnd(1),
+            new ToolCallStart(0, "call_slow", "slow_tool"),
+            new ToolCallDelta(0, "{}"),
+            new ToolCallEnd(0),
+            new ToolCallStart(1, "call_fast", "fast_tool"),
+            new ToolCallDelta(1, "{}"),
+            new ToolCallEnd(1),
             new MessageEnd(FinishReason: "tool_calls")
         );
         provider.Enqueue(
-            new TextContentStart(0),
-            new TextContentDelta(0, "Both done."),
-            new TextContentEnd(0),
+            new TextStart(0),
+            new TextDelta(0, "Both done."),
+            new TextEnd(0),
             new MessageEnd(FinishReason: "stop")
         );
 

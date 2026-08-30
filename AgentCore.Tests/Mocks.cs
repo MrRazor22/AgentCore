@@ -31,29 +31,29 @@ public class MockLLMProvider : ILLM
         {
             case Text t:
             {
-                yield return new TextContentStart(blockIndex);
-                yield return new TextContentDelta(blockIndex, t.Value);
-                yield return new TextContentEnd(blockIndex);
+                yield return new TextStart(blockIndex);
+                yield return new TextDelta(blockIndex, t.Value);
+                yield return new TextEnd(blockIndex);
                 break;
             }
             case Reasoning r:
             {
-                yield return new ReasoningContentStart(blockIndex);
-                yield return new ReasoningContentDelta(blockIndex, r.Thought);
-                yield return new ReasoningContentEnd(blockIndex);
+                yield return new ReasoningStart(blockIndex);
+                yield return new ReasoningDelta(blockIndex, r.Thought);
+                yield return new ReasoningEnd(blockIndex);
                 break;
             }
             case ToolCall tc:
             {
                 int idx = blockIndex;
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
-                yield return new ToolCallContentStart(idx, id, tc.Name);
+                yield return new ToolCallStart(idx, id, tc.Name);
                 var args = tc.Arguments?.ToJsonString() ?? "{}";
                 if (!string.IsNullOrEmpty(args))
                 {
-                    yield return new ToolCallContentDelta(idx, args);
+                    yield return new ToolCallDelta(idx, args);
                 }
-                yield return new ToolCallContentEnd(idx);
+                yield return new ToolCallEnd(idx);
                 break;
             }
             case IMessageEvent output:

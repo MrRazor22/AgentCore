@@ -44,9 +44,9 @@ namespace AgentCore.Tests
                     new IMessageEvent[]
                     {
                         new MessageStart(Role.Assistant),
-                        new TextContentStart(0),
-                        new TextContentDelta(0, text),
-                        new TextContentEnd(0),
+                        new TextStart(0),
+                        new TextDelta(0, text),
+                        new TextEnd(0),
                         new MessageEnd("stop")
                     }.ToAsyncEnumerable()
                 ));
@@ -197,12 +197,12 @@ namespace AgentCore.Tests
                 new IMessageEvent[]
                 {
                     new MessageStart(Role.Assistant),
-                    new ToolCallContentStart(0, "call-1", "Tool1"),
-                    new ToolCallContentDelta(0, "{}"),
-                    new ToolCallContentEnd(0),
-                    new ToolCallContentStart(1, "call-2", "Tool2"),
-                    new ToolCallContentDelta(1, "{}"),
-                    new ToolCallContentEnd(1),
+                    new ToolCallStart(0, "call-1", "Tool1"),
+                    new ToolCallDelta(0, "{}"),
+                    new ToolCallEnd(0),
+                    new ToolCallStart(1, "call-2", "Tool2"),
+                    new ToolCallDelta(1, "{}"),
+                    new ToolCallEnd(1),
                     new MessageEnd()
                 }.ToAsyncEnumerable()
             ));

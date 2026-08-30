@@ -56,11 +56,11 @@ public class ToolCallDetectionLayer : LLMLayer
         {
             switch (evt)
             {
-                case TextContentStart s when toolNames.Count > 0:
+                case TextStart s when toolNames.Count > 0:
                     textBuffers[s.Index] = new StringBuilder();
                     break;
 
-                case TextContentDelta d when toolNames.Count > 0:
+                case TextDelta d when toolNames.Count > 0:
                     if (!textBuffers.TryGetValue(d.Index, out var sb))
                     {
                         textBuffers[d.Index] = sb = new StringBuilder();
@@ -68,13 +68,13 @@ public class ToolCallDetectionLayer : LLMLayer
                     sb.Append(d.Text);
                     break;
 
-                case TextContentEnd e when toolNames.Count > 0:
+                case TextEnd e when toolNames.Count > 0:
                     if (textBuffers.Remove(e.Index, out var buffer))
                     {
                         foreach (var parsedEvt in EmitParsedTextEvents(buffer.ToString(), toolNames))
                         {
                             yield return parsedEvt;
-                            if (parsedEvt is ToolCallContentEnd)
+                            if (parsedEvt is ToolCallEnd)
                             {
                                 totalToolCallsEmitted++;
                                 if (_options.StopAfterFirstToolCall)
@@ -95,7 +95,7 @@ public class ToolCallDetectionLayer : LLMLayer
                             foreach (var parsedEvt in EmitParsedTextEvents(pendingBuffer.ToString(), toolNames))
                             {
                                 yield return parsedEvt;
-                                if (parsedEvt is ToolCallContentEnd)
+                                if (parsedEvt is ToolCallEnd)
                                 {
                                     totalToolCallsEmitted++;
                                     if (_options.StopAfterFirstToolCall)
@@ -110,7 +110,7 @@ public class ToolCallDetectionLayer : LLMLayer
 
                     yield return evt;
 
-                    if (evt is ToolCallContentEnd && _options.StopAfterFirstToolCall)
+                    if (evt is ToolCallEnd && _options.StopAfterFirstToolCall)
                     {
                         yield break;
                     }
@@ -125,16 +125,16 @@ public class ToolCallDetectionLayer : LLMLayer
                 if (content is Text t)
                 {
                     int idx = eventIndex++;
-                    yield return new TextContentStart(idx);
-                    yield return new TextContentDelta(idx, t.Value);
-                    yield return new TextContentEnd(idx);
+                    yield return new TextStart(idx);
+                    yield return new TextDelta(idx, t.Value);
+                    yield return new TextEnd(idx);
                 }
                 else if (content is ToolCall tc)
                 {
                     int idx = eventIndex++;
-                    yield return new ToolCallContentStart(idx, tc.Id, tc.Name);
-                    yield return new ToolCallContentDelta(idx, tc.Arguments?.ToJsonString() ?? "{}");
-                    yield return new ToolCallContentEnd(idx);
+                    yield return new ToolCallStart(idx, tc.Id, tc.Name);
+                    yield return new ToolCallDelta(idx, tc.Arguments?.ToJsonString() ?? "{}");
+                    yield return new ToolCallEnd(idx);
                 }
             }
         }

@@ -24,9 +24,9 @@ public class MessageAssemblyTests
     {
         var sequence = new List<IMessageEvent>
         {
-            new ToolCallContentStart(0, "ABC", "RunCommand"),
-            new ToolCallContentDelta(0, "{\"commandLine\":\"ls\"}"),
-            new ToolCallContentEnd(0),
+            new ToolCallStart(0, "ABC", "RunCommand"),
+            new ToolCallDelta(0, "{\"commandLine\":\"ls\"}"),
+            new ToolCallEnd(0),
             new MessageEnd()
         };
 
@@ -53,14 +53,14 @@ public class MessageAssemblyTests
     {
         var sequence = new List<IMessageEvent>
         {
-            new ToolCallContentStart(0, "A", "RunCommand"),
-            new ToolCallContentStart(1, "B", "SearchWeb"),
-            new ToolCallContentDelta(0, "{\"commandLine\":"),
-            new ToolCallContentDelta(1, "{\"query\":"),
-            new ToolCallContentDelta(0, "\"ls\"}"),
-            new ToolCallContentDelta(1, "\"test\"}"),
-            new ToolCallContentEnd(0),
-            new ToolCallContentEnd(1),
+            new ToolCallStart(0, "A", "RunCommand"),
+            new ToolCallStart(1, "B", "SearchWeb"),
+            new ToolCallDelta(0, "{\"commandLine\":"),
+            new ToolCallDelta(1, "{\"query\":"),
+            new ToolCallDelta(0, "\"ls\"}"),
+            new ToolCallDelta(1, "\"test\"}"),
+            new ToolCallEnd(0),
+            new ToolCallEnd(1),
             new MessageEnd()
         };
 
@@ -92,12 +92,12 @@ public class MessageAssemblyTests
         var sequence = new List<IMessageEvent>
         {
             new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"),
-            new ReasoningContentStart(0),
-            new ReasoningContentDelta(0, "Thinking deeply..."),
-            new ReasoningContentEnd(0),
-            new TextContentStart(1),
-            new TextContentDelta(1, "Here is the answer."),
-            new TextContentEnd(1),
+            new ReasoningStart(0),
+            new ReasoningDelta(0, "Thinking deeply..."),
+            new ReasoningEnd(0),
+            new TextStart(1),
+            new TextDelta(1, "Here is the answer."),
+            new TextEnd(1),
             new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20))
         };
 
@@ -130,16 +130,16 @@ public class MessageAssemblyTests
     {
         var sequence = new List<IMessageEvent>
         {
-            new ReasoningContentStart(0),
-            new ReasoningContentDelta(0, "Step 1: Analyze"),
-            new ReasoningContentEnd(0),
-            new ToolCallContentStart(1, "call_1", "lookup"),
-            new ToolCallContentDelta(1, "{\"q\":"),
-            new ToolCallContentDelta(1, "\"test\"}"),
-            new ToolCallContentEnd(1),
-            new TextContentStart(2),
-            new TextContentDelta(2, "The result is ready."),
-            new TextContentEnd(2),
+            new ReasoningStart(0),
+            new ReasoningDelta(0, "Step 1: Analyze"),
+            new ReasoningEnd(0),
+            new ToolCallStart(1, "call_1", "lookup"),
+            new ToolCallDelta(1, "{\"q\":"),
+            new ToolCallDelta(1, "\"test\"}"),
+            new ToolCallEnd(1),
+            new TextStart(2),
+            new TextDelta(2, "The result is ready."),
+            new TextEnd(2),
             new MessageEnd()
         };
 
@@ -164,26 +164,26 @@ public class MessageAssemblyTests
     {
         var sequence = new List<IMessageEvent>
         {
-            new ToolCallContentStart(0, "call_A", "ToolA"),
-            new ToolCallContentDelta(0, "{\"a\":"),
-            new ToolCallContentStart(1, "call_B", "ToolB"),
-            new ToolCallContentDelta(1, "{\"b\":"),
-            new ToolCallContentStart(2, "call_C", "ToolC"),
-            new ToolCallContentDelta(2, "{\"c\":"),
+            new ToolCallStart(0, "call_A", "ToolA"),
+            new ToolCallDelta(0, "{\"a\":"),
+            new ToolCallStart(1, "call_B", "ToolB"),
+            new ToolCallDelta(1, "{\"b\":"),
+            new ToolCallStart(2, "call_C", "ToolC"),
+            new ToolCallDelta(2, "{\"c\":"),
 
             // ToolCall B (index 1) finishes FIRST
-            new ToolCallContentDelta(1, "2}"),
-            new ToolCallContentEnd(1),
+            new ToolCallDelta(1, "2}"),
+            new ToolCallEnd(1),
 
             // ToolCall A and C continue
-            new ToolCallContentDelta(0, "1}"),
-            new ToolCallContentDelta(2, "3}"),
+            new ToolCallDelta(0, "1}"),
+            new ToolCallDelta(2, "3}"),
 
             // ToolCall C (index 2) finishes SECOND
-            new ToolCallContentEnd(2),
+            new ToolCallEnd(2),
 
             // ToolCall A (index 0) finishes LAST
-            new ToolCallContentEnd(0),
+            new ToolCallEnd(0),
 
             new MessageEnd()
         };
@@ -215,9 +215,9 @@ public class MessageAssemblyTests
         var events = new IMessageEvent[]
         {
             new MessageStart(),
-            new TextContentStart(0),
-            new TextContentDelta(0, "hello"),
-            new TextContentEnd(0),
+            new TextStart(0),
+            new TextDelta(0, "hello"),
+            new TextEnd(0),
             new MessageEnd()
         };
 
@@ -237,14 +237,14 @@ public class MessageAssemblyTests
     public async Task Message_Streaming_MalformedOrIncompleteStreams_HandledGracefully()
     {
         // 1. Delta without explicit start creates accumulator on demand and yields content
-        var bad1 = new IMessageEvent[] { new TextContentDelta(0, "graceful text"), new TextContentEnd(0) };
+        var bad1 = new IMessageEvent[] { new TextDelta(0, "graceful text"), new TextEnd(0) };
         var msg1 = new StreamingMessage(bad1.ToAsyncEnumerable());
         var contents1 = new List<IContent>();
         await foreach (var c in msg1.ContentsStream()) contents1.Add(c);
         Assert.Equal("graceful text", Assert.Single(contents1.OfType<Text>()).Value);
 
         // 2. Stray end without start does not throw and does not yield empty block
-        var bad2 = new IMessageEvent[] { new TextContentEnd(0) };
+        var bad2 = new IMessageEvent[] { new TextEnd(0) };
         var msg2 = new StreamingMessage(bad2.ToAsyncEnumerable());
         var contents2 = new List<IContent>();
         await foreach (var c in msg2.ContentsStream()) contents2.Add(c);
@@ -253,11 +253,11 @@ public class MessageAssemblyTests
         // 3. Duplicate start does not overwrite accumulated text
         var bad3 = new IMessageEvent[]
         {
-            new TextContentStart(0),
-            new TextContentDelta(0, "first"),
-            new TextContentStart(0),
-            new TextContentDelta(0, " second"),
-            new TextContentEnd(0)
+            new TextStart(0),
+            new TextDelta(0, "first"),
+            new TextStart(0),
+            new TextDelta(0, " second"),
+            new TextEnd(0)
         };
         var msg3 = new StreamingMessage(bad3.ToAsyncEnumerable());
         var contents3 = new List<IContent>();
@@ -265,7 +265,7 @@ public class MessageAssemblyTests
         Assert.Equal("first second", Assert.Single(contents3.OfType<Text>()).Value);
 
         // 4. Unclosed block on MessageEnd is gracefully completed and yielded
-        var bad4 = new IMessageEvent[] { new TextContentStart(0), new TextContentDelta(0, "unclosed"), new MessageEnd() };
+        var bad4 = new IMessageEvent[] { new TextStart(0), new TextDelta(0, "unclosed"), new MessageEnd() };
         var msg4 = new StreamingMessage(bad4.ToAsyncEnumerable());
         var contents4 = new List<IContent>();
         await foreach (var c in msg4.ContentsStream()) contents4.Add(c);

@@ -61,26 +61,26 @@ namespace CodeSharp.UI
         {
             switch (output)
             {
-                case ReasoningContentDelta r:
+                case ReasoningDelta r:
                     WriteReasoningDelta(r.Thought);
                     break;
 
-                case TextContentDelta t:
+                case TextDelta t:
                     WriteTextDelta(t.Text);
                     break;
 
-                case ToolCallContentStart tcStart:
+                case ToolCallStart tcStart:
                     _activeToolCalls[tcStart.Index] = (tcStart.Id, tcStart.Name, new StringBuilder());
                     break;
 
-                case ToolCallContentDelta tcDelta:
+                case ToolCallDelta tcDelta:
                     if (_activeToolCalls.TryGetValue(tcDelta.Index, out var entry))
                     {
                         entry.Args.Append(tcDelta.Arguments);
                     }
                     break;
 
-                case ToolCallContentEnd tcEnd:
+                case ToolCallEnd tcEnd:
                     if (_activeToolCalls.Remove(tcEnd.Index, out var completedCall))
                     {
                         StopSpinner();

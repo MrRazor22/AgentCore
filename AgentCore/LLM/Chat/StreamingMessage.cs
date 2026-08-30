@@ -33,25 +33,22 @@ namespace AgentCore.LLM.Chat
                 switch (evt)
                 {
                     case MessageStart s:
-                        Role = s.Role;
-                        id = s.Id;
-                        model = s.Model;
-                        break;
+                        Role = s.Role; id = s.Id; model = s.Model; break;
 
                     // 1. Text
-                    case TextContentStart s: active.TryAdd(s.Index, new Text.Accumulator()); break;
-                    case TextContentDelta d: GetOrAdd(d.Index, () => new Text.Accumulator()).Append(d.Text); break;
-                    case TextContentEnd e: if (Complete(e.Index) is { } t) yield return t; break;
+                    case TextStart s: active.TryAdd(s.Index, new Text.Accumulator()); break;
+                    case TextDelta d: GetOrAdd(d.Index, () => new Text.Accumulator()).Append(d.Text); break;
+                    case TextEnd e: if (Complete(e.Index) is { } t) yield return t; break;
 
                     // 2. Reasoning
-                    case ReasoningContentStart s: active.TryAdd(s.Index, new Reasoning.Accumulator()); break;
-                    case ReasoningContentDelta d: GetOrAdd(d.Index, () => new Reasoning.Accumulator()).Append(d.Thought); break;
-                    case ReasoningContentEnd e: if (Complete(e.Index) is { } r) yield return r; break;
+                    case ReasoningStart s: active.TryAdd(s.Index, new Reasoning.Accumulator()); break;
+                    case ReasoningDelta d: GetOrAdd(d.Index, () => new Reasoning.Accumulator()).Append(d.Thought); break;
+                    case ReasoningEnd e: if (Complete(e.Index) is { } r) yield return r; break;
 
                     // 3. Tool Calls
-                    case ToolCallContentStart s: active.TryAdd(s.Index, new ToolCall.Accumulator(s.Id, s.Name)); break;
-                    case ToolCallContentDelta d: GetOrAdd(d.Index, () => new ToolCall.Accumulator(string.Empty, string.Empty)).Append(d.Arguments); break;
-                    case ToolCallContentEnd e: if (Complete(e.Index) is { } call) yield return call; break;
+                    case ToolCallStart s: active.TryAdd(s.Index, new ToolCall.Accumulator(s.Id, s.Name)); break;
+                    case ToolCallDelta d: GetOrAdd(d.Index, () => new ToolCall.Accumulator(string.Empty, string.Empty)).Append(d.Arguments); break;
+                    case ToolCallEnd e: if (Complete(e.Index) is { } call) yield return call; break;
 
                     // 4. End
                     case MessageEnd end:

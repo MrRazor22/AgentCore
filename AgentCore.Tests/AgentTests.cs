@@ -120,10 +120,10 @@ public class AgentTests
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(
-            new TextContentStart(0),
-            new TextContentDelta(0, "Streaming "),
-            new TextContentDelta(0, "reply"),
-            new TextContentEnd(0),
+            new TextStart(0),
+            new TextDelta(0, "Streaming "),
+            new TextDelta(0, "reply"),
+            new TextEnd(0),
             new MessageEnd(FinishReason: "stop")
         );
 
