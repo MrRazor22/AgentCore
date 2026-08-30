@@ -59,10 +59,7 @@ public class ChatContext : IContext
         CancellationToken ct = default)
     {
         int estimatedTotal;
-        lock (_lock)
-        {
-            estimatedTotal = _committedTokens;
-        }
+        lock (_lock) estimatedTotal = _committedTokens; 
 
         _logger?.LogInformation(
              "Retrieving context messages. Strategy={Strategy}, TotalMessages={TotalMessages}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
@@ -72,19 +69,9 @@ public class ChatContext : IContext
              _limit);
 
         if (estimatedTotal > _limit)
-        {
-            _logger?.LogInformation(
-                "Compacting conversation context. Strategy={Strategy}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
-                _summarizer != null ? "Summary" : "Trim",
-                estimatedTotal,
-                _limit);
-            await CompactChatAsync(ct).ConfigureAwait(false);
-        }
+            await CompactChatAsync(ct).ConfigureAwait(false); 
 
-        lock (_lock)
-        {
-            return new List<Message>(_chat);
-        }
+        lock (_lock) return _chat; 
     }
 
     private async Task CompactChatAsync(CancellationToken ct = default)

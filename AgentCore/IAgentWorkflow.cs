@@ -51,10 +51,7 @@ namespace AgentCore
                 ct.ThrowIfCancellationRequested();
 
                 if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
-                {
-                    _logger?.LogError("Workflow execution exceeded iteration limit. MaxIterations={MaxIterations}", _maxIterations.Value);
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
-                }
 
                 var chatMessages = await context.GetMessagesAsync(ct).ConfigureAwait(false);
 
