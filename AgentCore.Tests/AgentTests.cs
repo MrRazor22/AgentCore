@@ -23,9 +23,7 @@ public class AgentTests
         var memory = new ChatContext(
             contextWindow: 50000
         );
-        await memory.StageAsync(new[] { new Message(Role.User, [new Text("Old message")]) });
-        var prompt = await memory.PreparePromptAsync();
-        await memory.CommitAsync(Array.Empty<Message>());
+        await memory.AddAsync(new[] { new Message(Role.User, [new Text("Old message")]) });
 
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)

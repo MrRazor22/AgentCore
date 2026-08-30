@@ -6,7 +6,6 @@ namespace AgentCore.LLM.Chat
     public sealed class StreamingMessage : Message
     {
         private readonly IAsyncEnumerable<IMessageEvent> _eventStream;
-        private int _consumed;
 
         public StreamingMessage(IAsyncEnumerable<IMessageEvent> stream) : base(Role.Assistant)
         {
@@ -18,11 +17,6 @@ namespace AgentCore.LLM.Chat
         /// </summary>
         public async IAsyncEnumerable<IContent> ContentsStream([EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (Interlocked.Exchange(ref _consumed, 1) != 0)
-            {
-                throw new InvalidOperationException("A streaming Message can only be consumed once.");
-            }
-
             var active = new Dictionary<int, IContentAccumulator>();
             var completed = new SortedDictionary<int, IContent>();
             string? id = null, model = null, finishReason = null;
@@ -65,14 +59,10 @@ namespace AgentCore.LLM.Chat
                 completed[idx] = content;
                 yield return content;
             }
-
-            _contents.Clear();
+             
             _contents.AddRange(completed.Values);
 
-            if (id != null || model != null || finishReason != null || usage != null)
-            {
-                Metadata = new MessageMetadata(id, model, finishReason, usage);
-            }
+            Metadata = new MessageMetadata(id, model, finishReason, usage);
 
             T GetOrAdd<T>(int index, Func<T> factory) where T : class, IContentAccumulator
             {

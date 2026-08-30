@@ -44,7 +44,7 @@ namespace AgentCore
         {
             int iterations = 0;
             StreamingMessage assistantResponse;
-            await context.StageAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
+            await context.AddAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
 
             do
             {
@@ -56,7 +56,7 @@ namespace AgentCore
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
-                var chatMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
+                var chatMessages = await context.GetMessagesAsync(ct).ConfigureAwait(false);
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
 
@@ -70,11 +70,11 @@ namespace AgentCore
                         _ = _tooling.ExecuteAsync(toolCall, ct);
                 }
 
-                await context.CommitAsync([assistantResponse], ct).ConfigureAwait(false); 
+                await context.AddAsync([assistantResponse], ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {
-                    await context.StageAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
+                    await context.AddAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
                     yield return result;
                 }
 

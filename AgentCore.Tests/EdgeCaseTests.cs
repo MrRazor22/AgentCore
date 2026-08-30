@@ -132,7 +132,7 @@ namespace AgentCore.Tests
             var system = new Message(Role.System, [new Text("Instructions")]);
             var user = new Message(Role.User, [new Text(new string('A', 300))]);
             var assistant = new Message(Role.Assistant, [new Text(new string('B', 300))], new MessageMetadata(Usage: new TokenUsage(105, 0)));
-            await context.CommitAsync(new[] { system, user, assistant });
+            await context.AddAsync(new[] { system, user, assistant });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)
@@ -165,9 +165,7 @@ namespace AgentCore.Tests
             );
 
             var system = new Message(Role.System, [new Text("Instructions")]);
-            await context.StageAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], new MessageMetadata(Usage: new TokenUsage(10, 0))) });
-            var p1 = await context.PreparePromptAsync();
-            await context.CommitAsync(Array.Empty<Message>());
+            await context.AddAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], new MessageMetadata(Usage: new TokenUsage(10, 0))) });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)

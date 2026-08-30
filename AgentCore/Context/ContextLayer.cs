@@ -21,18 +21,12 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual Task StageAsync(
+    public virtual Task<IReadOnlyList<Message>> GetMessagesAsync(
+        CancellationToken ct = default)
+        => Inner.GetMessagesAsync(ct);
+
+    public virtual Task AddAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default)
-        => Inner.StageAsync(messages, ct);
-
-    public virtual Task<IReadOnlyList<Message>> PreparePromptAsync(
-        CancellationToken ct = default)
-        => Inner.PreparePromptAsync(ct);
-
-
-    public virtual Task CommitAsync(
-        IReadOnlyList<Message> response,
-        CancellationToken ct = default)
-        => Inner.CommitAsync(response, ct);
+        => Inner.AddAsync(messages, ct);
 }

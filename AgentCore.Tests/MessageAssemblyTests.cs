@@ -210,30 +210,6 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public async Task Message_Streaming_SingleConsumption_ThrowsOnSecondEnumeration()
-    {
-        var events = new IMessageEvent[]
-        {
-            new MessageStart(),
-            new TextStart(0),
-            new TextDelta(0, "hello"),
-            new TextEnd(0),
-            new MessageEnd()
-        };
-
-        var message = new StreamingMessage(events.ToAsyncEnumerable());
-
-        // First enumeration succeeds
-        await foreach (var item in message.ContentsStream()) { }
-
-        // Second enumeration throws
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (var item in message.ContentsStream()) { }
-        });
-    }
-
-    [Fact]
     public async Task Message_Streaming_MalformedOrIncompleteStreams_HandledGracefully()
     {
         // 1. Delta without explicit start creates accumulator on demand and yields content

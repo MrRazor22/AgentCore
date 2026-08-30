@@ -17,23 +17,18 @@ public class MemoryTests
         var assistant = new Message(Role.Assistant, [new Text("Hi, how are you?")]);
 
         // Act
-        await context.StageAsync(new[] { system, user, assistant });
-        var prepared = await context.PreparePromptAsync();
+        await context.AddAsync(new[] { system, user, assistant });
+        var prepared = await context.GetMessagesAsync();
 
         // Assert
         Assert.Equal(3, prepared.Count);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
         Assert.Equal("Hello", prepared[1].Contents[0].ForLlm());
         Assert.Equal("Hi, how are you?", prepared[2].Contents[0].ForLlm());
-
-        await context.CommitAsync(Array.Empty<Message>());
-
-        var postCommitPrepared = await context.PreparePromptAsync();
-        Assert.Equal(3, postCommitPrepared.Count);
     }
 
     [Fact]
-    public async Task ChatContext_CommitUpdatesTokenUsage_TriggersCompactionOnNextPrepare()
+    public async Task ChatContext_AddUpdatesTokenUsage_TriggersCompactionOnNextGetMessages()
     {
         // Arrange
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
@@ -46,21 +41,21 @@ public class MemoryTests
         );
 
         var system = new Message(Role.System, [new Text("System instructions")]);
-        await context.StageAsync(new[] { system });
-        var prompt = await context.PreparePromptAsync();
+        await context.AddAsync(new[] { system });
+        var prompt = await context.GetMessagesAsync();
         
-        // Commit a high token usage (95 tokens, exceeding limit of 90) via Message Metadata
-        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0)))]);
+        // Add a message with high token usage (95 tokens, exceeding limit of 90) via Message Metadata
+        await context.AddAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0)))]);
 
-        // Act - Prepare again, which should trigger compaction immediately due to high TokenUsage
-        var finalPrompt = await context.PreparePromptAsync();
+        // Act - GetMessages again, which should trigger compaction immediately due to high TokenUsage
+        var finalPrompt = await context.GetMessagesAsync();
 
         // Assert
         Assert.Contains(finalPrompt, m => m.Contents.Any(c => c.ForLlm().Contains("Compacted summary")));
     }
 
     [Fact]
-    public async Task ChatContext_ExceedsLimit_WithSummarizer_TriggersConsolidationOnPrepare()
+    public async Task ChatContext_ExceedsLimit_WithSummarizer_TriggersConsolidationOnGetMessages()
     {
         // Arrange
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
@@ -74,18 +69,18 @@ public class MemoryTests
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
         var firstUser = new Message(Role.User, [new Text("Hello")]);
-        await context.StageAsync(new[] { system, firstUser });
-        var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
+        await context.AddAsync(new[] { system, firstUser });
+        var prompt1 = await context.GetMessagesAsync();
+        await context.AddAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
 
-        // Act - Prepare triggering compaction
-        await context.StageAsync(new[] { secondUser });
-        var prepared = await context.PreparePromptAsync();
+        // Act - Add and GetMessages triggering compaction
+        await context.AddAsync(new[] { secondUser });
+        var prepared = await context.GetMessagesAsync();
 
         // Assert
-        // Should have System instructions + 1 summary message + secondUser + Assistant
+        // Should have System instructions + 1 summary message + secondUser
         Assert.True(prepared.Count >= 3);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
         Assert.IsType<Text>(prepared[1].Contents[0]);
@@ -94,7 +89,7 @@ public class MemoryTests
     }
 
     [Fact]
-    public async Task ChatContext_ExceedsLimit_NoSummarizer_TriggersRollingTrimmingOnPrepare()
+    public async Task ChatContext_ExceedsLimit_NoSummarizer_TriggersRollingTrimmingOnGetMessages()
     {
         // Arrange
         var context = new ChatContext(
@@ -108,14 +103,14 @@ public class MemoryTests
         var msg2 = new Message(Role.User, [new Text("Second message")]);
         var msg3 = new Message(Role.User, [new Text("Third message that will definitely cause overflow and force eviction")]);
 
-        // Commit first two messages to committed history
-        await context.StageAsync(new[] { system, msg1, msg2 });
-        var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
+        // Add first two messages to history
+        await context.AddAsync(new[] { system, msg1, msg2 });
+        var prompt1 = await context.GetMessagesAsync();
+        await context.AddAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
-        // Act - Prepare triggering rolling trimming
-        await context.StageAsync(new[] { msg3 });
-        var prepared = await context.PreparePromptAsync();
+        // Act - Add third message and GetMessages triggering rolling trimming
+        await context.AddAsync(new[] { msg3 });
+        var prepared = await context.GetMessagesAsync();
 
         // Assert
         // Oldest message (First message) should be evicted. Only System instructions, second, and third should remain
@@ -140,15 +135,15 @@ public class MemoryTests
         var firstUser = new Message(Role.User, [new Text("Hello")]);
         var assistant = new Message(Role.Assistant, [new Text("Hi")]);
         
-        await context.StageAsync(new[] { system, firstUser, assistant });
-        var prompt1 = await context.PreparePromptAsync();
-        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
+        await context.AddAsync(new[] { system, firstUser, assistant });
+        var prompt1 = await context.GetMessagesAsync();
+        await context.AddAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
-        await context.StageAsync(new[] { secondUser });
+        await context.AddAsync(new[] { secondUser });
 
         // Act
-        var prepared = await context.PreparePromptAsync();
+        var prepared = await context.GetMessagesAsync();
 
         // Assert
         Assert.Equal(3, prepared.Count);

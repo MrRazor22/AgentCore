@@ -133,7 +133,6 @@ public class MockLLMProvider : ILLM
 public class MockMemoryProvider : IContext
 {
     private readonly List<Message> _internalMessages = new();
-    private readonly List<Message> _staged = new();
 
     public string RecallResult { get; set; } = "";
 
@@ -151,38 +150,17 @@ public class MockMemoryProvider : IContext
         }
     }
 
-    public Task StageAsync(
+    public Task<IReadOnlyList<Message>> GetMessagesAsync(
+        CancellationToken ct = default)
+    {
+        return Task.FromResult<IReadOnlyList<Message>>(new List<Message>(Messages));
+    }
+
+    public Task AddAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default)
     {
-        _staged.AddRange(messages);
-        return Task.CompletedTask;
-    }
-
-    public Task<IReadOnlyList<Message>> PreparePromptAsync(
-        CancellationToken ct = default)
-    {
-        var list = new List<Message>(Messages);
-        list.AddRange(_staged);
-        return Task.FromResult<IReadOnlyList<Message>>(list);
-    }
-
-
-    public Task CommitAsync(
-        IReadOnlyList<Message> response,
-        CancellationToken ct = default)
-    {
-        _internalMessages.Clear();
-        var prompt = new List<Message>(Messages);
-        prompt.AddRange(_staged);
-        var messagesToStore = new List<Message>(prompt);
-        if (!string.IsNullOrEmpty(RecallResult) && messagesToStore.Count > 0 && messagesToStore[0].Role == Role.System)
-        {
-            messagesToStore.RemoveAt(0);
-        }
-        _internalMessages.AddRange(messagesToStore);
-        _internalMessages.AddRange(response);
-        _staged.Clear();
+        _internalMessages.AddRange(messages);
         return Task.CompletedTask;
     }
 }

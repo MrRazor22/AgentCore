@@ -5,14 +5,10 @@ namespace AgentCore.Context;
 
 public interface IContext
 {
-    Task StageAsync(
-        IReadOnlyList<Message> messages,
+    Task<IReadOnlyList<Message>> GetMessagesAsync(
         CancellationToken ct = default);
 
-    Task<IReadOnlyList<Message>> PreparePromptAsync(
-        CancellationToken ct = default);
-
-    Task CommitAsync(
+    Task AddAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default);
 }

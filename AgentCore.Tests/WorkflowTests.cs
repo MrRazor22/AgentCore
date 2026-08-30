@@ -255,7 +255,7 @@ public class WorkflowTests
         });
 
         // Assert that uncompleted Assistant message was NOT persisted to context upon cancellation
-        Assert.Empty(context.Messages);
+        Assert.DoesNotContain(context.Messages, m => m.Role == Role.Assistant);
     }
 
     [Fact]

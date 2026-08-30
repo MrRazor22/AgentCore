@@ -8,7 +8,6 @@ namespace AgentCore.Context;
 public class ChatContext : IContext
 {
     private readonly List<Message> _chat = new();
-    private readonly List<Message> _staged = new();
     private readonly ILLM? _summarizer;
     private readonly ILogger<ChatContext>? _logger;
 
@@ -31,33 +30,44 @@ public class ChatContext : IContext
         _logger = logger;
     }
 
-    public Task StageAsync(
+    public Task AddAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default)
     {
-        lock (_lock)
-        {
-            _staged.AddRange(messages);
-        }
-        return Task.CompletedTask;
-    }
+        if (messages == null) throw new ArgumentNullException(nameof(messages));
 
-    public async Task<IReadOnlyList<Message>> PreparePromptAsync(
-        CancellationToken ct = default)
-    {
-        int stagedEstimate;
-        int estimatedTotal;
         lock (_lock)
         {
-            stagedEstimate = _staged.Sum(Estimate);
-            estimatedTotal = _committedTokens + stagedEstimate;
+            _chat.AddRange(messages);
+
+            var lastUsage = messages.LastOrDefault(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
+            _committedTokens = lastUsage != null
+                ? (lastUsage.InputTokens + lastUsage.OutputTokens)
+                : _chat.Sum(Estimate);
         }
 
         _logger?.LogInformation(
-             "Preparing prompt. Strategy={Strategy}, StagedMessages={StagedMessages}, StagedTokens={StagedTokens}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
+            "Messages added to context. AddedCount={AddedCount}, TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
+            messages.Count,
+            _chat.Count,
+            _committedTokens);
+
+        return Task.CompletedTask;
+    }
+
+    public async Task<IReadOnlyList<Message>> GetMessagesAsync(
+        CancellationToken ct = default)
+    {
+        int estimatedTotal;
+        lock (_lock)
+        {
+            estimatedTotal = _committedTokens;
+        }
+
+        _logger?.LogInformation(
+             "Retrieving context messages. Strategy={Strategy}, TotalMessages={TotalMessages}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
              _summarizer != null ? "Summary" : "Trim",
-             _staged.Count,
-             stagedEstimate,
+             _chat.Count,
              estimatedTotal,
              _limit);
 
@@ -73,37 +83,8 @@ public class ChatContext : IContext
 
         lock (_lock)
         {
-            var preparedPrompt = new List<Message>(_chat);
-            preparedPrompt.AddRange(_staged);
-            return preparedPrompt;
+            return new List<Message>(_chat);
         }
-    }
-
-
-    public Task CommitAsync(
-        IReadOnlyList<Message> response,
-        CancellationToken ct = default)
-    {
-        if (response == null) throw new ArgumentNullException(nameof(response));
-
-        lock (_lock)
-        {
-            _chat.AddRange(_staged);
-            _chat.AddRange(response);
-            _staged.Clear();
-
-            var lastUsage = response.LastOrDefault(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
-            _committedTokens = lastUsage != null
-                ? (lastUsage.InputTokens + lastUsage.OutputTokens)
-                : _chat.Sum(Estimate);
-        }
-
-        _logger?.LogInformation(
-            "Conversation updated. TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
-            _chat.Count,
-            _committedTokens);
-
-        return Task.CompletedTask;
     }
 
     private async Task CompactChatAsync(CancellationToken ct = default)
@@ -179,9 +160,14 @@ public class ChatContext : IContext
         lock (_lock)
         {
             var systemMessage = _chat.FirstOrDefault(m => m.Role == Role.System);
+            var lastMessage = _chat.Count > (systemMessage != null ? 2 : 1) ? _chat[^1] : null;
             _chat.Clear();
             if (systemMessage != null) _chat.Add(systemMessage);
             _chat.Add(new Message(Role.User, new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")));
+            if (lastMessage != null && lastMessage.Role != Role.System)
+            {
+                _chat.Add(lastMessage);
+            }
             _committedTokens = _chat.Sum(Estimate);
         }
     }

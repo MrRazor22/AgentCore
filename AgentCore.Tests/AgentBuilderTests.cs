@@ -86,26 +86,19 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public override Task StageAsync(
+        public override Task<IReadOnlyList<Message>> GetMessagesAsync(
+            CancellationToken ct = default)
+        {
+            CallLog.Add("GetMessages");
+            return base.GetMessagesAsync(ct);
+        }
+
+        public override async Task AddAsync(
             IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
-            CallLog.Add("Prepare");
-            return base.StageAsync(messages, ct);
-        }
-
-        public override Task<IReadOnlyList<Message>> PreparePromptAsync(
-            CancellationToken ct = default)
-        {
-            return base.PreparePromptAsync(ct);
-        }
-
-        public override async Task CommitAsync(
-            IReadOnlyList<Message> response,
-            CancellationToken ct = default)
-        {
-            CallLog.Add("Commit");
-            await base.CommitAsync(response, ct).ConfigureAwait(false);
+            CallLog.Add("Add");
+            await base.AddAsync(messages, ct).ConfigureAwait(false);
         }
     }
 
@@ -130,7 +123,8 @@ public class AgentBuilderTests
 
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
-        Assert.Contains("Commit", decoratorInstance.CallLog);
+        Assert.Contains("Add", decoratorInstance.CallLog);
+        Assert.Contains("GetMessages", decoratorInstance.CallLog);
     }
 
     private class TestLlmDecorator : LLMLayer
@@ -162,26 +156,19 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Task StageAsync(
+        public override Task<IReadOnlyList<Message>> GetMessagesAsync(
+            CancellationToken ct = default)
+        {
+            _callOrder.Add(_name);
+            return base.GetMessagesAsync(ct);
+        }
+
+        public override async Task AddAsync(
             IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.StageAsync(messages, ct);
-        }
-
-        public override Task<IReadOnlyList<Message>> PreparePromptAsync(
-            CancellationToken ct = default)
-        {
-            return base.PreparePromptAsync(ct);
-        }
-
-        public override async Task CommitAsync(
-            IReadOnlyList<Message> response,
-            CancellationToken ct = default)
-        {
-            _callOrder.Add(_name);
-            await base.CommitAsync(response, ct).ConfigureAwait(false);
+            await base.AddAsync(messages, ct).ConfigureAwait(false);
         }
     }
 
@@ -204,7 +191,7 @@ public class AgentBuilderTests
         Assert.NotNull(agent);
         await agent.InvokeAsync<string>(new Text("Hello"));
 
-        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
+        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
     }
 
     [Fact]
