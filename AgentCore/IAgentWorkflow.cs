@@ -60,8 +60,8 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
 
-                var eventStream = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
-                assistantResponse = new StreamingMessage(eventStream);
+                var msgEvents = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
+                assistantResponse = new StreamingMessage(msgEvents);
 
                 await foreach (var content in assistantResponse.ContentsStream(ct).ConfigureAwait(false))
                 { 

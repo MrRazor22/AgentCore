@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices; 
+using System.Runtime.CompilerServices; 
 
 namespace AgentCore.LLM.Chat
 {
@@ -39,18 +39,18 @@ namespace AgentCore.LLM.Chat
                         break;
 
                     // 1. Text
-                    case TextContentStart s: active.TryAdd(s.Index, new TextAccumulator()); break;
-                    case TextContentDelta d: GetOrAdd(d.Index, () => new TextAccumulator()).Append(d.Text); break;
+                    case TextContentStart s: active.TryAdd(s.Index, new Text.Accumulator()); break;
+                    case TextContentDelta d: GetOrAdd(d.Index, () => new Text.Accumulator()).Append(d.Text); break;
                     case TextContentEnd e: if (Complete(e.Index) is { } t) yield return t; break;
 
                     // 2. Reasoning
-                    case ReasoningContentStart s: active.TryAdd(s.Index, new ReasoningAccumulator()); break;
-                    case ReasoningContentDelta d: GetOrAdd(d.Index, () => new ReasoningAccumulator()).Append(d.Thought); break;
+                    case ReasoningContentStart s: active.TryAdd(s.Index, new Reasoning.Accumulator()); break;
+                    case ReasoningContentDelta d: GetOrAdd(d.Index, () => new Reasoning.Accumulator()).Append(d.Thought); break;
                     case ReasoningContentEnd e: if (Complete(e.Index) is { } r) yield return r; break;
 
                     // 3. Tool Calls
-                    case ToolCallContentStart s: active.TryAdd(s.Index, new ToolCallAccumulator(s.Id, s.Name, s.Index)); break;
-                    case ToolCallContentDelta d: if (active.TryGetValue(d.Index, out var tc)) tc.Append(d.Arguments); break;
+                    case ToolCallContentStart s: active.TryAdd(s.Index, new ToolCall.Accumulator(s.Id, s.Name)); break;
+                    case ToolCallContentDelta d: GetOrAdd(d.Index, () => new ToolCall.Accumulator(string.Empty, string.Empty)).Append(d.Arguments); break;
                     case ToolCallContentEnd e: if (Complete(e.Index) is { } call) yield return call; break;
 
                     // 4. End
@@ -77,13 +77,17 @@ namespace AgentCore.LLM.Chat
                 Metadata = new MessageMetadata(id, model, finishReason, usage);
             }
 
-            IContentAccumulator GetOrAdd(int index, Func<IContentAccumulator> factory)
+            T GetOrAdd<T>(int index, Func<T> factory) where T : class, IContentAccumulator
             {
                 if (!active.TryGetValue(index, out var acc))
                 {
                     active[index] = acc = factory();
                 }
-                return acc;
+                else if (acc is not T)
+                {
+                    throw new InvalidOperationException($"Protocol violation: Stream block at index {index} is of type {acc.GetType().Name}, but received an event expecting {typeof(T).Name}.");
+                }
+                return (T)acc;
             }
 
             IContent? Complete(int index)

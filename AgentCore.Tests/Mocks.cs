@@ -45,10 +45,10 @@ public class MockLLMProvider : ILLM
             }
             case ToolCall tc:
             {
-                int idx = tc.Index ?? blockIndex;
+                int idx = blockIndex;
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
                 yield return new ToolCallContentStart(idx, id, tc.Name);
-                var args = tc.Arguments?.ToJsonString() ?? tc.RawArguments ?? "";
+                var args = tc.Arguments?.ToJsonString() ?? "{}";
                 if (!string.IsNullOrEmpty(args))
                 {
                     yield return new ToolCallContentDelta(idx, args);
