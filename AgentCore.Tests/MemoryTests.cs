@@ -88,7 +88,7 @@ public class MemoryTests
         // Should have System instructions + 1 summary message + secondUser + Assistant
         Assert.True(prepared.Count >= 3);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
-        Assert.IsType<CompactedSummary>(prepared[1].Contents[0]);
+        Assert.IsType<Text>(prepared[1].Contents[0]);
         Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ForLlm());
         Assert.Equal(new string('B', 300), prepared[^1].Contents[0].ForLlm());
     }
@@ -153,7 +153,7 @@ public class MemoryTests
         // Assert
         Assert.Equal(3, prepared.Count);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
-        Assert.IsType<CompactedSummary>(prepared[1].Contents[0]);
+        Assert.IsType<Text>(prepared[1].Contents[0]);
         Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ForLlm());
         Assert.Equal(new string('B', 300), prepared[2].Contents[0].ForLlm());
 

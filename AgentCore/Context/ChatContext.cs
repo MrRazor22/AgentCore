@@ -205,7 +205,7 @@ public class ChatContext : IContext
             var systemMessage = _chat.FirstOrDefault(m => m.Role == Role.System);
             _chat.Clear();
             if (systemMessage != null) _chat.Add(systemMessage);
-            _chat.Add(new Message(Role.User, new CompactedSummary(summary)));
+            _chat.Add(new Message(Role.User, new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")));
             _committedTokens = _chat.Sum(Estimate);
         }
     }

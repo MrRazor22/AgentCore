@@ -18,7 +18,6 @@ internal interface IContentAccumulator
 [JsonDerivedType(typeof(ToolCall), "toolCall")]
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
-[JsonDerivedType(typeof(AgentCore.Context.CompactedSummary), "compactedSummary")]
 public interface IContent
 {
     string ForLlm();
