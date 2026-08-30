@@ -1,5 +1,7 @@
-using Microsoft.Extensions.AI;
-using AgentCore.LLM;
+using AgentCore.LLM.Tornado;
+using LlmTornado;
+using LlmTornado.Chat.Models;
+using LlmTornado.Code;
 using System;
 using System.IO;
 using System.Net.Http;
@@ -85,18 +87,18 @@ public static class OpenAICompatibleFixture
         }
     }
 
-    public static IChatClient CreateChatClient()
+    public static (TornadoApi Api, ChatModel Model) CreateTornado()
     {
-        var baseUri = new Uri(GetBaseUrl());
+        var baseUrl = GetBaseUrl();
         var apiKey = GetApiKey();
-        
-        var openAIClient = new global::OpenAI.OpenAIClient(
-            new System.ClientModel.ApiKeyCredential(apiKey),
-            new global::OpenAI.OpenAIClientOptions { Endpoint = baseUri }
-        );
-        var chatClient = openAIClient.GetChatClient(GetModelName());
-        
-        return chatClient.AsIChatClient();
+        var modelName = GetModelName();
+
+        var api = new TornadoApi(new List<ProviderAuthentication>
+        {
+            new ProviderAuthentication(LLmProviders.Custom, apiKey, baseUrl)
+        });
+        var model = new ChatModel(modelName, LLmProviders.Custom);
+        return (api, model);
     }
 }
 

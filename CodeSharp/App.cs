@@ -2,9 +2,6 @@ using System;
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.Extensions.AI;
-using OpenAI;
-using System.ClientModel;
 using AgentCore;
 using AgentCore.Tools;
 using AgentCore.Context;
@@ -106,13 +103,10 @@ internal class App
                 .AddSerilog();
 
             var baseUrl = config.BaseUrl;
-            if (!baseUrl.EndsWith("/"))
+            if (!string.IsNullOrWhiteSpace(baseUrl) && !baseUrl.EndsWith("/"))
             {
                 baseUrl += "/";
             }
-            var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
-            var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
-            var chatClient = openAIClient.GetChatClient(config.Model).AsIChatClient();
 
             var streamingLayer = new StreamingLLMLayer();
 
@@ -165,8 +159,8 @@ internal class App
 
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
-                .WithMEAI(chatClient)
-                .WithChatContext(contextWindow: 50000, reserveTokens: 2500, summarizer: new AgentCore.LLM.MEAI.MEAILLM(chatClient))
+                .WithTornado(apiKey: config.ApiKey, model: config.Model, baseUrl: baseUrl)
+                .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddLLMLayer(new MessageMergingLayer())
                 .AddLLMLayer(streamingLayer)
                 .AddLLMLayer(new ToolCallDetectionLayer())

@@ -27,23 +27,30 @@ public static class TornadoBuilderExtensions
     }
 
     /// <summary>
-    /// Registers the LLMTornado provider with an API key and provider on the Agent.Builder.
+    /// Registers the LLMTornado provider using an API key, model name, and optional custom endpoint.
     /// </summary>
     public static Agent.Builder WithTornado(
         this Agent.Builder builder,
         string apiKey,
-        LLmProviders provider,
-        ChatModel model)
+        string model,
+        string? baseUrl = null,
+        LLmProviders provider = LLmProviders.Custom)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(apiKey);
         ArgumentNullException.ThrowIfNull(model);
 
-        var api = new TornadoApi(new List<ProviderAuthentication>
-        {
-            new ProviderAuthentication(provider, apiKey)
-        });
+        var api = string.IsNullOrWhiteSpace(baseUrl)
+            ? new TornadoApi(new List<ProviderAuthentication>
+              {
+                  new ProviderAuthentication(provider, apiKey)
+              })
+            : new TornadoApi(new List<ProviderAuthentication>
+              {
+                  new ProviderAuthentication(provider, apiKey, baseUrl)
+              });
 
-        return builder.WithTornado(api, model);
+        var chatModel = new ChatModel(model, provider);
+        return builder.WithTornado(api, chatModel);
     }
 }

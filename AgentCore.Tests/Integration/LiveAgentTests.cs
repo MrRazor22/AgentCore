@@ -2,7 +2,7 @@ using AgentCore;
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.MEAI;
+using AgentCore.LLM.Tornado;
 using AgentCore.Tools;
 using System;
 using System.Collections.Generic;
@@ -65,9 +65,9 @@ public class LiveAgentTests
 
     private Agent.Builder CreateAgentBuilder()
     {
-        var chatClient = OpenAICompatibleFixture.CreateChatClient();
+        var (api, model) = OpenAICompatibleFixture.CreateTornado();
         return Agent.Create()
-            .WithMEAI(chatClient);
+            .WithTornado(api, model);
     }
 
     [LiveFact]
@@ -94,10 +94,10 @@ public class LiveAgentTests
         Assert.False(string.IsNullOrWhiteSpace(fullText), "Expected a non-empty text response from the streaming agent.");
         
         // Also call the underlying LLM direct stream to verify Metadata / token capturing
-        var resolvedLlm = OpenAICompatibleFixture.CreateChatClient();
-        var meaiLlm = new MEAILLM(resolvedLlm);
+        var (api, model) = OpenAICompatibleFixture.CreateTornado();
+        var tornadoLlm = new TornadoLLM(api, model);
         
-        var directMessage = new StreamingMessage(meaiLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }));
+        var directMessage = new StreamingMessage(tornadoLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }));
         await foreach (var _ in directMessage.ContentsStream()) { }
 
         var metadataItem = directMessage.Metadata?.Usage;
