@@ -115,21 +115,18 @@ public class MockLLMProvider : ILLM
 
 
 
-    public async IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public Message StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        CancellationToken ct = default)
     {
         CapturedMessages.Add(messages.ToList());
         CapturedTools.Add(tools);
         CapturedResponseSchemas.Add(responseSchema);
 
         var generator = _responses.Count > 0 ? _responses.Dequeue() : (ct => ToAsyncEnumerable(Enumerable.Empty<IMessageEvent>(), ct));
-        await foreach (var item in generator(ct).WithCancellation(ct).ConfigureAwait(false))
-        {
-            yield return item;
-        }
+        return new Message(generator(ct));
     }
 }
 

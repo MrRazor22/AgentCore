@@ -12,16 +12,13 @@ namespace AgentCore.Layers.LLM;
 /// </summary>
 public class MessageMergingLayer : LLMLayer
 { 
-    public override async IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public override Message StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
-        [EnumeratorCancellation] CancellationToken ct = default)
+        CancellationToken ct = default)
     { 
-        await foreach (var item in Inner.StreamAsync(MergeTextMessages(messages), responseSchema, tools, ct).WithCancellation(ct).ConfigureAwait(false))
-        {
-            yield return item;
-        }
+        return Inner.StreamAsync(MergeTextMessages(messages), responseSchema, tools, ct);
     }
 
     public static IReadOnlyList<Message> MergeTextMessages(IReadOnlyList<Message> messages)

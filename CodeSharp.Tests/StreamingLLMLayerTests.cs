@@ -24,13 +24,16 @@ public class StreamingLLMLayerTests
             _outputs = outputs;
         }
 
-
-
-        public async IAsyncEnumerable<IMessageEvent> StreamAsync(
+        public Message StreamAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
             IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
-            [EnumeratorCancellation] CancellationToken ct = default)
+            CancellationToken ct = default)
+        {
+            return new Message(StreamCoreAsync(ct));
+        }
+
+        private async IAsyncEnumerable<IMessageEvent> StreamCoreAsync([EnumeratorCancellation] CancellationToken ct)
         {
             foreach (var output in _outputs)
             {
@@ -50,9 +53,13 @@ public class StreamingLLMLayerTests
         var expectedOutputs = new List<IMessageEvent>
         {
             new MessageStart(Role.Assistant),
+            new ReasoningContentStart(0),
             new ReasoningContentDelta(0, "Thinking hard"),
+            new ReasoningContentEnd(0),
+            new TextContentStart(1),
             new TextContentDelta(1, "Hello "),
             new TextContentDelta(1, "world!"),
+            new TextContentEnd(1),
             new ToolCallContentStart(2, "tc-1", "test_tool"),
             new ToolCallContentEnd(2),
             new MessageEnd("stop", new TokenUsage(10, 20))
@@ -63,41 +70,31 @@ public class StreamingLLMLayerTests
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
-        var channel = Channel.CreateUnbounded<IMessageEvent>();
+        var channel = Channel.CreateUnbounded<IContent>();
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var streamedResults = new List<IMessageEvent>();
+        var message = layer.StreamAsync(messages);
 
-        await foreach (var output in layer.StreamAsync(messages))
+        var streamedContents = new List<IContent>();
+        await foreach (var content in message.ContentsStream())
         {
-            streamedResults.Add(output);
+            streamedContents.Add(content);
         }
 
         channel.Writer.Complete();
-        var channelResults = new List<IMessageEvent>();
+        var channelResults = new List<IContent>();
         await foreach (var output in channel.Reader.ReadAllAsync())
         {
             channelResults.Add(output);
         }
 
-        Assert.Equal(expectedOutputs.Count, streamedResults.Count);
-        Assert.Equal(expectedOutputs.Count, channelResults.Count);
+        Assert.Equal(3, streamedContents.Count);
+        Assert.Equal(3, channelResults.Count);
 
-        for (int i = 0; i < expectedOutputs.Count; i++)
-        {
-            Assert.Same(expectedOutputs[i], streamedResults[i]);
-            Assert.Same(expectedOutputs[i], channelResults[i]);
-        }
-
-        Assert.Equal("Thinking hard", ((ReasoningContentDelta)channelResults[1]).Thought);
-        Assert.Equal("Hello ", ((TextContentDelta)channelResults[2]).Text);
-        Assert.Equal("world!", ((TextContentDelta)channelResults[3]).Text);
-        Assert.Equal("tc-1", ((ToolCallContentStart)channelResults[4]).Id);
-        var end = (MessageEnd)channelResults[6];
-        Assert.Equal("stop", end.FinishReason);
-        Assert.Equal(10, end.Usage?.InputTokens);
-        Assert.Equal(20, end.Usage?.OutputTokens);
+        Assert.Equal("Thinking hard", ((Reasoning)channelResults[0]).Thought);
+        Assert.Equal("Hello world!", ((Text)channelResults[1]).Value);
+        Assert.Equal("tc-1", ((ToolCall)channelResults[2]).Id);
     }
 
     [Fact]
@@ -115,7 +112,8 @@ public class StreamingLLMLayerTests
         var messages = new List<Message>();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var unused in layer.StreamAsync(messages, ct: cts.Token))
+            var message = layer.StreamAsync(messages, ct: cts.Token);
+            await foreach (var unused in message.ContentsStream(cts.Token))
             {
             }
         });

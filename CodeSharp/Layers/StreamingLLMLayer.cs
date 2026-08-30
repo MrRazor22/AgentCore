@@ -14,19 +14,27 @@ public sealed class StreamingLLMLayer : LLMLayer
 {
 
 
-    internal ChannelWriter<IMessageEvent>? Writer { get; set; }
+    internal ChannelWriter<IContent>? Writer { get; set; }
 
-    public override async IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public override Message StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        CancellationToken ct = default)
+    {
+        var inner = Inner.StreamAsync(messages, responseSchema, tools, ct);
+        return new Message(InterceptContentsAsync(inner, ct));
+    }
+
+    private async IAsyncEnumerable<IContent> InterceptContentsAsync(
+        Message inner,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var writer = Writer;
-        await foreach (var output in Inner.StreamAsync(messages, responseSchema, tools, ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var content in inner.ContentsStream(ct).WithCancellation(ct).ConfigureAwait(false))
         {
-            writer?.TryWrite(output);
-            yield return output;
+            writer?.TryWrite(content);
+            yield return content;
         }
     }
 }

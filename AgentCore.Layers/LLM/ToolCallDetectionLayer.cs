@@ -32,131 +32,89 @@ public class ToolCallDetectionLayer : LLMLayer
         _options = options ?? new ToolCallDetectionOptions();
     }
 
-    public override async IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public override Message StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        CancellationToken ct = default)
+    {
+        var inner = Inner.StreamAsync(messages, responseSchema, tools, ct);
+        return new Message(ProcessContentsAsync(inner, tools, ct));
+    }
+
+    private async IAsyncEnumerable<IContent> ProcessContentsAsync(
+        Message inner,
+        IReadOnlyList<ToolDefinition>? tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var innerStream = Inner.StreamAsync(messages, responseSchema, tools, ct);
         var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-
-        if (toolNames.Count == 0)
-        {
-            await foreach (var item in innerStream.WithCancellation(ct).ConfigureAwait(false))
-            {
-                yield return item;
-            }
-            yield break;
-        }
-
-        Type? currentType = null;
-        var segmentBuffer = new List<IMessageEvent>();
         var totalToolCallsEmitted = 0;
 
-        await foreach (var item in innerStream.WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var content in inner.ContentsStream(ct).WithCancellation(ct).ConfigureAwait(false))
         {
-            var isTextOrReasoning = item is TextContentDelta or ReasoningContentDelta;
-            var itemType = isTextOrReasoning ? item.GetType() : null;
-
-            if (currentType != null && (itemType != currentType || !isTextOrReasoning))
+            if (content is Text t && toolNames.Count > 0)
             {
-                foreach (var emitted in FlushSegment(segmentBuffer, currentType, toolNames))
+                foreach (var parsed in ParseTextContent(t.Value, toolNames))
                 {
-                    yield return emitted;
-                    if (emitted is ToolCallContentStart) totalToolCallsEmitted++;
+                    yield return parsed;
+                    if (parsed is ToolCall)
+                    {
+                        totalToolCallsEmitted++;
+                        if (_options.StopAfterFirstToolCall)
+                        {
+                            yield break;
+                        }
+                    }
                 }
-                segmentBuffer.Clear();
-                currentType = null;
-
-                if (_options.StopAfterFirstToolCall && totalToolCallsEmitted > 0 && isTextOrReasoning)
-                {
-                    yield break;
-                }
-            }
-
-            if (isTextOrReasoning)
-            {
-                currentType = itemType;
-                segmentBuffer.Add(item);
             }
             else
             {
-                yield return item;
-                if (_options.StopAfterFirstToolCall && totalToolCallsEmitted > 0)
+                yield return content;
+                if (content is ToolCall && _options.StopAfterFirstToolCall)
                 {
                     yield break;
                 }
-            }
-        }
-
-        if (segmentBuffer.Count > 0)
-        {
-            foreach (var emitted in FlushSegment(segmentBuffer, currentType!, toolNames))
-            {
-                yield return emitted;
             }
         }
     }
 
-    private static IEnumerable<IMessageEvent> FlushSegment(List<IMessageEvent> buffer, Type type, HashSet<string> toolNames)
+    private static IEnumerable<IContent> ParseTextContent(string text, HashSet<string> toolNames)
     {
-        if (buffer.Count == 0) yield break;
-
-        var combinedText = string.Concat(buffer.Select(GetChunkText));
         int lastIndex = 0;
-
-        while (lastIndex < combinedText.Length)
+        while (lastIndex < text.Length)
         {
-            var parseResult = TryParseToolCall(combinedText.Substring(lastIndex), toolNames);
-            if (parseResult.Success && parseResult.ToolCallEvents != null)
+            var remaining = text.Substring(lastIndex);
+            var parseResult = TryParseToolCall(remaining, toolNames);
+            if (parseResult.Success && parseResult.ToolCall != null)
             {
                 if (parseResult.LeadingTextIndex > 0)
                 {
-                    var leadingText = combinedText.Substring(lastIndex, parseResult.LeadingTextIndex);
-                    yield return CreateDelta(type, leadingText);
+                    var leading = remaining.Substring(0, parseResult.LeadingTextIndex);
+                    if (!string.IsNullOrEmpty(leading))
+                    {
+                        yield return new Text(leading);
+                    }
                 }
 
-                foreach (var evt in parseResult.ToolCallEvents)
-                {
-                    yield return evt;
-                }
+                yield return parseResult.ToolCall;
                 lastIndex += parseResult.MatchedEndIndex;
             }
             else
             {
-                var remainingText = combinedText.Substring(lastIndex);
-                if (!string.IsNullOrEmpty(remainingText))
+                var trailing = remaining;
+                if (!string.IsNullOrEmpty(trailing))
                 {
-                    yield return CreateDelta(type, remainingText);
+                    yield return new Text(trailing);
                 }
                 break;
             }
         }
     }
 
-    private static string GetChunkText(IMessageEvent chunk)
-    {
-        return chunk switch
-        {
-            TextContentDelta tc => tc.Text,
-            ReasoningContentDelta rc => rc.Thought,
-            _ => ""
-        };
-    }
-
-    private static IMessageEvent CreateDelta(Type type, string text)
-    {
-        return type == typeof(ReasoningContentDelta)
-            ? new ReasoningContentDelta(0, text)
-            : new TextContentDelta(0, text);
-    }
-
     private struct ParseResult
     {
         public bool Success;
-        public bool IsDefiniteFailure;
-        public List<IMessageEvent>? ToolCallEvents;
+        public ToolCall? ToolCall;
         public int LeadingTextIndex;
         public int MatchedEndIndex;
     }
@@ -193,13 +151,13 @@ public class ToolCallDetectionLayer : LLMLayer
         if (tagMatch.Success)
         {
             var innerContent = tagMatch.Groups["content"].Value;
-            var toolEvents = TryExtractFromJson(innerContent, toolNames) ?? TryExtractFromXmlTags(innerContent, toolNames);
-            if (toolEvents != null)
+            var toolCall = TryExtractFromJson(innerContent, toolNames) ?? TryExtractFromXmlTags(innerContent, toolNames);
+            if (toolCall != null)
             {
                 return new ParseResult
                 {
                     Success = true,
-                    ToolCallEvents = toolEvents,
+                    ToolCall = toolCall,
                     LeadingTextIndex = tagMatch.Index,
                     MatchedEndIndex = tagMatch.Index + tagMatch.Length
                 };
@@ -210,13 +168,13 @@ public class ToolCallDetectionLayer : LLMLayer
         if (mdMatch.Success)
         {
             var jsonStr = mdMatch.Groups["json"].Value;
-            var toolEvents = TryExtractFromJson(jsonStr, toolNames);
-            if (toolEvents != null)
+            var toolCall = TryExtractFromJson(jsonStr, toolNames);
+            if (toolCall != null)
             {
                 return new ParseResult
                 {
                     Success = true,
-                    ToolCallEvents = toolEvents,
+                    ToolCall = toolCall,
                     LeadingTextIndex = mdMatch.Index,
                     MatchedEndIndex = mdMatch.Index + mdMatch.Length
                 };
@@ -230,29 +188,24 @@ public class ToolCallDetectionLayer : LLMLayer
             if (lastBrace >= 0)
             {
                 var jsonCandidate = text.Substring(firstBrace, lastBrace - firstBrace + 1);
-                var toolEvents = TryExtractFromJson(jsonCandidate, toolNames);
-                if (toolEvents != null)
+                var toolCall = TryExtractFromJson(jsonCandidate, toolNames);
+                if (toolCall != null)
                 {
                     return new ParseResult
                     {
                         Success = true,
-                        ToolCallEvents = toolEvents,
+                        ToolCall = toolCall,
                         LeadingTextIndex = firstBrace,
                         MatchedEndIndex = lastBrace + 1
                     };
                 }
-                return new ParseResult { IsDefiniteFailure = true };
             }
         }
 
-        if (text.Contains("</tool_call>") || text.Contains("[/TOOLCALL]") || text.Contains("```"))
-        {
-            return new ParseResult { IsDefiniteFailure = true };
-        }
         return new ParseResult { Success = false };
     }
 
-    private static List<IMessageEvent>? TryExtractFromJson(string jsonStr, HashSet<string> toolNames)
+    private static ToolCall? TryExtractFromJson(string jsonStr, HashSet<string> toolNames)
     {
         try
         {
@@ -263,12 +216,7 @@ public class ToolCallDetectionLayer : LLMLayer
                 {
                     var args = (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new JsonObject();
                     var callId = Guid.NewGuid().ToString("N");
-                    return
-                    [
-                        new ToolCallContentStart(0, callId, name),
-                        new ToolCallContentDelta(0, args.ToJsonString()),
-                        new ToolCallContentEnd(0)
-                    ];
+                    return new ToolCall(callId, name, args);
                 }
             }
         }
@@ -276,7 +224,7 @@ public class ToolCallDetectionLayer : LLMLayer
         return null;
     }
 
-    private static List<IMessageEvent>? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
+    private static ToolCall? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
     {
         var functionMatch = Regex.Match(content, @"(?i)<function\s*(?:=|\bname\s*=)\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>");
         if (!functionMatch.Success) return null;
@@ -296,11 +244,6 @@ public class ToolCallDetectionLayer : LLMLayer
         }
 
         var callId = Guid.NewGuid().ToString("N");
-        return
-        [
-            new ToolCallContentStart(0, callId, funcName),
-            new ToolCallContentDelta(0, argsObj.ToJsonString()),
-            new ToolCallContentEnd(0)
-        ];
+        return new ToolCall(callId, funcName, argsObj);
     }
 }

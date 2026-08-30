@@ -6,7 +6,7 @@ namespace AgentCore.LLM;
 
 public interface ILLM
 {
-    IAsyncEnumerable<IMessageEvent> StreamAsync(
+    Message StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,

@@ -33,7 +33,7 @@ public class MessageAssemblyTests
         var message = new Message(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
-        await foreach (var item in message)
+        await foreach (var item in message.ContentsStream())
         {
             contents.Add(item);
         }
@@ -67,7 +67,7 @@ public class MessageAssemblyTests
         var message = new Message(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
-        await foreach (var item in message)
+        await foreach (var item in message.ContentsStream())
         {
             contents.Add(item);
         }
@@ -104,7 +104,7 @@ public class MessageAssemblyTests
         var message = new Message(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
-        await foreach (var item in message)
+        await foreach (var item in message.ContentsStream())
         {
             contents.Add(item);
         }
@@ -146,7 +146,7 @@ public class MessageAssemblyTests
         var message = new Message(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
-        await foreach (var item in message)
+        await foreach (var item in message.ContentsStream())
         {
             contents.Add(item);
         }
@@ -191,7 +191,7 @@ public class MessageAssemblyTests
         var message = new Message(sequence.ToAsyncEnumerable());
 
         var yielded = new List<IContent>();
-        await foreach (var item in message)
+        await foreach (var item in message.ContentsStream())
         {
             yielded.Add(item);
         }
@@ -224,45 +224,53 @@ public class MessageAssemblyTests
         var message = new Message(events.ToAsyncEnumerable());
 
         // First enumeration succeeds
-        await foreach (var item in message) { }
+        await foreach (var item in message.ContentsStream()) { }
 
         // Second enumeration throws
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var item in message) { }
+            await foreach (var item in message.ContentsStream()) { }
         });
     }
 
     [Fact]
-    public async Task Message_Streaming_LifecycleViolations_ThrowExplicitly()
+    public async Task Message_Streaming_MalformedOrIncompleteStreams_HandledGracefully()
     {
-        // 1. Delta without start
-        var bad1 = new IMessageEvent[] { new TextContentDelta(0, "oops") };
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (var _ in new Message(bad1.ToAsyncEnumerable())) { }
-        });
+        // 1. Delta without explicit start creates accumulator on demand and yields content
+        var bad1 = new IMessageEvent[] { new TextContentDelta(0, "graceful text"), new TextContentEnd(0) };
+        var msg1 = new Message(bad1.ToAsyncEnumerable());
+        var contents1 = new List<IContent>();
+        await foreach (var c in msg1.ContentsStream()) contents1.Add(c);
+        Assert.Equal("graceful text", Assert.Single(contents1.OfType<Text>()).Value);
 
-        // 2. End without start
+        // 2. Stray end without start does not throw and does not yield empty block
         var bad2 = new IMessageEvent[] { new TextContentEnd(0) };
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (var _ in new Message(bad2.ToAsyncEnumerable())) { }
-        });
+        var msg2 = new Message(bad2.ToAsyncEnumerable());
+        var contents2 = new List<IContent>();
+        await foreach (var c in msg2.ContentsStream()) contents2.Add(c);
+        Assert.Empty(contents2);
 
-        // 3. Duplicate start
-        var bad3 = new IMessageEvent[] { new TextContentStart(0), new TextContentStart(0) };
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        // 3. Duplicate start does not overwrite accumulated text
+        var bad3 = new IMessageEvent[]
         {
-            await foreach (var _ in new Message(bad3.ToAsyncEnumerable())) { }
-        });
+            new TextContentStart(0),
+            new TextContentDelta(0, "first"),
+            new TextContentStart(0),
+            new TextContentDelta(0, " second"),
+            new TextContentEnd(0)
+        };
+        var msg3 = new Message(bad3.ToAsyncEnumerable());
+        var contents3 = new List<IContent>();
+        await foreach (var c in msg3.ContentsStream()) contents3.Add(c);
+        Assert.Equal("first second", Assert.Single(contents3.OfType<Text>()).Value);
 
-        // 4. Unclosed block on MessageEnd
-        var bad4 = new IMessageEvent[] { new TextContentStart(0), new MessageEnd() };
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (var _ in new Message(bad4.ToAsyncEnumerable())) { }
-        });
+        // 4. Unclosed block on MessageEnd is gracefully completed and yielded
+        var bad4 = new IMessageEvent[] { new TextContentStart(0), new TextContentDelta(0, "unclosed"), new MessageEnd() };
+        var msg4 = new Message(bad4.ToAsyncEnumerable());
+        var contents4 = new List<IContent>();
+        await foreach (var c in msg4.ContentsStream()) contents4.Add(c);
+        Assert.Equal("unclosed", Assert.Single(contents4.OfType<Text>()).Value);
+        Assert.Equal("unclosed", Assert.Single(msg4.Contents.OfType<Text>()).Value);
     }
 
     [Fact]

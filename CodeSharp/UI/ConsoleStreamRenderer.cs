@@ -9,23 +9,15 @@ using System.Linq;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+using AgentText = AgentCore.LLM.Chat.Text;
 
 namespace CodeSharp.UI
 {
-    /// <summary>
-    /// Wraps a completed <see cref="ToolResult"/> as an <see cref="IMessageEvent"/> so it can be
-    /// written into the same channel as raw LLM token deltas. Because the channel is FIFO and has
-    /// a single reader, this guarantees the result is rendered strictly after every preceding LLM
-    /// token for that iteration — with no locking or timing assumptions required.
-    /// </summary>
-    internal sealed record ToolResultOutput(ToolResult Result) : IMessageEvent;
-
     public sealed class ConsoleStreamRenderer
     {
         private readonly Stopwatch _thinkingSw = new();
         private ConsoleSpinner? _spinner;
         private ConsoleTreeWriter? _thinkingWriter;
-        private readonly List<AccumulatedToolCall> _toolCalls = new();
 
         /// <summary>Maps tool-call ID → tool name, populated as each call is finalized.</summary>
         private readonly Dictionary<string, string> _toolCallNames = new();
@@ -44,15 +36,6 @@ namespace CodeSharp.UI
 
         private readonly IToolDisplayFormatter _formatter;
 
-        private class AccumulatedToolCall
-        {
-            public string Id { get; set; } = "";
-            public int? Index { get; set; }
-            public StringBuilder Name { get; } = new();
-            public StringBuilder Arguments { get; } = new();
-            public bool Finalized { get; set; }
-        }
-
         public ConsoleStreamRenderer(IToolDisplayFormatter formatter)
         {
             _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
@@ -69,24 +52,14 @@ namespace CodeSharp.UI
         public void ResetForNextStep()
         {
             FinalizeThinking();
-            FinalizeAllToolCalls();
             _answerStarted = false;
         }
 
-        public void Write(IMessageEvent output)
+        public void Write(IContent output)
         {
-            if (output is MessageEnd)
-            {
-                ResetForNextStep();
-                return;
-            }
-
             switch (output)
             {
-                case MessageStart:
-                    break;
-                case ReasoningContentDelta reasoning:
-                    FinalizeAllToolCalls();
+                case Reasoning reasoning:
                     if (_thinkingWriter == null)
                     {
                         StopSpinner();
@@ -103,70 +76,34 @@ namespace CodeSharp.UI
                     }
                     break;
 
-                case ReasoningContentEnd:
-                    FinalizeThinking();
-                    break;
-
-                case TextContentDelta text:
+                case AgentText text:
                     if (!_answerStarted)
                     {
                         StopSpinner();
                         bool hadThinking = _thinkingWriter != null;
                         FinalizeThinking();
-                        FinalizeAllToolCalls();
                         if (!hadThinking)
                         {
                             AnsiConsole.WriteLine();
                         }
                         _answerStarted = true;
-                        var trimmed = text.Text.TrimStart('\r', '\n');
+                        var trimmed = text.Value.TrimStart('\r', '\n');
                         AnsiConsole.Write(new Spectre.Console.Text(trimmed));
                     }
                     else
                     {
-                        AnsiConsole.Write(new Spectre.Console.Text(text.Text));
+                        AnsiConsole.Write(new Spectre.Console.Text(text.Value));
                     }
                     break;
 
-                case ToolCallContentStart tcStart:
+                case ToolCall tc:
                     StopSpinner();
                     FinalizeThinking();
-                    FinalizeAllToolCalls();
-
-                    var newToolCall = new AccumulatedToolCall
-                    {
-                        Id = tcStart.Id,
-                        Index = tcStart.Index
-                    };
-                    if (!string.IsNullOrEmpty(tcStart.Name))
-                    {
-                        newToolCall.Name.Append(tcStart.Name);
-                    }
-                    _toolCalls.Add(newToolCall);
+                    RenderToolCall(tc);
                     break;
 
-                case ToolCallContentDelta tcDelta:
-                    StopSpinner();
-                    FinalizeThinking();
-
-                    var toolCall = _toolCalls.FirstOrDefault(t => t.Index == tcDelta.Index);
-                    if (toolCall != null && !string.IsNullOrEmpty(tcDelta.Arguments))
-                    {
-                        toolCall.Arguments.Append(tcDelta.Arguments);
-                    }
-                    break;
-
-                case ToolCallContentEnd end:
-                    var endingCall = _toolCalls.FirstOrDefault(t => t.Index == end.Index);
-                    if (endingCall != null)
-                    {
-                        FinalizeToolCall(endingCall);
-                        _toolCalls.Remove(endingCall);
-                    }
-                    break;
-
-                case ToolResultOutput tro:
-                    WriteToolResultCore(tro.Result);
+                case ToolResult tr:
+                    WriteToolResultCore(tr);
                     break;
             }
         }
@@ -175,7 +112,6 @@ namespace CodeSharp.UI
         {
             StopSpinner();
             FinalizeThinking();
-            FinalizeAllToolCalls();
         }
 
         private void FinalizeThinking()
@@ -191,47 +127,19 @@ namespace CodeSharp.UI
             }
         }
 
-        private void FinalizeAllToolCalls()
+        private void RenderToolCall(ToolCall tc)
         {
-            foreach (var toolCall in _toolCalls)
-            {
-                FinalizeToolCall(toolCall);
-            }
-            _toolCalls.Clear();
-        }
-
-        private void FinalizeToolCall(AccumulatedToolCall toolCall)
-        {
-            if (toolCall.Finalized) return;
-            toolCall.Finalized = true;
-
-            var name = toolCall.Name.ToString().Trim();
+            var name = tc.Name.Trim();
             if (string.IsNullOrEmpty(name)) return;
 
-            // Record call-ID → name so WriteToolResultCore can display the correct tool name.
-            if (!string.IsNullOrEmpty(toolCall.Id))
-                _toolCallNames[toolCall.Id] = name;
-
-            var rawArgs = toolCall.Arguments.ToString();
+            if (!string.IsNullOrEmpty(tc.Id))
+                _toolCallNames[tc.Id] = name;
 
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[bold yellow]Tool Call:[/] [bold cyan]{Markup.Escape(name)}[/]");
 
-            JsonObject? jsonObject = null;
-            if (!string.IsNullOrWhiteSpace(rawArgs))
-            {
-                try
-                {
-                    jsonObject = JsonNode.Parse(rawArgs)?.AsObject();
-                }
-                catch { }
-            }
-
-            var dummyCall = new ToolCall(toolCall.Id, name, jsonObject ?? new JsonObject());
-            var displayInfo = _formatter.FormatCall(dummyCall);
-
+            var displayInfo = _formatter.FormatCall(tc);
             var summary = displayInfo.ArgSummary;
-            // Compact rendering: truncate normal stream representation to MaxArgLength
             if (summary.Length > MaxArgLength)
             {
                 summary = summary[..MaxArgLength] + "...";
@@ -241,9 +149,7 @@ namespace CodeSharp.UI
         }
 
         /// <summary>
-        /// Renders a tool result. Called from <see cref="Write"/> when a
-        /// <see cref="ToolResultOutput"/> arrives off the channel, which guarantees this runs
-        /// after all preceding LLM token deltas for the same iteration have been rendered.
+        /// Renders a tool result.
         /// </summary>
         private void WriteToolResultCore(ToolResult result)
         {

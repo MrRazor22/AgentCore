@@ -62,23 +62,21 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<IMessageEvent>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]))
+        var message = provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]);
+        var contents = new List<IContent>();
+        await foreach (var c in message.ContentsStream())
         {
-            events.Add(evt);
+            contents.Add(c);
         }
 
         // Assert
-        var textDeltas = events.OfType<TextContentDelta>().ToList();
-        Assert.Equal(2, textDeltas.Count);
-        Assert.Equal("Hello", textDeltas[0].Text);
-        Assert.Equal(" World!", textDeltas[1].Text);
+        var texts = contents.OfType<Text>().ToList();
+        Assert.Equal(2, texts.Count);
+        Assert.Equal("Hello", texts[0].Value);
+        Assert.Equal(" World!", texts[1].Value);
 
-        var reasoningDelta = Assert.Single(events.OfType<ReasoningContentDelta>());
-        Assert.Equal("Thinking about reply...", reasoningDelta.Thought);
-
-        Assert.Contains(events, e => e is MessageStart);
-        Assert.Contains(events, e => e is MessageEnd);
+        var reasoning = Assert.Single(contents.OfType<Reasoning>());
+        Assert.Equal("Thinking about reply...", reasoning.Thought);
     }
 
     [Fact]
@@ -103,18 +101,14 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<IMessageEvent>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]))
-        {
-            events.Add(evt);
-        }
+        var message = provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]);
+        await foreach (var _ in message.ContentsStream()) { }
 
         // Assert
-        var msgEnd = Assert.Single(events.OfType<MessageEnd>());
-        Assert.Equal("stop", msgEnd.FinishReason);
-        Assert.NotNull(msgEnd.Usage);
-        Assert.Equal(10, msgEnd.Usage.InputTokens);
-        Assert.Equal(20, msgEnd.Usage.OutputTokens);
+        Assert.Equal("stop", message.Metadata?.FinishReason);
+        Assert.NotNull(message.Metadata?.Usage);
+        Assert.Equal(10, message.Metadata.Usage.InputTokens);
+        Assert.Equal(20, message.Metadata.Usage.OutputTokens);
     }
 
     [Fact]
@@ -134,17 +128,18 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var events = new List<IMessageEvent>();
-        await foreach (var evt in provider.StreamAsync([new Message(Role.User, [new Text("What is the weather?")])]))
+        var message = provider.StreamAsync([new Message(Role.User, [new Text("What is the weather?")])]);
+        var contents = new List<IContent>();
+        await foreach (var c in message.ContentsStream())
         {
-            events.Add(evt);
+            contents.Add(c);
         }
 
         // Assert
-        var toolStart = Assert.Single(events.OfType<ToolCallContentStart>());
-        Assert.Equal("call_1", toolStart.Id);
-        Assert.Equal("get_weather", toolStart.Name);
-        Assert.Contains(events, e => e is MessageEnd);
+        var toolCall = Assert.Single(contents.OfType<ToolCall>());
+        Assert.Equal("call_1", toolCall.Id);
+        Assert.Equal("get_weather", toolCall.Name);
+        Assert.Equal("Seattle", toolCall.Arguments?["location"]?.ToString());
     }
 
     [Fact]

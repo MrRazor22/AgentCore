@@ -84,7 +84,7 @@ public class ChatUI
                 }
             });
 
-            var channel = Channel.CreateUnbounded<IMessageEvent>(new UnboundedChannelOptions
+            var channel = Channel.CreateUnbounded<IContent>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 AllowSynchronousContinuations = false
@@ -106,7 +106,7 @@ public class ChatUI
                         // strict FIFO order after any preceding LLM token deltas.
                         if (content is AgentCore.LLM.Chat.ToolResult toolResult)
                         {
-                            channel.Writer.TryWrite(new ToolResultOutput(toolResult));
+                            channel.Writer.TryWrite(toolResult);
                         }
                     }
                 }
@@ -150,7 +150,7 @@ public class ChatUI
         }
     }
 
-    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<IMessageEvent> reader, CancellationToken cancellationToken)
+    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<IContent> reader, CancellationToken cancellationToken)
     {
         try
         {

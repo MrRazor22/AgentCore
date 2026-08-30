@@ -43,7 +43,7 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
-            Message assistantMessage;
+            Message assistantResponse;
             await context.StageAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
 
             do
@@ -56,21 +56,20 @@ namespace AgentCore
                     throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
                 }
 
-                var currentMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
+                var chatMessages = await context.PreparePromptAsync(ct).ConfigureAwait(false);
 
-                _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
+                _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
 
-                var stream = _llm.StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct);
-                assistantMessage = new Message(stream);
+                assistantResponse = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
 
-                await foreach (var content in assistantMessage.WithCancellation(ct).ConfigureAwait(false))
+                await foreach (var content in assistantResponse.ContentsStream(ct).ConfigureAwait(false))
                 { 
                     yield return content;
                     if (content is ToolCall toolCall)
                         _ = _tooling.ExecuteAsync(toolCall, ct);
                 }
 
-                await context.CommitAsync(assistantMessage, ct).ConfigureAwait(false); 
+                await context.CommitAsync(assistantResponse, ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {
@@ -80,7 +79,7 @@ namespace AgentCore
 
                 iterations++;
             }
-            while (assistantMessage.Contents.OfType<ToolCall>().Any());
+            while (assistantResponse.Contents.OfType<ToolCall>().Any());
         }
     }
 }
