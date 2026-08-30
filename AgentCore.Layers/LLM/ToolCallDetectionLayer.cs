@@ -14,24 +14,23 @@ public class ToolCallDetectionOptions
     public bool StopAfterFirstToolCall { get; set; } = false;
 }
 
-public class ToolCallDetectionLayer : LLMLayer
+public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : LLMLayer
 {
-    private readonly ToolCallDetectionOptions _options;
+    private readonly ToolCallDetectionOptions _options = options ?? new();
 
-    private static readonly Regex TagPattern = new Regex(
+    private static readonly Regex TagPattern = new(
         @"[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<content>[\s\S]*?)\s*[\[\(<]/\k<tag>[\]\)>]",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
-    );
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-    private static readonly Regex MarkdownBlockPattern = new Regex(
+    private static readonly Regex MarkdownPattern = new(
         @"```json\s*(?<json>\{[\s\S]*?\})\s*```",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline
-    );
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-    public ToolCallDetectionLayer(ToolCallDetectionOptions? options = null)
-    {
-        _options = options ?? new ToolCallDetectionOptions();
-    }
+    private static readonly Regex XmlFuncPattern = new(
+        @"(?i)<function\s*(?:=|\bname\s*=)\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>", RegexOptions.Compiled);
+
+    private static readonly Regex XmlParamPattern = new(
+        @"<parameter\s*=\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>(?<val>[\s\S]*?)</parameter>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -39,273 +38,158 @@ public class ToolCallDetectionLayer : LLMLayer
         IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
     {
-        return ProcessEventsAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), tools, ct);
+        var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+        return toolNames.Count == 0
+            ? Inner.StreamAsync(messages, responseSchema, tools, ct)
+            : ProcessStreamAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), toolNames, ct);
     }
 
-    private async IAsyncEnumerable<IMessageEvent> ProcessEventsAsync(
-        IAsyncEnumerable<IMessageEvent> innerEvents,
-        IReadOnlyList<ToolDefinition>? tools,
+    private async IAsyncEnumerable<IMessageEvent> ProcessStreamAsync(
+        IAsyncEnumerable<IMessageEvent> innerStream,
+        HashSet<string> toolNames,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-        var totalToolCallsEmitted = 0;
-        var textBuffers = new Dictionary<int, StringBuilder>();
+        var buffers = new Dictionary<int, StringBuilder>();
         int eventIndex = 0;
 
-        await foreach (var evt in innerEvents.WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var evt in innerStream.WithCancellation(ct).ConfigureAwait(false))
         {
+            yield return evt;
+
             switch (evt)
             {
-                case TextStart s when toolNames.Count > 0:
-                    textBuffers[s.Index] = new StringBuilder();
+                case TextStart s:
+                    buffers[s.Index] = new();
+                    eventIndex = Math.Max(eventIndex, s.Index + 1);
                     break;
 
-                case TextDelta d when toolNames.Count > 0:
-                    if (!textBuffers.TryGetValue(d.Index, out var sb))
+                case ReasoningStart rs:
+                    buffers[rs.Index] = new();
+                    eventIndex = Math.Max(eventIndex, rs.Index + 1);
+                    break;
+
+                case TextDelta d:
+                    if (!buffers.TryGetValue(d.Index, out var tb)) buffers[d.Index] = tb = new();
+                    tb.Append(d.Text);
+                    break;
+
+                case ReasoningDelta rd:
+                    if (!buffers.TryGetValue(rd.Index, out var rb)) buffers[rd.Index] = rb = new();
+                    rb.Append(rd.Thought);
+                    break;
+
+                case TextEnd te when buffers.Remove(te.Index, out var sb):
+                    foreach (var tcEvt in EmitToolCalls(sb.ToString()))
                     {
-                        textBuffers[d.Index] = sb = new StringBuilder();
+                        yield return tcEvt;
+                        if (_options.StopAfterFirstToolCall) yield break;
                     }
-                    sb.Append(d.Text);
                     break;
 
-                case TextEnd e when toolNames.Count > 0:
-                    if (textBuffers.Remove(e.Index, out var buffer))
+                case ReasoningEnd re when buffers.Remove(re.Index, out var sb):
+                    foreach (var tcEvt in EmitToolCalls(sb.ToString()))
                     {
-                        foreach (var parsedEvt in EmitParsedTextEvents(buffer.ToString(), toolNames))
+                        yield return tcEvt;
+                        if (_options.StopAfterFirstToolCall) yield break;
+                    }
+                    break;
+
+                case MessageEnd:
+                    foreach (var (_, sb) in buffers)
+                        foreach (var tcEvt in EmitToolCalls(sb.ToString()))
                         {
-                            yield return parsedEvt;
-                            if (parsedEvt is ToolCallEnd)
-                            {
-                                totalToolCallsEmitted++;
-                                if (_options.StopAfterFirstToolCall)
-                                {
-                                    yield break;
-                                }
-                            }
+                            yield return tcEvt;
+                            if (_options.StopAfterFirstToolCall) yield break;
                         }
-                    }
-                    break;
-
-                default:
-                    // If any text buffers were pending when a non-text event arrives, flush them
-                    if (textBuffers.Count > 0 && evt is MessageEnd)
-                    {
-                        foreach (var (_, pendingBuffer) in textBuffers)
-                        {
-                            foreach (var parsedEvt in EmitParsedTextEvents(pendingBuffer.ToString(), toolNames))
-                            {
-                                yield return parsedEvt;
-                                if (parsedEvt is ToolCallEnd)
-                                {
-                                    totalToolCallsEmitted++;
-                                    if (_options.StopAfterFirstToolCall)
-                                    {
-                                        yield break;
-                                    }
-                                }
-                            }
-                        }
-                        textBuffers.Clear();
-                    }
-
-                    yield return evt;
-
-                    if (evt is ToolCallEnd && _options.StopAfterFirstToolCall)
-                    {
-                        yield break;
-                    }
+                    buffers.Clear();
                     break;
             }
         }
 
-        IEnumerable<IMessageEvent> EmitParsedTextEvents(string text, HashSet<string> names)
+        IEnumerable<IMessageEvent> EmitToolCalls(string text)
         {
-            foreach (var content in ParseTextContent(text, names))
+            int lastIndex = 0;
+            while (lastIndex < text.Length)
             {
-                if (content is Text t)
-                {
-                    int idx = eventIndex++;
-                    yield return new TextStart(idx);
-                    yield return new TextDelta(idx, t.Value);
-                    yield return new TextEnd(idx);
-                }
-                else if (content is ToolCall tc)
-                {
-                    int idx = eventIndex++;
-                    yield return new ToolCallStart(idx, tc.Id, tc.Name);
-                    yield return new ToolCallDelta(idx, tc.Arguments?.ToJsonString() ?? "{}");
-                    yield return new ToolCallEnd(idx);
-                }
+                var match = FindToolCall(text, lastIndex, toolNames);
+                if (match == null) break;
+
+                int idx = eventIndex++;
+                yield return new ToolCallStart(idx, match.Call.Id, match.Call.Name);
+                yield return new ToolCallDelta(idx, match.Call.Arguments?.ToJsonString() ?? "{}");
+                yield return new ToolCallEnd(idx);
+
+                lastIndex = match.Index + match.Length;
             }
         }
     }
 
-    private static IEnumerable<IContent> ParseTextContent(string text, HashSet<string> toolNames)
-    {
-        int lastIndex = 0;
-        while (lastIndex < text.Length)
-        {
-            var remaining = text.Substring(lastIndex);
-            var parseResult = TryParseToolCall(remaining, toolNames);
-            if (parseResult.Success && parseResult.ToolCall != null)
-            {
-                if (parseResult.LeadingTextIndex > 0)
-                {
-                    var leading = remaining.Substring(0, parseResult.LeadingTextIndex);
-                    if (!string.IsNullOrEmpty(leading))
-                    {
-                        yield return new Text(leading);
-                    }
-                }
+    private record ToolMatch(ToolCall Call, int Index, int Length);
 
-                yield return parseResult.ToolCall;
-                lastIndex += parseResult.MatchedEndIndex;
-            }
-            else
-            {
-                var trailing = remaining;
-                if (!string.IsNullOrEmpty(trailing))
-                {
-                    yield return new Text(trailing);
-                }
-                break;
-            }
-        }
+    private static ToolMatch? FindToolCall(string text, int startIndex, HashSet<string> toolNames)
+    {
+        // 1. Tag wrapper (<tool_call>...</tool_call>)
+        var tag = TagPattern.Match(text, startIndex);
+        if (tag.Success && ExtractTag(tag.Groups["content"].Value, toolNames) is { } tc1)
+            return new(tc1, tag.Index, tag.Length);
+
+        // 2. Markdown codeblock (```json { ... } ```)
+        var md = MarkdownPattern.Match(text, startIndex);
+        if (md.Success && ExtractJson(md.Groups["json"].Value, toolNames) is { } tc2)
+            return new(tc2, md.Index, md.Length);
+
+        // 3. Raw JSON ({ "name": "...", "arguments": { ... } })
+        return ExtractRawJson(text, startIndex, toolNames);
     }
 
-    private struct ParseResult
+    private static ToolMatch? ExtractRawJson(string text, int startIndex, HashSet<string> toolNames)
     {
-        public bool Success;
-        public ToolCall? ToolCall;
-        public int LeadingTextIndex;
-        public int MatchedEndIndex;
-    }
+        int first = text.IndexOf('{', startIndex);
+        if (first < 0) return null;
 
-    private static int FindMatchingBrace(string text, int startIndex)
-    {
-        int braceCount = 0;
-        bool inString = false;
-        bool escaped = false;
-
-        for (int i = startIndex; i < text.Length; i++)
+        int depth = 0;
+        bool inStr = false, esc = false;
+        for (int i = first; i < text.Length; i++)
         {
             char c = text[i];
-            if (escaped) { escaped = false; continue; }
-            if (inString && c == '\\') { escaped = true; continue; }
-            if (c == '"') { inString = !inString; continue; }
-
-            if (!inString)
+            if (esc) { esc = false; continue; }
+            if (inStr && c == '\\') { esc = true; continue; }
+            if (c == '"') { inStr = !inStr; continue; }
+            if (!inStr)
             {
-                if (c == '{') braceCount++;
-                else if (c == '}')
-                {
-                    braceCount--;
-                    if (braceCount == 0) return i;
-                }
+                if (c == '{') depth++;
+                else if (c == '}' && --depth == 0)
+                    return ExtractJson(text[first..(i + 1)], toolNames) is { } tc ? new(tc, first, i - first + 1) : null;
             }
         }
-        return -1;
+        return null;
     }
 
-    private static ParseResult TryParseToolCall(string text, HashSet<string> toolNames)
-    {
-        var tagMatch = TagPattern.Match(text);
-        if (tagMatch.Success)
-        {
-            var innerContent = tagMatch.Groups["content"].Value;
-            var toolCall = TryExtractFromJson(innerContent, toolNames) ?? TryExtractFromXmlTags(innerContent, toolNames);
-            if (toolCall != null)
-            {
-                return new ParseResult
-                {
-                    Success = true,
-                    ToolCall = toolCall,
-                    LeadingTextIndex = tagMatch.Index,
-                    MatchedEndIndex = tagMatch.Index + tagMatch.Length
-                };
-            }
-        }
+    private static ToolCall? ExtractTag(string content, HashSet<string> names) =>
+        ExtractJson(content, names) ?? ExtractXml(content, names);
 
-        var mdMatch = MarkdownBlockPattern.Match(text);
-        if (mdMatch.Success)
-        {
-            var jsonStr = mdMatch.Groups["json"].Value;
-            var toolCall = TryExtractFromJson(jsonStr, toolNames);
-            if (toolCall != null)
-            {
-                return new ParseResult
-                {
-                    Success = true,
-                    ToolCall = toolCall,
-                    LeadingTextIndex = mdMatch.Index,
-                    MatchedEndIndex = mdMatch.Index + mdMatch.Length
-                };
-            }
-        }
-
-        int firstBrace = text.IndexOf('{');
-        if (firstBrace >= 0)
-        {
-            int lastBrace = FindMatchingBrace(text, firstBrace);
-            if (lastBrace >= 0)
-            {
-                var jsonCandidate = text.Substring(firstBrace, lastBrace - firstBrace + 1);
-                var toolCall = TryExtractFromJson(jsonCandidate, toolNames);
-                if (toolCall != null)
-                {
-                    return new ParseResult
-                    {
-                        Success = true,
-                        ToolCall = toolCall,
-                        LeadingTextIndex = firstBrace,
-                        MatchedEndIndex = lastBrace + 1
-                    };
-                }
-            }
-        }
-
-        return new ParseResult { Success = false };
-    }
-
-    private static ToolCall? TryExtractFromJson(string jsonStr, HashSet<string> toolNames)
+    private static ToolCall? ExtractJson(string jsonStr, HashSet<string> names)
     {
         try
         {
-            if (JsonNode.Parse(jsonStr) is JsonObject obj)
-            {
-                var name = (obj["name"] ?? obj["tool"])?.ToString();
-                if (!string.IsNullOrEmpty(name) && toolNames.Contains(name))
-                {
-                    var args = (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new JsonObject();
-                    var callId = Guid.NewGuid().ToString("N");
-                    return new ToolCall(callId, name, args);
-                }
-            }
+            if (JsonNode.Parse(jsonStr) is JsonObject obj && (obj["name"] ?? obj["tool"])?.ToString() is { } name && names.Contains(name))
+                return new ToolCall(Guid.NewGuid().ToString("N"), name, (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new());
         }
         catch { }
         return null;
     }
 
-    private static ToolCall? TryExtractFromXmlTags(string content, HashSet<string> toolNames)
+    private static ToolCall? ExtractXml(string content, HashSet<string> names)
     {
-        var functionMatch = Regex.Match(content, @"(?i)<function\s*(?:=|\bname\s*=)\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>");
-        if (!functionMatch.Success) return null;
+        if (XmlFuncPattern.Match(content) is not { Success: true } m || !names.Contains(m.Groups["name"].Value)) return null;
 
-        string funcName = functionMatch.Groups["name"].Value;
-        if (!toolNames.Contains(funcName)) return null;
-
-        var paramMatches = Regex.Matches(content, @"<parameter\s*=\s*""?(?<paramName>[a-zA-Z0-9_\-]+)""?\s*>(?<paramValue>[\s\S]*?)</parameter>", RegexOptions.IgnoreCase);
-        var argsObj = new JsonObject();
-
-        foreach (Match pm in paramMatches)
+        var args = new JsonObject();
+        foreach (Match p in XmlParamPattern.Matches(content))
         {
-            var pName = pm.Groups["paramName"].Value;
-            var val = pm.Groups["paramValue"].Value.Trim();
-            try { argsObj[pName] = JsonNode.Parse(val)?.DeepClone(); }
-            catch { argsObj[pName] = val; }
+            var val = p.Groups["val"].Value.Trim();
+            try { args[p.Groups["name"].Value] = JsonNode.Parse(val)?.DeepClone(); }
+            catch { args[p.Groups["name"].Value] = val; }
         }
-
-        var callId = Guid.NewGuid().ToString("N");
-        return new ToolCall(callId, funcName, argsObj);
+        return new ToolCall(Guid.NewGuid().ToString("N"), m.Groups["name"].Value, args);
     }
 }
