@@ -14,13 +14,13 @@ public class ToolCallDetectionLayerTests
     {
         public IAsyncEnumerable<IMessageEvent> EmittedOutputs { get; set; } = AsyncEnumerableExtensions.ToAsyncEnumerable(Array.Empty<IMessageEvent>());
 
-        public Message StreamAsync(
+        public IAsyncEnumerable<IMessageEvent> StreamAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
             IReadOnlyList<ToolDefinition>? tools = null,
             CancellationToken ct = default)
         {
-            return new Message(EmittedOutputs);
+            return EmittedOutputs;
         }
     }
 
@@ -60,7 +60,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TestTool").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
@@ -88,7 +88,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var toolStarts = results.OfType<ToolCall>().ToList();
@@ -116,7 +116,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var toolStarts = results.OfType<ToolCall>().ToList();
@@ -146,7 +146,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var textDeltas = results.OfType<Text>().ToList();
@@ -177,7 +177,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var single = Assert.Single(results);
@@ -204,7 +204,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
@@ -232,7 +232,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
@@ -259,7 +259,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
@@ -285,7 +285,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
@@ -320,7 +320,7 @@ public class ToolCallDetectionLayerTests
             var results = await layer.StreamAsync(
                 Array.Empty<Message>(),
                 tools: new[] { dummyTool.Definition }
-            ).ContentsStream().ToListAsync();
+            ).ToContentsAsync();
 
             // Assert
             var call = Assert.Single(results.OfType<ToolCall>());
@@ -347,7 +347,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var single = Assert.Single(results);
@@ -374,7 +374,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
@@ -401,7 +401,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("EditFile").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
@@ -431,7 +431,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
@@ -459,7 +459,7 @@ public class ToolCallDetectionLayerTests
         var results = await layer.StreamAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
-        ).ContentsStream().ToListAsync();
+        ).ToContentsAsync();
 
         // Assert
         var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
@@ -482,6 +482,11 @@ internal static class AsyncEnumerableExtensions
 
 internal static class ListExtensions
 {
+    public static async Task<List<IContent>> ToContentsAsync(this IAsyncEnumerable<IMessageEvent> stream)
+    {
+        return await new StreamingMessage(stream).ContentsStream().ToListAsync();
+    }
+
     public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
     {
         var list = new List<T>();

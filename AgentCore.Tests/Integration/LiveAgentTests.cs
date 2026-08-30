@@ -97,7 +97,7 @@ public class LiveAgentTests
         var resolvedLlm = OpenAICompatibleFixture.CreateChatClient();
         var meaiLlm = new MEAILLM(resolvedLlm);
         
-        var directMessage = meaiLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) });
+        var directMessage = new StreamingMessage(meaiLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }));
         await foreach (var _ in directMessage.ContentsStream()) { }
 
         var metadataItem = directMessage.Metadata?.Usage;

@@ -170,7 +170,8 @@ public class ChatContext : IContext
         {
             try
             {
-                var message = _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct);
+                var eventStream = _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct);
+                var message = new StreamingMessage(eventStream);
                 await foreach (var _ in message.ContentsStream(ct).ConfigureAwait(false)) { }
                 var summary = message.Contents.OfType<Text>().FirstOrDefault()?.Value ?? string.Empty;
                 return summary.Trim();

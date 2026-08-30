@@ -30,7 +30,7 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new Message(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
         await foreach (var item in message.ContentsStream())
@@ -64,7 +64,7 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new Message(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
         await foreach (var item in message.ContentsStream())
@@ -101,7 +101,7 @@ public class MessageAssemblyTests
             new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20))
         };
 
-        var message = new Message(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
         await foreach (var item in message.ContentsStream())
@@ -143,7 +143,7 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new Message(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
 
         var contents = new List<IContent>();
         await foreach (var item in message.ContentsStream())
@@ -188,7 +188,7 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new Message(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
 
         var yielded = new List<IContent>();
         await foreach (var item in message.ContentsStream())
@@ -221,7 +221,7 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new Message(events.ToAsyncEnumerable());
+        var message = new StreamingMessage(events.ToAsyncEnumerable());
 
         // First enumeration succeeds
         await foreach (var item in message.ContentsStream()) { }
@@ -238,14 +238,14 @@ public class MessageAssemblyTests
     {
         // 1. Delta without explicit start creates accumulator on demand and yields content
         var bad1 = new IMessageEvent[] { new TextContentDelta(0, "graceful text"), new TextContentEnd(0) };
-        var msg1 = new Message(bad1.ToAsyncEnumerable());
+        var msg1 = new StreamingMessage(bad1.ToAsyncEnumerable());
         var contents1 = new List<IContent>();
         await foreach (var c in msg1.ContentsStream()) contents1.Add(c);
         Assert.Equal("graceful text", Assert.Single(contents1.OfType<Text>()).Value);
 
         // 2. Stray end without start does not throw and does not yield empty block
         var bad2 = new IMessageEvent[] { new TextContentEnd(0) };
-        var msg2 = new Message(bad2.ToAsyncEnumerable());
+        var msg2 = new StreamingMessage(bad2.ToAsyncEnumerable());
         var contents2 = new List<IContent>();
         await foreach (var c in msg2.ContentsStream()) contents2.Add(c);
         Assert.Empty(contents2);
@@ -259,14 +259,14 @@ public class MessageAssemblyTests
             new TextContentDelta(0, " second"),
             new TextContentEnd(0)
         };
-        var msg3 = new Message(bad3.ToAsyncEnumerable());
+        var msg3 = new StreamingMessage(bad3.ToAsyncEnumerable());
         var contents3 = new List<IContent>();
         await foreach (var c in msg3.ContentsStream()) contents3.Add(c);
         Assert.Equal("first second", Assert.Single(contents3.OfType<Text>()).Value);
 
         // 4. Unclosed block on MessageEnd is gracefully completed and yielded
         var bad4 = new IMessageEvent[] { new TextContentStart(0), new TextContentDelta(0, "unclosed"), new MessageEnd() };
-        var msg4 = new Message(bad4.ToAsyncEnumerable());
+        var msg4 = new StreamingMessage(bad4.ToAsyncEnumerable());
         var contents4 = new List<IContent>();
         await foreach (var c in msg4.ContentsStream()) contents4.Add(c);
         Assert.Equal("unclosed", Assert.Single(contents4.OfType<Text>()).Value);

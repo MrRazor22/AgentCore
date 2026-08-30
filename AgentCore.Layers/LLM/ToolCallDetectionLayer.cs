@@ -3,6 +3,7 @@ using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -32,47 +33,108 @@ public class ToolCallDetectionLayer : LLMLayer
         _options = options ?? new ToolCallDetectionOptions();
     }
 
-    public override Message StreamAsync(
+    public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
     {
-        var inner = Inner.StreamAsync(messages, responseSchema, tools, ct);
-        return new Message(ProcessContentsAsync(inner, tools, ct));
+        return ProcessEventsAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), tools, ct);
     }
 
-    private async IAsyncEnumerable<IContent> ProcessContentsAsync(
-        Message inner,
+    private async IAsyncEnumerable<IMessageEvent> ProcessEventsAsync(
+        IAsyncEnumerable<IMessageEvent> innerEvents,
         IReadOnlyList<ToolDefinition>? tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
         var totalToolCallsEmitted = 0;
+        var textBuffers = new Dictionary<int, StringBuilder>();
+        int eventIndex = 0;
 
-        await foreach (var content in inner.ContentsStream(ct).WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var evt in innerEvents.WithCancellation(ct).ConfigureAwait(false))
         {
-            if (content is Text t && toolNames.Count > 0)
+            switch (evt)
             {
-                foreach (var parsed in ParseTextContent(t.Value, toolNames))
-                {
-                    yield return parsed;
-                    if (parsed is ToolCall)
+                case TextContentStart s when toolNames.Count > 0:
+                    textBuffers[s.Index] = new StringBuilder();
+                    break;
+
+                case TextContentDelta d when toolNames.Count > 0:
+                    if (!textBuffers.TryGetValue(d.Index, out var sb))
                     {
-                        totalToolCallsEmitted++;
-                        if (_options.StopAfterFirstToolCall)
+                        textBuffers[d.Index] = sb = new StringBuilder();
+                    }
+                    sb.Append(d.Text);
+                    break;
+
+                case TextContentEnd e when toolNames.Count > 0:
+                    if (textBuffers.Remove(e.Index, out var buffer))
+                    {
+                        foreach (var parsedEvt in EmitParsedTextEvents(buffer.ToString(), toolNames))
                         {
-                            yield break;
+                            yield return parsedEvt;
+                            if (parsedEvt is ToolCallContentEnd)
+                            {
+                                totalToolCallsEmitted++;
+                                if (_options.StopAfterFirstToolCall)
+                                {
+                                    yield break;
+                                }
+                            }
                         }
                     }
-                }
+                    break;
+
+                default:
+                    // If any text buffers were pending when a non-text event arrives, flush them
+                    if (textBuffers.Count > 0 && evt is MessageEnd)
+                    {
+                        foreach (var (_, pendingBuffer) in textBuffers)
+                        {
+                            foreach (var parsedEvt in EmitParsedTextEvents(pendingBuffer.ToString(), toolNames))
+                            {
+                                yield return parsedEvt;
+                                if (parsedEvt is ToolCallContentEnd)
+                                {
+                                    totalToolCallsEmitted++;
+                                    if (_options.StopAfterFirstToolCall)
+                                    {
+                                        yield break;
+                                    }
+                                }
+                            }
+                        }
+                        textBuffers.Clear();
+                    }
+
+                    yield return evt;
+
+                    if (evt is ToolCallContentEnd && _options.StopAfterFirstToolCall)
+                    {
+                        yield break;
+                    }
+                    break;
             }
-            else
+        }
+
+        IEnumerable<IMessageEvent> EmitParsedTextEvents(string text, HashSet<string> names)
+        {
+            foreach (var content in ParseTextContent(text, names))
             {
-                yield return content;
-                if (content is ToolCall && _options.StopAfterFirstToolCall)
+                if (content is Text t)
                 {
-                    yield break;
+                    int idx = eventIndex++;
+                    yield return new TextContentStart(idx);
+                    yield return new TextContentDelta(idx, t.Value);
+                    yield return new TextContentEnd(idx);
+                }
+                else if (content is ToolCall tc)
+                {
+                    int idx = eventIndex++;
+                    yield return new ToolCallContentStart(idx, tc.Id, tc.Name);
+                    yield return new ToolCallContentDelta(idx, tc.Arguments?.ToJsonString() ?? "{}");
+                    yield return new ToolCallContentEnd(idx);
                 }
             }
         }

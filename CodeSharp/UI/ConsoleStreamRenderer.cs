@@ -55,45 +55,47 @@ namespace CodeSharp.UI
             _answerStarted = false;
         }
 
-        public void Write(IContent output)
+        private readonly Dictionary<int, (string Id, string Name, StringBuilder Args)> _activeToolCalls = new();
+
+        public void Write(object output)
         {
             switch (output)
             {
-                case Reasoning reasoning:
-                    if (_thinkingWriter == null)
+                case ReasoningContentDelta r:
+                    WriteReasoningDelta(r.Thought);
+                    break;
+
+                case TextContentDelta t:
+                    WriteTextDelta(t.Text);
+                    break;
+
+                case ToolCallContentStart tcStart:
+                    _activeToolCalls[tcStart.Index] = (tcStart.Id, tcStart.Name, new StringBuilder());
+                    break;
+
+                case ToolCallContentDelta tcDelta:
+                    if (_activeToolCalls.TryGetValue(tcDelta.Index, out var entry))
                     {
-                        StopSpinner();
-                        AnsiConsole.WriteLine();
-                        _thinkingSw.Reset();
-                        _thinkingSw.Start();
-                        var style = new Style(Color.Grey, decoration: Decoration.Italic);
-                        _thinkingWriter = new ConsoleTreeWriter(style);
-                        _thinkingWriter.Start("Thinking...");
-                    }
-                    if (!string.IsNullOrEmpty(reasoning.Thought))
-                    {
-                        _thinkingWriter.Write(reasoning.Thought);
+                        entry.Args.Append(tcDelta.Arguments);
                     }
                     break;
 
-                case AgentText text:
-                    if (!_answerStarted)
+                case ToolCallContentEnd tcEnd:
+                    if (_activeToolCalls.Remove(tcEnd.Index, out var completedCall))
                     {
                         StopSpinner();
-                        bool hadThinking = _thinkingWriter != null;
                         FinalizeThinking();
-                        if (!hadThinking)
-                        {
-                            AnsiConsole.WriteLine();
-                        }
-                        _answerStarted = true;
-                        var trimmed = text.Value.TrimStart('\r', '\n');
-                        AnsiConsole.Write(new Spectre.Console.Text(trimmed));
+                        var json = JsonNode.Parse(string.IsNullOrWhiteSpace(completedCall.Args.ToString()) ? "{}" : completedCall.Args.ToString()) as JsonObject ?? new JsonObject();
+                        RenderToolCall(new ToolCall(completedCall.Id, completedCall.Name, json));
                     }
-                    else
-                    {
-                        AnsiConsole.Write(new Spectre.Console.Text(text.Value));
-                    }
+                    break;
+
+                case Reasoning reasoning:
+                    WriteReasoningDelta(reasoning.Thought);
+                    break;
+
+                case AgentText text:
+                    WriteTextDelta(text.Value);
                     break;
 
                 case ToolCall tc:
@@ -105,6 +107,45 @@ namespace CodeSharp.UI
                 case ToolResult tr:
                     WriteToolResultCore(tr);
                     break;
+            }
+        }
+
+        private void WriteReasoningDelta(string thought)
+        {
+            if (_thinkingWriter == null)
+            {
+                StopSpinner();
+                AnsiConsole.WriteLine();
+                _thinkingSw.Reset();
+                _thinkingSw.Start();
+                var style = new Style(Color.Grey, decoration: Decoration.Italic);
+                _thinkingWriter = new ConsoleTreeWriter(style);
+                _thinkingWriter.Start("Thinking...");
+            }
+            if (!string.IsNullOrEmpty(thought))
+            {
+                _thinkingWriter.Write(thought);
+            }
+        }
+
+        private void WriteTextDelta(string text)
+        {
+            if (!_answerStarted)
+            {
+                StopSpinner();
+                bool hadThinking = _thinkingWriter != null;
+                FinalizeThinking();
+                if (!hadThinking)
+                {
+                    AnsiConsole.WriteLine();
+                }
+                _answerStarted = true;
+                var trimmed = text.TrimStart('\r', '\n');
+                AnsiConsole.Write(new Spectre.Console.Text(trimmed));
+            }
+            else
+            {
+                AnsiConsole.Write(new Spectre.Console.Text(text));
             }
         }
 

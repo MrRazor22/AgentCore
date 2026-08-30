@@ -43,7 +43,7 @@ namespace AgentCore
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             int iterations = 0;
-            Message assistantResponse;
+            StreamingMessage assistantResponse;
             await context.StageAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
 
             do
@@ -60,7 +60,8 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
 
-                assistantResponse = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
+                var eventStream = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
+                assistantResponse = new StreamingMessage(eventStream);
 
                 await foreach (var content in assistantResponse.ContentsStream(ct).ConfigureAwait(false))
                 { 

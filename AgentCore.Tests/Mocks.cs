@@ -115,7 +115,7 @@ public class MockLLMProvider : ILLM
 
 
 
-    public Message StreamAsync(
+    public IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -126,7 +126,7 @@ public class MockLLMProvider : ILLM
         CapturedResponseSchemas.Add(responseSchema);
 
         var generator = _responses.Count > 0 ? _responses.Dequeue() : (ct => ToAsyncEnumerable(Enumerable.Empty<IMessageEvent>(), ct));
-        return new Message(generator(ct));
+        return generator(ct);
     }
 }
 

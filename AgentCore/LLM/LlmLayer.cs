@@ -19,7 +19,7 @@ public abstract class LLMLayer : ILLM
         _attached = true;
     }
 
-    public virtual Message StreamAsync(
+    public virtual IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,

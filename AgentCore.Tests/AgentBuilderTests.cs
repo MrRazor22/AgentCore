@@ -144,7 +144,7 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Message StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<IMessageEvent> StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
             return base.StreamAsync(messages, responseSchema, tools, ct);

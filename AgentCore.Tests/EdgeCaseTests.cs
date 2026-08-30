@@ -53,7 +53,7 @@ namespace AgentCore.Tests
             }
 
 
-            public Message StreamAsync(
+            public IAsyncEnumerable<IMessageEvent> StreamAsync(
                 IReadOnlyList<Message> messages,
                 JsonSchema? responseSchema = null,
                 IReadOnlyList<ToolDefinition>? tools = null,
@@ -63,9 +63,9 @@ namespace AgentCore.Tests
                 if (_responses.Count > 0)
                 {
                     var generator = _responses.Dequeue();
-                    return new Message(generator(messages).GetAwaiter().GetResult());
+                    return generator(messages).GetAwaiter().GetResult();
                 }
-                return new Message(Array.Empty<IMessageEvent>().ToAsyncEnumerable());
+                return Array.Empty<IMessageEvent>().ToAsyncEnumerable();
             }
         }
 

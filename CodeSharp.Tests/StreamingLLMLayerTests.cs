@@ -24,13 +24,13 @@ public class StreamingLLMLayerTests
             _outputs = outputs;
         }
 
-        public Message StreamAsync(
+        public IAsyncEnumerable<IMessageEvent> StreamAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
             IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
             CancellationToken ct = default)
         {
-            return new Message(StreamCoreAsync(ct));
+            return StreamCoreAsync(ct);
         }
 
         private async IAsyncEnumerable<IMessageEvent> StreamCoreAsync([EnumeratorCancellation] CancellationToken ct)
@@ -70,11 +70,11 @@ public class StreamingLLMLayerTests
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
-        var channel = Channel.CreateUnbounded<IContent>();
+        var channel = Channel.CreateUnbounded<object>();
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var message = layer.StreamAsync(messages);
+        var message = new StreamingMessage(layer.StreamAsync(messages));
 
         var streamedContents = new List<IContent>();
         await foreach (var content in message.ContentsStream())
@@ -83,18 +83,18 @@ public class StreamingLLMLayerTests
         }
 
         channel.Writer.Complete();
-        var channelResults = new List<IContent>();
+        var channelResults = new List<object>();
         await foreach (var output in channel.Reader.ReadAllAsync())
         {
             channelResults.Add(output);
         }
 
         Assert.Equal(3, streamedContents.Count);
-        Assert.Equal(3, channelResults.Count);
+        Assert.Equal(expectedOutputs.Count, channelResults.Count);
 
-        Assert.Equal("Thinking hard", ((Reasoning)channelResults[0]).Thought);
-        Assert.Equal("Hello world!", ((Text)channelResults[1]).Value);
-        Assert.Equal("tc-1", ((ToolCall)channelResults[2]).Id);
+        Assert.Equal("Thinking hard", ((Reasoning)streamedContents[0]).Thought);
+        Assert.Equal("Hello world!", ((Text)streamedContents[1]).Value);
+        Assert.Equal("tc-1", ((ToolCall)streamedContents[2]).Id);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class StreamingLLMLayerTests
         var messages = new List<Message>();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            var message = layer.StreamAsync(messages, ct: cts.Token);
+            var message = new StreamingMessage(layer.StreamAsync(messages, ct: cts.Token));
             await foreach (var unused in message.ContentsStream(cts.Token))
             {
             }

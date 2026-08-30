@@ -84,7 +84,7 @@ public class ChatUI
                 }
             });
 
-            var channel = Channel.CreateUnbounded<IContent>(new UnboundedChannelOptions
+            var channel = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 AllowSynchronousContinuations = false
@@ -150,7 +150,7 @@ public class ChatUI
         }
     }
 
-    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<IContent> reader, CancellationToken cancellationToken)
+    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<object> reader, CancellationToken cancellationToken)
     {
         try
         {

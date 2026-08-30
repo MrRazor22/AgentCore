@@ -12,7 +12,7 @@ namespace AgentCore.Layers.LLM;
 /// </summary>
 public class MessageMergingLayer : LLMLayer
 { 
-    public override Message StreamAsync(
+    public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,

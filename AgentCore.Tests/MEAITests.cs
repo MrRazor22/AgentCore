@@ -62,7 +62,7 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var message = provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]);
+        var message = new StreamingMessage(provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]));
         var contents = new List<IContent>();
         await foreach (var c in message.ContentsStream())
         {
@@ -101,7 +101,7 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var message = provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]);
+        var message = new StreamingMessage(provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]));
         await foreach (var _ in message.ContentsStream()) { }
 
         // Assert
@@ -128,7 +128,7 @@ public class MEAITests
         var provider = new MEAILLM(mockClient);
 
         // Act
-        var message = provider.StreamAsync([new Message(Role.User, [new Text("What is the weather?")])]);
+        var message = new StreamingMessage(provider.StreamAsync([new Message(Role.User, [new Text("What is the weather?")])]));
         var contents = new List<IContent>();
         await foreach (var c in message.ContentsStream())
         {

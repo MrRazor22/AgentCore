@@ -22,13 +22,13 @@ public class MEAILLM : ILLM
         _logger = logger;
     }
 
-    public Message StreamAsync(
+    public IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<AgentCore.Tools.ToolDefinition>? tools = null,
         CancellationToken ct = default)
     {
-        return new Message(StreamEventsCoreAsync(messages, responseSchema, tools, ct));
+        return StreamEventsCoreAsync(messages, responseSchema, tools, ct);
     }
 
     private async IAsyncEnumerable<IMessageEvent> StreamEventsCoreAsync(
