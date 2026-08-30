@@ -20,7 +20,7 @@ public static class MEAIBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(client);
 
-        return builder.WithLLM(lf => new MEAILLM(client, lf.CreateLogger<MEAILLM>()));
+        return builder.WithLLM(_ => new MEAILLM(client));
     }
 
     /// <summary>

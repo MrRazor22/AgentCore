@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp.Tests", "CodeShar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Layers", "AgentCore.Layers\AgentCore.Layers.csproj", "{57BBF322-1F3C-4B01-A0B7-C89A14505E88}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.LLM.Tornado", "AgentCore.LLM.Tornado\AgentCore.LLM.Tornado.csproj", "{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -102,6 +104,18 @@ Global
 		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x64.Build.0 = Release|Any CPU
 		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x86.ActiveCfg = Release|Any CPU
 		{57BBF322-1F3C-4B01-A0B7-C89A14505E88}.Release|x86.Build.0 = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|x64.Build.0 = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Debug|x86.Build.0 = Debug|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x64.ActiveCfg = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x64.Build.0 = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x86.ActiveCfg = Release|Any CPU
+		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -208,18 +208,24 @@ public class MEAITests
     }
 
     [Fact]
-    public void TryExtractReasoning_ExtractsReasoningFromRawRepresentation()
+    public async Task StreamAsync_PreservesModelAndResponseIdInMessageStart()
     {
-        var mockRawObj = new { ReasoningContentUpdate = "Thinking deeply..." };
-        var extracted = MEAILLM.TryExtractReasoning(mockRawObj);
-        Assert.Equal("Thinking deeply...", extracted);
-    }
+        // Arrange
+        var mockClient = new MockChatClient();
+        mockClient.AddStreamingUpdate(new ChatResponseUpdate(ChatRole.Assistant, "Hello")
+        {
+            ModelId = "gpt-4o",
+            ResponseId = "resp_123"
+        });
 
-    [Fact]
-    public void TryExtractReasoning_ReturnsNullWhenNoReasoningPropertyPresent()
-    {
-        var mockRawObj = new { UnrelatedProperty = "Hello" };
-        var extracted = MEAILLM.TryExtractReasoning(mockRawObj);
-        Assert.Null(extracted);
+        var provider = new MEAILLM(mockClient);
+
+        // Act
+        var message = new StreamingMessage(provider.StreamAsync([new Message(Role.User, [new Text("Hi")])]));
+        await foreach (var _ in message.ContentsStream()) { }
+
+        // Assert
+        Assert.Equal("gpt-4o", message.Metadata?.Model);
+        Assert.Equal("resp_123", message.Metadata?.Id);
     }
 }
