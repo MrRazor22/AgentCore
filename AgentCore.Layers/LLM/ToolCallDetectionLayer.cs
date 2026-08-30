@@ -148,8 +148,8 @@ public class ToolCallDetectionLayer : LLMLayer
     private static IMessageEvent CreateDelta(Type type, string text)
     {
         return type == typeof(ReasoningContentDelta)
-            ? new ReasoningContentDelta(text)
-            : new TextContentDelta(text);
+            ? new ReasoningContentDelta(0, text)
+            : new TextContentDelta(0, text);
     }
 
     private struct ParseResult
@@ -265,9 +265,9 @@ public class ToolCallDetectionLayer : LLMLayer
                     var callId = Guid.NewGuid().ToString("N");
                     return
                     [
-                        new ToolCallContentStart(callId, name),
-                        new ToolCallContentDelta(callId, args.ToJsonString()),
-                        new ToolCallContentEnd(callId)
+                        new ToolCallContentStart(0, callId, name),
+                        new ToolCallContentDelta(0, args.ToJsonString()),
+                        new ToolCallContentEnd(0)
                     ];
                 }
             }
@@ -298,9 +298,9 @@ public class ToolCallDetectionLayer : LLMLayer
         var callId = Guid.NewGuid().ToString("N");
         return
         [
-            new ToolCallContentStart(callId, funcName),
-            new ToolCallContentDelta(callId, argsObj.ToJsonString()),
-            new ToolCallContentEnd(callId)
+            new ToolCallContentStart(0, callId, funcName),
+            new ToolCallContentDelta(0, argsObj.ToJsonString()),
+            new ToolCallContentEnd(0)
         ];
     }
 }

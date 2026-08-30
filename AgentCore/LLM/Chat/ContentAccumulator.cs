@@ -3,38 +3,56 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.LLM.Chat;
 
-internal sealed class TextAccumulator
+internal interface IContentAccumulator
 {
-    private readonly StringBuilder _sb = new();
-    public void Append(string? text) => _sb.Append(text);
-    public IReadOnlyList<IContent> Complete() => _sb.Length > 0 ? [new Text(_sb.ToString())] : [];
+    IContent Complete();
 }
 
-internal sealed class ReasoningAccumulator
+internal sealed class TextAccumulator : IContentAccumulator
 {
     private readonly StringBuilder _sb = new();
-    public void Append(string? thought) => _sb.Append(thought);
-    public IReadOnlyList<IContent> Complete() => _sb.Length > 0 ? [new Reasoning(_sb.ToString())] : [];
+
+    public void Append(string text) => _sb.Append(text);
+
+    public IContent Complete() => new Text(_sb.ToString());
 }
 
-internal sealed class ToolCallAccumulator
+internal sealed class ReasoningAccumulator : IContentAccumulator
 {
-    private readonly Dictionary<string, (string Name, StringBuilder Args, int? Index)> _calls = new();
+    private readonly StringBuilder _sb = new();
 
-    public void Start(string id, string name, int? index) => _calls[id] = (name, new StringBuilder(), index);
-    public void Append(string id, string? args) { if (_calls.TryGetValue(id, out var tc)) tc.Args.Append(args); }
+    public void Append(string thought) => _sb.Append(thought);
 
-    public IReadOnlyList<IContent> Complete(string id)
+    public IContent Complete() => new Reasoning(_sb.ToString());
+}
+
+internal sealed class ToolCallAccumulator(string id, string name, int index) : IContentAccumulator
+{
+    private readonly StringBuilder _args = new();
+
+    public void Append(string arguments) => _args.Append(arguments);
+
+    public IContent Complete()
     {
-        if (!_calls.Remove(id, out var call)) return [];
-
-        var raw = call.Args.ToString().Trim();
-        JsonObject? parsed = null;
-        if (raw.Length > 0)
+        var raw = _args.ToString();
+        JsonObject? args = null;
+        if (!string.IsNullOrWhiteSpace(raw))
         {
-            try { parsed = JsonNode.Parse(raw)?.AsObject(); } catch { }
+            try
+            {
+                args = JsonNode.Parse(raw)?.AsObject();
+            }
+            catch (Exception ex)
+            {
+                throw new FormatException($"Malformed JSON arguments for tool '{name}' (id: '{id}'): {raw}", ex);
+            }
         }
 
-        return [new ToolCall(id, call.Name, parsed ?? new JsonObject()) { Index = call.Index, RawArguments = raw }];
+        return new ToolCall(id, name, args ?? new JsonObject())
+        {
+            RawArguments = raw,
+            Index = index
+        };
     }
 }
+

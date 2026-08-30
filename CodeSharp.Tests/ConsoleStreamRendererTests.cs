@@ -15,9 +15,9 @@ public class ConsoleStreamRendererTests
         // Deliberately test text containing square brackets and indexer patterns that crash raw AnsiConsole.Write()
         var textDeltas = new IMessageEvent[]
         {
-            new TextContentDelta("Here is C# code: List<AccumulatedToolCall> _toolCalls = new();\n"),
-            new TextContentDelta("public class AccumulatedToolCall [0] { public string Id { get; set; } }\n"),
-            new TextContentDelta("var value = dict[\"key\"]; // [bold red] unescaped markup test\n")
+            new TextContentDelta(0, "Here is C# code: List<AccumulatedToolCall> _toolCalls = new();\n"),
+            new TextContentDelta(0, "public class AccumulatedToolCall [0] { public string Id { get; set; } }\n"),
+            new TextContentDelta(0, "var value = dict[\"key\"]; // [bold red] unescaped markup test\n")
         };
 
         var exception = Record.Exception(() =>

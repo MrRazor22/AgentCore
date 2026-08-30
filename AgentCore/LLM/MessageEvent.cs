@@ -20,17 +20,19 @@ public sealed record MessageEnd(
 ) : IMessageEvent;
 
 // 1. Text Content Streaming
-public sealed record TextContentDelta(string Text) : IMessageEvent;
-public sealed record TextContentEnd() : IMessageEvent;
+public sealed record TextContentStart(int Index = 0) : IMessageEvent;
+public sealed record TextContentDelta(int Index, string Text) : IMessageEvent;
+public sealed record TextContentEnd(int Index = 0) : IMessageEvent;
 
 // 2. Reasoning Content Streaming
-public sealed record ReasoningContentDelta(string Thought) : IMessageEvent;
-public sealed record ReasoningContentEnd() : IMessageEvent;
+public sealed record ReasoningContentStart(int Index = 0) : IMessageEvent;
+public sealed record ReasoningContentDelta(int Index, string Thought) : IMessageEvent;
+public sealed record ReasoningContentEnd(int Index = 0) : IMessageEvent;
 
 // 3. Tool Call Content Streaming
-public sealed record ToolCallContentStart(string Id, string Name, int? Index = null) : IMessageEvent;
-public sealed record ToolCallContentDelta(string Id, string Arguments, int? Index = null) : IMessageEvent;
-public sealed record ToolCallContentEnd(string Id, int? Index = null) : IMessageEvent;
+public sealed record ToolCallContentStart(int Index, string Id, string Name) : IMessageEvent;
+public sealed record ToolCallContentDelta(int Index, string Arguments) : IMessageEvent;
+public sealed record ToolCallContentEnd(int Index) : IMessageEvent;
 
 // 4. Telemetry Data DTO
 public sealed record TokenUsage(

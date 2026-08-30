@@ -50,11 +50,11 @@ public class StreamingLLMLayerTests
         var expectedOutputs = new List<IMessageEvent>
         {
             new MessageStart(Role.Assistant),
-            new ReasoningContentDelta("Thinking hard"),
-            new TextContentDelta("Hello "),
-            new TextContentDelta("world!"),
-            new ToolCallContentStart("tc-1", "test_tool"),
-            new ToolCallContentEnd("tc-1"),
+            new ReasoningContentDelta(0, "Thinking hard"),
+            new TextContentDelta(1, "Hello "),
+            new TextContentDelta(1, "world!"),
+            new ToolCallContentStart(2, "tc-1", "test_tool"),
+            new ToolCallContentEnd(2),
             new MessageEnd("stop", new TokenUsage(10, 20))
         };
 
@@ -103,7 +103,7 @@ public class StreamingLLMLayerTests
     [Fact]
     public async Task StreamAsync_CancellationPropagatesCorrectly()
     {
-        var outputs = new List<IMessageEvent> { new TextContentDelta("hi") };
+        var outputs = new List<IMessageEvent> { new TextContentDelta(0, "hi") };
         var mockInner = new MockLLM(outputs);
         var layer = new StreamingLLMLayer();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);

@@ -56,24 +56,14 @@ public class MEAILLM : ILLM
         int outputTokens = 0;
         string? finalFinishReason = null;
 
+        int nextBlockIndex = 0;
+        int? activeTextIndex = null;
+        int? activeReasoningIndex = null;
+        var activeToolIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var rawYieldedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var activeToolCallStreams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        bool hasActiveText = false;
-        bool hasActiveReasoning = false;
 
         await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, chatOptions, ct).ConfigureAwait(false))
         {
-            int? choiceIndex = null;
-            if (update.RawRepresentation != null)
-            {
-                try
-                {
-                    dynamic raw = update.RawRepresentation;
-                    choiceIndex = (int?)raw.Index ?? (int?)raw.ChoiceIndex;
-                }
-                catch { }
-            }
-
             var rawToolCallEvents = new List<IMessageEvent>();
             if (update.RawRepresentation is not null)
             {
@@ -88,23 +78,32 @@ public class MEAILLM : ILLM
                             string? callId = toolCallUpdate.ToolCallId;
                             string? funcName = toolCallUpdate.FunctionName;
                             string? argDelta = toolCallUpdate.FunctionArgumentsUpdate?.ToString();
-                            int? index = null;
-                            try { index = (int?)toolCallUpdate.Index; } catch { }
 
                             if (!string.IsNullOrEmpty(callId))
                             {
                                 rawYieldedIds.Add(callId);
-                                if (activeToolCallStreams.Add(callId))
+                                if (!activeToolIndexes.TryGetValue(callId, out int toolIdx))
                                 {
-                                    if (hasActiveReasoning) { rawToolCallEvents.Add(new ReasoningContentEnd()); hasActiveReasoning = false; }
-                                    if (hasActiveText) { rawToolCallEvents.Add(new TextContentEnd()); hasActiveText = false; }
-                                    rawToolCallEvents.Add(new ToolCallContentStart(callId, funcName ?? "", index ?? choiceIndex));
-                                }
-                            }
+                                    if (activeReasoningIndex != null)
+                                    {
+                                        rawToolCallEvents.Add(new ReasoningContentEnd(activeReasoningIndex.Value));
+                                        activeReasoningIndex = null;
+                                    }
+                                    if (activeTextIndex != null)
+                                    {
+                                        rawToolCallEvents.Add(new TextContentEnd(activeTextIndex.Value));
+                                        activeTextIndex = null;
+                                    }
 
-                            if (!string.IsNullOrEmpty(argDelta) && !string.IsNullOrEmpty(callId))
-                            {
-                                rawToolCallEvents.Add(new ToolCallContentDelta(callId, argDelta, index ?? choiceIndex));
+                                    toolIdx = nextBlockIndex++;
+                                    activeToolIndexes[callId] = toolIdx;
+                                    rawToolCallEvents.Add(new ToolCallContentStart(toolIdx, callId, funcName ?? ""));
+                                }
+
+                                if (!string.IsNullOrEmpty(argDelta))
+                                {
+                                    rawToolCallEvents.Add(new ToolCallContentDelta(toolIdx, argDelta));
+                                }
                             }
                         }
                     }
@@ -129,18 +128,31 @@ public class MEAILLM : ILLM
                     if (content is TextReasoningContent reasoningContent && !string.IsNullOrEmpty(reasoningContent.Text))
                     {
                         yieldedReasoning = true;
-                        hasActiveReasoning = true;
-                        yield return new ReasoningContentDelta(reasoningContent.Text);
+                        if (activeTextIndex != null)
+                        {
+                            yield return new TextContentEnd(activeTextIndex.Value);
+                            activeTextIndex = null;
+                        }
+                        if (activeReasoningIndex == null)
+                        {
+                            activeReasoningIndex = nextBlockIndex++;
+                            yield return new ReasoningContentStart(activeReasoningIndex.Value);
+                        }
+                        yield return new ReasoningContentDelta(activeReasoningIndex.Value, reasoningContent.Text);
                     }
                     else if (content is TextContent textContent && !string.IsNullOrEmpty(textContent.Text))
                     {
-                        if (hasActiveReasoning)
+                        if (activeReasoningIndex != null)
                         {
-                            yield return new ReasoningContentEnd();
-                            hasActiveReasoning = false;
+                            yield return new ReasoningContentEnd(activeReasoningIndex.Value);
+                            activeReasoningIndex = null;
                         }
-                        hasActiveText = true;
-                        yield return new TextContentDelta(textContent.Text);
+                        if (activeTextIndex == null)
+                        {
+                            activeTextIndex = nextBlockIndex++;
+                            yield return new TextContentStart(activeTextIndex.Value);
+                        }
+                        yield return new TextContentDelta(activeTextIndex.Value, textContent.Text);
                     }
                     else if (content is FunctionCallContent fnCall)
                     {
@@ -160,15 +172,27 @@ public class MEAILLM : ILLM
                             catch { }
                         }
 
-                        if (activeToolCallStreams.Add(callId))
+                        if (!activeToolIndexes.TryGetValue(callId, out int toolIdx))
                         {
-                            if (hasActiveReasoning) { yield return new ReasoningContentEnd(); hasActiveReasoning = false; }
-                            if (hasActiveText) { yield return new TextContentEnd(); hasActiveText = false; }
-                            yield return new ToolCallContentStart(callId, fnCall.Name, choiceIndex);
+                            if (activeReasoningIndex != null)
+                            {
+                                yield return new ReasoningContentEnd(activeReasoningIndex.Value);
+                                activeReasoningIndex = null;
+                            }
+                            if (activeTextIndex != null)
+                            {
+                                yield return new TextContentEnd(activeTextIndex.Value);
+                                activeTextIndex = null;
+                            }
+
+                            toolIdx = nextBlockIndex++;
+                            activeToolIndexes[callId] = toolIdx;
+                            yield return new ToolCallContentStart(toolIdx, callId, fnCall.Name);
                         }
+
                         if (!string.IsNullOrEmpty(argsStr))
                         {
-                            yield return new ToolCallContentDelta(callId, argsStr, choiceIndex);
+                            yield return new ToolCallContentDelta(toolIdx, argsStr);
                         }
                     }
                     else if (content is UsageContent usageContent)
@@ -185,8 +209,17 @@ public class MEAILLM : ILLM
                 var rawReasoning = TryExtractReasoning(update.RawRepresentation, _logger);
                 if (!string.IsNullOrEmpty(rawReasoning))
                 {
-                    hasActiveReasoning = true;
-                    yield return new ReasoningContentDelta(rawReasoning);
+                    if (activeTextIndex != null)
+                    {
+                        yield return new TextContentEnd(activeTextIndex.Value);
+                        activeTextIndex = null;
+                    }
+                    if (activeReasoningIndex == null)
+                    {
+                        activeReasoningIndex = nextBlockIndex++;
+                        yield return new ReasoningContentStart(activeReasoningIndex.Value);
+                    }
+                    yield return new ReasoningContentDelta(activeReasoningIndex.Value, rawReasoning);
                 }
             }
 
@@ -196,21 +229,23 @@ public class MEAILLM : ILLM
             }
         }
 
-        if (hasActiveReasoning)
+        if (activeReasoningIndex != null)
         {
-            yield return new ReasoningContentEnd();
+            yield return new ReasoningContentEnd(activeReasoningIndex.Value);
+            activeReasoningIndex = null;
         }
 
-        if (hasActiveText)
+        if (activeTextIndex != null)
         {
-            yield return new TextContentEnd();
+            yield return new TextContentEnd(activeTextIndex.Value);
+            activeTextIndex = null;
         }
 
-        foreach (var callId in activeToolCallStreams)
+        foreach (var (_, toolIdx) in activeToolIndexes)
         {
-            yield return new ToolCallContentEnd(callId);
+            yield return new ToolCallContentEnd(toolIdx);
         }
-        activeToolCallStreams.Clear();
+        activeToolIndexes.Clear();
 
         var finalUsage = new TokenUsage(
             InputTokens: inputTokens,

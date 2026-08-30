@@ -20,45 +20,59 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void MessageAccumulator_SequentialToolCalls_MergesCorrectly()
+    public async Task Message_SequentialToolCalls_MergesAndStreamsCorrectly()
     {
-        var accumulator = new MessageAccumulator();
         var sequence = new List<IMessageEvent>
         {
-            new ToolCallContentStart("ABC", "RunCommand", Index: 0),
-            new ToolCallContentDelta("ABC", "{\"commandLine\":\"ls\"}", Index: 0),
-            new ToolCallContentEnd("ABC", Index: 0)
+            new ToolCallContentStart(0, "ABC", "RunCommand"),
+            new ToolCallContentDelta(0, "{\"commandLine\":\"ls\"}"),
+            new ToolCallContentEnd(0),
+            new MessageEnd()
         };
 
-        var contents = sequence.SelectMany(accumulator.Receive).ToList();
-        Assert.NotNull(contents);
+        var message = new Message(sequence.ToAsyncEnumerable());
+
+        var contents = new List<IContent>();
+        await foreach (var item in message)
+        {
+            contents.Add(item);
+        }
+
         var calls = contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
         Assert.Equal("ABC", calls[0].Id);
         Assert.Equal("RunCommand", calls[0].Name);
         Assert.Contains("ls", calls[0].Arguments.ToString());
+
+        Assert.Single(message.Contents);
+        Assert.Equal("ABC", ((ToolCall)message.Contents[0]).Id);
     }
 
     [Fact]
-    public void MessageAccumulator_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
+    public async Task Message_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
     {
-        var accumulator = new MessageAccumulator();
         var sequence = new List<IMessageEvent>
         {
-            new ToolCallContentStart("A", "RunCommand", Index: 0),
-            new ToolCallContentStart("B", "SearchWeb", Index: 1),
-            new ToolCallContentDelta("A", "{\"commandLine\":", Index: 0),
-            new ToolCallContentDelta("B", "{\"query\":", Index: 1),
-            new ToolCallContentDelta("A", "\"ls\"}", Index: 0),
-            new ToolCallContentDelta("B", "\"test\"}", Index: 1),
-            new ToolCallContentEnd("A", Index: 0),
-            new ToolCallContentEnd("B", Index: 1)
+            new ToolCallContentStart(0, "A", "RunCommand"),
+            new ToolCallContentStart(1, "B", "SearchWeb"),
+            new ToolCallContentDelta(0, "{\"commandLine\":"),
+            new ToolCallContentDelta(1, "{\"query\":"),
+            new ToolCallContentDelta(0, "\"ls\"}"),
+            new ToolCallContentDelta(1, "\"test\"}"),
+            new ToolCallContentEnd(0),
+            new ToolCallContentEnd(1),
+            new MessageEnd()
         };
 
-        var contents = sequence.SelectMany(accumulator.Receive).ToList();
-        Assert.NotNull(contents);
-        var calls = contents.OfType<ToolCall>().ToList();
+        var message = new Message(sequence.ToAsyncEnumerable());
 
+        var contents = new List<IContent>();
+        await foreach (var item in message)
+        {
+            contents.Add(item);
+        }
+
+        var calls = contents.OfType<ToolCall>().ToList();
         Assert.Equal(2, calls.Count);
 
         Assert.Equal("A", calls[0].Id);
@@ -68,26 +82,36 @@ public class MessageAssemblyTests
         Assert.Equal("B", calls[1].Id);
         Assert.Equal("SearchWeb", calls[1].Name);
         Assert.Contains("test", calls[1].Arguments.ToString());
+
+        Assert.Equal(2, message.Contents.Count);
     }
 
     [Fact]
-    public void MessageAccumulator_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
+    public async Task Message_Receive_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var accumulator = new MessageAccumulator();
+        var sequence = new List<IMessageEvent>
+        {
+            new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"),
+            new ReasoningContentStart(0),
+            new ReasoningContentDelta(0, "Thinking deeply..."),
+            new ReasoningContentEnd(0),
+            new TextContentStart(1),
+            new TextContentDelta(1, "Here is the answer."),
+            new TextContentEnd(1),
+            new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20))
+        };
 
-        accumulator.Receive(new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"));
-        accumulator.Receive(new ReasoningContentDelta("Thinking deeply..."));
-        var r1 = accumulator.Receive(new ReasoningContentEnd()).ToList();
-        Assert.Single(r1);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(r1[0]).Thought);
+        var message = new Message(sequence.ToAsyncEnumerable());
 
-        accumulator.Receive(new TextContentDelta("Here is the answer."));
-        var r2 = accumulator.Receive(new TextContentEnd()).ToList();
-        Assert.Single(r2);
-        Assert.Equal("Here is the answer.", Assert.IsType<Text>(r2[0]).Value);
+        var contents = new List<IContent>();
+        await foreach (var item in message)
+        {
+            contents.Add(item);
+        }
 
-        accumulator.Receive(new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20)));
-        var message = accumulator.ToMessage();
+        Assert.Equal(2, contents.Count);
+        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(contents[0]).Thought);
+        Assert.Equal("Here is the answer.", Assert.IsType<Text>(contents[1]).Value);
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal(Role.Assistant, message.Role);
@@ -102,75 +126,143 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void MessageAccumulator_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public async Task Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
     {
-        var accumulator = new MessageAccumulator();
+        var sequence = new List<IMessageEvent>
+        {
+            new ReasoningContentStart(0),
+            new ReasoningContentDelta(0, "Step 1: Analyze"),
+            new ReasoningContentEnd(0),
+            new ToolCallContentStart(1, "call_1", "lookup"),
+            new ToolCallContentDelta(1, "{\"q\":"),
+            new ToolCallContentDelta(1, "\"test\"}"),
+            new ToolCallContentEnd(1),
+            new TextContentStart(2),
+            new TextContentDelta(2, "The result is ready."),
+            new TextContentEnd(2),
+            new MessageEnd()
+        };
 
-        // Reasoning
-        accumulator.Receive(new ReasoningContentDelta("Step 1: Analyze"));
-        var r1 = accumulator.Receive(new ReasoningContentEnd()).ToList();
-        Assert.Single(r1);
-        Assert.Equal("Step 1: Analyze", Assert.IsType<Reasoning>(r1[0]).Thought);
+        var message = new Message(sequence.ToAsyncEnumerable());
 
-        // ToolCall
-        accumulator.Receive(new ToolCallContentStart("call_1", "lookup"));
-        accumulator.Receive(new ToolCallContentDelta("call_1", "{\"q\":"));
-        accumulator.Receive(new ToolCallContentDelta("call_1", "\"test\"}"));
-        var r2 = accumulator.Receive(new ToolCallContentEnd("call_1")).ToList();
-        Assert.Single(r2);
-        var tc = Assert.IsType<ToolCall>(r2[0]);
-        Assert.Equal("call_1", tc.Id);
-        Assert.Equal("lookup", tc.Name);
+        var contents = new List<IContent>();
+        await foreach (var item in message)
+        {
+            contents.Add(item);
+        }
 
-        // Text
-        accumulator.Receive(new TextContentDelta("The result is ready."));
-        var r3 = accumulator.Receive(new TextContentEnd()).ToList();
-        Assert.Single(r3);
-        Assert.Equal("The result is ready.", Assert.IsType<Text>(r3[0]).Value);
+        Assert.Equal(3, contents.Count);
+        Assert.IsType<Reasoning>(contents[0]);
+        Assert.IsType<ToolCall>(contents[1]);
+        Assert.IsType<Text>(contents[2]);
 
-        var message = accumulator.ToMessage();
         Assert.Equal(3, message.Contents.Count);
-        Assert.IsType<Reasoning>(message.Contents[0]);
-        Assert.IsType<ToolCall>(message.Contents[1]);
-        Assert.IsType<Text>(message.Contents[2]);
     }
 
     [Fact]
-    public void MessageAccumulator_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst()
+    public async Task Message_ThreeParallelToolCalls_EmitsEarlyFinalizedCallFirst_AndPreservesIndexOrderInFinalContents()
     {
-        var accumulator = new MessageAccumulator();
+        var sequence = new List<IMessageEvent>
+        {
+            new ToolCallContentStart(0, "call_A", "ToolA"),
+            new ToolCallContentDelta(0, "{\"a\":"),
+            new ToolCallContentStart(1, "call_B", "ToolB"),
+            new ToolCallContentDelta(1, "{\"b\":"),
+            new ToolCallContentStart(2, "call_C", "ToolC"),
+            new ToolCallContentDelta(2, "{\"c\":"),
 
-        // Start 3 parallel tool calls
-        accumulator.Receive(new ToolCallContentStart("call_A", "ToolA", Index: 0)).ToList();
-        accumulator.Receive(new ToolCallContentDelta("call_A", "{\"a\":", Index: 0)).ToList();
+            // ToolCall B (index 1) finishes FIRST
+            new ToolCallContentDelta(1, "2}"),
+            new ToolCallContentEnd(1),
 
-        accumulator.Receive(new ToolCallContentStart("call_B", "ToolB", Index: 1)).ToList();
-        accumulator.Receive(new ToolCallContentDelta("call_B", "{\"b\":", Index: 1)).ToList();
+            // ToolCall A and C continue
+            new ToolCallContentDelta(0, "1}"),
+            new ToolCallContentDelta(2, "3}"),
 
-        accumulator.Receive(new ToolCallContentStart("call_C", "ToolC", Index: 2)).ToList();
-        accumulator.Receive(new ToolCallContentDelta("call_C", "{\"c\":", Index: 2)).ToList();
+            // ToolCall C (index 2) finishes SECOND
+            new ToolCallContentEnd(2),
 
-        // ToolCall B finishes FIRST
-        accumulator.Receive(new ToolCallContentDelta("call_B", "2}", Index: 1)).ToList();
-        var bFinish = accumulator.Receive(new ToolCallContentEnd("call_B", Index: 1)).ToList();
-        Assert.Single(bFinish);
-        var tcB = Assert.IsType<ToolCall>(bFinish[0]);
-        Assert.Equal("call_B", tcB.Id);
-        Assert.Equal("ToolB", tcB.Name);
+            // ToolCall A (index 0) finishes LAST
+            new ToolCallContentEnd(0),
 
-        // ToolCall A and C continue accumulation
-        accumulator.Receive(new ToolCallContentDelta("call_A", "1}", Index: 0)).ToList();
-        accumulator.Receive(new ToolCallContentDelta("call_C", "3}", Index: 2)).ToList();
+            new MessageEnd()
+        };
 
-        // ToolCall C finishes SECOND
-        var cFinish = accumulator.Receive(new ToolCallContentEnd("call_C", Index: 2)).ToList();
-        Assert.Single(cFinish);
-        Assert.Equal("call_C", Assert.IsType<ToolCall>(cFinish[0]).Id);
+        var message = new Message(sequence.ToAsyncEnumerable());
 
-        // ToolCall A finishes LAST
-        var aFinish = accumulator.Receive(new ToolCallContentEnd("call_A", Index: 0)).ToList();
-        Assert.Single(aFinish);
-        Assert.Equal("call_A", Assert.IsType<ToolCall>(aFinish[0]).Id);
+        var yielded = new List<IContent>();
+        await foreach (var item in message)
+        {
+            yielded.Add(item);
+        }
+
+        // Live stream order was B -> C -> A
+        Assert.Equal(3, yielded.Count);
+        Assert.Equal("call_B", ((ToolCall)yielded[0]).Id);
+        Assert.Equal("call_C", ((ToolCall)yielded[1]).Id);
+        Assert.Equal("call_A", ((ToolCall)yielded[2]).Id);
+
+        // Final message contents must be sorted by logical index (0, 1, 2) -> [call_A, call_B, call_C]
+        Assert.Equal(3, message.Contents.Count);
+        Assert.Equal("call_A", ((ToolCall)message.Contents[0]).Id);
+        Assert.Equal("call_B", ((ToolCall)message.Contents[1]).Id);
+        Assert.Equal("call_C", ((ToolCall)message.Contents[2]).Id);
+    }
+
+    [Fact]
+    public async Task Message_Streaming_SingleConsumption_ThrowsOnSecondEnumeration()
+    {
+        var events = new IMessageEvent[]
+        {
+            new MessageStart(),
+            new TextContentStart(0),
+            new TextContentDelta(0, "hello"),
+            new TextContentEnd(0),
+            new MessageEnd()
+        };
+
+        var message = new Message(events.ToAsyncEnumerable());
+
+        // First enumeration succeeds
+        await foreach (var item in message) { }
+
+        // Second enumeration throws
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var item in message) { }
+        });
+    }
+
+    [Fact]
+    public async Task Message_Streaming_LifecycleViolations_ThrowExplicitly()
+    {
+        // 1. Delta without start
+        var bad1 = new IMessageEvent[] { new TextContentDelta(0, "oops") };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in new Message(bad1.ToAsyncEnumerable())) { }
+        });
+
+        // 2. End without start
+        var bad2 = new IMessageEvent[] { new TextContentEnd(0) };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in new Message(bad2.ToAsyncEnumerable())) { }
+        });
+
+        // 3. Duplicate start
+        var bad3 = new IMessageEvent[] { new TextContentStart(0), new TextContentStart(0) };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in new Message(bad3.ToAsyncEnumerable())) { }
+        });
+
+        // 4. Unclosed block on MessageEnd
+        var bad4 = new IMessageEvent[] { new TextContentStart(0), new MessageEnd() };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in new Message(bad4.ToAsyncEnumerable())) { }
+        });
     }
 
     [Fact]

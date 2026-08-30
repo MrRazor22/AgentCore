@@ -149,27 +149,15 @@ namespace CodeSharp.UI
                     StopSpinner();
                     FinalizeThinking();
 
-                    var toolCall = _toolCalls.FirstOrDefault(t => t.Id == tcDelta.Id)
-                                ?? (tcDelta.Index.HasValue ? _toolCalls.FirstOrDefault(t => t.Index == tcDelta.Index.Value) : null);
-
-                    if (toolCall == null)
-                    {
-                        toolCall = new AccumulatedToolCall
-                        {
-                            Id = tcDelta.Id,
-                            Index = tcDelta.Index
-                        };
-                        _toolCalls.Add(toolCall);
-                    }
-
-                    if (!string.IsNullOrEmpty(tcDelta.Arguments))
+                    var toolCall = _toolCalls.FirstOrDefault(t => t.Index == tcDelta.Index);
+                    if (toolCall != null && !string.IsNullOrEmpty(tcDelta.Arguments))
                     {
                         toolCall.Arguments.Append(tcDelta.Arguments);
                     }
                     break;
 
                 case ToolCallContentEnd end:
-                    var endingCall = _toolCalls.FirstOrDefault(t => t.Id == end.Id);
+                    var endingCall = _toolCalls.FirstOrDefault(t => t.Index == end.Index);
                     if (endingCall != null)
                     {
                         FinalizeToolCall(endingCall);

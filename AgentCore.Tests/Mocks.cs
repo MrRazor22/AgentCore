@@ -25,28 +25,35 @@ public class MockLLMProvider : ILLM
         _responses.Enqueue(generator);
     }
 
-    private static IEnumerable<IMessageEvent> ConvertToEvents(object evt)
+    private static IEnumerable<IMessageEvent> ConvertToEvents(object evt, int blockIndex)
     {
         switch (evt)
         {
             case Text t:
-                yield return new TextContentDelta(t.Value);
-                yield return new TextContentEnd();
+            {
+                yield return new TextContentStart(blockIndex);
+                yield return new TextContentDelta(blockIndex, t.Value);
+                yield return new TextContentEnd(blockIndex);
                 break;
+            }
             case Reasoning r:
-                yield return new ReasoningContentDelta(r.Thought);
-                yield return new ReasoningContentEnd();
+            {
+                yield return new ReasoningContentStart(blockIndex);
+                yield return new ReasoningContentDelta(blockIndex, r.Thought);
+                yield return new ReasoningContentEnd(blockIndex);
                 break;
+            }
             case ToolCall tc:
             {
+                int idx = tc.Index ?? blockIndex;
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
-                yield return new ToolCallContentStart(id, tc.Name, tc.Index);
+                yield return new ToolCallContentStart(idx, id, tc.Name);
                 var args = tc.Arguments?.ToJsonString() ?? tc.RawArguments ?? "";
                 if (!string.IsNullOrEmpty(args))
                 {
-                    yield return new ToolCallContentDelta(id, args, tc.Index);
+                    yield return new ToolCallContentDelta(idx, args);
                 }
-                yield return new ToolCallContentEnd(id, tc.Index);
+                yield return new ToolCallContentEnd(idx);
                 break;
             }
             case IMessageEvent output:
@@ -76,21 +83,33 @@ public class MockLLMProvider : ILLM
     {
         await Task.Yield();
         throw ex;
+#pragma warning disable CS0162
         yield break;
+#pragma warning restore CS0162
     }
 
     private static async IAsyncEnumerable<IMessageEvent> ToAsyncEnumerable(IEnumerable<object> items, [EnumeratorCancellation] CancellationToken ct)
     {
         yield return new MessageStart(Role.Assistant);
+        int blockIndex = 0;
+        bool hasEmittedEnd = false;
         foreach (var item in items)
         {
             await Task.Yield();
-            foreach (var evt in ConvertToEvents(item))
+            foreach (var evt in ConvertToEvents(item, blockIndex))
             {
+                if (evt is MessageEnd) hasEmittedEnd = true;
                 yield return evt;
             }
+            if (item is Text or Reasoning or ToolCall)
+            {
+                blockIndex++;
+            }
         }
-        yield return new MessageEnd();
+        if (!hasEmittedEnd)
+        {
+            yield return new MessageEnd();
+        }
     }
 
 

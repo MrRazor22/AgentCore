@@ -60,19 +60,16 @@ namespace AgentCore
 
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, currentMessages.Count);
 
-                var accumulator = new MessageAccumulator();
+                var stream = _llm.StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct);
+                assistantMessage = new Message(stream);
 
-                await foreach (var content in _llm
-                    .StreamAsync(currentMessages, responseSchema, _tooling.GetDefinitions(), ct)
-                    .ToContentsAsync(accumulator, ct)
-                    .ConfigureAwait(false))
+                await foreach (var content in assistantMessage.WithCancellation(ct).ConfigureAwait(false))
                 { 
                     yield return content;
                     if (content is ToolCall toolCall)
                         _ = _tooling.ExecuteAsync(toolCall, ct);
                 }
 
-                assistantMessage = accumulator.ToMessage();
                 await context.CommitAsync(assistantMessage, ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))

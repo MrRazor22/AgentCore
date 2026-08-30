@@ -48,7 +48,7 @@ public class ToolCallDetectionLayerTests
     {
         // Arrange
         var mockLlm = new MockLLM();
-        var expectedCall = new ToolCallContentStart("call-1", "TestTool");
+        var expectedCall = new ToolCallContentStart(0, "call-1", "TestTool");
         mockLlm.EmittedOutputs = new IMessageEvent[] { expectedCall }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -72,8 +72,8 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>\n"),
-            new TextContentDelta("<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>")
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>\n"),
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -99,7 +99,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>")
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -125,9 +125,9 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("Before tool "),
-            new TextContentDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>"),
-            new TextContentDelta(" After tool")
+            new TextContentDelta(0, "Before tool "),
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>"),
+            new TextContentDelta(0, " After tool")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -156,7 +156,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("{\"name\": \"UnregisteredTool\", \"arguments\": {}}")
+            new TextContentDelta(0, "{\"name\": \"UnregisteredTool\", \"arguments\": {}}")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -181,7 +181,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("You can use a List<string> here: {\"something\": 123}")
+            new TextContentDelta(0, "You can use a List<string> here: {\"something\": 123}")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -207,7 +207,7 @@ public class ToolCallDetectionLayerTests
         var rawText = "{\"name\":\"ToolA\",\"arguments\":{\"text\":\"var x = \\\"{ hello }\\\"; \\\\\\\\ test\"}}";
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta(rawText)
+            new TextContentDelta(0, rawText)
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -233,7 +233,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>")
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -257,7 +257,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call>{\"name\": \"ToolA\", \"arguments\": ")
+            new TextContentDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": ")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -289,8 +289,8 @@ public class ToolCallDetectionLayerTests
             var mockLlm = new MockLLM();
             mockLlm.EmittedOutputs = new IMessageEvent[]
             {
-                new TextContentDelta(chunk1),
-                new TextContentDelta(chunk2)
+                new TextContentDelta(0, chunk1),
+                new TextContentDelta(0, chunk2)
             }.ToAsyncEnumerable();
 
             var layer = new ToolCallDetectionLayer();
@@ -315,7 +315,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new ReasoningContentDelta("Thinking process: { \"name\": \"NotATool\" }")
+            new ReasoningContentDelta(0, "Thinking process: { \"name\": \"NotATool\" }")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -340,7 +340,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>")
+            new TextContentDelta(0, "<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -366,7 +366,7 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>")
+            new TextContentDelta(0, "<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -393,9 +393,9 @@ public class ToolCallDetectionLayerTests
         var mockLlm = new MockLLM();
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta("<tool_call><function=TodoList>"),
-            new TextContentDelta("<parameter=todos>[\"Search\"]</parameter>"),
-            new TextContentDelta("</function></tool_call>")
+            new TextContentDelta(0, "<tool_call><function=TodoList>"),
+            new TextContentDelta(0, "<parameter=todos>[\"Search\"]</parameter>"),
+            new TextContentDelta(0, "</function></tool_call>")
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
@@ -422,7 +422,7 @@ public class ToolCallDetectionLayerTests
         var rawText = "<tool_call><function=FakeDangerousThing><parameter=todos>[\"Search\"]</parameter></function></tool_call>";
         mockLlm.EmittedOutputs = new IMessageEvent[]
         {
-            new TextContentDelta(rawText)
+            new TextContentDelta(0, rawText)
         }.ToAsyncEnumerable();
 
         var layer = new ToolCallDetectionLayer();
