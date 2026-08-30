@@ -50,7 +50,7 @@ public class MemoryTests
         var prompt = await context.PreparePromptAsync();
         
         // Commit a high token usage (95 tokens, exceeding limit of 90) via Message Metadata
-        await context.CommitAsync(new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0))));
+        await context.CommitAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0)))]);
 
         // Act - Prepare again, which should trigger compaction immediately due to high TokenUsage
         var finalPrompt = await context.PreparePromptAsync();

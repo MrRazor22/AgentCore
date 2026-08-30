@@ -79,30 +79,6 @@ public class ChatContext : IContext
         }
     }
 
-    public Task CommitAsync(
-        Message response,
-        CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(response);
-
-        lock (_lock)
-        {
-            _chat.AddRange(_staged);
-            _chat.Add(response);
-            _staged.Clear();
-
-            _committedTokens = response.Metadata?.Usage != null
-                ? (response.Metadata.Usage.InputTokens + response.Metadata.Usage.OutputTokens)
-                : _chat.Sum(Estimate);
-        }
-
-        _logger?.LogInformation(
-            "Conversation updated. TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
-            _chat.Count,
-            _committedTokens);
-
-        return Task.CompletedTask;
-    }
 
     public Task CommitAsync(
         IReadOnlyList<Message> response,

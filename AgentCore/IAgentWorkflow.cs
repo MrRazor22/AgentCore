@@ -70,7 +70,7 @@ namespace AgentCore
                         _ = _tooling.ExecuteAsync(toolCall, ct);
                 }
 
-                await context.CommitAsync(assistantResponse, ct).ConfigureAwait(false); 
+                await context.CommitAsync([assistantResponse], ct).ConfigureAwait(false); 
 
                 await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
                 {

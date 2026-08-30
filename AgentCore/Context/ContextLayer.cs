@@ -30,10 +30,6 @@ public abstract class ContextLayer : IContext
         CancellationToken ct = default)
         => Inner.PreparePromptAsync(ct);
 
-    public virtual Task CommitAsync(
-        Message response,
-        CancellationToken ct = default)
-        => CommitAsync([response], ct);
 
     public virtual Task CommitAsync(
         IReadOnlyList<Message> response,

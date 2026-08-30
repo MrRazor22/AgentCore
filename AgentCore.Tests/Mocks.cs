@@ -167,10 +167,6 @@ public class MockMemoryProvider : IContext
         return Task.FromResult<IReadOnlyList<Message>>(list);
     }
 
-    public Task CommitAsync(
-        Message response,
-        CancellationToken ct = default)
-        => CommitAsync([response], ct);
 
     public Task CommitAsync(
         IReadOnlyList<Message> response,
