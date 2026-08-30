@@ -130,19 +130,19 @@ public sealed partial class Agent
                 tooling = layer;
             }
 
-            IContext memory = _contextFactory != null
+            IContext context = _contextFactory != null
                 ? _contextFactory(lf)
                 : new ChatContext(summarizer: baseProvider, logger: lf.CreateLogger<ChatContext>());
 
             foreach (var layer in _contextLayers)
             {
-                layer.Attach(memory);
-                memory = layer;
+                layer.Attach(context);
+                context = layer;
             }
 
             if (_instructions != null)
             {
-                memory.AddAsync([new Message(Role.System, [_instructions])]).GetAwaiter().GetResult();
+                context.AddAsync([new Message(Role.System, [_instructions])]).GetAwaiter().GetResult();
             }
 
             var workflow = _workflowFactory != null
@@ -152,7 +152,7 @@ public sealed partial class Agent
             _logger.LogInformation("Agent built: Tools={ToolCount} Provider={ProviderType} Context={ContextType} Workflow={WorkflowType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
                 frozenTools.Length,
                 provider.GetType().Name,
-                memory.GetType().Name,
+                context.GetType().Name,
                 workflow.GetType().Name,
                 _llmLayers.Count,
                 _toolingLayers.Count,
@@ -160,9 +160,9 @@ public sealed partial class Agent
 
             _builtComponents.Add(provider);
             _builtComponents.Add(tooling);
-            _builtComponents.Add(memory);
+            _builtComponents.Add(context);
 
-            return new Agent(memory, workflow, lf.CreateLogger<Agent>());
+            return new Agent(context, workflow);
         }
     }
 }

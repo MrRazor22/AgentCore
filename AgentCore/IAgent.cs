@@ -19,17 +19,14 @@ public sealed partial class Agent : IAgent
     public static Builder Create() => new Builder();
 
     private readonly IContext _context;
-    private readonly IAgentWorkflow _workflow;
-    private readonly ILogger<Agent> _logger;
+    private readonly IAgentWorkflow _workflow; 
 
     public Agent(
         IContext memory,
-        IAgentWorkflow workflow,
-        ILogger<Agent>? logger = null)
+        IAgentWorkflow workflow)
     {
         _context = memory;
-        _workflow = workflow;
-        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<Agent>.Instance;
+        _workflow = workflow; 
     }
 
     private static T? Deserialize<T>(string? response)
