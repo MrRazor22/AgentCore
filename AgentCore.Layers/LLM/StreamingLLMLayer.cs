@@ -8,7 +8,7 @@ using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
 
-namespace CodeSharp.Layers;
+namespace AgentCore.LLM;
 
 public sealed class StreamingLLMLayer : LLMLayer
 {

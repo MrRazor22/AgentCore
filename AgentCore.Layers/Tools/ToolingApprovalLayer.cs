@@ -3,7 +3,7 @@ using AgentCore.Tools;
 using System.Collections.Frozen;
 using System.Text.Json.Nodes;
 
-namespace CodeSharp.Layers;
+namespace AgentCore.Tools;
 
 /// <summary>
 /// Tool permission classification. Dictates whether a tool defaults to allowed
