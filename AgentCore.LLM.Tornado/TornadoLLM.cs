@@ -5,202 +5,118 @@ using AgentCore.Tools;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;
-using LlmTornado.ChatFunctions;
 using LlmTornado.Code;
-using LlmTornado.Common;
 
 namespace AgentCore.LLM.Tornado;
 
 /// <summary>
 /// Adapts LLMTornado to the AgentCore ILLM event-streaming interface.
-/// Supports token-by-token tool call argument streaming, reasoning extraction, and 20+ LLM providers.
+/// Preserves parallel/interleaved tool calls and clean sequential text/reasoning transitions.
 /// </summary>
-public class TornadoLLM : ILLM
+public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 {
-    private readonly TornadoApi _api;
-    private readonly ChatModel _model;
-
-    public TornadoLLM(TornadoApi api, ChatModel model)
-    {
-        ArgumentNullException.ThrowIfNull(api);
-        ArgumentNullException.ThrowIfNull(model);
-        _api = api;
-        _model = model;
-    }
-
-    public IAsyncEnumerable<IMessageEvent> StreamAsync(
-        IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
-        IReadOnlyList<ToolDefinition>? tools = null,
-        CancellationToken ct = default)
-    {
-        return StreamEventsCoreAsync(messages, responseSchema, tools, ct);
-    }
-
-    private async IAsyncEnumerable<IMessageEvent> StreamEventsCoreAsync(
+    public async IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var tornadoMessages = messages.Select(m => m.ToTornadoMessage()).ToList();
-
         var request = new ChatRequest
         {
-            Model = _model,
-            Messages = tornadoMessages,
+            Model = model,
+            Messages = messages.Select(m => m.ToTornadoMessage()).ToList(),
+            Tools = tools?.Select(t => t.ToTornadoTool()).ToList(),
+            ResponseFormat = responseSchema != null ? ChatRequestResponseFormats.StructuredJson("response", responseSchema.ToJsonElement()) : null,
             CancellationToken = ct
         };
 
-        if (tools is { Count: > 0 })
-        {
-            request.Tools = tools.Select(t => t.ToTornadoTool()).ToList();
-        }
-
-        if (responseSchema != null)
-        {
-            try
-            {
-                var jsonElem = responseSchema.ToJsonElement();
-                request.ResponseFormat = ChatRequestResponseFormats.StructuredJson("response", jsonElem);
-            }
-            catch
-            {
-                request.ResponseFormat = ChatRequestResponseFormats.Json;
-            }
-        }
-
-        bool messageStarted = false;
-        int nextBlockIndex = 0;
-        int? activeTextIndex = null;
-        int? activeReasoningIndex = null;
+        bool started = false;
+        int nextId = 0, inTokens = 0, outTokens = 0;
+        string? finishReason = null;
+        (int Id, IMessageEvent End)? activeBlock = null;
         var toolIndices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        int inputTokens = 0;
-        int outputTokens = 0;
-        string? finalFinishReason = null;
-
-        await foreach (ChatResult res in _api.Chat.StreamChatEnumerable(request).ConfigureAwait(false))
+        await foreach (var res in api.Chat.StreamChatEnumerable(request).ConfigureAwait(false))
         {
-            if (!messageStarted)
+            if (!started)
             {
-                messageStarted = true;
-                yield return new MessageStart(
-                    Role: Role.Assistant,
-                    Id: res.Id,
-                    Model: _model.Name
-                );
+                started = true;
+                yield return new MessageStart(Role.Assistant, res.Id, model.Name);
             }
 
-            if (res.Usage != null)
-            {
-                inputTokens = res.Usage.PromptTokens;
-                outputTokens = res.Usage.CompletionTokens;
-            }
+            if (res.Usage != null) { inTokens = res.Usage.PromptTokens; outTokens = res.Usage.CompletionTokens; }
+            if (res.Choices is not { Count: > 0 }) continue;
 
-            if (res.Choices is { Count: > 0 })
+            foreach (var choice in res.Choices)
             {
-                foreach (var choice in res.Choices)
+                if (choice.FinishReason is { } fr) finishReason = fr.ToString();
+
+                // Skip Tornado's synthetic end-of-stream full-message snapshot
+                if (res.Id == null && res.Usage != null && choice.FinishReason == null && choice.Delta?.Content != null)
                 {
-                    if (choice.FinishReason is { } fr)
+                    continue;
+                }
+
+                var delta = choice.Delta ?? choice.Message;
+                if (delta == null) continue;
+
+                // 1. Reasoning Tokens
+                if (delta.ReasoningTokens is { Length: > 0 } r)
+                {
+                    if (activeBlock is not (var id, ReasoningEnd))
                     {
-                        finalFinishReason = fr.ToString();
+                        if (activeBlock is (_, var end)) yield return end;
+                        activeBlock = (id = nextId++, new ReasoningEnd(id));
+                        yield return new ReasoningStart(id);
                     }
+                    yield return new ReasoningDelta(activeBlock.Value.Id, r);
+                }
 
-                    var delta = choice.Delta ?? choice.Message;
-                    if (delta == null) continue;
-
-                    // 1. Reasoning stream
-                    var reasoning = delta.ReasoningTokens;
-                    if (!string.IsNullOrEmpty(reasoning))
+                // 2. Text Content
+                if (delta.Content is { Length: > 0 } text)
+                {
+                    if (activeBlock is not (var id, TextEnd))
                     {
-                        if (activeTextIndex != null)
-                        {
-                            yield return new TextEnd(activeTextIndex.Value);
-                            activeTextIndex = null;
-                        }
-                        if (activeReasoningIndex == null)
-                        {
-                            activeReasoningIndex = nextBlockIndex++;
-                            yield return new ReasoningStart(activeReasoningIndex.Value);
-                        }
-                        yield return new ReasoningDelta(activeReasoningIndex.Value, reasoning);
+                        if (activeBlock is (_, var end)) yield return end;
+                        activeBlock = (id = nextId++, new TextEnd(id));
+                        yield return new TextStart(id);
                     }
+                    yield return new TextDelta(activeBlock.Value.Id, text);
+                }
 
-                    // 2. Text stream
-                    if (!string.IsNullOrEmpty(delta.Content))
+                // 3. Tool Calls (preserves parallel and interleaved tool streams)
+                if (delta.ToolCalls is { Count: > 0 } tcs)
+                {
+                    if (activeBlock is (_, var end)) { activeBlock = null; yield return end; }
+
+                    foreach (var tc in tcs)
                     {
-                        if (activeReasoningIndex != null)
-                        {
-                            yield return new ReasoningEnd(activeReasoningIndex.Value);
-                            activeReasoningIndex = null;
-                        }
-                        if (activeTextIndex == null)
-                        {
-                            activeTextIndex = nextBlockIndex++;
-                            yield return new TextStart(activeTextIndex.Value);
-                        }
-                        yield return new TextDelta(activeTextIndex.Value, delta.Content);
-                    }
+                        var key = tc.Index.HasValue ? $"idx_{tc.Index.Value}" : (tc.Id ?? tc.FunctionCall?.Name ?? "fn_call");
+                        var callId = tc.Id ?? key;
 
-                    // 3. Tool calls stream (true token delta streaming)
-                    if (delta.ToolCalls is { Count: > 0 })
-                    {
-                        if (activeReasoningIndex != null)
+                        if (!toolIndices.TryGetValue(key, out int toolIdx))
                         {
-                            yield return new ReasoningEnd(activeReasoningIndex.Value);
-                            activeReasoningIndex = null;
-                        }
-                        if (activeTextIndex != null)
-                        {
-                            yield return new TextEnd(activeTextIndex.Value);
-                            activeTextIndex = null;
+                            toolIndices[key] = toolIdx = nextId++;
+                            yield return new ToolCallStart(toolIdx, callId, tc.FunctionCall?.Name ?? "");
                         }
 
-                        foreach (var tc in delta.ToolCalls)
+                        if (tc.FunctionCall?.Arguments is { Length: > 0 } args)
                         {
-                            var callId = string.IsNullOrEmpty(tc.Id)
-                                ? (tc.Index?.ToString() ?? tc.FunctionCall?.Name ?? "fn_call")
-                                : tc.Id;
-
-                            if (!toolIndices.TryGetValue(callId, out int toolIdx))
-                            {
-                                toolIdx = nextBlockIndex++;
-                                toolIndices[callId] = toolIdx;
-                                yield return new ToolCallStart(toolIdx, callId, tc.FunctionCall?.Name ?? "");
-                            }
-
-                            var args = tc.FunctionCall?.Arguments;
-                            if (!string.IsNullOrEmpty(args))
-                            {
-                                yield return new ToolCallDelta(toolIdx, args);
-                            }
+                            yield return new ToolCallDelta(toolIdx, args);
                         }
                     }
                 }
             }
         }
 
-        if (!messageStarted)
-        {
-            yield return new MessageStart(Role.Assistant);
-        }
+        if (!started) yield return new MessageStart(Role.Assistant);
+        if (activeBlock is (_, var finalEnd)) yield return finalEnd;
 
-        if (activeReasoningIndex != null)
-        {
-            yield return new ReasoningEnd(activeReasoningIndex.Value);
-        }
-
-        if (activeTextIndex != null)
-        {
-            yield return new TextEnd(activeTextIndex.Value);
-        }
-
-        foreach (var (_, toolIdx) in toolIndices)
+        foreach (var toolIdx in toolIndices.Values.Order())
         {
             yield return new ToolCallEnd(toolIdx);
         }
 
-        yield return new MessageEnd(finalFinishReason, new TokenUsage(inputTokens, outputTokens));
+        yield return new MessageEnd(finishReason, new TokenUsage(inTokens, outTokens));
     }
 }

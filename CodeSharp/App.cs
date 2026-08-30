@@ -184,7 +184,8 @@ internal class App
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[bold red]Error building agent:[/] {ex.Message}");
+            AnsiConsole.MarkupLine($"[bold red]Error building agent:[/] {Markup.Escape(ex.Message)}");
+            Serilog.Log.Error(ex, "Error starting CodeSharp");
         }
     }
 }
