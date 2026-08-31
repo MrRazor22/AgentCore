@@ -43,7 +43,7 @@ public class ApprovalLayerDuplicateIdTests
     public async Task ExecuteAsync_DuplicateOrEmptyCallIds_PreservesOrderWithoutException()
     {
         var tool = new DummyTool("test_tool");
-        var approvalLayer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
+        var approvalLayer = new ToolApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
         var mockInner = new MockTooling(tool);
 
         // Attach inner tooling via internal Attach method using reflection for test isolation

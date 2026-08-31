@@ -15,7 +15,7 @@ public class MessageMergingLayerTests
             new Message(Role.User, [new Text("no i mean the class diagram")])
         };
 
-        var output = MessageMergingLayer.MergeTextMessages(input);
+        var output = MessageCoalescingLayer.MergeTextMessages(input);
 
         Assert.Single(output);
         Assert.Equal(Role.User, output[0].Role);
@@ -40,7 +40,7 @@ public class MessageMergingLayerTests
             new Message(Role.Assistant, [new Text("here are the files")])
         };
 
-        var output = MessageMergingLayer.MergeTextMessages(input);
+        var output = MessageCoalescingLayer.MergeTextMessages(input);
 
         Assert.Equal(4, output.Count);
         Assert.Equal(Role.User, output[0].Role);
@@ -60,7 +60,7 @@ public class MessageMergingLayerTests
             new Message(Role.Assistant, [new Text("I'm searching for files.")])
         };
 
-        var output = MessageMergingLayer.MergeTextMessages(input);
+        var output = MessageCoalescingLayer.MergeTextMessages(input);
 
         Assert.Equal(2, output.Count);
     }

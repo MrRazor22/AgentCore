@@ -43,7 +43,7 @@ public class ApprovalLayerTests
         }
     }
 
-    private static void AttachInner(ApprovalLayer layer, ITooling inner)
+    private static void AttachInner(ToolApprovalLayer layer, ITooling inner)
     {
         var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         method!.Invoke(layer, new object[] { inner });
@@ -53,7 +53,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_ApprovedEvaluator_ExecutesInner()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
+        var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -73,7 +73,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_DeniedEvaluator_EmitsDeniedResultAndSkipsInner()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(new Text("[DENIED] User rejected execution.")));
+        var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IContent?>(new Text("[DENIED] User rejected execution.")));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -100,7 +100,7 @@ public class ApprovalLayerTests
             new Text("[DENIED] Layout invalid."),
             new Reasoning("Checked against design specs.")
         };
-        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IReadOnlyList<IContent>?>(denialItems));
+        var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IReadOnlyList<IContent>?>(denialItems));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -123,7 +123,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_PromptDelegateOverload_Works()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer((call, ct) => Task.FromResult(true));
+        var layer = new ToolApprovalLayer((call, ct) => Task.FromResult(true));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -143,7 +143,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_PromptDelegateOverload_UserDenies_EmitsToolNameRejection()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer((call, ct) => Task.FromResult(false));
+        var layer = new ToolApprovalLayer((call, ct) => Task.FromResult(false));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -163,7 +163,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_CustomGuardrailEvaluator_BlocksMatchingCalls()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer((call, ct) =>
+        var layer = new ToolApprovalLayer((call, ct) =>
         {
             if (call.Name == "RunCommand" &&
                 call.Arguments.TryGetPropertyValue("CommandLine", out var cmd) &&
@@ -192,7 +192,7 @@ public class ApprovalLayerTests
     public async Task ExecuteAsync_CancellationPropagation_ThrowsOperationCanceledException()
     {
         var mockInner = new MockTooling();
-        var layer = new ApprovalLayer(async (call, ct) =>
+        var layer = new ToolApprovalLayer(async (call, ct) =>
         {
             await Task.Delay(100, ct);
             return (IContent?)null;
@@ -250,7 +250,7 @@ public class ApprovalLayerTests
     {
         var mockInner = new TimedMockTooling();
 
-        var layer = new ApprovalLayer(async (call, ct) =>
+        var layer = new ToolApprovalLayer(async (call, ct) =>
         {
             if (call.Name == "tool_a")
             {

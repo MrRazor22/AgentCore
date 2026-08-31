@@ -108,7 +108,7 @@ internal class App
                 baseUrl += "/";
             }
 
-            var streamingLayer = new StreamingLLMLayer<object>();
+            var streamingLayer = new StreamingEventLayer<object>();
 
             // Initialize static tool contexts with workspace boundary
             CodeSharp.Tools.FileTools.Initialize(workspacePath);
@@ -142,7 +142,7 @@ internal class App
 
             var prompt = new CodeSharp.UI.ConsoleApprovalPrompt(formatter);
 
-            var approvalLayer = new ApprovalLayer(async (call, ct) =>
+            var approvalLayer = new ToolApprovalLayer(async (call, ct) =>
             {
                 if (string.Equals(call.Name, "RunCommand", StringComparison.OrdinalIgnoreCase) &&
                     call.Arguments.TryGetPropertyValue("CommandLine", out var node))
@@ -167,7 +167,7 @@ internal class App
                 .WithLoggerFactory(lf)
                 .WithTornado(apiKey: config.ApiKey, model: config.Model, baseUrl: baseUrl)
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddLLMLayer(new MessageMergingLayer())
+                .AddLLMLayer(new MessageCoalescingLayer())
                 .AddLLMLayer(streamingLayer)
                 .AddLLMLayer(new ToolCallDetectionLayer())
                 .WithTools(shellTool)

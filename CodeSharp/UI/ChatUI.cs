@@ -18,10 +18,10 @@ public class ChatUI
     private readonly IAgent _agent;
     private readonly string _modelName;
     private readonly string _workspacePath;
-    private readonly StreamingLLMLayer<object> _streamingLayer;
+    private readonly StreamingEventLayer<object> _streamingLayer;
     private readonly IToolDisplayFormatter _formatter;
 
-    public ChatUI(IAgent agent, string modelName, string workspacePath, StreamingLLMLayer<object> streamingLayer, IToolDisplayFormatter formatter)
+    public ChatUI(IAgent agent, string modelName, string workspacePath, StreamingEventLayer<object> streamingLayer, IToolDisplayFormatter formatter)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _modelName = modelName;

@@ -65,7 +65,7 @@ public class StreamingLLMLayerTests
         };
 
         var mockInner = new MockLLM(expectedOutputs);
-        var layer = new StreamingLLMLayer<object>();
+        var layer = new StreamingEventLayer<object>();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
@@ -108,7 +108,7 @@ public class StreamingLLMLayerTests
         };
 
         var mockInner = new MockLLM(expectedOutputs);
-        var layer = new StreamingLLMLayer<string>(evt => evt is TextDelta td ? td.Text : evt.GetType().Name);
+        var layer = new StreamingEventLayer<string>(evt => evt is TextDelta td ? td.Text : evt.GetType().Name);
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
@@ -137,7 +137,7 @@ public class StreamingLLMLayerTests
     {
         var outputs = new List<IMessageEvent> { new TextDelta(0, "hi") };
         var mockInner = new MockLLM(outputs);
-        var layer = new StreamingLLMLayer<IMessageEvent>();
+        var layer = new StreamingEventLayer<IMessageEvent>();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 

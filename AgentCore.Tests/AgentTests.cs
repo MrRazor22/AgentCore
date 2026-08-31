@@ -28,7 +28,7 @@ public class AgentTests
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)
             .WithContext(lf => memory)
-            .AddLLMLayer(new AgentCore.Layers.LLM.MessageMergingLayer())
+            .AddLLMLayer(new AgentCore.Layers.LLM.MessageCoalescingLayer())
             .Build();
 
         // Act

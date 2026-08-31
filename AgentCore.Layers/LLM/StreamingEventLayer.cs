@@ -10,7 +10,7 @@ using AgentCore.Tools;
 
 namespace AgentCore.LLM;
 
-public sealed class StreamingLLMLayer<T>(Func<IMessageEvent, T>? mapper = null) : LLMLayer
+public sealed class StreamingEventLayer<T>(Func<IMessageEvent, T>? mapper = null) : LLMLayer
 {
     public ChannelWriter<T>? Writer { get; set; }
 

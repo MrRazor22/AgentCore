@@ -10,7 +10,7 @@ namespace AgentCore.Layers.LLM;
 /// Pipeline layer that normalizes request messages for strict chat template compatibility
 /// by merging adjacent text-only User or Assistant messages without mutating context.
 /// </summary>
-public class MessageMergingLayer : LLMLayer
+public class MessageCoalescingLayer : LLMLayer
 { 
     public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
