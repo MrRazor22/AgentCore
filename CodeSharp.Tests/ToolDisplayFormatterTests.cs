@@ -28,24 +28,6 @@ public class ToolDisplayFormatterTests
         Assert.Null(summary.LongDetails);
     }
 
-    [Fact]
-    public void EditFileFormatter_ExtractsMetadataAndPreservesDetails()
-    {
-        var formatter = new EditFileFormatter();
-        var content = "public void Hello() {\n  Console.WriteLine(\"Hi\");\n}";
-        var call = new ToolCall("1", "EditFile", new JsonObject
-        {
-            ["filePath"] = "src/Helper.cs",
-            ["replacementContent"] = content
-        });
-
-        Assert.True(formatter.CanFormat("EditFile"));
-        var summary = formatter.FormatCall(call);
-
-        Assert.Equal("Create file?", summary.DisplayName);
-        Assert.Contains("src/Helper.cs", summary.ArgSummary);
-        Assert.Equal(content, summary.LongDetails);
-    }
 
     [Fact]
     public void CompositeToolDisplayFormatter_FallsBackToGenericFormatter()

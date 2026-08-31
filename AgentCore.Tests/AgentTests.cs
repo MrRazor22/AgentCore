@@ -20,7 +20,7 @@ public class AgentTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var memory = new ChatContext(
+        var memory = new Context.ChatContext(
             contextWindow: 50000
         );
         await memory.AddAsync(new[] { new Message(Role.User, [new Text("Old message")]) });

@@ -110,54 +110,18 @@ internal class App
 
             var streamingLayer = new StreamingEventLayer<object>();
 
-            // Initialize static tool contexts with workspace boundary
-            CodeSharp.Tools.FileTools.Initialize(workspacePath);
-            CodeSharp.Tools.SearchTool.Initialize(workspacePath);
-
-            // Instantiate stateful/instance tools
+            // Universal PowerShell execution tool with workspace boundary enforcement
             var shellTool = new CodeSharp.Tools.ShellTool(workspacePath);
-            var webTools = new CodeSharp.Tools.WebTools();
-            var todoTool = new CodeSharp.Tools.TodoTool();
-            var scheduleTool = new CodeSharp.Tools.ScheduleTool();
-
-            var alwaysAllowedTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "ReadFile", "Search", "SearchWeb", "TodoList", "Schedule"
-            };
-
-            var blockedCommands = new[]
-            {
-                "rm -rf /", "format c:", "del /s /q c:\\",
-                ":(){:|:&};:", "mkfs.", "dd if="
-            };
 
             var formatter = new CodeSharp.UI.CompositeToolDisplayFormatter(new CodeSharp.UI.IToolDisplayFormatter[]
             {
-                new CodeSharp.UI.RunCommandFormatter(),
-                new CodeSharp.UI.EditFileFormatter(),
-                new CodeSharp.UI.FilesystemFormatter(),
-                new CodeSharp.UI.SearchToolFormatter(),
-                new CodeSharp.UI.SearchWebFormatter()
+                new CodeSharp.UI.RunCommandFormatter()
             });
 
             var prompt = new CodeSharp.UI.ConsoleApprovalPrompt(formatter);
 
             var approvalLayer = new ToolApprovalLayer(async (call, ct) =>
             {
-                if (string.Equals(call.Name, "RunCommand", StringComparison.OrdinalIgnoreCase) &&
-                    call.Arguments.TryGetPropertyValue("CommandLine", out var node))
-                {
-                    var cmd = node?.GetValue<string>() ?? "";
-                    foreach (var pattern in blockedCommands)
-                    {
-                        if (cmd.Contains(pattern, StringComparison.OrdinalIgnoreCase))
-                            return (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text($"[DENIED] Blocked by defense-in-depth guardrail: command matches '{pattern}'.");
-                    }
-                }
-
-                if (alwaysAllowedTools.Contains(call.Name))
-                    return null;
-
                 return await prompt.RequestApprovalAsync(call, ct).ConfigureAwait(false)
                     ? null
                     : (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text("[DENIED] User rejected execution.");
@@ -171,17 +135,12 @@ internal class App
                 .AddLLMLayer(streamingLayer)
                 .AddLLMLayer(new ToolCallDetectionLayer())
                 .WithTools(shellTool)
-                .WithTools(typeof(CodeSharp.Tools.FileTools))
-                .WithTools(typeof(CodeSharp.Tools.SearchTool))
-                .WithTools(webTools)
-                .WithTools(todoTool)
-                .WithTools(scheduleTool)
                 .AddToolingLayer(approvalLayer)
                 .WithInstructions(
                     "You are CodeSharp, an expert agentic AI coding assistant.\n" +
                     "Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\n" +
-                    "Use workspace-relative paths for file tools. Do not invent path schemes or prefixes.\n" +
-                    "Prefer Search for directory listing, file discovery, filename matching, and repository content search. Use ReadFile to inspect file contents. Do not use RunCommand as a substitute for Search or ReadFile. Use RunCommand when shell execution is inherently required, such as builds, tests, git operations, package managers, scripts, or application execution."
+                    "You have a single universal execution tool: RunCommand.\n" +
+                    "Use PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories."
                 )
                 .Build();
 

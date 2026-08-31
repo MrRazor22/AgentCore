@@ -113,7 +113,7 @@ public class LiveAgentTests
     public async Task Test2_StructuredOutput()
     {
         // Arrange
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
@@ -173,7 +173,7 @@ public class LiveAgentTests
     public async Task Test3_MultiTurnContextAndConversationMemory()
     {
         // Arrange
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
@@ -203,7 +203,7 @@ public class LiveAgentTests
     {
         // Arrange
         var tools = new OrderTools();
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
@@ -241,7 +241,7 @@ public class LiveAgentTests
     {
         // Arrange
         var tools = new OrderTools();
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()

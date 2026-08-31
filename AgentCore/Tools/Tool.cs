@@ -22,3 +22,22 @@ public abstract class Tool
         return !string.IsNullOrWhiteSpace(Definition.Description) ? $"{Definition.Name}{argPart} => {Definition.Description}" : $"{Definition.Name}{argPart}";
     }
 }
+
+public sealed record ToolDefinition
+{
+    public string Name { get; }
+    public string Description { get; }
+    public JsonSchema ParametersSchema { get; }
+
+    public ToolDefinition(string name, string description, JsonSchema parametersSchema)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ArgumentNullException.ThrowIfNull(parametersSchema);
+
+        Name = name;
+        Description = description;
+        ParametersSchema = parametersSchema;
+    }
+}
+

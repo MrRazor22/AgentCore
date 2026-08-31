@@ -120,7 +120,7 @@ namespace AgentCore.Tests
             var mockSummarizer = new MockLLM();
             mockSummarizer.EnqueueSimpleText("Summarized context sheet content");
 
-            var context = new ChatContext(
+            var context = new Context.ChatContext(
                 contextWindow: 120,
                 reserveTokens: 10,
                 summarizer: mockSummarizer
@@ -159,7 +159,7 @@ namespace AgentCore.Tests
             var mockLlm = new MockLLM();
             mockLlm.EnqueueSimpleText("Reply despite overflow");
 
-            var context = new ChatContext(
+            var context = new Context.ChatContext(
                 contextWindow: 30,
                 reserveTokens: 40
             );

@@ -4,6 +4,12 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Context;
 
+public interface IContext
+{
+    Task<IReadOnlyList<Message>> GetMessagesAsync(CancellationToken ct = default); 
+    Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
+}
+
 public class ChatContext : IContext
 {
     private readonly List<Message> _chat = new();

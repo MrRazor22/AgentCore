@@ -11,7 +11,7 @@ public class MemoryTests
     public async Task ChatContext_UnderLimit_AccumulatesMessagesAndEstimatesTokens()
     {
         // Arrange
-        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100);
+        var context = new Context.ChatContext(contextWindow: 1000, reserveTokens: 100);
         var system = new Message(Role.System, [new Text("Be helpful.")]);
         var user = new Message(Role.User, [new Text("Hello")]);
         var assistant = new Message(Role.Assistant, [new Text("Hi, how are you?")]);
@@ -34,7 +34,7 @@ public class MemoryTests
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
         mockLlm.Enqueue(new Text("Compacted summary"));
 
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 100, // limit = 90
             reserveTokens: 10,
             summarizer: mockLlm
@@ -61,7 +61,7 @@ public class MemoryTests
         var mockLlm = new MockLLMProvider { ContextWindow = 1000 };
         mockLlm.Enqueue(new Text("This is the compacted summary of history."));
 
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 25, // very small limit to trigger compaction easily
             reserveTokens: 5,
             summarizer: mockLlm
@@ -92,7 +92,7 @@ public class MemoryTests
     public async Task ChatContext_WithoutCompactor_PreservesHistoryWithoutCompaction()
     {
         // Arrange
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 30,
             reserveTokens: 10,
             compactor: null,
@@ -118,7 +118,7 @@ public class MemoryTests
         mockLlm.EnqueueException(new Exception("Context limit exceeded"));
         mockLlm.Enqueue(new Text("This is the compacted summary of history."));
 
-        var context = new ChatContext(
+        var context = new Context.ChatContext(
             contextWindow: 30,
             reserveTokens: 5,
             summarizer: mockLlm
@@ -154,7 +154,7 @@ public class MemoryTests
     public async Task ChatContext_OversizedToolResult_IsTruncatedAtIngress()
     {
         // Arrange - contextWindow = 1000, maxSingleMessageTokens = 200 -> ~800 chars
-        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
+        var context = new Context.ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
         string giantOutput = new string('A', 5000);
         var toolResult = new Message(Role.Tool, [new ToolResult("call_1", new Text(giantOutput))]);
 
@@ -199,7 +199,7 @@ public class MemoryTests
     public async Task ChatContext_PrunesHistoricalReasoning_BeforeLastUserMessage()
     {
         // Arrange
-        var context = new ChatContext(contextWindow: 10000);
+        var context = new Context.ChatContext(contextWindow: 10000);
 
         // Turn 1
         var user1 = new Message(Role.User, new Text("Question 1"));
@@ -229,7 +229,7 @@ public class MemoryTests
     {
         // Arrange
         var customCompactor = new CustomTestCompactor();
-        var context = new ChatContext(contextWindow: 50, reserveTokens: 10, compactor: customCompactor);
+        var context = new Context.ChatContext(contextWindow: 50, reserveTokens: 10, compactor: customCompactor);
 
         var system = new Message(Role.System, [new Text("System")]);
         var userOverflow = new Message(Role.User, [new Text(new string('X', 300))]);
@@ -248,7 +248,7 @@ public class MemoryTests
     [Fact]
     public async Task ChatContext_NonEstimatableContent_ThrowsInvalidOperationException()
     {
-        var context = new ChatContext();
+        var context = new Context.ChatContext();
         var badMessage = new Message(Role.User, [new DummyNonEstimatableContent()]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.AddAsync([badMessage]));
@@ -258,7 +258,7 @@ public class MemoryTests
     public async Task ChatContext_OversizedNonTruncatableContent_ThrowsInvalidOperationException()
     {
         // contextWindow: 500, maxSingleMessageTokens: 100
-        var context = new ChatContext(contextWindow: 500, reserveTokens: 50, maxSingleMessageTokens: 100);
+        var context = new Context.ChatContext(contextWindow: 500, reserveTokens: 50, maxSingleMessageTokens: 100);
         // ToolCall with massive arguments (> 100 tokens -> ~400 chars)
         var giantObj = new System.Text.Json.Nodes.JsonObject { ["large_param"] = new string('A', 1000) };
         var oversizedToolCall = new Message(Role.Tool, [new ToolCall("call_1", "run", giantObj)]);

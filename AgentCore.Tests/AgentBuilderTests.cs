@@ -108,7 +108,7 @@ public class AgentBuilderTests
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var baseMemory = new ChatContext(
+        var baseMemory = new Context.ChatContext(
             contextWindow: 50000
         );
 

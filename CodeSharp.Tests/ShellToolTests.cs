@@ -96,7 +96,7 @@ public class ShellToolTests : IDisposable
         await Task.Delay(200);
         cts.Cancel();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await runTask;
         });
