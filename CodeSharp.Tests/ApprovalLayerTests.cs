@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -44,46 +43,17 @@ public class ApprovalLayerTests
         }
     }
 
-    private class ConfigurablePrompt : IApprovalPrompt
-    {
-        private readonly bool _approve;
-        private readonly Exception? _exceptionToThrow;
-
-        public ConfigurablePrompt(bool approve, Exception? exceptionToThrow = null)
-        {
-            _approve = approve;
-            _exceptionToThrow = exceptionToThrow;
-        }
-
-        public Task<bool> RequestApprovalAsync(ToolCall call, CancellationToken ct)
-        {
-            if (ct.IsCancellationRequested)
-            {
-                throw new OperationCanceledException(ct);
-            }
-            if (_exceptionToThrow != null)
-            {
-                throw _exceptionToThrow;
-            }
-            return Task.FromResult(_approve);
-        }
-    }
-
-
     private static void AttachInner(ApprovalLayer layer, ITooling inner)
     {
         var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         method!.Invoke(layer, new object[] { inner });
     }
 
-
     [Fact]
-    public async Task ExecuteAsync_StrictPolicy_AlwaysPromptsAndApproves()
+    public async Task ExecuteAsync_ApprovedEvaluator_ExecutesInner()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: true);
-        var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -96,16 +66,14 @@ public class ApprovalLayerTests
 
         Assert.True(mockInner.ExecuteCalled);
         Assert.Single(results);
-        Assert.Equal("Execution Ok", ((Text)results[0].Result).Value);
+        Assert.Equal("Execution Ok", Assert.IsType<Text>(results[0].Result).Value);
     }
 
     [Fact]
-    public async Task ExecuteAsync_StrictPolicy_UserDenies_ExecutorNotCalled()
+    public async Task ExecuteAsync_DeniedEvaluator_EmitsDeniedResultAndSkipsInner()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: false);
-        var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(new Text("[DENIED] User rejected execution.")));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -118,19 +86,24 @@ public class ApprovalLayerTests
 
         Assert.False(mockInner.ExecuteCalled);
         Assert.Single(results);
-        Assert.Contains("[DENIED]", ((Text)results[0].Result).Value);
+        var text = Assert.IsType<Text>(results[0].Result).Value;
+        Assert.Contains("[DENIED]", text);
+        Assert.Contains("User rejected execution.", text);
     }
 
     [Fact]
-    public async Task ExecuteAsync_TrustModelPolicy_AutoApprovesSafeToAutoRun()
+    public async Task ExecuteAsync_MultiContentDenial_EmitsAllContents()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: false); // Prompt would deny if called
-        var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.TrustModel, prompt);
+        var denialItems = new IContent[]
+        {
+            new Text("[DENIED] Layout invalid."),
+            new Reasoning("Checked against design specs.")
+        };
+        var layer = new ApprovalLayer((call, ct) => Task.FromResult<IReadOnlyList<IContent>?>(denialItems));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject { ["SafeToAutoRun"] = true });
+        var call = new ToolCall("1", "test_tool", new JsonObject());
         await layer.ExecuteAsync(call);
         var results = new List<ToolResult>();
         await foreach (var r in layer.StreamResultsAsync())
@@ -138,18 +111,19 @@ public class ApprovalLayerTests
             results.Add(r);
         }
 
-        Assert.True(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        Assert.Equal("Execution Ok", ((Text)results[0].Result).Value);
+        Assert.False(mockInner.ExecuteCalled);
+        Assert.Equal(2, results.Count);
+        Assert.Equal("1", results[0].CallId);
+        Assert.Equal("1", results[1].CallId);
+        Assert.IsType<Text>(results[0].Result);
+        Assert.IsType<Reasoning>(results[1].Result);
     }
 
     [Fact]
-    public async Task ExecuteAsync_AlwaysAllowPolicy_AutoApprovesWithoutPrompt()
+    public async Task ExecuteAsync_PromptDelegateOverload_Works()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: false); // Prompt would deny if called
-        var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt);
+        var layer = new ApprovalLayer((call, ct) => Task.FromResult(true));
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -162,19 +136,23 @@ public class ApprovalLayerTests
 
         Assert.True(mockInner.ExecuteCalled);
         Assert.Single(results);
-        Assert.Equal("Execution Ok", ((Text)results[0].Result).Value);
+        Assert.Equal("Execution Ok", Assert.IsType<Text>(results[0].Result).Value);
     }
 
     [Fact]
-    public async Task ExecuteAsync_GuardrailDeny_BlocksAndExecutorNotCalled()
+    public async Task ExecuteAsync_CustomGuardrailEvaluator_BlocksMatchingCalls()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: true);
-        var permissions = new Dictionary<string, ToolPermission> { ["RunCommand"] = ToolPermission.Confirm };
-        
-        // Add rule to block format c:
-        var guardrails = DenyRules.CommandPatterns("format c:");
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, prompt, guardrails);
+        var layer = new ApprovalLayer((call, ct) =>
+        {
+            if (call.Name == "RunCommand" &&
+                call.Arguments.TryGetPropertyValue("CommandLine", out var cmd) &&
+                cmd?.GetValue<string>()?.Contains("format c:") == true)
+            {
+                return Task.FromResult<IContent?>(new Text("[DENIED] Blocked by guardrail."));
+            }
+            return Task.FromResult<IContent?>(null);
+        });
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" });
@@ -187,17 +165,18 @@ public class ApprovalLayerTests
 
         Assert.False(mockInner.ExecuteCalled);
         Assert.Single(results);
-        Assert.Contains("[DENIED]", ((Text)results[0].Result).Value);
-        Assert.Contains("defense-in-depth guardrail", ((Text)results[0].Result).Value);
+        Assert.Contains("[DENIED] Blocked by guardrail.", Assert.IsType<Text>(results[0].Result).Value);
     }
 
     [Fact]
     public async Task ExecuteAsync_CancellationPropagation_ThrowsOperationCanceledException()
     {
         var mockInner = new MockTooling();
-        var prompt = new ConfigurablePrompt(approve: true);
-        var permissions = new Dictionary<string, ToolPermission> { ["test_tool"] = ToolPermission.Confirm };
-        var layer = new ApprovalLayer(permissions, ExecutionPolicy.Strict, prompt);
+        var layer = new ApprovalLayer(async (call, ct) =>
+        {
+            await Task.Delay(100, ct);
+            return (IContent?)null;
+        });
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
@@ -205,7 +184,7 @@ public class ApprovalLayerTests
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Pre-cancel
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await layer.ExecuteAsync(call, cts.Token);
             await foreach (var r in layer.StreamResultsAsync(cts.Token))

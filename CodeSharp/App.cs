@@ -108,7 +108,7 @@ internal class App
                 baseUrl += "/";
             }
 
-            var streamingLayer = new StreamingLLMLayer();
+            var streamingLayer = new StreamingLLMLayer<object>();
 
             // Initialize static tool contexts with workspace boundary
             CodeSharp.Tools.FileTools.Initialize(workspacePath);
@@ -120,26 +120,16 @@ internal class App
             var todoTool = new CodeSharp.Tools.TodoTool();
             var scheduleTool = new CodeSharp.Tools.ScheduleTool();
 
-            // Define data-driven tool permissions
-            var permissions = new Dictionary<string, ToolPermission>
+            var alwaysAllowedTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["ReadFile"]   = ToolPermission.Allow,
-                ["Search"]     = ToolPermission.Allow,
-                ["SearchWeb"]  = ToolPermission.Allow,
-                ["TodoList"]   = ToolPermission.Allow,
-                ["Schedule"]   = ToolPermission.Allow,
-                ["EditFile"]   = ToolPermission.Confirm,
-                ["Filesystem"] = ToolPermission.Confirm,
-                ["RunCommand"] = ToolPermission.Confirm,
+                "ReadFile", "Search", "SearchWeb", "TodoList", "Schedule"
             };
 
-            // Defense-in-depth guardrails
-            var guardrails = DenyRules.Combine(
-                DenyRules.CommandPatterns(
-                    "rm -rf /", "format c:", "del /s /q c:\\",
-                    ":(){:|:&};:", "mkfs.", "dd if="
-                )
-            );
+            var blockedCommands = new[]
+            {
+                "rm -rf /", "format c:", "del /s /q c:\\",
+                ":(){:|:&};:", "mkfs.", "dd if="
+            };
 
             var formatter = new CodeSharp.UI.CompositeToolDisplayFormatter(new CodeSharp.UI.IToolDisplayFormatter[]
             {
@@ -150,12 +140,28 @@ internal class App
                 new CodeSharp.UI.SearchWebFormatter()
             });
 
-            var approvalLayer = new ApprovalLayer(
-                permissions,
-                ExecutionPolicy.Strict,
-                new CodeSharp.UI.ConsoleApprovalPrompt(formatter),
-                guardrails
-            );
+            var prompt = new CodeSharp.UI.ConsoleApprovalPrompt(formatter);
+
+            var approvalLayer = new ApprovalLayer(async (call, ct) =>
+            {
+                if (string.Equals(call.Name, "RunCommand", StringComparison.OrdinalIgnoreCase) &&
+                    call.Arguments.TryGetPropertyValue("CommandLine", out var node))
+                {
+                    var cmd = node?.GetValue<string>() ?? "";
+                    foreach (var pattern in blockedCommands)
+                    {
+                        if (cmd.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                            return (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text($"[DENIED] Blocked by defense-in-depth guardrail: command matches '{pattern}'.");
+                    }
+                }
+
+                if (alwaysAllowedTools.Contains(call.Name))
+                    return null;
+
+                return await prompt.RequestApprovalAsync(call, ct).ConfigureAwait(false)
+                    ? null
+                    : (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text("[DENIED] User rejected execution.");
+            });
 
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)

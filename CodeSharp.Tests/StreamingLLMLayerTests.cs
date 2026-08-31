@@ -65,7 +65,7 @@ public class StreamingLLMLayerTests
         };
 
         var mockInner = new MockLLM(expectedOutputs);
-        var layer = new StreamingLLMLayer();
+        var layer = new StreamingLLMLayer<object>();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 
@@ -97,11 +97,47 @@ public class StreamingLLMLayerTests
     }
 
     [Fact]
+    public async Task StreamAsync_WithCustomMapper_ProjectsEventsToCustomType()
+    {
+        var expectedOutputs = new List<IMessageEvent>
+        {
+            new TextStart(0),
+            new TextDelta(0, "Hello "),
+            new TextDelta(0, "World"),
+            new TextEnd(0)
+        };
+
+        var mockInner = new MockLLM(expectedOutputs);
+        var layer = new StreamingLLMLayer<string>(evt => evt is TextDelta td ? td.Text : evt.GetType().Name);
+        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        attachMethod!.Invoke(layer, new object[] { mockInner });
+
+        var channel = Channel.CreateUnbounded<string>();
+        layer.Writer = channel.Writer;
+
+        var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
+        var message = new StreamingMessage(layer.StreamAsync(messages));
+
+        await foreach (var _ in message.ContentsStream())
+        {
+        }
+
+        channel.Writer.Complete();
+        var results = new List<string>();
+        await foreach (var str in channel.Reader.ReadAllAsync())
+        {
+            results.Add(str);
+        }
+
+        Assert.Equal(new[] { "TextStart", "Hello ", "World", "TextEnd" }, results);
+    }
+
+    [Fact]
     public async Task StreamAsync_CancellationPropagatesCorrectly()
     {
         var outputs = new List<IMessageEvent> { new TextDelta(0, "hi") };
         var mockInner = new MockLLM(outputs);
-        var layer = new StreamingLLMLayer();
+        var layer = new StreamingLLMLayer<IMessageEvent>();
         var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
         attachMethod!.Invoke(layer, new object[] { mockInner });
 

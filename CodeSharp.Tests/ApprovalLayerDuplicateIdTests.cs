@@ -39,21 +39,11 @@ public class ApprovalLayerDuplicateIdTests
         }
     }
 
-    private class AlwaysApprovePrompt : IApprovalPrompt
-    {
-        public Task<bool> RequestApprovalAsync(ToolCall call, CancellationToken ct) => Task.FromResult(true);
-    }
-
     [Fact]
     public async Task ExecuteAsync_DuplicateOrEmptyCallIds_PreservesOrderWithoutException()
     {
         var tool = new DummyTool("test_tool");
-        var permissions = new Dictionary<string, ToolPermission>
-        {
-            ["test_tool"] = ToolPermission.Allow
-        };
-
-        var approvalLayer = new ApprovalLayer(permissions, ExecutionPolicy.AlwaysAllow, new AlwaysApprovePrompt());
+        var approvalLayer = new ApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
         var mockInner = new MockTooling(tool);
 
         // Attach inner tooling via internal Attach method using reflection for test isolation

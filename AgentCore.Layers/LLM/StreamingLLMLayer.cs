@@ -10,11 +10,9 @@ using AgentCore.Tools;
 
 namespace AgentCore.LLM;
 
-public sealed class StreamingLLMLayer : LLMLayer
+public sealed class StreamingLLMLayer<T>(Func<IMessageEvent, T>? mapper = null) : LLMLayer
 {
-
-
-    public ChannelWriter<object>? Writer { get; set; }
+    public ChannelWriter<T>? Writer { get; set; }
 
     public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
@@ -32,7 +30,18 @@ public sealed class StreamingLLMLayer : LLMLayer
         var writer = Writer;
         await foreach (var evt in innerEvents.WithCancellation(ct).ConfigureAwait(false))
         {
-            writer?.TryWrite(evt);
+            if (writer != null)
+            {
+                if (mapper != null)
+                {
+                    writer.TryWrite(mapper(evt));
+                }
+                else if (evt is T typedEvt)
+                {
+                    writer.TryWrite(typedEvt);
+                }
+            }
+
             yield return evt;
         }
     }

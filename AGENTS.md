@@ -2,7 +2,7 @@
 
 ## 1. NO CODE MODIFICATIONS WITHOUT EXPLICIT APPROVAL
 - You are STRICTLY FORBIDDEN from calling `write_to_file`, `replace_file_content`, or making source changes until the user explicitly says "yes", "proceed", "do it", or "apply".
-- State clearly and concisely what changes will be made instead of outputting verbose, token-wasting diffs, and STOP your turn to wait for user confirmation.
+- State clearly and concisely in chat what changes will be made instead of creating explicit plan.md files (unless explicitly asked) or outputting verbose token-wasting diffs, and STOP your turn to wait for user confirmation.
 - Never make speculative, panic, or knee-jerk code edits.
 
 ## 2. MINIMAL & DIRECT ABSTRACTIONS
@@ -24,3 +24,8 @@
 
 ## 5. RULE UPDATES TARGET GLOBAL USER RULES
 - When the user asks to update rules or add guidelines, always target and update the global user rules file (`~/.gemini/config/AGENTS.md`) in addition to repository-level rules.
+
+## 6. CONCISE CODE & ZERO DUPLICATION
+- Correct code is naturally lean. Never write repetitive flows or verbose boilerplate.
+- Leverage modern language constructs (e.g. primary constructors, concise guard clauses) to minimize lines while preserving clarity and zero-allocation performance.
+- Zero bloat, zero speculative layers, zero redundant checks.

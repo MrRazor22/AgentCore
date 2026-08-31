@@ -35,7 +35,7 @@ public class RetryLayerTests
     public async Task StreamAsync_SuccessfulFirstAttempt_YieldsEventsWithoutRetry()
     {
         var mockLLM = new MockLLM(_ => CreateAsyncEnumerable(new TextStart(0), new TextDelta(0, "Hello"), new TextEnd(0)));
-        var layer = new RetryLayer(new RetryOptions { MaxRetries = 3 });
+        var layer = new RetryLayer(maxRetries: 3);
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
@@ -60,14 +60,12 @@ public class RetryLayerTests
             return CreateAsyncEnumerable(new TextStart(0), new TextDelta(0, "Recovered"), new TextEnd(0));
         });
 
-        var retryContexts = new List<RetryContext>();
-        var layer = new RetryLayer(new RetryOptions
-        {
-            MaxRetries = 3,
-            InitialDelay = TimeSpan.FromMilliseconds(5),
-            UseJitter = false,
-            OnRetry = ctx => retryContexts.Add(ctx)
-        });
+        var attemptsRetried = new List<int>();
+        var layer = new RetryLayer(
+            maxRetries: 3,
+            initialDelay: TimeSpan.FromMilliseconds(5),
+            useJitter: false,
+            onRetry: (ex, attempt, delay) => attemptsRetried.Add(attempt));
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
@@ -78,21 +76,19 @@ public class RetryLayerTests
 
         Assert.Equal(3, events.Count);
         Assert.Equal(3, mockLLM.CallCount);
-        Assert.Equal(2, retryContexts.Count);
-        Assert.Equal(1, retryContexts[0].Attempt);
-        Assert.Equal(2, retryContexts[1].Attempt);
+        Assert.Equal(2, attemptsRetried.Count);
+        Assert.Equal(1, attemptsRetried[0]);
+        Assert.Equal(2, attemptsRetried[1]);
     }
 
     [Fact]
     public async Task StreamAsync_TransientErrorExceedsMaxRetries_ThrowsLastException()
     {
         var mockLLM = new MockLLM(_ => ThrowBeforeYield(new HttpRequestException("Rate limit", null, HttpStatusCode.TooManyRequests)));
-        var layer = new RetryLayer(new RetryOptions
-        {
-            MaxRetries = 2,
-            InitialDelay = TimeSpan.FromMilliseconds(1),
-            UseJitter = false
-        });
+        var layer = new RetryLayer(
+            maxRetries: 2,
+            initialDelay: TimeSpan.FromMilliseconds(1),
+            useJitter: false);
         layer.Attach(mockLLM);
 
         var ex = await Assert.ThrowsAsync<HttpRequestException>(async () =>
@@ -108,11 +104,9 @@ public class RetryLayerTests
     public async Task StreamAsync_NonTransientError_ThrowsImmediatelyWithoutRetrying()
     {
         var mockLLM = new MockLLM(_ => ThrowBeforeYield(new InvalidOperationException("Fatal configuration error")));
-        var layer = new RetryLayer(new RetryOptions
-        {
-            MaxRetries = 3,
-            InitialDelay = TimeSpan.FromMilliseconds(1)
-        });
+        var layer = new RetryLayer(
+            maxRetries: 3,
+            initialDelay: TimeSpan.FromMilliseconds(1));
         layer.Attach(mockLLM);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -127,11 +121,9 @@ public class RetryLayerTests
     public async Task StreamAsync_FailureAfterEmittingEvent_DoesNotRetryAndThrowsImmediately()
     {
         var mockLLM = new MockLLM(_ => ThrowAfterYield(new TextStart(0), new HttpRequestException("Disconnect mid-stream", null, HttpStatusCode.BadGateway)));
-        var layer = new RetryLayer(new RetryOptions
-        {
-            MaxRetries = 3,
-            InitialDelay = TimeSpan.FromMilliseconds(1)
-        });
+        var layer = new RetryLayer(
+            maxRetries: 3,
+            initialDelay: TimeSpan.FromMilliseconds(1));
         layer.Attach(mockLLM);
 
         var eventsReceived = new List<IMessageEvent>();
@@ -161,12 +153,10 @@ public class RetryLayerTests
             return CreateAsyncEnumerable(new TextStart(0), new TextEnd(0));
         });
 
-        var layer = new RetryLayer(new RetryOptions
-        {
-            MaxRetries = 2,
-            InitialDelay = TimeSpan.FromMilliseconds(1),
-            ShouldRetry = (ex, attempt) => ex is CustomBusinessException
-        });
+        var layer = new RetryLayer(
+            maxRetries: 2,
+            initialDelay: TimeSpan.FromMilliseconds(1),
+            shouldRetry: (ex, attempt) => ex is CustomBusinessException);
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
@@ -185,15 +175,14 @@ public class RetryLayerTests
     [InlineData(3, 1000, -1, 2.0)]
     [InlineData(3, 1000, 30000, 0.5)]
     [InlineData(3, 1000, 30000, double.NaN)]
+    [InlineData(3, 1000, 30000, double.PositiveInfinity)]
     public void Constructor_InvalidOptions_ThrowsArgumentOutOfRangeException(int maxRetries, int initialMs, int maxMs, double multiplier)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new RetryLayer(new RetryOptions
-        {
-            MaxRetries = maxRetries,
-            InitialDelay = TimeSpan.FromMilliseconds(initialMs),
-            MaxDelay = TimeSpan.FromMilliseconds(maxMs),
-            BackoffMultiplier = multiplier
-        }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RetryLayer(
+            maxRetries: maxRetries,
+            initialDelay: TimeSpan.FromMilliseconds(initialMs),
+            maxDelay: TimeSpan.FromMilliseconds(maxMs),
+            backoffMultiplier: multiplier));
     }
 
     [Fact]

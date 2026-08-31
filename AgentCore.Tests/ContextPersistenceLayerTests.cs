@@ -87,6 +87,31 @@ public class ContextPersistenceLayerTests
     }
 
     [Fact]
+    public async Task RestoreAsync_RestoresExistingMessagesOnDemand()
+    {
+        var store = new InMemoryContextStore();
+        store.Storage["session-manual"] = new List<Message>
+        {
+            new(Role.User, new Text("Manual restore message"))
+        };
+
+        var innerContext = new MockMemoryProvider();
+        var layer = new ContextPersistenceLayer(store, "session-manual", autoRestore: false);
+        layer.Attach(innerContext);
+
+        // Before RestoreAsync
+        var before = await layer.GetMessagesAsync();
+        Assert.Empty(before);
+
+        // Explicit Restore
+        await layer.RestoreAsync();
+
+        var after = await layer.GetMessagesAsync();
+        Assert.Single(after);
+        Assert.Equal("Manual restore message", after[0].Contents[0].ToString());
+    }
+
+    [Fact]
     public void Constructor_InvalidArguments_ThrowsException()
     {
         var store = new InMemoryContextStore();
