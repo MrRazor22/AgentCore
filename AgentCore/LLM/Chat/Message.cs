@@ -6,6 +6,16 @@ namespace AgentCore.LLM.Chat;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
+
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(Text), "text")]
+[JsonDerivedType(typeof(ToolCall), "toolCall")]
+[JsonDerivedType(typeof(ToolResult), "toolResult")]
+[JsonDerivedType(typeof(Reasoning), "reasoning")]
+public interface IContent {} 
+public interface ITruncatable { IContent Truncate(int maxTokens); }  
+public interface IEstimatable { int EstimateTokens(); } 
+
 public sealed record MessageMetadata(
     [property: JsonPropertyName("id")] string? Id = null,
     [property: JsonPropertyName("model")] string? Model = null,
