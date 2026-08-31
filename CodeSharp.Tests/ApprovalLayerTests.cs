@@ -140,6 +140,26 @@ public class ApprovalLayerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_PromptDelegateOverload_UserDenies_EmitsToolNameRejection()
+    {
+        var mockInner = new MockTooling();
+        var layer = new ApprovalLayer((call, ct) => Task.FromResult(false));
+        AttachInner(layer, mockInner);
+
+        var call = new ToolCall("1", "test_tool", new JsonObject());
+        await layer.ExecuteAsync(call);
+        var results = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            results.Add(r);
+        }
+
+        Assert.False(mockInner.ExecuteCalled);
+        Assert.Single(results);
+        Assert.Equal("Execution of tool 'test_tool' was rejected by the user.", Assert.IsType<Text>(results[0].Result).Value);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_CustomGuardrailEvaluator_BlocksMatchingCalls()
     {
         var mockInner = new MockTooling();
@@ -193,5 +213,86 @@ public class ApprovalLayerTests
         });
         
         Assert.False(mockInner.ExecuteCalled);
+    }
+
+    private class TimedMockTooling : ITooling
+    {
+        private readonly List<Task<ToolResult>> _tasks = [];
+        public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
+
+        public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
+        {
+            var task = Task.Run(async () =>
+            {
+                var delay = call.Name == "tool_b" ? 40 : 10;
+                await Task.Delay(delay, ct);
+                return new ToolResult(call.Id, new Text($"Result for {call.Name}"));
+            }, ct);
+            _tasks.Add(task);
+            return Task.CompletedTask;
+        }
+
+        public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            var tasks = new List<Task<ToolResult>>(_tasks);
+            _tasks.Clear();
+            while (tasks.Count > 0)
+            {
+                var completed = await Task.WhenAny(tasks).ConfigureAwait(false);
+                tasks.Remove(completed);
+                yield return await completed.ConfigureAwait(false);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConcurrentCalls_FastDenialAndFastToolStreamBeforeSlowApproval()
+    {
+        var mockInner = new TimedMockTooling();
+
+        var layer = new ApprovalLayer(async (call, ct) =>
+        {
+            if (call.Name == "tool_a")
+            {
+                // Slow approval (e.g. 250ms user prompt)
+                await Task.Delay(250, ct);
+                return null;
+            }
+            if (call.Name == "tool_b")
+            {
+                // Instant approval -> inner runs in 40ms
+                return null;
+            }
+            if (call.Name == "tool_c")
+            {
+                // Fast denial (10ms)
+                await Task.Delay(10, ct);
+                return [new Text("Denied tool_c")];
+            }
+            return null;
+        });
+        AttachInner(layer, mockInner);
+
+        var callA = new ToolCall("call_A", "tool_a", new JsonObject());
+        var callB = new ToolCall("call_B", "tool_b", new JsonObject());
+        var callC = new ToolCall("call_C", "tool_c", new JsonObject());
+
+        await layer.ExecuteAsync(callA);
+        await layer.ExecuteAsync(callB);
+        await layer.ExecuteAsync(callC);
+
+        var received = new List<ToolResult>();
+        await foreach (var r in layer.StreamResultsAsync())
+        {
+            received.Add(r);
+        }
+
+        Assert.Equal(3, received.Count);
+
+        // Tool C (fast denial ~10ms) and Tool B (fast inner tool ~40ms) must stream before Tool A (~250ms)
+        var callIds = received.Select(r => r.CallId).ToList();
+        Assert.Equal("call_A", callIds[2]); // Tool A is last
+        Assert.Contains("call_B", callIds.Take(2));
+        Assert.Contains("call_C", callIds.Take(2));
     }
 }

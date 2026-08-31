@@ -4,172 +4,114 @@ using System.Threading.Channels;
 
 namespace AgentCore.Tools;
 
-/// <summary>
-/// Delegate for evaluating tool approval.
-/// Returns null/empty if approved (proceed to execute inner tool),
-/// or a list of <see cref="IContent"/> items (text, images, media) to emit as tool results if denied.
-/// </summary>
 public delegate Task<IReadOnlyList<IContent>?> ToolApprovalEvaluator(ToolCall call, CancellationToken ct);
 
-/// <summary>
-/// Minimal, pluggable ToolingLayer decorator that intercepts tool calls and delegates approval.
-/// </summary>
 public sealed class ApprovalLayer : ToolingLayer
 {
     private readonly ToolApprovalEvaluator _evaluator;
-    private readonly List<Task> _evaluations = [];
+    private readonly List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>> _evaluations = [];
     private readonly object _lock = new();
 
-    public ApprovalLayer(ToolApprovalEvaluator evaluator)
-    {
-        _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
-    }
+    public ApprovalLayer(ToolApprovalEvaluator evaluator) => _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 
     public ApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
-        : this(async (call, ct) =>
-        {
-            var content = await evaluator(call, ct).ConfigureAwait(false);
-            return content is null ? null : [content];
-        })
-    {
-    }
+        : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
 
     public ApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
-        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text("[DENIED] User rejected execution.")])
-    {
-    }
+        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
     public override Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
-        var task = ProcessAsync(call, ct);
+        var task = EvaluateAsync(call, ct);
         lock (_lock) _evaluations.Add(task);
         return Task.CompletedTask;
     }
 
-    private async Task ProcessAsync(ToolCall call, CancellationToken ct)
+    private async Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)> EvaluateAsync(ToolCall call, CancellationToken ct)
     {
         var denial = await _evaluator(call, ct).ConfigureAwait(false);
-        if (denial is { Count: > 0 })
-            throw new ApprovalDeniedException(call.Id, denial);
-
-        await Inner.ExecuteAsync(call, ct).ConfigureAwait(false);
+        return (call, denial);
     }
 
     public override async IAsyncEnumerable<ToolResult> StreamResultsAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
-        Task[] evaluations;
+        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] evaluations;
         lock (_lock)
         {
             evaluations = [.. _evaluations];
             _evaluations.Clear();
         }
 
-        var channel = Channel.CreateUnbounded<ToolResult>(new UnboundedChannelOptions
-        {
-            SingleReader = true,
-            SingleWriter = false
-        });
+        var results = Channel.CreateUnbounded<ToolResult>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+        var dispatchSignal = Channel.CreateUnbounded<bool>();
 
-        var innerSignal = Channel.CreateUnbounded<bool>();
+        var approvals = StreamApprovalsAsync(evaluations, Inner, dispatchSignal.Writer, results.Writer, ct);
+        var inner = StreamInnerResultsAsync(dispatchSignal.Reader, results.Writer, ct);
 
-        var approvalPump = PumpApprovalsAsync(evaluations, innerSignal.Writer, channel.Writer, ct);
-        var innerPump = PumpInnerAsync(evaluations, innerSignal.Reader, channel.Writer, ct);
+        _ = CompleteAsync(results.Writer, approvals, inner);
 
-        _ = CompleteAsync(channel.Writer, approvalPump, innerPump);
-
-        await foreach (var result in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
-        {
+        await foreach (var result in results.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return result;
-        }
     }
 
-    private static async Task PumpApprovalsAsync(
-        Task[] evaluations,
-        ChannelWriter<bool> innerSignal,
-        ChannelWriter<ToolResult> writer,
+    private static async Task StreamApprovalsAsync(
+        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] evaluations,
+        ITooling inner,
+        ChannelWriter<bool> dispatchSignal,
+        ChannelWriter<ToolResult> results,
         CancellationToken ct)
     {
         try
         {
-            var pending = new List<Task>(evaluations);
-
+            var pending = new List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>>(evaluations);
             while (pending.Count > 0)
             {
                 var completed = await Task.WhenAny(pending).ConfigureAwait(false);
                 pending.Remove(completed);
 
-                try
+                var (call, denial) = await completed.ConfigureAwait(false);
+
+                if (denial is { Count: > 0 })
                 {
-                    await completed.ConfigureAwait(false);
-                    // Approved & dispatched to Inner -> signal inner pump immediately!
-                    innerSignal.TryWrite(true);
+                    foreach (var content in denial)
+                        await results.WriteAsync(new ToolResult(call.Id, content), ct).ConfigureAwait(false);
                 }
-                catch (ApprovalDeniedException ex)
+                else
                 {
-                    foreach (var content in ex.Contents)
-                    {
-                        await writer.WriteAsync(new ToolResult(ex.CallId, content), ct).ConfigureAwait(false);
-                    }
+                    await inner.ExecuteAsync(call, ct).ConfigureAwait(false);
+                    dispatchSignal.TryWrite(true);
                 }
             }
         }
         finally
         {
-            innerSignal.TryComplete();
+            dispatchSignal.TryComplete();
         }
     }
 
-    private async Task PumpInnerAsync(
-        Task[] evaluations,
-        ChannelReader<bool> innerSignal,
-        ChannelWriter<ToolResult> writer,
-        CancellationToken ct)
+    private async Task StreamInnerResultsAsync(ChannelReader<bool> dispatchSignal, ChannelWriter<ToolResult> results, CancellationToken ct)
     {
-        var allEvaluations = Task.WhenAll(evaluations);
-
-        while (await innerSignal.WaitToReadAsync(ct).ConfigureAwait(false))
+        while (await dispatchSignal.WaitToReadAsync(ct).ConfigureAwait(false))
         {
-            while (innerSignal.TryRead(out _)) { }
-            await DrainInnerAsync(writer, ct).ConfigureAwait(false);
+            while (dispatchSignal.TryRead(out _)) { }
+            await foreach (var r in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
+                await results.WriteAsync(r, ct).ConfigureAwait(false);
         }
 
-        // Final drain once all evaluations have finished
-        await DrainInnerAsync(writer, ct).ConfigureAwait(false);
-
-        try
-        {
-            await allEvaluations.ConfigureAwait(false);
-        }
-        catch
-        {
-            // Denials handled in PumpApprovalsAsync; unexpected faults observed by CompleteAsync
-        }
+        await foreach (var r in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
+            await results.WriteAsync(r, ct).ConfigureAwait(false);
     }
 
-    private async Task DrainInnerAsync(ChannelWriter<ToolResult> writer, CancellationToken ct)
-    {
-        await foreach (var result in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
-        {
-            await writer.WriteAsync(result, ct).ConfigureAwait(false);
-        }
-    }
-
-    private static async Task CompleteAsync(ChannelWriter<ToolResult> writer, Task approvalPump, Task innerPump)
+    private static async Task CompleteAsync(ChannelWriter<ToolResult> results, Task approvals, Task inner)
     {
         try
         {
-            await Task.WhenAll(approvalPump, innerPump).ConfigureAwait(false);
-            writer.TryComplete();
+            await Task.WhenAll(approvals, inner).ConfigureAwait(false);
+            results.TryComplete();
         }
         catch (Exception ex)
         {
-            writer.TryComplete(ex);
+            results.TryComplete(ex);
         }
-    }
-
-    private sealed class ApprovalDeniedException(string callId, IReadOnlyList<IContent> contents) : Exception
-    {
-        public string CallId { get; } = callId;
-        public IReadOnlyList<IContent> Contents { get; } = contents;
     }
 }
