@@ -1,4 +1,5 @@
 using AgentCore.LLM.Chat;
+using AgentCore.Tools;
 using Spectre.Console;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,7 +9,7 @@ namespace CodeSharp.UI;
 /// <summary>
 /// A decoupled, human-readable approval prompt that formats and renders tool calls.
 /// </summary>
-public sealed class ConsoleApprovalPrompt : Layers.IApprovalPrompt
+public sealed class ConsoleApprovalPrompt : IApprovalPrompt
 {
     private static readonly SemaphoreSlim _promptLock = new(1, 1);
     private readonly IToolDisplayFormatter _formatter;

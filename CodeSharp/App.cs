@@ -3,11 +3,11 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AgentCore;
+using AgentCore.LLM;
 using AgentCore.Tools;
 using AgentCore.Context;
 using Spectre.Console;
 using CodeSharp.UI;
-using CodeSharp.Layers;
 using AgentCore.Layers.LLM;
 using Serilog;
 using Microsoft.Extensions.Logging;
@@ -150,7 +150,7 @@ internal class App
                 new CodeSharp.UI.SearchWebFormatter()
             });
 
-            var approvalLayer = new CodeSharp.Layers.ApprovalLayer(
+            var approvalLayer = new ApprovalLayer(
                 permissions,
                 ExecutionPolicy.Strict,
                 new CodeSharp.UI.ConsoleApprovalPrompt(formatter),

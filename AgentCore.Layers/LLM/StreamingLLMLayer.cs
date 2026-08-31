@@ -14,7 +14,7 @@ public sealed class StreamingLLMLayer : LLMLayer
 {
 
 
-    internal ChannelWriter<object>? Writer { get; set; }
+    public ChannelWriter<object>? Writer { get; set; }
 
     public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,

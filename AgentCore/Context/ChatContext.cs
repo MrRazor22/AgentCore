@@ -1,19 +1,19 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
-using System.Text;
 
 namespace AgentCore.Context;
 
 public class ChatContext : IContext
 {
     private readonly List<Message> _chat = new();
-    private readonly ILLM? _summarizer;
+    private readonly ICompactor? _compactor;
     private readonly ILogger<ChatContext>? _logger;
 
     private readonly int _contextWindow;
     private readonly int _reserveTokens;
     private readonly int _limit;
+    private readonly int _maxSingleMessageChars;
     private int _committedTokens;
 
     private const double CharsPerToken = 4.0;
@@ -21,12 +21,21 @@ public class ChatContext : IContext
 
     private readonly object _lock = new();
 
-    public ChatContext(int contextWindow = 50000, int? reserveTokens = null, ILLM? summarizer = null, ILogger<ChatContext>? logger = null)
+    public ChatContext(
+        int contextWindow = 50000, 
+        int? reserveTokens = null, 
+        int? maxSingleMessageTokens = null,
+        ICompactor? compactor = null,
+        ILLM? summarizer = null, 
+        ILogger<ChatContext>? logger = null)
     {
         _contextWindow = contextWindow;
-        _reserveTokens = reserveTokens ?? (contextWindow / 10);
-        _limit = _contextWindow - _reserveTokens;
-        _summarizer = summarizer;
+        _reserveTokens = reserveTokens ?? Math.Min(4_000, contextWindow / 10);
+        _limit = Math.Max(1, _contextWindow - _reserveTokens);
+
+        int maxMsgTokens = maxSingleMessageTokens ?? Math.Min(10_000, contextWindow / 5);
+        _maxSingleMessageChars = Math.Max(500, (int)(maxMsgTokens * CharsPerToken));
+        _compactor = compactor ?? (summarizer != null ? new Summarizer(summarizer) : null);
         _logger = logger;
     }
 
@@ -36,19 +45,21 @@ public class ChatContext : IContext
     {
         if (messages == null) throw new ArgumentNullException(nameof(messages));
 
+        var compactedMsg = messages.Select(TruncateMessage).ToList();
+
         lock (_lock)
         {
-            _chat.AddRange(messages);
+            _chat.AddRange(compactedMsg);
 
-            var lastUsage = messages.LastOrDefault(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
+            var lastUsage = compactedMsg.LastOrDefault(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
             _committedTokens = lastUsage != null
                 ? (lastUsage.InputTokens + lastUsage.OutputTokens)
-                : _chat.Sum(Estimate);
+                : _committedTokens + compactedMsg.Sum(Estimate);
         }
 
         _logger?.LogInformation(
             "Messages added to context. AddedCount={AddedCount}, TotalMessages={TotalMessages}, CommittedTokens={CommittedTokens}",
-            messages.Count,
+            compactedMsg.Count,
             _chat.Count,
             _committedTokens);
 
@@ -63,103 +74,49 @@ public class ChatContext : IContext
 
         _logger?.LogInformation(
              "Retrieving context messages. Strategy={Strategy}, TotalMessages={TotalMessages}, EstimatedTokens={EstimatedTokens}, Limit={Limit}",
-             _summarizer != null ? "Summary" : "Trim",
+             _compactor?.GetType().Name ?? "None",
              _chat.Count,
              estimatedTotal,
              _limit);
 
-        if (estimatedTotal > _limit)
-            await CompactChatAsync(ct).ConfigureAwait(false); 
+        if (estimatedTotal > _limit && _compactor != null)
+        {
+            List<Message> snapshot;
+            lock (_lock) snapshot = _chat.ToList();
+
+            var compacted = await _compactor.CompactAsync(snapshot, _limit, ct).ConfigureAwait(false);
+
+            lock (_lock)
+            {
+                _chat.Clear();
+                _chat.AddRange(compacted);
+                _committedTokens = _chat.Sum(Estimate);
+            }
+        }
 
         lock (_lock) return _chat; 
     }
 
-    private async Task CompactChatAsync(CancellationToken ct = default)
+    private Message TruncateMessage(Message message)
     {
-        if (_summarizer != null)
+        if (message.Role is not (Role.Tool or Role.User))
+            return message;
+
+        var sanitized = message.Contents.Select(c => c switch
         {
-            string summary = await GenerateChatSummary(ct).ConfigureAwait(false);
-            ReplaceChatWithSummary(summary);
-        }
-        else
-        {
-            // Fallback: Rolling window trimming
-            lock (_lock)
-            {
-                // Start checking from the first message after the system prompt (if one exists)
-                bool hasSystem = _chat.Any(m => m.Role == Role.System);
-                int startIndex = hasSystem ? 1 : 0;
-                while (_chat.Count > (startIndex + 1))
-                {
-                    _chat.RemoveAt(startIndex);
-                }
-                _committedTokens = _chat.Sum(Estimate);
-            }
-        }
+            ToolResult { Result: Text { Value.Length: var len } } tr when len > _maxSingleMessageChars =>
+                new ToolResult(tr.CallId, new Text(tr.Result.ForLlm()[.._maxSingleMessageChars] + $"\n... [Output truncated from {len} to {_maxSingleMessageChars} characters]")),
+
+            Text { Value.Length: var len } t when len > _maxSingleMessageChars =>
+                new Text(t.Value[.._maxSingleMessageChars] + $"\n... [Content truncated from {len} to {_maxSingleMessageChars} characters]"),
+
+            _ => c
+        }).ToList();
+
+        return new Message(message.Role, sanitized, message.Metadata);
     }
 
-    private async Task<string> GenerateChatSummary(CancellationToken ct)
-    {
-        if (_summarizer == null) return string.Empty;
-
-        List<Message> tempChat;
-        lock (_lock)
-        {
-            tempChat = _chat.ToList();
-        }
-
-        tempChat.Add(new Message(Role.User, new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
-
-        while (true)
-        {
-            try
-            {
-                var eventStream = _summarizer.StreamAsync(tempChat, responseSchema: null, tools: null, ct: ct);
-                var message = new StreamingMessage(eventStream);
-                await foreach (var _ in message.ContentsStream(ct).ConfigureAwait(false)) { }
-                var summary = message.Contents.OfType<Text>().FirstOrDefault()?.Value ?? string.Empty;
-                return summary.Trim();
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                int oldestIndex = tempChat.Count > 0 && tempChat[0].Role == Role.System ? 1 : 0;
-                if (tempChat.Count > oldestIndex + 1)
-                {
-                    var removedMessage = tempChat[oldestIndex];
-                    tempChat.RemoveAt(oldestIndex);
-
-                    _logger?.LogWarning(
-                        ex,
-                        "Chat summary generation failed. Retrying with reduced message history. RemovedMessageRole={Role}, RemovedChars={Length}",
-                        removedMessage.Role,
-                        removedMessage.Contents.FirstOrDefault()?.ForLlm()?.Length ?? 0);
-                }
-                else
-                {
-                    throw;
-                }
-            }
-        }
-    }
-
-    private void ReplaceChatWithSummary(string summary)
-    {
-        lock (_lock)
-        {
-            var systemMessage = _chat.FirstOrDefault(m => m.Role == Role.System);
-            var lastMessage = _chat.Count > (systemMessage != null ? 2 : 1) ? _chat[^1] : null;
-            _chat.Clear();
-            if (systemMessage != null) _chat.Add(systemMessage);
-            _chat.Add(new Message(Role.User, new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")));
-            if (lastMessage != null && lastMessage.Role != Role.System)
-            {
-                _chat.Add(lastMessage);
-            }
-            _committedTokens = _chat.Sum(Estimate);
-        }
-    }
-
-    private int Estimate(Message message)
+    private static int Estimate(Message message)
     {
         int chars = 4; // overhead
         foreach (var content in message.Contents)

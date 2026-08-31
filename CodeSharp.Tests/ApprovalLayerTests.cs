@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
-using CodeSharp.Layers;
 using Xunit;
 
 namespace CodeSharp.Tests;

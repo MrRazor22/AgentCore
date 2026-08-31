@@ -30,19 +30,19 @@ namespace AgentCore.LLM.Chat
                         Role = s.Role; id = s.Id; model = s.Model; break;
 
                     // 1. Text
-                    case TextStart s: active.TryAdd(s.Index, new Text.Accumulator()); break;
-                    case TextDelta d: GetOrAdd(d.Index, () => new Text.Accumulator()).Append(d.Text); break;
-                    case TextEnd e: if (Complete(e.Index) is { } t) yield return t; break;
+                    case TextStart s: AddStart(s.Index, new Text.Accumulator()); break;
+                    case TextDelta d: GetRequired<Text.Accumulator>(d.Index).Append(d.Text); break;
+                    case TextEnd e: yield return Complete<Text.Accumulator>(e.Index); break;
 
                     // 2. Reasoning
-                    case ReasoningStart s: active.TryAdd(s.Index, new Reasoning.Accumulator()); break;
-                    case ReasoningDelta d: GetOrAdd(d.Index, () => new Reasoning.Accumulator()).Append(d.Thought); break;
-                    case ReasoningEnd e: if (Complete(e.Index) is { } r) yield return r; break;
+                    case ReasoningStart s: AddStart(s.Index, new Reasoning.Accumulator()); break;
+                    case ReasoningDelta d: GetRequired<Reasoning.Accumulator>(d.Index).Append(d.Thought); break;
+                    case ReasoningEnd e: yield return Complete<Reasoning.Accumulator>(e.Index); break;
 
                     // 3. Tool Calls
-                    case ToolCallStart s: active.TryAdd(s.Index, new ToolCall.Accumulator(s.Id, s.Name)); break;
-                    case ToolCallDelta d: GetOrAdd(d.Index, () => new ToolCall.Accumulator(string.Empty, string.Empty)).Append(d.Arguments); break;
-                    case ToolCallEnd e: if (Complete(e.Index) is { } call) yield return call; break;
+                    case ToolCallStart s: AddStart(s.Index, new ToolCall.Accumulator(s.Id, s.Name)); break;
+                    case ToolCallDelta d: GetRequired<ToolCall.Accumulator>(d.Index).Append(d.Arguments); break;
+                    case ToolCallEnd e: yield return Complete<ToolCall.Accumulator>(e.Index); break;
 
                     // 4. End
                     case MessageEnd end:
@@ -64,29 +64,41 @@ namespace AgentCore.LLM.Chat
 
             Metadata = new MessageMetadata(id, model, finishReason, usage);
 
-            T GetOrAdd<T>(int index, Func<T> factory) where T : class, IContentAccumulator
+            void AddStart(int index, IContentAccumulator accumulator)
             {
-                if (!active.TryGetValue(index, out var acc))
-                {
-                    active[index] = acc = factory();
-                }
-                else if (acc is not T)
-                {
-                    throw new InvalidOperationException($"Protocol violation: Stream block at index {index} is of type {acc.GetType().Name}, but received an event expecting {typeof(T).Name}.");
-                }
-                return (T)acc;
+                if (!active.TryAdd(index, accumulator))
+                    throw new InvalidOperationException($"Protocol violation: Block already started at index {index}.");
             }
 
-            IContent? Complete(int index)
+            T GetRequired<T>(int index) where T : class, IContentAccumulator
             {
-                if (active.Remove(index, out var acc))
-                {
-                    var content = acc.Complete();
-                    completed[index] = content;
-                    return content;
-                }
-                return null;
+                if (!active.TryGetValue(index, out var acc))
+                    throw new InvalidOperationException($"Protocol violation: Received delta for index {index} before a Start event.");
+                if (acc is not T typedAcc)
+                    throw new InvalidOperationException($"Protocol violation: Stream block at index {index} is of type {acc.GetType().Name}, but received an event expecting {typeof(T).Name}.");
+                return typedAcc;
             }
+
+            IContent Complete<T>(int index) where T : class, IContentAccumulator
+            {
+                if (!active.Remove(index, out var acc))
+                    throw new InvalidOperationException($"Protocol violation: Received End event for index {index} before a Start event (or already ended).");
+                if (acc is not T)
+                    throw new InvalidOperationException($"Protocol violation: End event type mismatch at index {index}. Expected {typeof(T).Name} accumulator, but found {acc.GetType().Name}.");
+                
+                var content = acc.Complete();
+                completed[index] = content;
+                return content;
+            }
+        }
+
+        /// <summary>
+        /// Asynchronously drains the stream to completion and returns this message with fully populated contents and metadata.
+        /// </summary>
+        public async Task<Message> ToMessageAsync(CancellationToken ct = default)
+        {
+            await foreach (var _ in ContentsStream(ct).ConfigureAwait(false)) { }
+            return this;
         }
     }
 }

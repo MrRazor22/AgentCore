@@ -212,21 +212,23 @@ public class MessageAssemblyTests
     [Fact]
     public async Task Message_Streaming_MalformedOrIncompleteStreams_HandledGracefully()
     {
-        // 1. Delta without explicit start creates accumulator on demand and yields content
+        // 1. Delta without explicit start throws protocol violation
         var bad1 = new IMessageEvent[] { new TextDelta(0, "graceful text"), new TextEnd(0) };
         var msg1 = new StreamingMessage(bad1.ToAsyncEnumerable());
-        var contents1 = new List<IContent>();
-        await foreach (var c in msg1.ContentsStream()) contents1.Add(c);
-        Assert.Equal("graceful text", Assert.Single(contents1.OfType<Text>()).Value);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in msg1.ContentsStream()) { }
+        });
 
-        // 2. Stray end without start does not throw and does not yield empty block
+        // 2. Stray end without start throws protocol violation
         var bad2 = new IMessageEvent[] { new TextEnd(0) };
         var msg2 = new StreamingMessage(bad2.ToAsyncEnumerable());
-        var contents2 = new List<IContent>();
-        await foreach (var c in msg2.ContentsStream()) contents2.Add(c);
-        Assert.Empty(contents2);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in msg2.ContentsStream()) { }
+        });
 
-        // 3. Duplicate start does not overwrite accumulated text
+        // 3. Duplicate start throws protocol violation
         var bad3 = new IMessageEvent[]
         {
             new TextStart(0),
@@ -236,9 +238,10 @@ public class MessageAssemblyTests
             new TextEnd(0)
         };
         var msg3 = new StreamingMessage(bad3.ToAsyncEnumerable());
-        var contents3 = new List<IContent>();
-        await foreach (var c in msg3.ContentsStream()) contents3.Add(c);
-        Assert.Equal("first second", Assert.Single(contents3.OfType<Text>()).Value);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var _ in msg3.ContentsStream()) { }
+        });
 
         // 4. Unclosed block on MessageEnd is gracefully completed and yielded
         var bad4 = new IMessageEvent[] { new TextStart(0), new TextDelta(0, "unclosed"), new MessageEnd() };

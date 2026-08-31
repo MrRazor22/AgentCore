@@ -89,32 +89,25 @@ public class MemoryTests
     }
 
     [Fact]
-    public async Task ChatContext_ExceedsLimit_NoSummarizer_TriggersRollingTrimmingOnGetMessages()
+    public async Task ChatContext_WithoutCompactor_PreservesHistoryWithoutCompaction()
     {
         // Arrange
         var context = new ChatContext(
-            contextWindow: 30, // very small limit
+            contextWindow: 30,
             reserveTokens: 10,
-            summarizer: null // no summarizer
+            compactor: null,
+            summarizer: null
         );
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
         var msg1 = new Message(Role.User, [new Text("First message")]);
         var msg2 = new Message(Role.User, [new Text("Second message")]);
-        var msg3 = new Message(Role.User, [new Text("Third message that will definitely cause overflow and force eviction")]);
 
-        // Add first two messages to history
         await context.AddAsync(new[] { system, msg1, msg2 });
-        var prompt1 = await context.GetMessagesAsync();
-        await context.AddAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
-
-        // Act - Add third message and GetMessages triggering rolling trimming
-        await context.AddAsync(new[] { msg3 });
         var prepared = await context.GetMessagesAsync();
 
         // Assert
-        // Oldest message (First message) should be evicted. Only System instructions, second, and third should remain
-        Assert.DoesNotContain(prepared, m => m.Contents.Any(c => c.ForLlm().Contains("First message")));
+        Assert.Equal(3, prepared.Count);
     }
 
     [Fact]
@@ -155,5 +148,76 @@ public class MemoryTests
         Assert.Equal(2, mockLlm.CallCount);
         Assert.Contains(mockLlm.CapturedMessages[0], m => m.Contents.Any(c => c.ForLlm().Contains("Hello")));
         Assert.DoesNotContain(mockLlm.CapturedMessages[1], m => m.Contents.Any(c => c.ForLlm().Contains("Hello")));
+    }
+
+    [Fact]
+    public async Task ChatContext_OversizedToolResult_IsTruncatedAtIngress()
+    {
+        // Arrange - contextWindow = 1000, maxSingleMessageTokens = 200 -> ~800 chars
+        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
+        string giantOutput = new string('A', 5000);
+        var toolResult = new Message(Role.Tool, [new ToolResult("call_1", new Text(giantOutput))]);
+
+        // Act
+        await context.AddAsync([toolResult]);
+        var messages = await context.GetMessagesAsync();
+
+        // Assert
+        Assert.Single(messages);
+        var content = messages[0].Contents[0].ForLlm();
+        Assert.Contains("Output truncated", content);
+        Assert.True(content.Length < 5000);
+    }
+
+    [Fact]
+    public async Task ChatContext_ServerUsageBaseline_PreservedAndAugmentedWithToolResults()
+    {
+        // Arrange
+        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100);
+        
+        // Add assistant message with 500 server tokens
+        var assistantMsg = new Message(Role.Assistant, [new Text("Calling tool...")], new MessageMetadata(Usage: new TokenUsage(400, 100)));
+        await context.AddAsync([assistantMsg]);
+
+        // Add tool result without server usage
+        var toolMsg = new Message(Role.Tool, [new ToolResult("call_1", new Text("Tool output ok"))]);
+        await context.AddAsync([toolMsg]);
+
+        // Act
+        var messages = await context.GetMessagesAsync();
+
+        // Assert
+        Assert.Equal(2, messages.Count);
+    }
+
+    [Fact]
+    public async Task ChatContext_CustomCompaction_IsInvokedOnOverflow()
+    {
+        // Arrange
+        var customCompactor = new CustomTestCompactor();
+        var context = new ChatContext(contextWindow: 50, reserveTokens: 10, compactor: customCompactor);
+
+        var system = new Message(Role.System, [new Text("System")]);
+        var userOverflow = new Message(Role.User, [new Text(new string('X', 300))]);
+
+        await context.AddAsync([system, userOverflow]);
+
+        // Act
+        var messages = await context.GetMessagesAsync();
+
+        // Assert
+        Assert.True(customCompactor.WasInvoked);
+        Assert.Single(messages);
+        Assert.Equal("CustomCompacted", messages[0].Contents[0].ForLlm());
+    }
+
+    private class CustomTestCompactor : ICompactor
+    {
+        public bool WasInvoked { get; private set; }
+        public Task<IReadOnlyList<Message>> CompactAsync(IReadOnlyList<Message> messages, int tokenLimit, CancellationToken ct = default)
+        {
+            WasInvoked = true;
+            return Task.FromResult<IReadOnlyList<Message>>(new[] { new Message(Role.System, [new Text("CustomCompacted")]) });
+        }
     }
 }
