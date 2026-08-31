@@ -27,4 +27,8 @@ public interface IEstimatable
     int EstimateTokens();
 }
 
-
+public interface IStreamingContent
+{
+    void Append(IBlockDeltaEvent delta);
+    IContent ToContent();
+}

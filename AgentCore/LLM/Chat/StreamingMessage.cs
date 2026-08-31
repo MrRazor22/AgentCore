@@ -35,12 +35,10 @@ namespace AgentCore.LLM.Chat
                             throw new InvalidOperationException($"Protocol violation: Block already started at index {s.Index}.");
                         break;
 
-                    case IDataDeltaEvent<string> d:
+                    case IBlockDeltaEvent d:
                         if (!active.TryGetValue(d.Index, out var stream))
                             throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
-                        if (stream is not IStreamingContent<string> textStream)
-                            throw new InvalidOperationException($"Protocol violation: Stream block at index {d.Index} is of type {stream.GetType().Name}, but received an event expecting {nameof(IStreamingContent<string>)}.");
-                        textStream.Append(d.Data);
+                        stream.Append(d);
                         break;
 
                     case IBlockEndEvent e:

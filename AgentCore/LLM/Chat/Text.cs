@@ -22,10 +22,15 @@ namespace AgentCore.LLM.Chat
                 : new Text(Value[..maxChars] + $"\n... [Content truncated from {Value.Length} to {maxChars} characters]");
         }
 
-        public sealed class Stream : IStreamingContent<string>
+        public sealed class Stream : IStreamingContent
         {
             private readonly StringBuilder _sb = new();
-            public void Append(string chunk) => _sb.Append(chunk);
+            public void Append(IBlockDeltaEvent delta)
+            {
+                if (delta is not TextDelta text)
+                    throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(TextDelta)} but received {delta.GetType().Name}.");
+                _sb.Append(text.Text);
+            }
             public IContent ToContent() => new Text(_sb.ToString());
         }
     }

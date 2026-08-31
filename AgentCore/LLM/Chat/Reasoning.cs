@@ -13,10 +13,15 @@ namespace AgentCore.LLM.Chat
 
         public int EstimateTokens() => (int)Math.Ceiling(Thought.Length / 4.0);
 
-        public sealed class Stream : IStreamingContent<string>
+        public sealed class Stream : IStreamingContent
         {
             private readonly StringBuilder _sb = new();
-            public void Append(string chunk) => _sb.Append(chunk);
+            public void Append(IBlockDeltaEvent delta)
+            {
+                if (delta is not ReasoningDelta reasoning)
+                    throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(ReasoningDelta)} but received {delta.GetType().Name}.");
+                _sb.Append(reasoning.Thought);
+            }
             public IContent ToContent() => new Reasoning(_sb.ToString());
         }
     }
