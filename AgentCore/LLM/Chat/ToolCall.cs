@@ -25,12 +25,12 @@ namespace AgentCore.LLM.Chat
             return $"{Name}({args})";
         }
 
-        internal sealed class Accumulator(string id, string name) : IContentAccumulator
+        public sealed class Stream(string id, string name) : IStreamingContent<string>
         {
             private readonly StringBuilder _args = new();
             public void Append(string chunk) => _args.Append(chunk);
 
-            public IContent Complete()
+            public IContent ToContent()
             {
                 var raw = _args.ToString();
                 JsonObject? args = null;

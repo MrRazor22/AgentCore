@@ -2,39 +2,33 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.LLM;
 
-/// <summary>
-/// Root interface for any stream event emitted during an LLM response message generation.
-/// </summary>
-public interface IMessageEvent { }
+public interface IMessageEvent;
+public interface IBlockEvent : IMessageEvent { int Index { get; } }
+public interface IBlockStartEvent : IBlockEvent { IStreamingContent CreateStream(); }
+public interface IDataDeltaEvent<out T> : IBlockEvent { T Data { get; } }
+public interface IBlockEndEvent : IBlockEvent;
 
-// 0. Message Lifecycle Envelope
-public sealed record MessageStart(
-    Role Role = Role.Assistant,
-    string? Id = null,
-    string? Model = null
-) : IMessageEvent;
+// Envelope Events
+public sealed record MessageStart(Role Role = Role.Assistant, string? Id = null, string? Model = null) : IMessageEvent;
+public sealed record MessageEnd(string? FinishReason = null, TokenUsage? Usage = null) : IMessageEvent;
 
-public sealed record MessageEnd(
-    string? FinishReason = null,
-    TokenUsage? Usage = null
-) : IMessageEvent;
+// Text Block
+public sealed record TextStart(int Index = 0) : IBlockStartEvent { public IStreamingContent CreateStream() => new Text.Stream(); }
+public sealed record TextDelta(int Index, string Text) : IDataDeltaEvent<string> { public string Data => Text; }
+public sealed record TextEnd(int Index = 0) : IBlockEndEvent;
 
-// 1. Text Content Streaming
-public sealed record TextStart(int Index = 0) : IMessageEvent;
-public sealed record TextDelta(int Index, string Text) : IMessageEvent;
-public sealed record TextEnd(int Index = 0) : IMessageEvent;
+// Reasoning Block
+public sealed record ReasoningStart(int Index = 0) : IBlockStartEvent { public IStreamingContent CreateStream() => new Reasoning.Stream(); }
+public sealed record ReasoningDelta(int Index, string Thought) : IDataDeltaEvent<string> { public string Data => Thought; }
+public sealed record ReasoningEnd(int Index = 0) : IBlockEndEvent;
 
-// 2. Reasoning Content Streaming
-public sealed record ReasoningStart(int Index = 0) : IMessageEvent;
-public sealed record ReasoningDelta(int Index, string Thought) : IMessageEvent;
-public sealed record ReasoningEnd(int Index = 0) : IMessageEvent;
+// Tool Call Block
+public sealed record ToolCallStart(int Index, string Id, string Name) : IBlockStartEvent { public IStreamingContent CreateStream() => new ToolCall.Stream(Id, Name); }
+public sealed record ToolCallDelta(int Index, string Arguments) : IDataDeltaEvent<string> { public string Data => Arguments; }
+public sealed record ToolCallEnd(int Index = 0) : IBlockEndEvent;
 
-// 3. Tool Call Content Streaming
-public sealed record ToolCallStart(int Index, string Id, string Name) : IMessageEvent;
-public sealed record ToolCallDelta(int Index, string Arguments) : IMessageEvent;
-public sealed record ToolCallEnd(int Index) : IMessageEvent;
-
-// 4. Telemetry Data DTO
-public sealed record TokenUsage(
-    int InputTokens = 0,
-    int OutputTokens = 0);
+// Telemetry
+public sealed record TokenUsage(int InputTokens = 0, int OutputTokens = 0)
+{
+    public int TotalTokens => InputTokens + OutputTokens;
+}

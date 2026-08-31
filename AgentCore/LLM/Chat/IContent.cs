@@ -27,15 +27,4 @@ public interface IEstimatable
     int EstimateTokens();
 }
 
-internal interface IContentAccumulator
-{
-    IContent Complete();
-}
-
-
-
-
-
-
-
 

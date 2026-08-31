@@ -22,11 +22,11 @@ namespace AgentCore.LLM.Chat
                 : new Text(Value[..maxChars] + $"\n... [Content truncated from {Value.Length} to {maxChars} characters]");
         }
 
-        internal sealed class Accumulator : IContentAccumulator
+        public sealed class Stream : IStreamingContent<string>
         {
             private readonly StringBuilder _sb = new();
             public void Append(string chunk) => _sb.Append(chunk);
-            public IContent Complete() => new Text(_sb.ToString());
+            public IContent ToContent() => new Text(_sb.ToString());
         }
     }
 

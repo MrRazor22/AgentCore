@@ -245,6 +245,29 @@ public class MemoryTests
         Assert.Equal("CustomCompacted", messages[0].Contents[0].ToString());
     }
 
+    [Fact]
+    public async Task ChatContext_NonEstimatableContent_ThrowsInvalidOperationException()
+    {
+        var context = new ChatContext();
+        var badMessage = new Message(Role.User, [new DummyNonEstimatableContent()]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.AddAsync([badMessage]));
+    }
+
+    [Fact]
+    public async Task ChatContext_OversizedNonTruncatableContent_ThrowsInvalidOperationException()
+    {
+        // contextWindow: 500, maxSingleMessageTokens: 100
+        var context = new ChatContext(contextWindow: 500, reserveTokens: 50, maxSingleMessageTokens: 100);
+        // ToolCall with massive arguments (> 100 tokens -> ~400 chars)
+        var giantObj = new System.Text.Json.Nodes.JsonObject { ["large_param"] = new string('A', 1000) };
+        var oversizedToolCall = new Message(Role.Tool, [new ToolCall("call_1", "run", giantObj)]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => context.AddAsync([oversizedToolCall]));
+    }
+
+    private class DummyNonEstimatableContent : IContent { }
+
     private class CustomTestCompactor : ICompactor
     {
         public bool WasInvoked { get; private set; }
@@ -255,3 +278,4 @@ public class MemoryTests
         }
     }
 }
+

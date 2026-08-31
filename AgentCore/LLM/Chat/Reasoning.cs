@@ -13,11 +13,11 @@ namespace AgentCore.LLM.Chat
 
         public int EstimateTokens() => (int)Math.Ceiling(Thought.Length / 4.0);
 
-        internal sealed class Accumulator : IContentAccumulator
+        public sealed class Stream : IStreamingContent<string>
         {
             private readonly StringBuilder _sb = new();
             public void Append(string chunk) => _sb.Append(chunk);
-            public IContent Complete() => new Reasoning(_sb.ToString());
+            public IContent ToContent() => new Reasoning(_sb.ToString());
         }
     }
 }
