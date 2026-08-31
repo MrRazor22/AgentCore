@@ -9,7 +9,7 @@ public delegate Task<IReadOnlyList<IContent>?> ToolApprovalEvaluator(ToolCall ca
 public sealed class ApprovalLayer : ToolingLayer
 {
     private readonly ToolApprovalEvaluator _evaluator;
-    private readonly List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>> _evaluations = [];
+    private readonly List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>> _pendingToolCalls = [];
     private readonly object _lock = new();
 
     public ApprovalLayer(ToolApprovalEvaluator evaluator) => _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
@@ -23,7 +23,7 @@ public sealed class ApprovalLayer : ToolingLayer
     public override Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
         var task = EvaluateAsync(call, ct);
-        lock (_lock) _evaluations.Add(task);
+        lock (_lock) _pendingToolCalls.Add(task);
         return Task.CompletedTask;
     }
 
@@ -35,35 +35,35 @@ public sealed class ApprovalLayer : ToolingLayer
 
     public override async IAsyncEnumerable<ToolResult> StreamResultsAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
-        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] evaluations;
+        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] pendingToolCalls;
         lock (_lock)
         {
-            evaluations = [.. _evaluations];
-            _evaluations.Clear();
+            pendingToolCalls = [.. _pendingToolCalls];
+            _pendingToolCalls.Clear();
         }
 
-        var results = Channel.CreateUnbounded<ToolResult>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
-        var dispatchSignal = Channel.CreateUnbounded<bool>();
+        var toolResultsStream = Channel.CreateUnbounded<ToolResult>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+        var checkForResultSignal = Channel.CreateUnbounded<bool>();
 
-        var approvals = StreamApprovalsAsync(evaluations, Inner, dispatchSignal.Writer, results.Writer, ct);
-        var inner = StreamInnerResultsAsync(dispatchSignal.Reader, results.Writer, ct);
+        var approvalResults = StreamApprovalsResultsAsync(pendingToolCalls, Inner, checkForResultSignal.Writer, toolResultsStream.Writer, ct);
+        var executionResults = StreamExecutionResultsAsync(checkForResultSignal.Reader, toolResultsStream.Writer, ct);
 
-        _ = CompleteAsync(results.Writer, approvals, inner);
+        _ = CompleteAsync(toolResultsStream.Writer, approvalResults, executionResults);
 
-        await foreach (var result in results.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+        await foreach (var result in toolResultsStream.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return result;
     }
 
-    private static async Task StreamApprovalsAsync(
-        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] evaluations,
+    private static async Task StreamApprovalsResultsAsync(
+        Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>[] pendingToolCalls,
         ITooling inner,
-        ChannelWriter<bool> dispatchSignal,
-        ChannelWriter<ToolResult> results,
+        ChannelWriter<bool> checkForResultSignal,
+        ChannelWriter<ToolResult> toolResultsStream,
         CancellationToken ct)
     {
         try
         {
-            var pending = new List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>>(evaluations);
+            var pending = new List<Task<(ToolCall Call, IReadOnlyList<IContent>? Denial)>>(pendingToolCalls);
             while (pending.Count > 0)
             {
                 var completed = await Task.WhenAny(pending).ConfigureAwait(false);
@@ -74,44 +74,41 @@ public sealed class ApprovalLayer : ToolingLayer
                 if (denial is { Count: > 0 })
                 {
                     foreach (var content in denial)
-                        await results.WriteAsync(new ToolResult(call.Id, content), ct).ConfigureAwait(false);
+                        await toolResultsStream.WriteAsync(new ToolResult(call.Id, content), ct).ConfigureAwait(false);
                 }
                 else
                 {
                     await inner.ExecuteAsync(call, ct).ConfigureAwait(false);
-                    dispatchSignal.TryWrite(true);
+                    checkForResultSignal.TryWrite(true); //triggers here calls StreamExecutionResultsAsync
                 }
             }
         }
         finally
         {
-            dispatchSignal.TryComplete();
+            checkForResultSignal.TryComplete();
         }
     }
 
-    private async Task StreamInnerResultsAsync(ChannelReader<bool> dispatchSignal, ChannelWriter<ToolResult> results, CancellationToken ct)
+    private async Task StreamExecutionResultsAsync(ChannelReader<bool> checkForResultSignal, ChannelWriter<ToolResult> toolResultsStream, CancellationToken ct)
     {
-        while (await dispatchSignal.WaitToReadAsync(ct).ConfigureAwait(false))
+        while (await checkForResultSignal.WaitToReadAsync(ct).ConfigureAwait(false))
         {
-            while (dispatchSignal.TryRead(out _)) { }
+            while (checkForResultSignal.TryRead(out _)) { } //coalescing notifications
             await foreach (var r in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
-                await results.WriteAsync(r, ct).ConfigureAwait(false);
-        }
-
-        await foreach (var r in Inner.StreamResultsAsync(ct).ConfigureAwait(false))
-            await results.WriteAsync(r, ct).ConfigureAwait(false);
+                await toolResultsStream.WriteAsync(r, ct).ConfigureAwait(false);
+        } 
     }
 
-    private static async Task CompleteAsync(ChannelWriter<ToolResult> results, Task approvals, Task inner)
+    private static async Task CompleteAsync(ChannelWriter<ToolResult> toolResultsStream, Task approvalResults, Task executionResults)
     {
         try
         {
-            await Task.WhenAll(approvals, inner).ConfigureAwait(false);
-            results.TryComplete();
+            await Task.WhenAll(approvalResults, executionResults).ConfigureAwait(false);
+            toolResultsStream.TryComplete();
         }
         catch (Exception ex)
         {
-            results.TryComplete(ex);
+            toolResultsStream.TryComplete(ex);
         }
     }
 }
