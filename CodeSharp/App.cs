@@ -8,9 +8,12 @@ using AgentCore.Tools;
 using AgentCore.Context;
 using Spectre.Console;
 using CodeSharp.UI;
+using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using Serilog;
 using Microsoft.Extensions.Logging;
+
+using CodeSharp.Skills;
 
 namespace CodeSharp;
 
@@ -112,6 +115,8 @@ internal class App
 
             // Universal PowerShell execution tool with workspace boundary enforcement
             var shellTool = new CodeSharp.Tools.ShellTool(workspacePath);
+            var skillManager = new SkillManager(workspacePath);
+            var skillTool = new SkillTool(skillManager);
 
             var formatter = new CodeSharp.UI.CompositeToolDisplayFormatter(new CodeSharp.UI.IToolDisplayFormatter[]
             {
@@ -122,25 +127,40 @@ internal class App
 
             var approvalLayer = new ToolApprovalLayer(async (call, ct) =>
             {
+                // ViewSkill is strictly read-only and loads discovered skill content by name
+                if (string.Equals(call.Name, "ViewSkill", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
                 return await prompt.RequestApprovalAsync(call, ct).ConfigureAwait(false)
                     ? null
                     : (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text("[DENIED] User rejected execution.");
             });
 
+            var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
+            var sessionStore = new JsonFileContextStore(sessionsDir);
+
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithTornado(apiKey: config.ApiKey, model: config.Model, baseUrl: baseUrl)
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddLLMLayer(new MessageCoalescingLayer())
-                .AddLLMLayer(streamingLayer)
+                .AddContextPersistence(sessionStore, "default")
+                .AddLLMLayer(new RetryLayer())
                 .AddLLMLayer(new ToolCallDetectionLayer())
+                .AddLLMLayer(streamingLayer)
+                .AddLLMLayer(new MessageCoalescingLayer())
                 .WithTools(shellTool)
+                .WithTools(skillTool)
                 .AddToolingLayer(approvalLayer)
                 .WithInstructions(
                     "You are CodeSharp, an expert agentic AI coding assistant.\n" +
                     "Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\n" +
-                    "You have a single universal execution tool: RunCommand.\n" +
-                    "Use PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories."
+                    "You have a universal execution tool: RunCommand.\n" +
+                    "Use PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\n" +
+                    "Available skills:\n" +
+                    skillManager.FormatIndex() + "\n\n" +
+                    "When a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
                 )
                 .Build();
 

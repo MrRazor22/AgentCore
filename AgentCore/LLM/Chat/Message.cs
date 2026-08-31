@@ -36,6 +36,7 @@ public class Message
     [JsonPropertyName("metadata")]
     public MessageMetadata? Metadata { get; protected set; }
 
+    [JsonConstructor]
     public Message(Role role, IReadOnlyList<IContent>? contents = null, MessageMetadata? metadata = null)
     {
         Role = role;
