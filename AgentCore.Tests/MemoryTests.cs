@@ -172,20 +172,20 @@ public class MemoryTests
     [Fact]
     public void ITruncatable_PolymorphicBehavior()
     {
-        // 1. Text truncation
+        // 1. Text truncation (10 tokens -> ~40 chars)
         var shortText = new Text("Hello");
         Assert.Same(shortText, shortText.Truncate(10));
 
         var longText = new Text(new string('Z', 100));
         var truncatedText = longText.Truncate(10);
         Assert.NotSame(longText, truncatedText);
-        Assert.Contains("Content truncated from 100 to 10 characters", truncatedText.ToString());
+        Assert.Contains("Content truncated from 100 to 40 characters", truncatedText.ToString());
 
         // 2. ToolResult truncation
         var toolResult = new ToolResult("call_1", longText);
         var truncatedResult = toolResult.Truncate(10);
         Assert.NotSame(toolResult, truncatedResult);
-        Assert.Contains("Content truncated from 100 to 10 characters", truncatedResult.ToString());
+        Assert.Contains("Content truncated from 100 to 40 characters", truncatedResult.ToString());
 
         // 3. Non-truncatable contents do not implement ITruncatable
         IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());

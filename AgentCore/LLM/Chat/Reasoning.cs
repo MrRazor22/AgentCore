@@ -7,9 +7,11 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
+    public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent, IEstimatable
     {
         public override string ToString() => Thought;
+
+        public int EstimateTokens() => (int)Math.Ceiling(Thought.Length / 4.0);
 
         internal sealed class Accumulator : IContentAccumulator
         {

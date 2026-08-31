@@ -13,10 +13,9 @@ public class ChatContext : IContext
     private readonly int _contextWindow;
     private readonly int _reserveTokens;
     private readonly int _limit;
-    private readonly int _maxSingleMessageChars;
+    private readonly int _maxSingleMessageTokens;
     private int _committedTokens;
 
-    private const double CharsPerToken = 4.0;
     private const double SafetyMargin = 1.15;
 
     private readonly object _lock = new();
@@ -33,8 +32,7 @@ public class ChatContext : IContext
         _reserveTokens = reserveTokens ?? Math.Min(4_000, contextWindow / 10);
         _limit = Math.Max(1, _contextWindow - _reserveTokens);
 
-        int maxMsgTokens = maxSingleMessageTokens ?? Math.Min(10_000, contextWindow / 5);
-        _maxSingleMessageChars = Math.Max(500, (int)(maxMsgTokens * CharsPerToken));
+        _maxSingleMessageTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
         _compactor = compactor ?? (summarizer != null ? new Summarizer(summarizer) : null);
         _logger = logger;
     }
@@ -102,7 +100,7 @@ public class ChatContext : IContext
         if (message.Role is not (Role.Tool or Role.User))
             return message;
 
-        var sanitized = message.Contents.Select(c => c is ITruncatable t ? t.Truncate(_maxSingleMessageChars) : c).ToList();
+        var sanitized = message.Contents.Select(c => c is ITruncatable t ? t.Truncate(_maxSingleMessageTokens) : c).ToList();
         return new Message(message.Role, sanitized, message.Metadata);
     }
 
@@ -143,18 +141,11 @@ public class ChatContext : IContext
 
     private static int Estimate(Message message)
     {
-        int chars = 4; // overhead
+        int tokens = 1; // message envelope overhead
         foreach (var content in message.Contents)
         {
-            chars += content switch
-            {
-                Text t => t.Value.Length,
-                ToolCall tc => tc.Name.Length + (tc.Arguments?.ToJsonString().Length ?? 0),
-                ToolResult tr => tr.Result is Text t ? t.Value.Length : (tr.Result?.ToString()?.Length ?? 0),
-                Reasoning r => r.Thought.Length,
-                _ => content.ToString()?.Length ?? 0
-            };
+            tokens += content is IEstimatable e ? e.EstimateTokens() : 0;
         }
-        return (int)((chars / CharsPerToken) * SafetyMargin);
+        return (int)(tokens * SafetyMargin);
     }
 }

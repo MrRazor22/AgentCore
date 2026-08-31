@@ -19,7 +19,12 @@ public interface IContent
 
 public interface ITruncatable
 {
-    IContent Truncate(int maxChars);
+    IContent Truncate(int maxTokens);
+}
+
+public interface IEstimatable
+{
+    int EstimateTokens();
 }
 
 internal interface IContentAccumulator

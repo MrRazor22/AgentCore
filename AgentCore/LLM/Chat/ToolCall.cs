@@ -12,8 +12,10 @@ namespace AgentCore.LLM.Chat
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("arguments")] JsonObject Arguments
-) : IContent
+) : IContent, IEstimatable
     {
+        public int EstimateTokens() => (int)Math.Ceiling((Name.Length + (Arguments?.ToJsonString().Length ?? 0)) / 4.0);
+
         public override string ToString()
         {
             if (Arguments.Count == 0)

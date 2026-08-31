@@ -7,15 +7,20 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent, ITruncatable
+    public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent, ITruncatable, IEstimatable
     {
         public static implicit operator Text(string text) => new(text);
         public override string ToString() => Value;
 
-        public IContent Truncate(int maxChars) =>
-            Value.Length <= maxChars
+        public int EstimateTokens() => (int)Math.Ceiling(Value.Length / 4.0);
+
+        public IContent Truncate(int maxTokens)
+        {
+            int maxChars = Math.Max(0, maxTokens * 4);
+            return Value.Length <= maxChars
                 ? this
                 : new Text(Value[..maxChars] + $"\n... [Content truncated from {Value.Length} to {maxChars} characters]");
+        }
 
         internal sealed class Accumulator : IContentAccumulator
         {
