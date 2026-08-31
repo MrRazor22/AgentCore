@@ -38,9 +38,9 @@ public class WorkflowTests
         var messages = context.Messages;
         Assert.Equal(2, messages.Count);
         Assert.Equal(Role.User, messages[0].Role);
-        Assert.Equal("Hello", messages[0].Contents[0].ForLlm());
+        Assert.Equal("Hello", messages[0].Contents[0].ToString());
         Assert.Equal(Role.Assistant, messages[1].Role);
-        Assert.Equal("Today is sunny.", messages[1].Contents[0].ForLlm());
+        Assert.Equal("Today is sunny.", messages[1].Contents[0].ToString());
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class WorkflowTests
 
         // Assert
         Assert.Contains(contents, c => c is ToolCall tc && tc.Name == "get_weather");
-        Assert.Contains(contents, c => c is ToolResult tr && tr.ForLlm() == "Rainy");
+        Assert.Contains(contents, c => c is ToolResult tr && tr.ToString() == "Rainy");
         var finalResponse = contents.OfType<Text>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Value);
 
@@ -95,7 +95,7 @@ public class WorkflowTests
         Assert.Equal(Role.User, secondCallHistory[0].Role);
         Assert.Equal(Role.Assistant, secondCallHistory[1].Role);
         Assert.Equal(Role.Tool, secondCallHistory[2].Role);
-        Assert.Equal("Rainy", secondCallHistory[2].Contents[0].ForLlm());
+        Assert.Equal("Rainy", secondCallHistory[2].Contents[0].ToString());
     }
 
     [Fact]

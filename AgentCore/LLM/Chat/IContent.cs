@@ -15,7 +15,11 @@ namespace AgentCore.LLM.Chat;
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
 public interface IContent
 {
-    string ForLlm();
+}
+
+public interface ITruncatable
+{
+    IContent Truncate(int maxChars);
 }
 
 internal interface IContentAccumulator

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,7 +14,7 @@ namespace AgentCore.LLM.Chat
     [property: JsonPropertyName("arguments")] JsonObject Arguments
 ) : IContent
     {
-        public string ForLlm()
+        public override string ToString()
         {
             if (Arguments.Count == 0)
                 return Name;

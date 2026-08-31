@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,7 +9,7 @@ namespace AgentCore.LLM.Chat
 {
     public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
     {
-        public string ForLlm() => Thought;
+        public override string ToString() => Thought;
 
         internal sealed class Accumulator : IContentAccumulator
         {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,9 +10,18 @@ namespace AgentCore.LLM.Chat
     public sealed record ToolResult(
     [property: JsonPropertyName("call_id")] string CallId,
     [property: JsonPropertyName("result")] IContent? Result
-) : IContent
+) : IContent, ITruncatable
     {
-        public string ForLlm()
-            => Result?.ForLlm() ?? "";
+        public override string ToString() => Result?.ToString() ?? "";
+
+        public IContent Truncate(int maxChars)
+        {
+            if (Result is ITruncatable truncatable)
+            {
+                var truncated = truncatable.Truncate(maxChars);
+                return ReferenceEquals(truncated, Result) ? this : new ToolResult(CallId, truncated);
+            }
+            return this;
+        }
     }
 }

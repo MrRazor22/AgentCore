@@ -36,6 +36,13 @@ We compact context after LLM calls, not before. Pre-counting tokens is approxima
 
 The agent explicitly loads skills via tool calls. Skills are not silently injected into context. This makes the agent's reasoning traceable and the system predictable.
 
+### Generic & Multimodal by Design
+
+Never design core abstractions with a narrow, single-modality (text-only) mindset:
+- Keep root contracts, pipeline stages, and context data models generic across all modalities (text, binary media, structured calls, reasoning traces).
+- Never force modality-specific operations (e.g., character slicing, flat text conversion) onto root interfaces.
+- Model modality-specific behaviors through isolated, optional capability contracts rather than polluting root contracts.
+
 ## Logging Philosophy
 
 ### 1. Component Independence

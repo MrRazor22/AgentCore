@@ -34,7 +34,7 @@ public class ToolingTests
         Assert.Single(results);
         var toolResult = results[0];
         Assert.Equal("call_1", toolResult.CallId);
-        Assert.Equal("25", toolResult.Result!.ForLlm());
+        Assert.Equal("25", toolResult.Result!.ToString());
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class ToolingTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Contains("Error calling tool", resultText);
     }
 
@@ -90,7 +90,7 @@ public class ToolingTests
 
         Assert.Single(results);
         var toolResult = results[0];
-        Assert.Equal("25", toolResult.Result!.ForLlm());
+        Assert.Equal("25", toolResult.Result!.ToString());
     }
 
     private class NullNameTool : Tool

@@ -44,7 +44,7 @@ public class AgentTests
         // Should include coalesced User message containing: "Old message\nNew message"
         Assert.Single(messagesSentToLlm);
         Assert.Equal(Role.User, messagesSentToLlm[0].Role);
-        Assert.Equal("Old message\nNew message", messagesSentToLlm[0].Contents[0].ForLlm());
+        Assert.Equal("Old message\nNew message", messagesSentToLlm[0].Contents[0].ToString());
     }
 
     [Fact]
@@ -68,10 +68,10 @@ public class AgentTests
         var messages = memory.Messages;
         Assert.Equal(2, messages.Count);
         Assert.Equal(Role.User, messages[0].Role);
-        Assert.Equal("User input", messages[0].Contents[0].ForLlm());
+        Assert.Equal("User input", messages[0].Contents[0].ToString());
 
         Assert.Equal(Role.Assistant, messages[1].Role);
-        Assert.Equal("Model reply", messages[1].Contents[0].ForLlm());
+        Assert.Equal("Model reply", messages[1].Contents[0].ToString());
     }
 
     [Fact]
@@ -156,8 +156,8 @@ public class AgentTests
         var messages = mockProvider.CapturedMessages[0];
         Assert.Equal(2, messages.Count);
         Assert.Equal(Role.System, messages[0].Role);
-        Assert.Equal("System instruction baseline", messages[0].Contents[0].ForLlm());
+        Assert.Equal("System instruction baseline", messages[0].Contents[0].ToString());
         Assert.Equal(Role.User, messages[1].Role);
-        Assert.Equal("User baseline", messages[1].Contents[0].ForLlm());
+        Assert.Equal("User baseline", messages[1].Contents[0].ToString());
     }
 }

@@ -22,9 +22,9 @@ public class MemoryTests
 
         // Assert
         Assert.Equal(3, prepared.Count);
-        Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
-        Assert.Equal("Hello", prepared[1].Contents[0].ForLlm());
-        Assert.Equal("Hi, how are you?", prepared[2].Contents[0].ForLlm());
+        Assert.Equal("Be helpful.", prepared[0].Contents[0].ToString());
+        Assert.Equal("Hello", prepared[1].Contents[0].ToString());
+        Assert.Equal("Hi, how are you?", prepared[2].Contents[0].ToString());
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public class MemoryTests
         var finalPrompt = await context.GetMessagesAsync();
 
         // Assert
-        Assert.Contains(finalPrompt, m => m.Contents.Any(c => c.ForLlm().Contains("Compacted summary")));
+        Assert.Contains(finalPrompt, m => m.Contents.Any(c => c.ToString()?.Contains("Compacted summary") == true));
     }
 
     [Fact]
@@ -82,10 +82,10 @@ public class MemoryTests
         // Assert
         // Should have System instructions + 1 summary message + secondUser
         Assert.True(prepared.Count >= 3);
-        Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
+        Assert.Equal("Be helpful.", prepared[0].Contents[0].ToString());
         Assert.IsType<Text>(prepared[1].Contents[0]);
-        Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ForLlm());
-        Assert.Equal(new string('B', 300), prepared[^1].Contents[0].ForLlm());
+        Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ToString());
+        Assert.Equal(new string('B', 300), prepared[^1].Contents[0].ToString());
     }
 
     [Fact]
@@ -140,14 +140,14 @@ public class MemoryTests
 
         // Assert
         Assert.Equal(3, prepared.Count);
-        Assert.Equal("Be helpful.", prepared[0].Contents[0].ForLlm());
+        Assert.Equal("Be helpful.", prepared[0].Contents[0].ToString());
         Assert.IsType<Text>(prepared[1].Contents[0]);
-        Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ForLlm());
-        Assert.Equal(new string('B', 300), prepared[2].Contents[0].ForLlm());
+        Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ToString());
+        Assert.Equal(new string('B', 300), prepared[2].Contents[0].ToString());
 
         Assert.Equal(2, mockLlm.CallCount);
-        Assert.Contains(mockLlm.CapturedMessages[0], m => m.Contents.Any(c => c.ForLlm().Contains("Hello")));
-        Assert.DoesNotContain(mockLlm.CapturedMessages[1], m => m.Contents.Any(c => c.ForLlm().Contains("Hello")));
+        Assert.Contains(mockLlm.CapturedMessages[0], m => m.Contents.Any(c => c.ToString()?.Contains("Hello") == true));
+        Assert.DoesNotContain(mockLlm.CapturedMessages[1], m => m.Contents.Any(c => c.ToString()?.Contains("Hello") == true));
     }
 
     [Fact]
@@ -164,30 +164,64 @@ public class MemoryTests
 
         // Assert
         Assert.Single(messages);
-        var content = messages[0].Contents[0].ForLlm();
-        Assert.Contains("Output truncated", content);
+        var content = messages[0].Contents[0].ToString();
+        Assert.Contains("truncated", content);
         Assert.True(content.Length < 5000);
     }
 
     [Fact]
-    public async Task ChatContext_ServerUsageBaseline_PreservedAndAugmentedWithToolResults()
+    public void ITruncatable_PolymorphicBehavior()
+    {
+        // 1. Text truncation
+        var shortText = new Text("Hello");
+        Assert.Same(shortText, shortText.Truncate(10));
+
+        var longText = new Text(new string('Z', 100));
+        var truncatedText = longText.Truncate(10);
+        Assert.NotSame(longText, truncatedText);
+        Assert.Contains("Content truncated from 100 to 10 characters", truncatedText.ToString());
+
+        // 2. ToolResult truncation
+        var toolResult = new ToolResult("call_1", longText);
+        var truncatedResult = toolResult.Truncate(10);
+        Assert.NotSame(toolResult, truncatedResult);
+        Assert.Contains("Content truncated from 100 to 10 characters", truncatedResult.ToString());
+
+        // 3. Non-truncatable contents do not implement ITruncatable
+        IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());
+        Assert.False(toolCall is ITruncatable);
+
+        IContent reasoning = new Reasoning("Deep thought...");
+        Assert.False(reasoning is ITruncatable);
+    }
+
+    [Fact]
+    public async Task ChatContext_PrunesHistoricalReasoning_BeforeLastUserMessage()
     {
         // Arrange
-        var context = new ChatContext(contextWindow: 1000, reserveTokens: 100);
-        
-        // Add assistant message with 500 server tokens
-        var assistantMsg = new Message(Role.Assistant, [new Text("Calling tool...")], new MessageMetadata(Usage: new TokenUsage(400, 100)));
-        await context.AddAsync([assistantMsg]);
+        var context = new ChatContext(contextWindow: 10000);
 
-        // Add tool result without server usage
-        var toolMsg = new Message(Role.Tool, [new ToolResult("call_1", new Text("Tool output ok"))]);
-        await context.AddAsync([toolMsg]);
+        // Turn 1
+        var user1 = new Message(Role.User, new Text("Question 1"));
+        var assistant1 = new Message(Role.Assistant, [new Reasoning("Thought for Q1"), new Text("Answer 1")]);
+
+        // Turn 2
+        var user2 = new Message(Role.User, new Text("Question 2"));
+        var assistant2 = new Message(Role.Assistant, [new Reasoning("Thought for Q2"), new Text("Answer 2")]);
+
+        await context.AddAsync([user1, assistant1, user2, assistant2]);
 
         // Act
         var messages = await context.GetMessagesAsync();
 
-        // Assert
-        Assert.Equal(2, messages.Count);
+        // Assert: Turn 1 assistant message should have Reasoning pruned, Turn 2 assistant reasoning should be preserved
+        Assert.Equal(4, messages.Count);
+        Assert.Single(messages[1].Contents); // only Text("Answer 1")
+        Assert.IsType<Text>(messages[1].Contents[0]);
+
+        Assert.Equal(2, messages[3].Contents.Count); // Reasoning + Text preserved in current turn
+        Assert.IsType<Reasoning>(messages[3].Contents[0]);
+        Assert.IsType<Text>(messages[3].Contents[1]);
     }
 
     [Fact]
@@ -208,7 +242,7 @@ public class MemoryTests
         // Assert
         Assert.True(customCompactor.WasInvoked);
         Assert.Single(messages);
-        Assert.Equal("CustomCompacted", messages[0].Contents[0].ForLlm());
+        Assert.Equal("CustomCompacted", messages[0].Contents[0].ToString());
     }
 
     private class CustomTestCompactor : ICompactor

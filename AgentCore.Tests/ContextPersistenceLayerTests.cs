@@ -44,8 +44,8 @@ public class ContextPersistenceLayerTests
         var messages = await layer.GetMessagesAsync();
 
         Assert.Equal(2, messages.Count);
-        Assert.Equal("Hello from previous session", messages[0].Contents[0].ForLlm());
-        Assert.Equal("Welcome back!", messages[1].Contents[0].ForLlm());
+        Assert.Equal("Hello from previous session", messages[0].Contents[0].ToString());
+        Assert.Equal("Welcome back!", messages[1].Contents[0].ToString());
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class ContextPersistenceLayerTests
 
         Assert.True(store.Storage.ContainsKey("session-2"));
         Assert.Single(store.Storage["session-2"]);
-        Assert.Equal("New question", store.Storage["session-2"][0].Contents[0].ForLlm());
+        Assert.Equal("New question", store.Storage["session-2"][0].Contents[0].ToString());
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public class ContextPersistenceLayerTests
         // Adding a message still saves only the new message
         await layer.AddAsync([new Message(Role.User, new Text("Fresh message"))]);
         Assert.Single(store.Storage["session-3"]);
-        Assert.Equal("Fresh message", store.Storage["session-3"][0].Contents[0].ForLlm());
+        Assert.Equal("Fresh message", store.Storage["session-3"][0].Contents[0].ToString());
     }
 
     [Fact]

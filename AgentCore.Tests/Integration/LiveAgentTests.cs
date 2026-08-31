@@ -140,9 +140,9 @@ public class LiveAgentTests
                 var thoughts = new List<string>();
                 foreach (var content in assistantMsg.Contents)
                 {
-                    if (content.GetType().Name == "Reasoning")
+                    if (content is Reasoning r)
                     {
-                        thoughts.Add(content.ForLlm());
+                        thoughts.Add(r.Thought);
                     }
                 }
                 var reasoningText = string.Join("", thoughts);
@@ -221,7 +221,7 @@ public class LiveAgentTests
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
             {
-                _output.WriteLine($"  Content ({content.GetType().Name}): {content.ForLlm()}");
+                _output.WriteLine($"  Content ({content.GetType().Name}): {content}");
             }
         }
         _output.WriteLine($"Final Result: {result}");
@@ -259,7 +259,7 @@ public class LiveAgentTests
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
             {
-                _output.WriteLine($"  Content ({content.GetType().Name}): {content.ForLlm()}");
+                _output.WriteLine($"  Content ({content.GetType().Name}): {content}");
             }
         }
         _output.WriteLine($"Final Result: {result}");
@@ -276,7 +276,7 @@ public class LiveAgentTests
         Assert.NotEmpty(toolResultMessages);
         var failedResult = toolResultMessages.FirstOrDefault();
         Assert.NotNull(failedResult);
-        Assert.Contains("Simulation tool failure", failedResult.Result.ForLlm());
+        Assert.Contains("Simulation tool failure", failedResult.Result?.ToString() ?? "");
         
         // Ensure the conversation history remains clean and agent loop finished successfully
         Assert.False(string.IsNullOrWhiteSpace(result));

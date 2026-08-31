@@ -56,7 +56,7 @@ public static class TornadoAdapterExtensions
 
                 case ToolResult tr:
                     tornadoMsg.ToolCallId = tr.CallId;
-                    textParts.Add(tr.Result?.ForLlm() ?? "");
+                    textParts.Add(tr.Result?.ToString() ?? "");
                     break;
             }
         }

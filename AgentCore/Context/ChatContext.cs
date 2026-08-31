@@ -94,7 +94,7 @@ public class ChatContext : IContext
             }
         }
 
-        lock (_lock) return _chat; 
+        lock (_lock) return PruneHistoricalReasoning(_chat); 
     }
 
     private Message TruncateMessage(Message message)
@@ -102,18 +102,43 @@ public class ChatContext : IContext
         if (message.Role is not (Role.Tool or Role.User))
             return message;
 
-        var sanitized = message.Contents.Select(c => c switch
-        {
-            ToolResult { Result: Text { Value.Length: var len } } tr when len > _maxSingleMessageChars =>
-                new ToolResult(tr.CallId, new Text(tr.Result.ForLlm()[.._maxSingleMessageChars] + $"\n... [Output truncated from {len} to {_maxSingleMessageChars} characters]")),
-
-            Text { Value.Length: var len } t when len > _maxSingleMessageChars =>
-                new Text(t.Value[.._maxSingleMessageChars] + $"\n... [Content truncated from {len} to {_maxSingleMessageChars} characters]"),
-
-            _ => c
-        }).ToList();
-
+        var sanitized = message.Contents.Select(c => c is ITruncatable t ? t.Truncate(_maxSingleMessageChars) : c).ToList();
         return new Message(message.Role, sanitized, message.Metadata);
+    }
+
+    private static IReadOnlyList<Message> PruneHistoricalReasoning(IReadOnlyList<Message> messages)
+    {
+        int lastUserIndex = -1;
+        for (int i = messages.Count - 1; i >= 0; i--)
+        {
+            if (messages[i].Role == Role.User)
+            {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        if (lastUserIndex <= 0)
+            return messages;
+
+        var result = new List<Message>(messages.Count);
+        for (int i = 0; i < messages.Count; i++)
+        {
+            var msg = messages[i];
+            if (i < lastUserIndex && msg.Role == Role.Assistant && msg.Contents.Any(c => c is Reasoning))
+            {
+                var filtered = msg.Contents.Where(c => c is not Reasoning).ToList();
+                if (filtered.Count > 0)
+                {
+                    result.Add(new Message(msg.Role, filtered, msg.Metadata));
+                }
+            }
+            else
+            {
+                result.Add(msg);
+            }
+        }
+        return result;
     }
 
     private static int Estimate(Message message)
@@ -121,7 +146,14 @@ public class ChatContext : IContext
         int chars = 4; // overhead
         foreach (var content in message.Contents)
         {
-            chars += content.ForLlm()?.Length ?? 0;
+            chars += content switch
+            {
+                Text t => t.Value.Length,
+                ToolCall tc => tc.Name.Length + (tc.Arguments?.ToJsonString().Length ?? 0),
+                ToolResult tr => tr.Result is Text t ? t.Value.Length : (tr.Result?.ToString()?.Length ?? 0),
+                Reasoning r => r.Thought.Length,
+                _ => content.ToString()?.Length ?? 0
+            };
         }
         return (int)((chars / CharsPerToken) * SafetyMargin);
     }

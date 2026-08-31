@@ -31,7 +31,7 @@ public class ToolingServiceTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Contains("not registered", resultText);
     }
 
@@ -49,7 +49,7 @@ public class ToolingServiceTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Contains("cannot be empty", resultText);
     }
 
@@ -74,7 +74,7 @@ public class ToolingServiceTests
 
         // Should NOT throw, but return error text
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Contains("Tool implementation crashed", resultText);
     }
 
@@ -94,7 +94,7 @@ public class ToolingServiceTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Equal("", resultText);
     }
 
@@ -117,7 +117,7 @@ public class ToolingServiceTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Equal("Explicit IContent", resultText);
     }
 
@@ -140,7 +140,7 @@ public class ToolingServiceTests
         }
 
         Assert.Single(results);
-        var resultText = results[0].ForLlm();
+        var resultText = results[0].ToString();
         Assert.Contains("{\"Key\":\"Val\"}", resultText);
     }
 

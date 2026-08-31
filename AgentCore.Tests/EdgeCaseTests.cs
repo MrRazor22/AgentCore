@@ -149,7 +149,7 @@ namespace AgentCore.Tests
             
             // Check that the pruned history has consolidated fact sheet included
             var lastCaptured = mockLlm.CapturedMessages.Last();
-            Assert.Contains(lastCaptured, m => m.Contents.Any(c => c.ForLlm().Contains("Summarized context")));
+            Assert.Contains(lastCaptured, m => m.Contents.Any(c => c.ToString()?.Contains("Summarized context") == true));
         }
 
         [Fact]
