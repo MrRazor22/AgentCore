@@ -70,7 +70,17 @@ namespace CodeSharp.UI
                     break;
 
                 case ToolCallStart tcStart:
+                    StopSpinner();
+                    FinalizeThinking();
                     _activeToolCalls[tcStart.Index] = (tcStart.Id, tcStart.Name, new StringBuilder());
+                    if (!string.IsNullOrEmpty(tcStart.Id))
+                    {
+                        _toolCallNames[tcStart.Id] = tcStart.Name;
+                    }
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine($"[bold yellow]Tool Call:[/] [bold cyan]{Markup.Escape(tcStart.Name)}[/]");
+                    AnsiConsole.Markup("[grey]└─ [/]");
+                    Console.Out.Flush();
                     break;
 
                 case ToolCallDelta tcDelta:
@@ -78,15 +88,17 @@ namespace CodeSharp.UI
                     {
                         entry.Args.Append(tcDelta.Arguments);
                     }
+                    Console.ForegroundColor = ConsoleColor.White;
+                    Console.Out.Write(tcDelta.Arguments);
+                    Console.ResetColor();
+                    Console.Out.Flush();
                     break;
 
                 case ToolCallEnd tcEnd:
-                    if (_activeToolCalls.Remove(tcEnd.Index, out var completedCall))
+                    if (_activeToolCalls.Remove(tcEnd.Index, out _))
                     {
-                        StopSpinner();
-                        FinalizeThinking();
-                        var json = JsonNode.Parse(string.IsNullOrWhiteSpace(completedCall.Args.ToString()) ? "{}" : completedCall.Args.ToString()) as JsonObject ?? new JsonObject();
-                        RenderToolCall(new ToolCall(completedCall.Id, completedCall.Name, json));
+                        Console.Out.WriteLine();
+                        Console.Out.Flush();
                     }
                     break;
 
@@ -142,10 +154,12 @@ namespace CodeSharp.UI
                 _answerStarted = true;
                 var trimmed = text.TrimStart('\r', '\n');
                 AnsiConsole.Write(new Spectre.Console.Text(trimmed));
+                Console.Out.Flush();
             }
             else
             {
                 AnsiConsole.Write(new Spectre.Console.Text(text));
+                Console.Out.Flush();
             }
         }
 

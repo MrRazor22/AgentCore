@@ -31,4 +31,29 @@ public class ConsoleStreamRendererTests
 
         Assert.Null(exception);
     }
+
+    [Fact]
+    public void Write_ToolCallStreamingEvents_DoesNotThrowException()
+    {
+        var renderer = new ConsoleStreamRenderer(new GenericFallbackToolFormatter());
+
+        var events = new object[]
+        {
+            new ToolCallStart(0, "call_123", "RunCommand"),
+            new ToolCallDelta(0, "{\"commandLine\":"),
+            new ToolCallDelta(0, " \"Get-Process\"}"),
+            new ToolCallEnd(0)
+        };
+
+        var exception = Record.Exception(() =>
+        {
+            foreach (var evt in events)
+            {
+                renderer.Write(evt);
+            }
+            renderer.Complete();
+        });
+
+        Assert.Null(exception);
+    }
 }

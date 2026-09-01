@@ -42,13 +42,8 @@ public static class TornadoBuilderExtensions
 
         TornadoApi api;
         if (!string.IsNullOrWhiteSpace(baseUrl))
-        {
-            var cleanUrl = baseUrl.TrimEnd('/');
-            if (cleanUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-            {
-                cleanUrl = cleanUrl[..^3];
-            }
-            api = new TornadoApi(new Uri(cleanUrl), apiKey, provider);
+        { 
+            api = new TornadoApi(new Uri(baseUrl), apiKey, provider);
         }
         else
         {

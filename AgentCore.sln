@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Layers", "AgentCo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.LLM.Tornado", "AgentCore.LLM.Tornado\AgentCore.LLM.Tornado.csproj", "{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.LLM.MEAI", "AgentCore.LLM.MEAI\AgentCore.LLM.MEAI.csproj", "{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -102,6 +104,18 @@ Global
 		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x64.Build.0 = Release|Any CPU
 		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x86.ActiveCfg = Release|Any CPU
 		{B3447DDD-2083-4558-9C4D-62B3E6C2DB2E}.Release|x86.Build.0 = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|x64.Build.0 = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Debug|x86.Build.0 = Debug|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|x64.ActiveCfg = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|x64.Build.0 = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|x86.ActiveCfg = Release|Any CPU
+		{0F2E3523-8A9C-4D5F-A116-A6ACCF0AB142}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

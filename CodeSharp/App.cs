@@ -12,7 +12,9 @@ using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using Serilog;
 using Microsoft.Extensions.Logging;
-
+using Microsoft.Extensions.AI;
+using OpenAI;
+using System.ClientModel;
 using CodeSharp.Skills;
 
 namespace CodeSharp;
@@ -24,6 +26,7 @@ internal class App
         public string BaseUrl { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
         public string ApiKey { get; set; } = string.Empty;
+        public string? Provider { get; set; }
     }
 
     private static async Task Main(string[] args)
@@ -141,11 +144,15 @@ internal class App
             var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
             var sessionStore = new JsonFileContextStore(sessionsDir);
 
+            var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
+            var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
+            var chatClient = new OpenAIChatClient(openAIClient.GetChatClient(config.Model));
+
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
-                .WithTornado(apiKey: config.ApiKey, model: config.Model, baseUrl: baseUrl)
+                .WithMEAI(chatClient)
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddContextPersistence(sessionStore, "default")
+                .AddContextPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())
                 .AddLLMLayer(new ToolCallDetectionLayer())
                 .AddLLMLayer(streamingLayer)

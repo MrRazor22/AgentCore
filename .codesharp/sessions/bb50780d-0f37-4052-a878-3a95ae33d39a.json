@@ -1,0 +1,49 @@
+[
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "write the flappy bird game in single html file and launch it"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "Assistant",
+    "contents": [
+      {
+        "type": "toolCall",
+        "id": "1IgDylewWojlXSfywO2rLZX2x0OK0w8Y",
+        "name": "RunCommand",
+        "arguments": {
+          "commandLine": "@echo off\ncd \u0022C:\\Users\\Public\\Desktop\u0022 2\u003Enul || mkdir \u0022C:\\Users\\Public\\Desktop\u0022\ncopy /Y \u0022%TEMP%\\flappy_bird.html\u0022 \u0022C:\\Users\\Public\\Desktop\\flappy_bird.html\u0022 2\u003Enul\nstart \u0022\u0022 \u0022C:\\Users\\Public\\Desktop\\flappy_bird.html\u0022\nexit",
+          "background": true,
+          "notifyOnCompletion": false,
+          "outputCharacterCount": 5000,
+          "safeToAutoRun": false
+        }
+      }
+    ],
+    "metadata": {
+      "id": "msg_w63hsgfho1nqsffxu7v55f",
+      "model": "qwen/qwen3.5-9b",
+      "finish_reason": "tool_use",
+      "usage": {
+        "InputTokens": 675,
+        "OutputTokens": 161,
+        "TotalTokens": 836
+      }
+    }
+  }
+]

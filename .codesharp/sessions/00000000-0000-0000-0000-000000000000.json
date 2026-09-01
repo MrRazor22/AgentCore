@@ -1,0 +1,145 @@
+[
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "Hi"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "HI"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "Hi"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "Assistant",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "Understood. How can I help you today?"
+      }
+    ],
+    "metadata": {
+      "id": "msg_cdtz5zp1duc9o10ikm9apg",
+      "model": "qwen/qwen3.5-9b",
+      "finish_reason": "end_turn",
+      "usage": {
+        "InputTokens": 675,
+        "OutputTokens": 11,
+        "TotalTokens": 686
+      }
+    }
+  },
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "write the flappy bird game in single html file and launch it"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "Assistant",
+    "contents": [],
+    "metadata": {
+      "id": "msg_n22ypcwqz8bnbemu3urcx7",
+      "model": "qwen/qwen3.5-9b",
+      "finish_reason": null,
+      "usage": {
+        "InputTokens": 708,
+        "OutputTokens": 0,
+        "TotalTokens": 708
+      }
+    }
+  },
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "User",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "Hi"
+      }
+    ],
+    "metadata": null
+  },
+  {
+    "role": "System",
+    "contents": [
+      {
+        "type": "text",
+        "Value": "You are CodeSharp, an expert agentic AI coding assistant.\nKeep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\nYou have a universal execution tool: RunCommand.\nUse PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\nAvailable skills:\n- codeagent: PowerShell workflows for searching, reading, editing and safe file operations.\n\nWhen a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
+      }
+    ],
+    "metadata": null
+  }
+]
