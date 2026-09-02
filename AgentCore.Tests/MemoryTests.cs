@@ -170,7 +170,7 @@ public class MemoryTests
     }
 
     [Fact]
-    public void ITruncatable_PolymorphicBehavior()
+    public void IContent_PolymorphicTruncationBehavior()
     {
         // 1. Text truncation (10 tokens -> ~40 chars)
         var shortText = new Text("Hello");
@@ -187,12 +187,18 @@ public class MemoryTests
         Assert.NotSame(toolResult, truncatedResult);
         Assert.Contains("Content truncated from 100 to 40 characters", truncatedResult.ToString());
 
-        // 3. Non-truncatable contents do not implement ITruncatable
+        // 3. ToolCall returns itself unchanged
         IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());
-        Assert.False(toolCall is ITruncatable);
+        Assert.Same(toolCall, toolCall.Truncate(10));
 
-        IContent reasoning = new Reasoning("Deep thought...");
-        Assert.False(reasoning is ITruncatable);
+        // 4. Reasoning truncates thought string when over budget
+        IContent shortReasoning = new Reasoning("Short thought");
+        Assert.Same(shortReasoning, shortReasoning.Truncate(10));
+
+        IContent longReasoning = new Reasoning(new string('R', 100));
+        var truncatedReasoning = longReasoning.Truncate(10);
+        Assert.NotSame(longReasoning, truncatedReasoning);
+        Assert.Contains("Reasoning truncated from 100 to 40 characters", truncatedReasoning.ToString());
     }
 
     [Fact]
@@ -244,29 +250,6 @@ public class MemoryTests
         Assert.Single(messages);
         Assert.Equal("CustomCompacted", messages[0].Contents[0].ToString());
     }
-
-    [Fact]
-    public async Task ChatContext_NonEstimatableContent_ThrowsInvalidOperationException()
-    {
-        var context = new Context.ChatContext();
-        var badMessage = new Message(Role.User, [new DummyNonEstimatableContent()]);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.AddAsync([badMessage]));
-    }
-
-    [Fact]
-    public async Task ChatContext_OversizedNonTruncatableContent_ThrowsInvalidOperationException()
-    {
-        // contextWindow: 500, maxSingleMessageTokens: 100
-        var context = new Context.ChatContext(contextWindow: 500, reserveTokens: 50, maxSingleMessageTokens: 100);
-        // ToolCall with massive arguments (> 100 tokens -> ~400 chars)
-        var giantObj = new System.Text.Json.Nodes.JsonObject { ["large_param"] = new string('A', 1000) };
-        var oversizedToolCall = new Message(Role.Tool, [new ToolCall("call_1", "run", giantObj)]);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => context.AddAsync([oversizedToolCall]));
-    }
-
-    private class DummyNonEstimatableContent : IContent { }
 
     private class CustomTestCompactor : ICompactor
     {

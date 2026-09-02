@@ -10,17 +10,17 @@ namespace AgentCore.LLM.Chat
     public sealed record ToolResult(
     [property: JsonPropertyName("call_id")] string CallId,
     [property: JsonPropertyName("result")] IContent? Result
-) : IContent, ITruncatable, IEstimatable
+) : IContent
     {
         public override string ToString() => Result?.ToString() ?? "";
 
-        public int EstimateTokens() => Result is IEstimatable e ? e.EstimateTokens() : 0;
+        public int EstimateTokens() => Result?.EstimateTokens() ?? 0;
 
         public IContent Truncate(int maxTokens)
         {
-            if (Result is ITruncatable truncatable)
+            if (Result != null)
             {
-                var truncated = truncatable.Truncate(maxTokens);
+                var truncated = Result.Truncate(maxTokens);
                 return ReferenceEquals(truncated, Result) ? this : new ToolResult(CallId, truncated);
             }
             return this;

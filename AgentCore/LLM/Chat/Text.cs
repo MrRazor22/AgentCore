@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent, ITruncatable, IEstimatable
+    public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent
     {
         public static implicit operator Text(string text) => new(text);
         public override string ToString() => Value;
@@ -19,7 +19,7 @@ namespace AgentCore.LLM.Chat
             int maxChars = Math.Max(0, maxTokens * 4);
             return Value.Length <= maxChars
                 ? this
-                : new Text(Value[..maxChars] + $"\n... [Content truncated from {Value.Length} to {maxChars} characters]");
+                : new Text(Value[..maxChars] + $"\n... [truncated]");
         }
 
         public sealed class Stream : IStreamingContent

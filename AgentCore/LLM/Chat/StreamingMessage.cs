@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.LLM.Chat;
 
-public interface IStreamingContent : IContent
+public interface IStreamingContent
 {
     void Append(IBlockDeltaEvent delta);
     IContent ToContent();

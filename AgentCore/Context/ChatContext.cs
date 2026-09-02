@@ -95,22 +95,11 @@ public class ChatContext : IContext
 
     private Message TruncateMessage(Message message)
     {
-        if (message.Role is not (Role.Tool or Role.User)) return message;
-
-        return new Message(message.Role, message.Contents.Select(c =>
-        {
-            int tokens = RequireEstimatable(c);
-            if (c is ITruncatable t) return t.Truncate(_maxSingleMessageTokens);
-            if (tokens > _maxSingleMessageTokens)
-                throw new InvalidOperationException($"Non-truncatable content '{c.GetType().Name}' ({tokens} tokens) exceeds limit of {_maxSingleMessageTokens}.");
-            return c;
-        }).ToList(), message.Metadata);
+        if (message.Role == Role.System) return message; // Protect ONLY System, truncates User, Tool, and Assistant
+        return new Message(message.Role, message.Contents.Select(c => c.Truncate(_maxSingleMessageTokens)).ToList(), message.Metadata);
     }
 
     private static int Estimate(Message message) =>
-        (int)((1 + message.Contents.Sum(RequireEstimatable)) * SafetyMargin);
-
-    private static int RequireEstimatable(IContent c) =>
-        c is IEstimatable e ? e.EstimateTokens() : throw new InvalidOperationException($"Content of type '{c.GetType().Name}' does not implement '{nameof(IEstimatable)}'.");
+        (int)((1 + message.Contents.Sum(c => c.EstimateTokens())) * SafetyMargin);
 }
 

@@ -12,9 +12,11 @@ public enum Role { System, Assistant, User, Tool }
 [JsonDerivedType(typeof(ToolCall), "toolCall")]
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
-public interface IContent {} 
-public interface ITruncatable { IContent Truncate(int maxTokens); }  
-public interface IEstimatable { int EstimateTokens(); } 
+public interface IContent 
+{ 
+    int EstimateTokens();
+    IContent Truncate(int maxTokens);
+} 
 
 public sealed record MessageMetadata(
     [property: JsonPropertyName("id")] string? Id = null,
