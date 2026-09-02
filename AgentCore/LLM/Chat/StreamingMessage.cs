@@ -4,29 +4,30 @@ namespace AgentCore.LLM.Chat;
 
 public interface IStreamingContent
 {
-    void Append(IBlockDeltaEvent delta);
+    void Recieve(IBlockDeltaEvent delta);
     IContent ToContent();
 }
 public sealed class StreamingMessage : Message
 {
-    private readonly IAsyncEnumerable<IMessageEvent> _eventStream;
-
-    public StreamingMessage(IAsyncEnumerable<IMessageEvent> stream) : base(Role.Assistant)
+    public StreamingMessage(Role role = Role.Assistant) : base(role)
     {
-        _eventStream = stream ?? throw new ArgumentNullException(nameof(stream));
     }
 
     /// <summary>
     /// Eagerly streams completed <see cref="IContent"/> blocks and seals the Message upon completion.
     /// </summary>
-    public async IAsyncEnumerable<IContent> ContentsStream([EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<IContent> Receive(
+        IAsyncEnumerable<IMessageEvent> stream,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(stream);
+
         var active = new Dictionary<int, IStreamingContent>();
         var completed = new SortedDictionary<int, IContent>();
         string? id = null, model = null, finishReason = null;
         TokenUsage? usage = null;
 
-        await foreach (var evt in _eventStream.WithCancellation(ct).ConfigureAwait(false))
+        await foreach (var evt in stream.WithCancellation(ct).ConfigureAwait(false))
         {
             switch (evt)
             {
@@ -40,9 +41,9 @@ public sealed class StreamingMessage : Message
                     break;
 
                 case IBlockDeltaEvent d:
-                    if (!active.TryGetValue(d.Index, out var stream))
+                    if (!active.TryGetValue(d.Index, out var blockStream))
                         throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
-                    stream.Append(d);
+                    blockStream.Recieve(d);
                     break;
 
                 case IBlockEndEvent e:
@@ -61,9 +62,9 @@ public sealed class StreamingMessage : Message
         }
 
         // Gracefully complete and yield any remaining unclosed blocks
-        foreach (var (idx, stream) in active.OrderBy(x => x.Key))
+        foreach (var (idx, activeStream) in active.OrderBy(x => x.Key))
         {
-            var content = stream.ToContent();
+            var content = activeStream.ToContent();
             completed[idx] = content;
             yield return content;
         }
@@ -75,9 +76,11 @@ public sealed class StreamingMessage : Message
     /// <summary>
     /// Asynchronously drains the stream to completion and returns this message with fully populated contents and metadata.
     /// </summary>
-    public async Task<Message> ToMessageAsync(CancellationToken ct = default)
+    public async Task<Message> ToMessageAsync(
+        IAsyncEnumerable<IMessageEvent> stream,
+        CancellationToken ct = default)
     {
-        await foreach (var _ in ContentsStream(ct).ConfigureAwait(false)) { }
+        await foreach (var _ in Receive(stream, ct).ConfigureAwait(false)) { }
         return this;
     }
 }

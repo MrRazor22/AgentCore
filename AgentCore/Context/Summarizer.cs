@@ -35,7 +35,7 @@ public class Summarizer : ICompactor
             try
             {
                 var eventStream = _llm.StreamAsync(history, responseSchema: null, tools: null, ct: ct);
-                var message = await new StreamingMessage(eventStream).ToMessageAsync(ct).ConfigureAwait(false);
+                var message = await new StreamingMessage(Role.Assistant).ToMessageAsync(eventStream, ct).ConfigureAwait(false);
                 var summary = message.Contents.OfType<Text>().FirstOrDefault()?.Value ?? string.Empty;
                 return BuildCompactedHistory(messages, summary.Trim());
             }

@@ -58,9 +58,9 @@ namespace AgentCore
                 _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
 
                 var msgEvents = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
-                assistantResponse = new StreamingMessage(msgEvents);
+                assistantResponse = new (Role.Assistant);
 
-                await foreach (var content in assistantResponse.ContentsStream(ct).ConfigureAwait(false))
+                await foreach (var content in assistantResponse.Receive(msgEvents, ct).ConfigureAwait(false))
                 { 
                     yield return content;
                     if (content is ToolCall toolCall)

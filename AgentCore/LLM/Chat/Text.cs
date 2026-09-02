@@ -25,7 +25,7 @@ namespace AgentCore.LLM.Chat
         public sealed class Stream : IStreamingContent
         {
             private readonly StringBuilder _sb = new();
-            public void Append(IBlockDeltaEvent delta)
+            public void Recieve(IBlockDeltaEvent delta)
             {
                 if (delta is not TextDelta text)
                     throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(TextDelta)} but received {delta.GetType().Name}.");

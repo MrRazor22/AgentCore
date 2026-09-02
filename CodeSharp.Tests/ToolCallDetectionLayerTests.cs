@@ -483,7 +483,7 @@ internal static class ListExtensions
 {
     public static async Task<List<IContent>> ToContentsAsync(this IAsyncEnumerable<IMessageEvent> stream)
     {
-        return await new StreamingMessage(stream).ContentsStream().ToListAsync();
+        return await new StreamingMessage(Role.Assistant).Receive(stream).ToListAsync();
     }
 
     public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)

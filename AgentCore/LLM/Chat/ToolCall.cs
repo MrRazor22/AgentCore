@@ -30,7 +30,7 @@ namespace AgentCore.LLM.Chat
         public sealed class Stream(string id, string name) : IStreamingContent
         {
             private readonly StringBuilder _args = new();
-            public void Append(IBlockDeltaEvent delta)
+            public void Recieve(IBlockDeltaEvent delta)
             {
                 if (delta is not ToolCallDelta toolCall)
                     throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(ToolCallDelta)} but received {delta.GetType().Name}.");

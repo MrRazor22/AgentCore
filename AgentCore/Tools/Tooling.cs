@@ -18,7 +18,7 @@ internal sealed class Tooling : ITooling
     private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<Tooling> _logger;
-    private readonly List<Task<ToolResult>> _runningTasks = new();
+    private readonly List<Task<ToolResult>> _pendingResults = new();
     private readonly object _lock = new();
 
     public Tooling(
@@ -50,7 +50,7 @@ internal sealed class Tooling : ITooling
         var task = HandleInternalAsync(call, ct);
         lock (_lock)
         {
-            _runningTasks.Add(task);
+            _pendingResults.Add(task);
         }
         return Task.CompletedTask;
     }
@@ -60,8 +60,8 @@ internal sealed class Tooling : ITooling
         List<Task<ToolResult>> tasks;
         lock (_lock)
         {
-            tasks = [.. _runningTasks];
-            _runningTasks.Clear();
+            tasks = [.. _pendingResults];
+            _pendingResults.Clear();
         }
 
         while (tasks.Count > 0)

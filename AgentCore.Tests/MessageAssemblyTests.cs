@@ -30,10 +30,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.ContentsStream())
+        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
         {
             contents.Add(item);
         }
@@ -64,10 +64,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.ContentsStream())
+        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
         {
             contents.Add(item);
         }
@@ -101,10 +101,10 @@ public class MessageAssemblyTests
             new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20))
         };
 
-        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.ContentsStream())
+        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
         {
             contents.Add(item);
         }
@@ -143,10 +143,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.ContentsStream())
+        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
         {
             contents.Add(item);
         }
@@ -188,10 +188,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(sequence.ToAsyncEnumerable());
+        var message = new StreamingMessage(Role.Assistant);
 
         var yielded = new List<IContent>();
-        await foreach (var item in message.ContentsStream())
+        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
         {
             yielded.Add(item);
         }
@@ -214,18 +214,18 @@ public class MessageAssemblyTests
     {
         // 1. Delta without explicit start throws protocol violation
         var bad1 = new IMessageEvent[] { new TextDelta(0, "graceful text"), new TextEnd(0) };
-        var msg1 = new StreamingMessage(bad1.ToAsyncEnumerable());
+        var msg1 = new StreamingMessage(Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg1.ContentsStream()) { }
+            await foreach (var _ in msg1.Receive(bad1.ToAsyncEnumerable())) { }
         });
 
         // 2. Stray end without start throws protocol violation
         var bad2 = new IMessageEvent[] { new TextEnd(0) };
-        var msg2 = new StreamingMessage(bad2.ToAsyncEnumerable());
+        var msg2 = new StreamingMessage(Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg2.ContentsStream()) { }
+            await foreach (var _ in msg2.Receive(bad2.ToAsyncEnumerable())) { }
         });
 
         // 3. Duplicate start throws protocol violation
@@ -237,17 +237,17 @@ public class MessageAssemblyTests
             new TextDelta(0, " second"),
             new TextEnd(0)
         };
-        var msg3 = new StreamingMessage(bad3.ToAsyncEnumerable());
+        var msg3 = new StreamingMessage(Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg3.ContentsStream()) { }
+            await foreach (var _ in msg3.Receive(bad3.ToAsyncEnumerable())) { }
         });
 
         // 4. Unclosed block on MessageEnd is gracefully completed and yielded
         var bad4 = new IMessageEvent[] { new TextStart(0), new TextDelta(0, "unclosed"), new MessageEnd() };
-        var msg4 = new StreamingMessage(bad4.ToAsyncEnumerable());
+        var msg4 = new StreamingMessage(Role.Assistant);
         var contents4 = new List<IContent>();
-        await foreach (var c in msg4.ContentsStream()) contents4.Add(c);
+        await foreach (var c in msg4.Receive(bad4.ToAsyncEnumerable())) contents4.Add(c);
         Assert.Equal("unclosed", Assert.Single(contents4.OfType<Text>()).Value);
         Assert.Equal("unclosed", Assert.Single(msg4.Contents.OfType<Text>()).Value);
     }
