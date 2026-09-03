@@ -152,7 +152,6 @@ internal class App
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
-                .UseContent<AgentCore.LLM.Chat.Text, CodeSharpText>(t => new CodeSharpText(t.Value, spilloverDir))
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddContextPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())

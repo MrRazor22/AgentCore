@@ -83,7 +83,7 @@ internal sealed class Tooling : ITooling
 
             sw.Stop();
             _logger.LogInformation("Tool executed. ToolName={ToolName}, DurationMs={DurationMs}", call.Name, sw.ElapsedMilliseconds);
-            return new ToolResult(call.Id, result);
+            return new ToolResult(call.Id, [result]);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -97,4 +97,7 @@ internal sealed class Tooling : ITooling
             return Failed(call.Id, call.Name, actualEx.Message);
         }
     }
+
+    private static ToolResult Failed(string callId, string toolName, string message)
+        => new(callId, [new Text($"Error calling tool '{toolName}': {message}")]);
 }

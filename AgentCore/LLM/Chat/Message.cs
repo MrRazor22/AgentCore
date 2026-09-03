@@ -12,6 +12,7 @@ public enum Role { System, Assistant, User, Tool }
 [JsonDerivedType(typeof(ToolCall), "toolCall")]
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]
+[JsonDerivedType(typeof(Image), "image")]
 public interface IContent 
 { 
     int EstimateTokens();
