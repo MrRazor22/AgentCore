@@ -28,7 +28,7 @@ public class Summarizer : ICompactor
         CancellationToken ct = default)
     {
         var history = messages.ToList();
-        history.Add(new Message(Role.User, new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")));
+        history.Add(new Message(Role.User, [new Text("Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.")]));
 
         while (true)
         {
@@ -63,7 +63,7 @@ public class Summarizer : ICompactor
         var lastMessage = original.Count > (systemMessage != null ? 2 : 1) ? original[^1] : null;
 
         if (systemMessage != null) result.Add(systemMessage);
-        result.Add(new Message(Role.User, new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")));
+        result.Add(new Message(Role.User, [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")]));
         if (lastMessage != null && lastMessage.Role != Role.System)
         {
             result.Add(lastMessage);

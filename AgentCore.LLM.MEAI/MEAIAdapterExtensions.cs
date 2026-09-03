@@ -50,7 +50,7 @@ internal static class MEAIAdapterExtensions
             }
             else if (content is ToolResult tr)
             {
-                contents.Add(new FunctionResultContent(tr.CallId, tr.Result?.ToString()));
+                contents.Add(new FunctionResultContent(tr.CallId, tr.ToString()));
             }
         }
 

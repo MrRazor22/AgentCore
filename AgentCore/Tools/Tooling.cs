@@ -9,8 +9,7 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    Task ExecuteAsync(ToolCall call, CancellationToken ct = default);
-    IAsyncEnumerable<ToolResult> StreamResultsAsync(CancellationToken ct = default);
+    Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default);
 }
 
 internal sealed class Tooling : ITooling
@@ -18,8 +17,6 @@ internal sealed class Tooling : ITooling
     private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
     private readonly IReadOnlyDictionary<string, Tool> _tools;
     private readonly ILogger<Tooling> _logger;
-    private readonly List<Task<ToolResult>> _pendingResults = new();
-    private readonly object _lock = new();
 
     public Tooling(
         IReadOnlyList<Tool> tools,
@@ -45,37 +42,7 @@ internal sealed class Tooling : ITooling
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _toolDefinitions;
 
-    public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
-    {
-        var task = HandleInternalAsync(call, ct);
-        lock (_lock)
-        {
-            _pendingResults.Add(task);
-        }
-        return Task.CompletedTask;
-    }
-
-    public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-    {
-        List<Task<ToolResult>> tasks;
-        lock (_lock)
-        {
-            tasks = [.. _pendingResults];
-            _pendingResults.Clear();
-        }
-
-        while (tasks.Count > 0)
-        {
-            var completedTask = await Task.WhenAny(tasks).ConfigureAwait(false);
-            tasks.Remove(completedTask);
-            yield return await completedTask.ConfigureAwait(false);
-        }
-    }
-
-    private static ToolResult Failed(string callId, string toolName, string message)
-        => new(callId, new Text($"Error calling tool '{toolName}': {message}"));
-
-    private async Task<ToolResult> HandleInternalAsync(ToolCall call, CancellationToken ct)
+    public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 

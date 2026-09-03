@@ -21,25 +21,13 @@ public class ApprovalLayerTests
 
     private class MockTooling : ITooling
     {
-        private readonly List<Task<ToolResult>> _tasks = new();
         public bool ExecuteCalled { get; private set; }
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
-        public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
+        public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
             ExecuteCalled = true;
-            _tasks.Add(Task.FromResult(new ToolResult(call.Id, new Text("Execution Ok"))));
-            return Task.CompletedTask;
-        }
-
-        public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-        {
-            var tasks = new List<Task<ToolResult>>(_tasks);
-            _tasks.Clear();
-            foreach (var t in tasks)
-            {
-                yield return await t.ConfigureAwait(false);
-            }
+            return Task.FromResult(new ToolResult(call.Id, [new Text("Execution Ok")]));
         }
     }
 
@@ -57,16 +45,10 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.True(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        Assert.Equal("Execution Ok", Assert.IsType<Text>(results[0].Result).Value);
+        Assert.Equal("Execution Ok", result.ToString());
     }
 
     [Fact]
@@ -77,16 +59,10 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        var text = Assert.IsType<Text>(results[0].Result).Value;
+        var text = result.ToString();
         Assert.Contains("[DENIED]", text);
         Assert.Contains("User rejected execution.", text);
     }
@@ -104,19 +80,13 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
-        Assert.Equal(2, results.Count);
-        Assert.Equal("1", results[0].CallId);
-        Assert.Equal("1", results[1].CallId);
-        Assert.IsType<Text>(results[0].Result);
-        Assert.IsType<Reasoning>(results[1].Result);
+        Assert.Equal(2, result.Contents.Count);
+        Assert.Equal("1", result.CallId);
+        Assert.IsType<Text>(result.Contents[0]);
+        Assert.IsType<Reasoning>(result.Contents[1]);
     }
 
     [Fact]
@@ -127,16 +97,10 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.True(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        Assert.Equal("Execution Ok", Assert.IsType<Text>(results[0].Result).Value);
+        Assert.Equal("Execution Ok", result.ToString());
     }
 
     [Fact]
@@ -147,16 +111,10 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "test_tool", new JsonObject());
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        Assert.Equal("Execution of tool 'test_tool' was rejected by the user.", Assert.IsType<Text>(results[0].Result).Value);
+        Assert.Equal("Execution of tool 'test_tool' was rejected by the user.", result.ToString());
     }
 
     [Fact]
@@ -176,16 +134,10 @@ public class ApprovalLayerTests
         AttachInner(layer, mockInner);
 
         var call = new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" });
-        await layer.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
-        Assert.Single(results);
-        Assert.Contains("[DENIED] Blocked by guardrail.", Assert.IsType<Text>(results[0].Result).Value);
+        Assert.Contains("[DENIED] Blocked by guardrail.", result.ToString());
     }
 
     [Fact]
@@ -207,9 +159,6 @@ public class ApprovalLayerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await layer.ExecuteAsync(call, cts.Token);
-            await foreach (var r in layer.StreamResultsAsync(cts.Token))
-            {
-            }
         });
         
         Assert.False(mockInner.ExecuteCalled);
@@ -217,31 +166,13 @@ public class ApprovalLayerTests
 
     private class TimedMockTooling : ITooling
     {
-        private readonly List<Task<ToolResult>> _tasks = [];
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
-        public Task ExecuteAsync(ToolCall call, CancellationToken ct = default)
+        public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
-            var task = Task.Run(async () =>
-            {
-                var delay = call.Name == "tool_b" ? 40 : 10;
-                await Task.Delay(delay, ct);
-                return new ToolResult(call.Id, new Text($"Result for {call.Name}"));
-            }, ct);
-            _tasks.Add(task);
-            return Task.CompletedTask;
-        }
-
-        public async IAsyncEnumerable<ToolResult> StreamResultsAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-        {
-            var tasks = new List<Task<ToolResult>>(_tasks);
-            _tasks.Clear();
-            while (tasks.Count > 0)
-            {
-                var completed = await Task.WhenAny(tasks).ConfigureAwait(false);
-                tasks.Remove(completed);
-                yield return await completed.ConfigureAwait(false);
-            }
+            var delay = call.Name == "tool_b" ? 40 : 10;
+            await Task.Delay(delay, ct);
+            return new ToolResult(call.Id, [new Text($"Result for {call.Name}")]);
         }
     }
 
@@ -277,19 +208,24 @@ public class ApprovalLayerTests
         var callB = new ToolCall("call_B", "tool_b", new JsonObject());
         var callC = new ToolCall("call_C", "tool_c", new JsonObject());
 
-        await layer.ExecuteAsync(callA);
-        await layer.ExecuteAsync(callB);
-        await layer.ExecuteAsync(callC);
+        var tasks = new List<Task<ToolResult>>
+        {
+            layer.ExecuteAsync(callA),
+            layer.ExecuteAsync(callB),
+            layer.ExecuteAsync(callC)
+        };
 
         var received = new List<ToolResult>();
-        await foreach (var r in layer.StreamResultsAsync())
+        while (tasks.Count > 0)
         {
-            received.Add(r);
+            var completed = await Task.WhenAny(tasks);
+            tasks.Remove(completed);
+            received.Add(await completed);
         }
 
         Assert.Equal(3, received.Count);
 
-        // Tool C (fast denial ~10ms) and Tool B (fast inner tool ~40ms) must stream before Tool A (~250ms)
+        // Tool C (fast denial ~10ms) and Tool B (fast inner tool ~40ms) must complete before Tool A (~250ms)
         var callIds = received.Select(r => r.CallId).ToList();
         Assert.Equal("call_A", callIds[2]); // Tool A is last
         Assert.Contains("call_B", callIds.Take(2));

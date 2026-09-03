@@ -15,7 +15,7 @@ public enum Role { System, Assistant, User, Tool }
 public interface IContent 
 { 
     int EstimateTokens();
-    IContent Truncate(int maxTokens);
+    IContent Truncate(int maxTokens, string? notice = null);
 } 
 
 public sealed record MessageMetadata(
@@ -25,31 +25,20 @@ public sealed record MessageMetadata(
     [property: JsonPropertyName("usage")] TokenUsage? Usage = null
 );
 
-public class Message
+public class Message(
+    Role role,
+    IReadOnlyList<IContent>? contents = null,
+    MessageMetadata? metadata = null)
 {
-    protected readonly List<IContent> _contents = [];
+    protected readonly List<IContent> _contents = contents != null ? [.. contents] : [];
 
     [JsonPropertyName("role")]
-    public Role Role { get; protected set; }
+    public Role Role { get; protected set; } = role;
 
     [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents => _contents;
 
     [JsonPropertyName("metadata")]
-    public MessageMetadata? Metadata { get; protected set; }
-
-    [JsonConstructor]
-    public Message(Role role, IReadOnlyList<IContent>? contents = null, MessageMetadata? metadata = null)
-    {
-        Role = role;
-        if (contents != null)
-        {
-            _contents.AddRange(contents);
-        }
-        Metadata = metadata;
-    }
-
-    public Message(Role role, IContent content) : this(role, [content], null) { }
-    public Message(Role role, params IContent[] contents) : this(role, (IReadOnlyList<IContent>)contents, null) { }
+    public MessageMetadata? Metadata { get; protected set; } = metadata;
 }
 

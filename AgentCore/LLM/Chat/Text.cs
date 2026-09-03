@@ -7,19 +7,26 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record Text([property: JsonPropertyName("Value")] string Value) : IContent
+    public record Text([property: JsonPropertyName("Value")] string Value) : IContent
     {
+        private const int CharsPerToken = 4;
+
         public static implicit operator Text(string text) => new(text);
         public override string ToString() => Value;
 
-        public int EstimateTokens() => (int)Math.Ceiling(Value.Length / 4.0);
+        public virtual int EstimateTokens() => (int)Math.Ceiling(Value.Length / (double)CharsPerToken);
 
-        public IContent Truncate(int maxTokens)
+        public virtual IContent Truncate(int maxTokens, string? notice = null)
         {
-            int maxChars = Math.Max(0, maxTokens * 4);
-            return Value.Length <= maxChars
-                ? this
-                : new Text(Value[..maxChars] + $"\n... [truncated]");
+            if (EstimateTokens() <= maxTokens)
+                return this;
+
+            notice ??= "\n... [truncated]";
+            int noticeTokens = (int)Math.Ceiling(notice.Length / (double)CharsPerToken);
+            int contentBudget = Math.Max(0, maxTokens - noticeTokens);
+            int maxChars = contentBudget * CharsPerToken;
+
+            return new Text(Value[..maxChars] + notice);
         }
 
         public sealed class Stream : IStreamingContent

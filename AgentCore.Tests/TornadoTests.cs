@@ -52,7 +52,7 @@ public class TornadoTests
         Assert.Contains("5", tc.FunctionCall?.Arguments);
 
         var trMsg = new Message(Role.Tool, [
-            new ToolResult("call_1", new Text("result_10"))
+            new ToolResult("call_1", [new Text("result_10")])
         ]);
 
         var tornadoTr = trMsg.ToTornadoMessage();

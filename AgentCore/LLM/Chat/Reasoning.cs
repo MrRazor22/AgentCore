@@ -7,18 +7,25 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
+    public record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
     {
+        private const int CharsPerToken = 4;
+
         public override string ToString() => Thought;
 
-        public int EstimateTokens() => (int)Math.Ceiling(Thought.Length / 4.0);
+        public virtual int EstimateTokens() => (int)Math.Ceiling(Thought.Length / (double)CharsPerToken);
 
-        public IContent Truncate(int maxTokens)
+        public virtual IContent Truncate(int maxTokens, string? notice = null)
         {
-            int maxChars = Math.Max(0, maxTokens * 4);
-            return Thought.Length <= maxChars
-                ? this
-                : new Reasoning(Thought[..maxChars] + $"\n... [truncated]");
+            if (EstimateTokens() <= maxTokens)
+                return this;
+
+            notice ??= "\n... [truncated]";
+            int noticeTokens = (int)Math.Ceiling(notice.Length / (double)CharsPerToken);
+            int contentBudget = Math.Max(0, maxTokens - noticeTokens);
+            int maxChars = contentBudget * CharsPerToken;
+
+            return new Reasoning(Thought[..maxChars] + notice);
         }
 
         public sealed class Stream : IStreamingContent

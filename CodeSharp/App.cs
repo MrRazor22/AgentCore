@@ -143,6 +143,7 @@ internal class App
 
             var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
             var sessionStore = new JsonFileContextStore(sessionsDir);
+            var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
 
             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
             var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
@@ -151,6 +152,7 @@ internal class App
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
+                .UseContent<AgentCore.LLM.Chat.Text, CodeSharpText>(t => new CodeSharpText(t.Value, spilloverDir))
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddContextPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())

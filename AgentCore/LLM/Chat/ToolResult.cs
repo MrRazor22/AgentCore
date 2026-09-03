@@ -7,23 +7,27 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public sealed record ToolResult(
-    [property: JsonPropertyName("call_id")] string CallId,
-    [property: JsonPropertyName("result")] IContent? Result
-) : IContent
+    public record ToolResult(
+        [property: JsonPropertyName("call_id")] string CallId,
+        [property: JsonPropertyName("contents")] IReadOnlyList<IContent> Contents
+    ) : IContent
     {
-        public override string ToString() => Result?.ToString() ?? "";
+        public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
 
-        public int EstimateTokens() => Result?.EstimateTokens() ?? 0;
+        public virtual int EstimateTokens() => Contents.Sum(c => c.EstimateTokens());
 
-        public IContent Truncate(int maxTokens)
+        public virtual IContent Truncate(int maxTokens, string? notice = null)
         {
-            if (Result != null)
+            var truncatedList = new List<IContent>();
+            int remaining = maxTokens;
+            foreach (var c in Contents)
             {
-                var truncated = Result.Truncate(maxTokens);
-                return ReferenceEquals(truncated, Result) ? this : new ToolResult(CallId, truncated);
+                if (remaining <= 0) break;
+                var result = c.Truncate(remaining, notice);
+                truncatedList.Add(result);
+                remaining -= result.EstimateTokens();
             }
-            return this;
+            return new ToolResult(CallId, truncatedList);
         }
     }
 }

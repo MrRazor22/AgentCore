@@ -214,7 +214,7 @@ namespace CodeSharp.UI
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine($"[bold green]Tool Result:[/] [bold cyan]{Markup.Escape(name)}[/]");
 
-            var content = result.Result?.ToString() ?? "";
+            var content = result.ToString();
 
             // Denial — yellow/dim; important agent events, always shown
             if (content.StartsWith("[DENIED]", StringComparison.OrdinalIgnoreCase))

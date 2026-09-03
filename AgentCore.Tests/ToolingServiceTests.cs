@@ -23,15 +23,9 @@ public class ToolingServiceTests
         var tooling = new Tooling(Array.Empty<Tool>());
         var call = new ToolCall("call_1", "missing_tool", new JsonObject());
 
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Contains("not registered", resultText);
     }
 
@@ -41,15 +35,9 @@ public class ToolingServiceTests
         var tooling = new Tooling(Array.Empty<Tool>());
         var call = new ToolCall("call_1", "", new JsonObject());
 
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Contains("cannot be empty", resultText);
     }
 
@@ -65,16 +53,10 @@ public class ToolingServiceTests
 
         var call = new ToolCall("call_1", "crash_tool", new JsonObject());
 
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
         // Should NOT throw, but return error text
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Contains("Tool implementation crashed", resultText);
     }
 
@@ -86,15 +68,9 @@ public class ToolingServiceTests
         var tooling = new Tooling(new[] { tool });
 
         var call = new ToolCall("call_1", "null_tool", new JsonObject());
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Equal("", resultText);
     }
 
@@ -109,15 +85,9 @@ public class ToolingServiceTests
         var tooling = new Tooling(new[] { tool });
 
         var call = new ToolCall("call_1", "content_tool", new JsonObject());
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Equal("Explicit IContent", resultText);
     }
 
@@ -132,15 +102,9 @@ public class ToolingServiceTests
         var tooling = new Tooling(new[] { tool });
 
         var call = new ToolCall("call_1", "object_tool", new JsonObject());
-        await tooling.ExecuteAsync(call);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var result = await tooling.ExecuteAsync(call);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = result.ToString();
         Assert.Contains("{\"Key\":\"Val\"}", resultText);
     }
 
@@ -161,9 +125,6 @@ public class ToolingServiceTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await tooling.ExecuteAsync(call, cts.Token);
-            await foreach (var r in tooling.StreamResultsAsync(cts.Token))
-            {
-            }
         });
     }
 }

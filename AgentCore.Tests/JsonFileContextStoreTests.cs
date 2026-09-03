@@ -27,8 +27,8 @@ public class JsonFileContextStoreTests : IDisposable
         var store = new JsonFileContextStore(_tempDir);
         var messages = new List<Message>
         {
-            new(Role.User, new Text("Hello")),
-            new(Role.Assistant, new Text("Hi there!"))
+            new(Role.User, [new Text("Hello")]),
+            new(Role.Assistant, [new Text("Hi there!")])
         };
 
         await store.SaveAsync("session-1", messages);

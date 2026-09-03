@@ -276,7 +276,7 @@ public class LiveAgentTests
         Assert.NotEmpty(toolResultMessages);
         var failedResult = toolResultMessages.FirstOrDefault();
         Assert.NotNull(failedResult);
-        Assert.Contains("Simulation tool failure", failedResult.Result?.ToString() ?? "");
+        Assert.Contains("Simulation tool failure", failedResult.ToString());
         
         // Ensure the conversation history remains clean and agent loop finished successfully
         Assert.False(string.IsNullOrWhiteSpace(result));

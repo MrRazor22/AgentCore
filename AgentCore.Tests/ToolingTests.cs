@@ -24,17 +24,10 @@ public class ToolingTests
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
-        await tooling.ExecuteAsync(toolCall);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var toolResult = await tooling.ExecuteAsync(toolCall);
 
-        Assert.Single(results);
-        var toolResult = results[0];
         Assert.Equal("call_1", toolResult.CallId);
-        Assert.Equal("25", toolResult.Result!.ToString());
+        Assert.Equal("25", toolResult.ToString());
     }
 
     [Fact]
@@ -49,15 +42,9 @@ public class ToolingTests
         var args = new JsonObject { ["a"] = 10 };
         var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
 
-        await tooling.ExecuteAsync(toolCall);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var toolResult = await tooling.ExecuteAsync(toolCall);
 
-        Assert.Single(results);
-        var resultText = results[0].ToString();
+        var resultText = toolResult.ToString();
         Assert.Contains("Error calling tool", resultText);
     }
 
@@ -81,16 +68,9 @@ public class ToolingTests
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", "Weather_Lookup", args);
-        await tooling.ExecuteAsync(toolCall);
-        var results = new List<ToolResult>();
-        await foreach (var r in tooling.StreamResultsAsync())
-        {
-            results.Add(r);
-        }
+        var toolResult = await tooling.ExecuteAsync(toolCall);
 
-        Assert.Single(results);
-        var toolResult = results[0];
-        Assert.Equal("25", toolResult.Result!.ToString());
+        Assert.Equal("25", toolResult.ToString());
     }
 
     private class NullNameTool : Tool

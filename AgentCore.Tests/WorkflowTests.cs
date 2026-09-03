@@ -64,7 +64,7 @@ public class WorkflowTests
         var tooling = new MockTooling();
         tooling.Handler = (calls, ct) =>
         {
-            var results = calls.Select(c => new ToolResult(c.Id, new Text("Rainy"))).ToList();
+            var results = calls.Select(c => new ToolResult(c.Id, [new Text("Rainy")])).ToList();
             return Task.FromResult<IReadOnlyList<ToolResult>>(results);
         };
 
@@ -286,12 +286,12 @@ public class WorkflowTests
             if (call.Name == "slow_tool")
             {
                 await Task.Delay(150, ct);
-                return new List<ToolResult> { new(call.Id, new Text("SlowResult")) };
+                return new List<ToolResult> { new(call.Id, [new Text("SlowResult")]) };
             }
             else
             {
                 await Task.Delay(20, ct);
-                return new List<ToolResult> { new(call.Id, new Text("FastResult")) };
+                return new List<ToolResult> { new(call.Id, [new Text("FastResult")]) };
             }
         };
 

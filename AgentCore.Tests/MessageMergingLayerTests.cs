@@ -30,7 +30,7 @@ public class MessageMergingLayerTests
     public void MergeTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
         var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
-        var toolResult = new ToolResult("1", new Text("search result content"));
+        var toolResult = new ToolResult("1", [new Text("search result content")]);
 
         var input = new List<Message>
         {

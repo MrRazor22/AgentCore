@@ -59,18 +59,23 @@ namespace AgentCore
 
                 var msgEvents = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
                 assistantResponse = new (Role.Assistant);
+                var toolExecutionTasks = new List<Task<ToolResult>>();
 
                 await foreach (var content in assistantResponse.Receive(msgEvents, ct).ConfigureAwait(false))
                 { 
                     yield return content;
                     if (content is ToolCall toolCall)
-                        _ = _tooling.ExecuteAsync(toolCall, ct);
+                        toolExecutionTasks.Add(_tooling.ExecuteAsync(toolCall, ct));
                 }
 
                 await context.AddAsync([assistantResponse], ct).ConfigureAwait(false); 
 
-                await foreach (var result in _tooling.StreamResultsAsync(ct).ConfigureAwait(false))
+                while (toolExecutionTasks.Count > 0)
                 {
+                    var completedTask = await Task.WhenAny(toolExecutionTasks).ConfigureAwait(false);
+                    toolExecutionTasks.Remove(completedTask);
+                    var result = await completedTask.ConfigureAwait(false);
+
                     await context.AddAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
                     yield return result;
                 }

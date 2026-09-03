@@ -33,8 +33,8 @@ public class ContextPersistenceLayerTests
         var store = new InMemoryContextStore();
         store.Storage["session-1"] = new List<Message>
         {
-            new(Role.User, new Text("Hello from previous session")),
-            new(Role.Assistant, new Text("Welcome back!"))
+            new(Role.User, [new Text("Hello from previous session")]),
+            new(Role.Assistant, [new Text("Welcome back!")])
         };
 
         var innerContext = new MockMemoryProvider();
@@ -56,7 +56,7 @@ public class ContextPersistenceLayerTests
         var layer = new ContextPersistenceLayer(store, "session-2", autoRestore: true);
         layer.Attach(innerContext);
 
-        var userMessage = new Message(Role.User, new Text("New question"));
+        var userMessage = new Message(Role.User, [new Text("New question")]);
         await layer.AddAsync([userMessage]);
 
         Assert.True(store.Storage.ContainsKey("session-2"));
@@ -70,7 +70,7 @@ public class ContextPersistenceLayerTests
         var store = new InMemoryContextStore();
         store.Storage["session-3"] = new List<Message>
         {
-            new(Role.User, new Text("Previous message"))
+            new(Role.User, [new Text("Previous message")])
         };
 
         var innerContext = new MockMemoryProvider();
@@ -81,7 +81,7 @@ public class ContextPersistenceLayerTests
         Assert.Empty(messages);
 
         // Adding a message still saves only the new message
-        await layer.AddAsync([new Message(Role.User, new Text("Fresh message"))]);
+        await layer.AddAsync([new Message(Role.User, [new Text("Fresh message")])]);
         Assert.Single(store.Storage["session-3"]);
         Assert.Equal("Fresh message", store.Storage["session-3"][0].Contents[0].ToString());
     }
@@ -92,7 +92,7 @@ public class ContextPersistenceLayerTests
         var store = new InMemoryContextStore();
         store.Storage["session-manual"] = new List<Message>
         {
-            new(Role.User, new Text("Manual restore message"))
+            new(Role.User, [new Text("Manual restore message")])
         };
 
         var innerContext = new MockMemoryProvider();

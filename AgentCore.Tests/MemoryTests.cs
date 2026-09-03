@@ -156,7 +156,7 @@ public class MemoryTests
         // Arrange - contextWindow = 1000, maxSingleMessageTokens = 200 -> ~800 chars
         var context = new Context.ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
         string giantOutput = new string('A', 5000);
-        var toolResult = new Message(Role.Tool, [new ToolResult("call_1", new Text(giantOutput))]);
+        var toolResult = new Message(Role.Tool, [new ToolResult("call_1", [new Text(giantOutput)])]);
 
         // Act
         await context.AddAsync([toolResult]);
@@ -179,13 +179,13 @@ public class MemoryTests
         var longText = new Text(new string('Z', 100));
         var truncatedText = longText.Truncate(10);
         Assert.NotSame(longText, truncatedText);
-        Assert.Contains("Content truncated from 100 to 40 characters", truncatedText.ToString());
+        Assert.Contains("truncated", truncatedText.ToString());
 
         // 2. ToolResult truncation
-        var toolResult = new ToolResult("call_1", longText);
+        var toolResult = new ToolResult("call_1", [longText]);
         var truncatedResult = toolResult.Truncate(10);
         Assert.NotSame(toolResult, truncatedResult);
-        Assert.Contains("Content truncated from 100 to 40 characters", truncatedResult.ToString());
+        Assert.Contains("truncated", truncatedResult.ToString());
 
         // 3. ToolCall returns itself unchanged
         IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());
@@ -198,7 +198,7 @@ public class MemoryTests
         IContent longReasoning = new Reasoning(new string('R', 100));
         var truncatedReasoning = longReasoning.Truncate(10);
         Assert.NotSame(longReasoning, truncatedReasoning);
-        Assert.Contains("Reasoning truncated from 100 to 40 characters", truncatedReasoning.ToString());
+        Assert.Contains("truncated", truncatedReasoning.ToString());
     }
 
     [Fact]
@@ -208,11 +208,11 @@ public class MemoryTests
         var context = new Context.ChatContext(contextWindow: 10000);
 
         // Turn 1
-        var user1 = new Message(Role.User, new Text("Question 1"));
+        var user1 = new Message(Role.User, [new Text("Question 1")]);
         var assistant1 = new Message(Role.Assistant, [new Reasoning("Thought for Q1"), new Text("Answer 1")]);
 
         // Turn 2
-        var user2 = new Message(Role.User, new Text("Question 2"));
+        var user2 = new Message(Role.User, [new Text("Question 2")]);
         var assistant2 = new Message(Role.Assistant, [new Reasoning("Thought for Q2"), new Text("Answer 2")]);
 
         await context.AddAsync([user1, assistant1, user2, assistant2]);

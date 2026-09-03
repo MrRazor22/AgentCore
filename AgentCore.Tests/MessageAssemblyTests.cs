@@ -255,7 +255,7 @@ public class MessageAssemblyTests
     [Fact]
     public void Message_Serialization_SerializesCommittedContents()
     {
-        var message = new Message(Role.Assistant, new Text("Committed message"));
+        var message = new Message(Role.Assistant, [new Text("Committed message")]);
 
         var json = System.Text.Json.JsonSerializer.Serialize(message);
         Assert.Contains("\"role\":\"Assistant\"", json);
@@ -267,7 +267,7 @@ public class MessageAssemblyTests
     {
         var message = new Message(
             Role.Assistant,
-            new Text("Initial message")
+            [new Text("Initial message")]
         );
 
         Assert.Equal(Role.Assistant, message.Role);
@@ -280,9 +280,11 @@ public class MessageAssemblyTests
     {
         var message = new Message(
             Role.Assistant,
-            new Text("Part 1"),
-            new Reasoning("Part 2"),
-            new ToolCall("call_1", "test", new System.Text.Json.Nodes.JsonObject())
+            [
+                new Text("Part 1"),
+                new Reasoning("Part 2"),
+                new ToolCall("call_1", "test", new System.Text.Json.Nodes.JsonObject())
+            ]
         );
 
         Assert.Equal(3, message.Contents.Count);
