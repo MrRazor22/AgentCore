@@ -1,69 +1,127 @@
-using System.Runtime.CompilerServices; 
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Channels;
 
 namespace AgentCore.LLM.Chat;
 
-public sealed class StreamingMessage : Message
+public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
 {
-    public StreamingMessage(Role role = Role.Assistant) : base(role)
+    private readonly IAsyncEnumerable<IMessageEvent> _stream;
+
+    private record ActiveBlock(
+        IStreamingContent Content,
+        Action<IBlockDeltaEvent> OnDelta,
+        Action<Exception?> OnComplete);
+
+    public StreamingMessage(IAsyncEnumerable<IMessageEvent> stream, Role role = Role.Assistant) : base(role)
     {
+        _stream = stream ?? throw new ArgumentNullException(nameof(stream));
     }
 
     /// <summary>
-    /// Eagerly streams completed <see cref="IContent"/> blocks and seals the Message upon completion.
+    /// Returns an immutable snapshot of the currently accumulated message state.
     /// </summary>
-    public async IAsyncEnumerable<IContent> Receive(
-        IAsyncEnumerable<IMessageEvent> stream,
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(stream);
+    public Message ToMessage() => new(Role, _contents, Metadata);
 
-        var active = new Dictionary<int, IStreamingContent>();
+    /// <summary>
+    /// Directly enumerates completed <see cref="IContent"/> blocks from the underlying message event stream.
+    /// </summary>
+    public async IAsyncEnumerator<IContent> GetAsyncEnumerator(CancellationToken ct = default)
+    {
+        var active = new Dictionary<int, ActiveBlock>();
         var completed = new SortedDictionary<int, IContent>();
         string? id = null, model = null, finishReason = null;
         TokenUsage? usage = null;
 
-        await foreach (var evt in stream.WithCancellation(ct).ConfigureAwait(false))
+        var enumerator = _stream.WithCancellation(ct).ConfigureAwait(false).GetAsyncEnumerator();
+        try
         {
-            switch (evt)
+            while (true)
             {
-                case MessageStart s:
-                    Role = s.Role; id = s.Id; model = s.Model;
-                    break;
+                IMessageEvent evt;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync())
+                        break;
+                    evt = enumerator.Current;
+                }
+                catch (Exception ex)
+                {
+                    foreach (var block in active.Values)
+                        block.OnComplete(ex);
+                    throw;
+                }
 
-                case IBlockStartEvent s:
-                    if (!active.TryAdd(s.Index, s.CreateStream()))
-                        throw new InvalidOperationException($"Protocol violation: Block already started at index {s.Index}.");
-                    break;
+                switch (evt)
+                {
+                    case MessageStart s:
+                        Role = s.Role; id = s.Id; model = s.Model;
+                        break;
 
-                case IBlockDeltaEvent d:
-                    if (!active.TryGetValue(d.Index, out var blockStream))
-                        throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
-                    blockStream.Receive(d);
-                    break;
+                    case TextStart s:
+                    {
+                        var ch = Channel.CreateUnbounded<TextDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+                        var sb = new StringBuilder();
+                        var text = new StreamingText(ch.Reader, sb);
+                        if (!active.TryAdd(s.Index, new(text, d => { sb.Append(((TextDelta)d).Text); ch.Writer.TryWrite((TextDelta)d); }, ex => ch.Writer.TryComplete(ex))))
+                            throw new InvalidOperationException($"Protocol violation: Block already started at index {s.Index}.");
+                        break;
+                    }
 
-                case IBlockEndEvent e:
-                    if (!active.Remove(e.Index, out var endStream))
-                        throw new InvalidOperationException($"Protocol violation: Received End event for index {e.Index} before a Start event (or already ended).");
-                    endStream.Complete();
-                    var content = endStream.ToContent();
-                    completed[e.Index] = content;
-                    yield return content;
-                    break;
+                    case ReasoningStart s:
+                    {
+                        var ch = Channel.CreateUnbounded<ReasoningDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+                        var sb = new StringBuilder();
+                        var reasoning = new StreamingReasoning(ch.Reader, sb);
+                        if (!active.TryAdd(s.Index, new(reasoning, d => { sb.Append(((ReasoningDelta)d).Thought); ch.Writer.TryWrite((ReasoningDelta)d); }, ex => ch.Writer.TryComplete(ex))))
+                            throw new InvalidOperationException($"Protocol violation: Block already started at index {s.Index}.");
+                        break;
+                    }
 
-                case MessageEnd end:
-                    finishReason = end.FinishReason;
-                    usage = end.Usage;
-                    break;
+                    case ToolCallStart s:
+                    {
+                        var ch = Channel.CreateUnbounded<ToolCallDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+                        var args = new StringBuilder();
+                        var toolCall = new StreamingToolCall(s.Id, s.Name, ch.Reader, args);
+                        if (!active.TryAdd(s.Index, new(toolCall, d => { args.Append(((ToolCallDelta)d).Arguments); ch.Writer.TryWrite((ToolCallDelta)d); }, ex => ch.Writer.TryComplete(ex))))
+                            throw new InvalidOperationException($"Protocol violation: Block already started at index {s.Index}.");
+                        break;
+                    }
+
+                    case IBlockDeltaEvent d:
+                        if (!active.TryGetValue(d.Index, out var block))
+                            throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
+                        block.OnDelta(d);
+                        break;
+
+                    case IBlockEndEvent e:
+                        if (!active.Remove(e.Index, out var endBlock))
+                            throw new InvalidOperationException($"Protocol violation: Received End event for index {e.Index} before a Start event (or already ended).");
+                        endBlock.OnComplete(null);
+                        var content = endBlock.Content.ToContent();
+                        completed[e.Index] = content;
+                        yield return content;
+                        break;
+
+                    case MessageEnd end:
+                        finishReason = end.FinishReason;
+                        usage = end.Usage;
+                        break;
+                }
+            }
+
+            // Gracefully complete and yield any remaining unclosed blocks
+            foreach (var (idx, activeBlock) in active.OrderBy(x => x.Key))
+            {
+                activeBlock.OnComplete(null);
+                var content = activeBlock.Content.ToContent();
+                completed[idx] = content;
+                yield return content;
             }
         }
-
-        // Gracefully complete and yield any remaining unclosed blocks
-        foreach (var (idx, activeStream) in active.OrderBy(x => x.Key))
+        finally
         {
-            activeStream.Complete();
-            var content = activeStream.ToContent();
-            completed[idx] = content;
-            yield return content;
+            await enumerator.DisposeAsync();
         }
 
         _contents.AddRange(completed.Values);
@@ -73,12 +131,10 @@ public sealed class StreamingMessage : Message
     /// <summary>
     /// Asynchronously drains the stream to completion and returns this message with fully populated contents and metadata.
     /// </summary>
-    public async Task<Message> ToMessageAsync(
-        IAsyncEnumerable<IMessageEvent> stream,
-        CancellationToken ct = default)
+    public async Task<Message> ToMessageAsync(CancellationToken ct = default)
     {
-        await foreach (var _ in Receive(stream, ct).ConfigureAwait(false)) { }
-        return this;
+        await foreach (var _ in this.WithCancellation(ct).ConfigureAwait(false)) { }
+        return ToMessage();
     }
 }
  

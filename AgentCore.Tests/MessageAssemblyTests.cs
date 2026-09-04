@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
@@ -30,10 +31,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
+        await foreach (var item in message)
         {
             contents.Add(item);
         }
@@ -64,10 +65,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
+        await foreach (var item in message)
         {
             contents.Add(item);
         }
@@ -101,10 +102,10 @@ public class MessageAssemblyTests
             new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20))
         };
 
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
+        await foreach (var item in message)
         {
             contents.Add(item);
         }
@@ -123,19 +124,21 @@ public class MessageAssemblyTests
         Assert.Equal("stop", message.Metadata.FinishReason);
         Assert.Equal(10, message.Metadata.Usage?.InputTokens);
         Assert.Equal(20, message.Metadata.Usage?.OutputTokens);
+        Assert.Equal(30, message.Metadata.Usage?.TotalTokens);
     }
 
     [Fact]
-    public async Task Message_Receive_MultiBoundaryTransition_YieldsSettledContentsInOrder()
+    public async Task Message_AllBlocksInterleaved_CorrectlySeparatesAndPreservesTypes()
     {
         var sequence = new List<IMessageEvent>
         {
             new ReasoningStart(0),
-            new ReasoningDelta(0, "Step 1: Analyze"),
+            new ToolCallStart(1, "call_42", "Search"),
+            new ReasoningDelta(0, "I need to search first. "),
+            new ToolCallDelta(1, "{\"query\":"),
+            new ReasoningDelta(0, "Then analyze results."),
+            new ToolCallDelta(1, "\"dotnet 9\"}"),
             new ReasoningEnd(0),
-            new ToolCallStart(1, "call_1", "lookup"),
-            new ToolCallDelta(1, "{\"q\":"),
-            new ToolCallDelta(1, "\"test\"}"),
             new ToolCallEnd(1),
             new TextStart(2),
             new TextDelta(2, "The result is ready."),
@@ -143,10 +146,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
 
         var contents = new List<IContent>();
-        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
+        await foreach (var item in message)
         {
             contents.Add(item);
         }
@@ -188,10 +191,10 @@ public class MessageAssemblyTests
             new MessageEnd()
         };
 
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
 
         var yielded = new List<IContent>();
-        await foreach (var item in message.Receive(sequence.ToAsyncEnumerable()))
+        await foreach (var item in message)
         {
             yielded.Add(item);
         }
@@ -214,18 +217,18 @@ public class MessageAssemblyTests
     {
         // 1. Delta without explicit start throws protocol violation
         var bad1 = new IMessageEvent[] { new TextDelta(0, "graceful text"), new TextEnd(0) };
-        var msg1 = new StreamingMessage(Role.Assistant);
+        var msg1 = new StreamingMessage(bad1.ToAsyncEnumerable(), Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg1.Receive(bad1.ToAsyncEnumerable())) { }
+            await foreach (var _ in msg1) { }
         });
 
         // 2. Stray end without start throws protocol violation
         var bad2 = new IMessageEvent[] { new TextEnd(0) };
-        var msg2 = new StreamingMessage(Role.Assistant);
+        var msg2 = new StreamingMessage(bad2.ToAsyncEnumerable(), Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg2.Receive(bad2.ToAsyncEnumerable())) { }
+            await foreach (var _ in msg2) { }
         });
 
         // 3. Duplicate start throws protocol violation
@@ -237,17 +240,17 @@ public class MessageAssemblyTests
             new TextDelta(0, " second"),
             new TextEnd(0)
         };
-        var msg3 = new StreamingMessage(Role.Assistant);
+        var msg3 = new StreamingMessage(bad3.ToAsyncEnumerable(), Role.Assistant);
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in msg3.Receive(bad3.ToAsyncEnumerable())) { }
+            await foreach (var _ in msg3) { }
         });
 
         // 4. Unclosed block on MessageEnd is gracefully completed and yielded
         var bad4 = new IMessageEvent[] { new TextStart(0), new TextDelta(0, "unclosed"), new MessageEnd() };
-        var msg4 = new StreamingMessage(Role.Assistant);
+        var msg4 = new StreamingMessage(bad4.ToAsyncEnumerable(), Role.Assistant);
         var contents4 = new List<IContent>();
-        await foreach (var c in msg4.Receive(bad4.ToAsyncEnumerable())) contents4.Add(c);
+        await foreach (var c in msg4) contents4.Add(c);
         Assert.Equal("unclosed", Assert.Single(contents4.OfType<Text>()).Value);
         Assert.Equal("unclosed", Assert.Single(msg4.Contents.OfType<Text>()).Value);
     }
@@ -297,23 +300,39 @@ public class MessageAssemblyTests
     public void StreamingContent_StandaloneClasses_AccumulateAndProduceContent()
     {
         // StreamingText
-        var stText = new StreamingText();
-        stText.Receive(new TextDelta(0, "Hello, "));
-        stText.Receive(new TextDelta(0, "world!"));
+        // StreamingText
+        var chText = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
+        var sbText = new StringBuilder();
+        var stText = new StreamingText(chText.Reader, sbText);
+        sbText.Append("Hello, ");
+        chText.Writer.TryWrite(new TextDelta(0, "Hello, "));
+        sbText.Append("world!");
+        chText.Writer.TryWrite(new TextDelta(0, "world!"));
+        chText.Writer.TryComplete();
         var textContent = stText.ToContent();
         Assert.Equal("Hello, world!", textContent.Value);
 
         // StreamingReasoning
-        var stReasoning = new StreamingReasoning();
-        stReasoning.Receive(new ReasoningDelta(0, "Plan step 1. "));
-        stReasoning.Receive(new ReasoningDelta(0, "Plan step 2."));
+        var chReasoning = System.Threading.Channels.Channel.CreateUnbounded<ReasoningDelta>();
+        var sbReasoning = new StringBuilder();
+        var stReasoning = new StreamingReasoning(chReasoning.Reader, sbReasoning);
+        sbReasoning.Append("Plan step 1. ");
+        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Plan step 1. "));
+        sbReasoning.Append("Plan step 2.");
+        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Plan step 2."));
+        chReasoning.Writer.TryComplete();
         var reasoningContent = stReasoning.ToContent();
         Assert.Equal("Plan step 1. Plan step 2.", reasoningContent.Thought);
 
         // StreamingToolCall
-        var stTool = new StreamingToolCall("call_1", "calc");
-        stTool.Receive(new ToolCallDelta(0, "{\"expr\":"));
-        stTool.Receive(new ToolCallDelta(0, "\"1 + 1\"}"));
+        var chTool = System.Threading.Channels.Channel.CreateUnbounded<ToolCallDelta>();
+        var sbTool = new StringBuilder();
+        var stTool = new StreamingToolCall("call_1", "calc", chTool.Reader, sbTool);
+        sbTool.Append("{\"expr\":");
+        chTool.Writer.TryWrite(new ToolCallDelta(0, "{\"expr\":"));
+        sbTool.Append("\"1 + 1\"}");
+        chTool.Writer.TryWrite(new ToolCallDelta(0, "\"1 + 1\"}"));
+        chTool.Writer.TryComplete();
         var toolContent = stTool.ToContent();
         Assert.Equal("call_1", toolContent.Id);
         Assert.Equal("calc", toolContent.Name);
@@ -324,10 +343,14 @@ public class MessageAssemblyTests
     public async Task StreamingContent_ChannelBackedDeltas_YieldsInRealTime_AndCompletes()
     {
         // 1. StreamingText
-        var stText = new StreamingText();
-        stText.Receive(new TextDelta(0, "Hello, "));
-        stText.Receive(new TextDelta(0, "world!"));
-        stText.Complete();
+        var chText = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
+        var sbText = new StringBuilder();
+        var stText = new StreamingText(chText.Reader, sbText);
+        sbText.Append("Hello, ");
+        chText.Writer.TryWrite(new TextDelta(0, "Hello, "));
+        sbText.Append("world!");
+        chText.Writer.TryWrite(new TextDelta(0, "world!"));
+        chText.Writer.TryComplete();
 
         var textDeltas = new List<string>();
         await foreach (var delta in stText)
@@ -340,10 +363,14 @@ public class MessageAssemblyTests
         Assert.Equal("Hello, world!", stText.ToString());
 
         // 2. StreamingReasoning
-        var stReasoning = new StreamingReasoning();
-        stReasoning.Receive(new ReasoningDelta(0, "Think 1. "));
-        stReasoning.Receive(new ReasoningDelta(0, "Think 2."));
-        stReasoning.Complete();
+        var chReasoning = System.Threading.Channels.Channel.CreateUnbounded<ReasoningDelta>();
+        var sbReasoning = new StringBuilder();
+        var stReasoning = new StreamingReasoning(chReasoning.Reader, sbReasoning);
+        sbReasoning.Append("Think 1. ");
+        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Think 1. "));
+        sbReasoning.Append("Think 2.");
+        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Think 2."));
+        chReasoning.Writer.TryComplete();
 
         var reasoningDeltas = new List<string>();
         await foreach (var delta in stReasoning)
@@ -354,10 +381,14 @@ public class MessageAssemblyTests
         Assert.Equal("Think 1. Think 2.", stReasoning.ToContent().Thought);
 
         // 3. StreamingToolCall
-        var stTool = new StreamingToolCall("call_99", "fn");
-        stTool.Receive(new ToolCallDelta(0, "{\"x\":"));
-        stTool.Receive(new ToolCallDelta(0, "42}"));
-        stTool.Complete();
+        var chTool = System.Threading.Channels.Channel.CreateUnbounded<ToolCallDelta>();
+        var sbTool = new StringBuilder();
+        var stTool = new StreamingToolCall("call_99", "fn", chTool.Reader, sbTool);
+        sbTool.Append("{\"x\":");
+        chTool.Writer.TryWrite(new ToolCallDelta(0, "{\"x\":"));
+        sbTool.Append("42}");
+        chTool.Writer.TryWrite(new ToolCallDelta(0, "42}"));
+        chTool.Writer.TryComplete();
 
         var toolDeltas = new List<string>();
         await foreach (var delta in stTool)
@@ -374,11 +405,56 @@ public class MessageAssemblyTests
     [Fact]
     public void StreamingContent_Truncate_ReturnsMaterializedContent()
     {
-        var stText = new StreamingText();
-        stText.Receive(new TextDelta(0, "This is a very long text that will be truncated."));
+        var ch = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
+        var sb = new StringBuilder("This is a very long text that will be truncated.");
+        var stText = new StreamingText(ch.Reader, sb);
         
         var truncated = stText.Truncate(3, "...");
         Assert.IsType<Text>(truncated);
         Assert.Contains("...", ((Text)truncated).Value);
+    }
+
+    [Fact]
+    public async Task StreamingContent_CompleteWithError_PropagatesExceptionToEnumerator()
+    {
+        var ch = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
+        var sb = new StringBuilder("Part 1. ");
+        var stText = new StreamingText(ch.Reader, sb);
+        ch.Writer.TryWrite(new TextDelta(0, "Part 1. "));
+        ch.Writer.TryComplete(new InvalidOperationException("Provider exploded"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        {
+            await foreach (var delta in stText)
+            {
+                // read
+            }
+        });
+
+        Assert.Equal("Provider exploded", ex.Message);
+    }
+
+    [Fact]
+    public async Task StreamingMessage_ProviderException_CompletesActiveStreamsWithError()
+    {
+        static async IAsyncEnumerable<IMessageEvent> FailingStream()
+        {
+            yield return new TextStart(0);
+            yield return new TextDelta(0, "First chunk");
+            await Task.Yield();
+            throw new HttpRequestException("Connection terminated abruptly");
+        }
+
+        var msg = new StreamingMessage(FailingStream(), Role.Assistant);
+
+        // When the provider throws, StreamingMessage rethrows on enumeration
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(async () =>
+        {
+            await foreach (var content in msg)
+            {
+                // Never reaches yield because TextEnd was never emitted
+            }
+        });
+        Assert.Equal("Connection terminated abruptly", ex.Message);
     }
 }

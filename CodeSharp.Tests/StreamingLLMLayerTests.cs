@@ -73,10 +73,10 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(layer.StreamAsync(messages), Role.Assistant);
 
         var streamedContents = new List<IContent>();
-        await foreach (var content in message.Receive(layer.StreamAsync(messages)))
+        await foreach (var content in message)
         {
             streamedContents.Add(content);
         }
@@ -116,9 +116,9 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var message = new StreamingMessage(Role.Assistant);
+        var message = new StreamingMessage(layer.StreamAsync(messages), Role.Assistant);
 
-        await foreach (var _ in message.Receive(layer.StreamAsync(messages)))
+        await foreach (var _ in message)
         {
         }
 
@@ -147,8 +147,8 @@ public class StreamingLLMLayerTests
         var messages = new List<Message>();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            var message = new StreamingMessage(Role.Assistant);
-            await foreach (var unused in message.Receive(layer.StreamAsync(messages, ct: cts.Token), cts.Token))
+            var message = new StreamingMessage(layer.StreamAsync(messages, ct: cts.Token), Role.Assistant);
+            await foreach (var unused in message.WithCancellation(cts.Token))
             {
             }
         });
