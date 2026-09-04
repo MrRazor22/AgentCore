@@ -1,13 +1,13 @@
 using AgentCore.Context;
-using AgentCore.Layers.Context;
+using AgentCore.Layers.Chat;
 using AgentCore.LLM.Chat;
 using Xunit;
 
 namespace AgentCore.Tests;
 
-public class ContextPersistenceLayerTests
+public class ChatPersistenceLayerTests
 {
-    private class InMemoryContextStore : IContextStore
+    private class InMemoryChatStore : IChatStore
     {
         public Dictionary<string, List<Message>> Storage { get; } = new();
 
@@ -30,15 +30,15 @@ public class ContextPersistenceLayerTests
     [Fact]
     public async Task GetMessagesAsync_RestoresExistingMessagesFromStore()
     {
-        var store = new InMemoryContextStore();
-        store.Storage["session-1"] = new List<Message>
-        {
+        var store = new InMemoryChatStore();
+        store.Storage["session-1"] =
+        [
             new(Role.User, [new Text("Hello from previous session")]),
             new(Role.Assistant, [new Text("Welcome back!")])
-        };
+        ];
 
         var innerContext = new MockMemoryProvider();
-        var layer = new ContextPersistenceLayer(store, "session-1", autoRestore: true);
+        var layer = new ChatPersistenceLayer(store, "session-1", autoRestore: true);
         layer.Attach(innerContext);
 
         var messages = await layer.GetMessagesAsync();
@@ -51,9 +51,9 @@ public class ContextPersistenceLayerTests
     [Fact]
     public async Task AddAsync_SavesSnapshotToStore()
     {
-        var store = new InMemoryContextStore();
+        var store = new InMemoryChatStore();
         var innerContext = new MockMemoryProvider();
-        var layer = new ContextPersistenceLayer(store, "session-2", autoRestore: true);
+        var layer = new ChatPersistenceLayer(store, "session-2", autoRestore: true);
         layer.Attach(innerContext);
 
         var userMessage = new Message(Role.User, [new Text("New question")]);
@@ -67,69 +67,76 @@ public class ContextPersistenceLayerTests
     [Fact]
     public async Task AutoRestore_Disabled_DoesNotLoadExistingMessages()
     {
-        var store = new InMemoryContextStore();
-        store.Storage["session-3"] = new List<Message>
-        {
+        var store = new InMemoryChatStore();
+        store.Storage["session-3"] =
+        [
             new(Role.User, [new Text("Previous message")])
-        };
+        ];
 
         var innerContext = new MockMemoryProvider();
-        var layer = new ContextPersistenceLayer(store, "session-3", autoRestore: false);
+        var layer = new ChatPersistenceLayer(store, "session-3", autoRestore: false);
         layer.Attach(innerContext);
 
         var messages = await layer.GetMessagesAsync();
         Assert.Empty(messages);
 
-        // Adding a message still saves only the new message
         await layer.AddAsync([new Message(Role.User, [new Text("Fresh message")])]);
         Assert.Single(store.Storage["session-3"]);
         Assert.Equal("Fresh message", store.Storage["session-3"][0].Contents[0].ToString());
     }
 
     [Fact]
-    public async Task RestoreAsync_RestoresExistingMessagesOnDemand()
+    public async Task RestoreAsync_RestoresWorkingContext_FromLatestCompactedSummary()
     {
-        var store = new InMemoryContextStore();
-        store.Storage["session-manual"] = new List<Message>
-        {
-            new(Role.User, [new Text("Manual restore message")])
-        };
+        var store = new InMemoryChatStore();
+        // Session history with multiple compactions
+        store.Storage["session-compacted"] =
+        [
+            new(Role.System, [new Text("System instruction")]),
+            new(Role.User, [new Text("First message")]),
+            new(Role.Assistant, [new Text("First answer")]),
+            new(Role.User, [new CompactedSummary("Summary 1")]),
+            new(Role.User, [new Text("Second message")]),
+            new(Role.Assistant, [new Text("Second answer")]),
+            new(Role.User, [new CompactedSummary("Latest Summary 2")]),
+            new(Role.User, [new Text("Third message")]),
+            new(Role.Assistant, [new Text("Third answer")])
+        ];
 
         var innerContext = new MockMemoryProvider();
-        var layer = new ContextPersistenceLayer(store, "session-manual", autoRestore: false);
+        var layer = new ChatPersistenceLayer(store, "session-compacted", autoRestore: true);
         layer.Attach(innerContext);
 
-        // Before RestoreAsync
-        var before = await layer.GetMessagesAsync();
-        Assert.Empty(before);
+        var workingContext = await layer.GetMessagesAsync();
 
-        // Explicit Restore
-        await layer.RestoreAsync();
-
-        var after = await layer.GetMessagesAsync();
-        Assert.Single(after);
-        Assert.Equal("Manual restore message", after[0].Contents[0].ToString());
+        // Should reconstruct: System + Latest Summary 2 + Third message + Third answer
+        Assert.Equal(4, workingContext.Count);
+        Assert.Equal(Role.System, workingContext[0].Role);
+        Assert.IsType<CompactedSummary>(workingContext[1].Contents[0]);
+        Assert.Equal("Latest Summary 2", workingContext[1].Contents[0].ToString());
+        Assert.Equal("Third message", workingContext[2].Contents[0].ToString());
+        Assert.Equal("Third answer", workingContext[3].Contents[0].ToString());
     }
 
     [Fact]
     public void Constructor_InvalidArguments_ThrowsException()
     {
-        var store = new InMemoryContextStore();
+        var store = new InMemoryChatStore();
 
-        Assert.Throws<ArgumentNullException>(() => new ContextPersistenceLayer(null!, "session"));
-        Assert.Throws<ArgumentException>(() => new ContextPersistenceLayer(store, ""));
-        Assert.Throws<ArgumentException>(() => new ContextPersistenceLayer(store, "   "));
+        Assert.Throws<ArgumentNullException>(() => new ChatPersistenceLayer(null!, "session"));
+        Assert.Throws<ArgumentException>(() => new ChatPersistenceLayer(store, ""));
+        Assert.Throws<ArgumentException>(() => new ChatPersistenceLayer(store, "   "));
     }
 
     [Fact]
     public void BuilderExtension_RegistersLayerProperly()
     {
-        var store = new InMemoryContextStore();
+        var store = new InMemoryChatStore();
         var mockLLM = new MockLLMProvider();
 
         var agent = new Agent.Builder()
             .WithLLM(_ => mockLLM)
-            .AddContextPersistence(store, "session-builder-test")
+            .AddChatPersistence(store, "session-builder-test")
             .Build();
 
         Assert.NotNull(agent);

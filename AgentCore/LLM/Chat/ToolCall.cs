@@ -26,35 +26,5 @@ namespace AgentCore.LLM.Chat
             var args = string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"));
             return $"{Name}({args})";
         }
-
-        public sealed class Stream(string id, string name) : IStreamingContent
-        {
-            private readonly StringBuilder _args = new();
-            public void Recieve(IBlockDeltaEvent delta)
-            {
-                if (delta is not ToolCallDelta toolCall)
-                    throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(ToolCallDelta)} but received {delta.GetType().Name}.");
-                _args.Append(toolCall.Arguments);
-            }
-
-            public IContent ToContent()
-            {
-                var raw = _args.ToString();
-                JsonObject? args = null;
-                if (!string.IsNullOrWhiteSpace(raw))
-                {
-                    try
-                    {
-                        args = JsonNode.Parse(raw)?.AsObject();
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new FormatException($"Malformed JSON arguments for tool '{name}' (id: '{id}'): {raw}", ex);
-                    }
-                }
-
-                return new ToolCall(id, name, args ?? new JsonObject());
-            }
-        }
     }
 }

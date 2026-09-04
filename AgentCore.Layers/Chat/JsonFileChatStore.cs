@@ -1,9 +1,9 @@
 using System.Text.Json;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Layers.Context;
+namespace AgentCore.Layers.Chat;
 
-public sealed class JsonFileContextStore(string storageDirectory) : IContextStore
+public sealed class JsonFileChatStore(string storageDirectory) : IChatStore
 {
     private readonly string _storageDirectory = !string.IsNullOrWhiteSpace(storageDirectory)
         ? storageDirectory

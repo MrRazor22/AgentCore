@@ -63,7 +63,7 @@ public class Summarizer : ICompactor
         var lastMessage = original.Count > (systemMessage != null ? 2 : 1) ? original[^1] : null;
 
         if (systemMessage != null) result.Add(systemMessage);
-        result.Add(new Message(Role.User, [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")]));
+        result.Add(new Message(Role.User, [new CompactedSummary($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")]));
         if (lastMessage != null && lastMessage.Role != Role.System)
         {
             result.Add(lastMessage);

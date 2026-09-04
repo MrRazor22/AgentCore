@@ -11,8 +11,6 @@
 		<ProjectReference Include="..\AgentCore\AgentCore.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="Context\" />
-	</ItemGroup>
+
 
 </Project>

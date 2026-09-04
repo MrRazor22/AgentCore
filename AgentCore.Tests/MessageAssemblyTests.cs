@@ -292,4 +292,93 @@ public class MessageAssemblyTests
         Assert.IsType<Reasoning>(message.Contents[1]);
         Assert.IsType<ToolCall>(message.Contents[2]);
     }
+
+    [Fact]
+    public void StreamingContent_StandaloneClasses_AccumulateAndProduceContent()
+    {
+        // StreamingText
+        var stText = new StreamingText();
+        stText.Receive(new TextDelta(0, "Hello, "));
+        stText.Receive(new TextDelta(0, "world!"));
+        var textContent = stText.ToContent();
+        Assert.Equal("Hello, world!", textContent.Value);
+
+        // StreamingReasoning
+        var stReasoning = new StreamingReasoning();
+        stReasoning.Receive(new ReasoningDelta(0, "Plan step 1. "));
+        stReasoning.Receive(new ReasoningDelta(0, "Plan step 2."));
+        var reasoningContent = stReasoning.ToContent();
+        Assert.Equal("Plan step 1. Plan step 2.", reasoningContent.Thought);
+
+        // StreamingToolCall
+        var stTool = new StreamingToolCall("call_1", "calc");
+        stTool.Receive(new ToolCallDelta(0, "{\"expr\":"));
+        stTool.Receive(new ToolCallDelta(0, "\"1 + 1\"}"));
+        var toolContent = stTool.ToContent();
+        Assert.Equal("call_1", toolContent.Id);
+        Assert.Equal("calc", toolContent.Name);
+        Assert.Equal("1 + 1", toolContent.Arguments["expr"]?.ToString());
+    }
+
+    [Fact]
+    public async Task StreamingContent_ChannelBackedDeltas_YieldsInRealTime_AndCompletes()
+    {
+        // 1. StreamingText
+        var stText = new StreamingText();
+        stText.Receive(new TextDelta(0, "Hello, "));
+        stText.Receive(new TextDelta(0, "world!"));
+        stText.Complete();
+
+        var textDeltas = new List<string>();
+        await foreach (var delta in stText)
+        {
+            textDeltas.Add(delta.Text);
+        }
+        Assert.Equal(["Hello, ", "world!"], textDeltas);
+        Assert.Equal("Hello, world!", stText.ToContent().Value);
+        Assert.True(stText.EstimateTokens() > 0);
+        Assert.Equal("Hello, world!", stText.ToString());
+
+        // 2. StreamingReasoning
+        var stReasoning = new StreamingReasoning();
+        stReasoning.Receive(new ReasoningDelta(0, "Think 1. "));
+        stReasoning.Receive(new ReasoningDelta(0, "Think 2."));
+        stReasoning.Complete();
+
+        var reasoningDeltas = new List<string>();
+        await foreach (var delta in stReasoning)
+        {
+            reasoningDeltas.Add(delta.Thought);
+        }
+        Assert.Equal(["Think 1. ", "Think 2."], reasoningDeltas);
+        Assert.Equal("Think 1. Think 2.", stReasoning.ToContent().Thought);
+
+        // 3. StreamingToolCall
+        var stTool = new StreamingToolCall("call_99", "fn");
+        stTool.Receive(new ToolCallDelta(0, "{\"x\":"));
+        stTool.Receive(new ToolCallDelta(0, "42}"));
+        stTool.Complete();
+
+        var toolDeltas = new List<string>();
+        await foreach (var delta in stTool)
+        {
+            toolDeltas.Add(delta.Arguments);
+        }
+        Assert.Equal(["{\"x\":", "42}"], toolDeltas);
+        var toolCall = stTool.ToContent();
+        Assert.Equal("call_99", toolCall.Id);
+        Assert.Equal("fn", toolCall.Name);
+        Assert.Equal("42", toolCall.Arguments["x"]?.ToString());
+    }
+
+    [Fact]
+    public void StreamingContent_Truncate_ReturnsMaterializedContent()
+    {
+        var stText = new StreamingText();
+        stText.Receive(new TextDelta(0, "This is a very long text that will be truncated."));
+        
+        var truncated = stText.Truncate(3, "...");
+        Assert.IsType<Text>(truncated);
+        Assert.Contains("...", ((Text)truncated).Value);
+    }
 }

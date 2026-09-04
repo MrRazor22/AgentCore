@@ -1,14 +1,14 @@
-using AgentCore.Layers.Context;
+using AgentCore.Layers.Chat;
 using AgentCore.LLM.Chat;
 using Xunit;
 
 namespace AgentCore.Tests;
 
-public class JsonFileContextStoreTests : IDisposable
+public class JsonFileChatStoreTests : IDisposable
 {
     private readonly string _tempDir;
 
-    public JsonFileContextStoreTests()
+    public JsonFileChatStoreTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), "agentcore_tests_" + Guid.NewGuid().ToString("N"));
     }
@@ -24,7 +24,7 @@ public class JsonFileContextStoreTests : IDisposable
     [Fact]
     public async Task SaveAndLoad_PersistsAndRestoresMessages()
     {
-        var store = new JsonFileContextStore(_tempDir);
+        var store = new JsonFileChatStore(_tempDir);
         var messages = new List<Message>
         {
             new(Role.User, [new Text("Hello")]),
@@ -45,7 +45,7 @@ public class JsonFileContextStoreTests : IDisposable
     [Fact]
     public async Task Load_NonExistentSession_ReturnsNull()
     {
-        var store = new JsonFileContextStore(_tempDir);
+        var store = new JsonFileChatStore(_tempDir);
         var loaded = await store.LoadAsync("non-existent");
         Assert.Null(loaded);
     }
@@ -53,7 +53,7 @@ public class JsonFileContextStoreTests : IDisposable
     [Fact]
     public void Constructor_InvalidDirectory_Throws()
     {
-        Assert.Throws<ArgumentException>(() => new JsonFileContextStore(""));
-        Assert.Throws<ArgumentException>(() => new JsonFileContextStore("   "));
+        Assert.Throws<ArgumentException>(() => new JsonFileChatStore(""));
+        Assert.Throws<ArgumentException>(() => new JsonFileChatStore("   "));
     }
 }

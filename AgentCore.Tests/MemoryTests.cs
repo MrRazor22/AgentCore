@@ -83,7 +83,7 @@ public class MemoryTests
         // Should have System instructions + 1 summary message + secondUser
         Assert.True(prepared.Count >= 3);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ToString());
-        Assert.IsType<Text>(prepared[1].Contents[0]);
+        Assert.IsAssignableFrom<Text>(prepared[1].Contents[0]);
         Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ToString());
         Assert.Equal(new string('B', 300), prepared[^1].Contents[0].ToString());
     }
@@ -141,7 +141,7 @@ public class MemoryTests
         // Assert
         Assert.Equal(3, prepared.Count);
         Assert.Equal("Be helpful.", prepared[0].Contents[0].ToString());
-        Assert.IsType<Text>(prepared[1].Contents[0]);
+        Assert.IsAssignableFrom<Text>(prepared[1].Contents[0]);
         Assert.Contains("This is the compacted summary of history.", prepared[1].Contents[0].ToString());
         Assert.Equal(new string('B', 300), prepared[2].Contents[0].ToString());
 
@@ -199,6 +199,37 @@ public class MemoryTests
         var truncatedReasoning = longReasoning.Truncate(10);
         Assert.NotSame(longReasoning, truncatedReasoning);
         Assert.Contains("truncated", truncatedReasoning.ToString());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(10)]
+    [InlineData(25)]
+    [InlineData(50)]
+    public void Text_Truncate_AlwaysSatisfiesBudgetInvariant(int maxTokens)
+    {
+        var text = new Text(string.Join("\n", Enumerable.Range(1, 200).Select(i => $"Line {i}: some log payload content here")));
+        var truncated = (Text)text.Truncate(maxTokens);
+
+        Assert.True(truncated.EstimateTokens() <= maxTokens,
+            $"Expected EstimateTokens() ({truncated.EstimateTokens()}) <= maxTokens ({maxTokens})");
+    }
+
+    [Fact]
+    public void Text_Truncate_PreservesHeadAndTail()
+    {
+        var content = "HEAD_START" + new string('x', 500) + "TAIL_END";
+        var text = new Text(content);
+
+        var truncated = (Text)text.Truncate(30);
+        var str = truncated.ToString();
+
+        Assert.StartsWith("HEAD_START", str);
+        Assert.EndsWith("TAIL_END", str);
+        Assert.Contains("truncated", str);
+        Assert.True(truncated.EstimateTokens() <= 30);
     }
 
     [Fact]

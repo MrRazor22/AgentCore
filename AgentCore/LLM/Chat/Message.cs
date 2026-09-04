@@ -9,6 +9,7 @@ public enum Role { System, Assistant, User, Tool }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(Text), "text")]
+[JsonDerivedType(typeof(CompactedSummary), "compactedSummary")]
 [JsonDerivedType(typeof(ToolCall), "toolCall")]
 [JsonDerivedType(typeof(ToolResult), "toolResult")]
 [JsonDerivedType(typeof(Reasoning), "reasoning")]

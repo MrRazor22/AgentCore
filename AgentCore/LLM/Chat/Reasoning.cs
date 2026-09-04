@@ -21,23 +21,21 @@ namespace AgentCore.LLM.Chat
                 return this;
 
             notice ??= "\n... [truncated]";
-            int noticeTokens = (int)Math.Ceiling(notice.Length / (double)CharsPerToken);
-            int contentBudget = Math.Max(0, maxTokens - noticeTokens);
-            int maxChars = contentBudget * CharsPerToken;
+            int maxChars = Math.Max(0, maxTokens * CharsPerToken - notice.Length);
 
-            return new Reasoning(Thought[..maxChars] + notice);
-        }
-
-        public sealed class Stream : IStreamingContent
-        {
-            private readonly StringBuilder _sb = new();
-            public void Recieve(IBlockDeltaEvent delta)
+            if (maxChars <= 0)
             {
-                if (delta is not ReasoningDelta reasoning)
-                    throw new InvalidOperationException($"Protocol violation: Stream expected {nameof(ReasoningDelta)} but received {delta.GetType().Name}.");
-                _sb.Append(reasoning.Thought);
+                int cappedNoticeLen = Math.Min(notice.Length, maxTokens * CharsPerToken);
+                return new Reasoning(notice[..cappedNoticeLen]);
             }
-            public IContent ToContent() => new Reasoning(_sb.ToString());
+
+            if (maxChars >= Thought.Length)
+                return this;
+
+            int headChars = maxChars / 2;
+            int tailChars = maxChars - headChars;
+
+            return new Reasoning(Thought[..headChars] + notice + Thought[^tailChars..]);
         }
     }
 }

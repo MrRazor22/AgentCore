@@ -2,11 +2,6 @@ using System.Runtime.CompilerServices;
 
 namespace AgentCore.LLM.Chat;
 
-public interface IStreamingContent
-{
-    void Recieve(IBlockDeltaEvent delta);
-    IContent ToContent();
-}
 public sealed class StreamingMessage : Message
 {
     public StreamingMessage(Role role = Role.Assistant) : base(role)
@@ -43,12 +38,13 @@ public sealed class StreamingMessage : Message
                 case IBlockDeltaEvent d:
                     if (!active.TryGetValue(d.Index, out var blockStream))
                         throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
-                    blockStream.Recieve(d);
+                    blockStream.Receive(d);
                     break;
 
                 case IBlockEndEvent e:
                     if (!active.Remove(e.Index, out var endStream))
                         throw new InvalidOperationException($"Protocol violation: Received End event for index {e.Index} before a Start event (or already ended).");
+                    endStream.Complete();
                     var content = endStream.ToContent();
                     completed[e.Index] = content;
                     yield return content;
@@ -64,6 +60,7 @@ public sealed class StreamingMessage : Message
         // Gracefully complete and yield any remaining unclosed blocks
         foreach (var (idx, activeStream) in active.OrderBy(x => x.Key))
         {
+            activeStream.Complete();
             var content = activeStream.ToContent();
             completed[idx] = content;
             yield return content;
