@@ -8,7 +8,7 @@ using AgentCore.Tools;
 using AgentCore.Context;
 using Spectre.Console;
 using CodeSharp.UI;
-using AgentCore.Layers.Context;
+using AgentCore.Layers.Chat;
 using AgentCore.Layers.LLM;
 using Serilog;
 using Microsoft.Extensions.Logging;
@@ -114,8 +114,6 @@ internal class App
                 baseUrl += "/";
             }
 
-            var streamingLayer = new StreamingEventLayer<object>();
-
             // Universal PowerShell execution tool with workspace boundary enforcement
             var shellTool = new CodeSharp.Tools.ShellTool(workspacePath);
             var skillManager = new SkillManager(workspacePath);
@@ -142,7 +140,7 @@ internal class App
             });
 
             var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
-            var sessionStore = new JsonFileContextStore(sessionsDir);
+            var sessionStore = new JsonFileChatStore(sessionsDir);
             var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
 
             var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
@@ -153,10 +151,9 @@ internal class App
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddContextPersistence(sessionStore, Guid.NewGuid().ToString())
+                .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())
                 .AddLLMLayer(new ToolCallDetectionLayer())
-                .AddLLMLayer(streamingLayer)
                 .AddLLMLayer(new MessageCoalescingLayer())
                 .WithTools(shellTool)
                 .WithTools(skillTool)
@@ -172,7 +169,7 @@ internal class App
                 )
                 .Build();
 
-            var chatUi = new ChatUI(agent, config.Model, workspacePath, streamingLayer, formatter);
+            var chatUi = new ChatUI(agent, config.Model, workspacePath, formatter);
             await chatUi.RunAsync();
         }
         catch (Exception ex)

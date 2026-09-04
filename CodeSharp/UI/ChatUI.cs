@@ -18,15 +18,13 @@ public class ChatUI
     private readonly IAgent _agent;
     private readonly string _modelName;
     private readonly string _workspacePath;
-    private readonly StreamingEventLayer<object> _streamingLayer;
     private readonly IToolDisplayFormatter _formatter;
 
-    public ChatUI(IAgent agent, string modelName, string workspacePath, StreamingEventLayer<object> streamingLayer, IToolDisplayFormatter formatter)
+    public ChatUI(IAgent agent, string modelName, string workspacePath, IToolDisplayFormatter formatter)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _modelName = modelName;
         _workspacePath = workspacePath;
-        _streamingLayer = streamingLayer ?? throw new ArgumentNullException(nameof(streamingLayer));
         _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
     }
 
@@ -83,15 +81,7 @@ public class ChatUI
                 }
             });
 
-            var channel = Channel.CreateUnbounded<object>(new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                AllowSynchronousContinuations = false
-            });
-
             var renderer = new ConsoleStreamRenderer(_formatter);
-            var renderTask = RenderStreamAsync(renderer, channel.Reader, turnCts.Token);
-            _streamingLayer.Writer = channel.Writer;
 
             try
             {
@@ -99,30 +89,37 @@ public class ChatUI
                 {
                     await foreach (var content in _agent.InvokeStreamingAsync(new AgentText(input), turnCts.Token))
                     {
-                        // Stream execution is driven by pulling items from the high-level enumerator.
-                        // Raw token rendering is handled out-of-band by the channel observer.
-                        // Tool results are written into the same channel so they are rendered in
-                        // strict FIFO order after any preceding LLM token deltas.
-                        if (content is AgentCore.LLM.Chat.ToolResult toolResult)
+                        switch (content)
                         {
-                            channel.Writer.TryWrite(toolResult);
+                            case StreamingReasoning reasoning:
+                                await foreach (var delta in reasoning.WithCancellation(turnCts.Token))
+                                    renderer.Write(delta);
+                                break;
+
+                            case StreamingText text:
+                                await foreach (var delta in text.WithCancellation(turnCts.Token))
+                                    renderer.Write(delta);
+                                break;
+
+                            case StreamingToolCall tool:
+                                await foreach (var delta in tool.WithCancellation(turnCts.Token))
+                                    renderer.Write(delta);
+                                break;
+
+                            case AgentCore.LLM.Chat.ToolResult toolResult:
+                                renderer.Write(toolResult);
+                                break;
+
+                            default:
+                                renderer.Write(content);
+                                break;
                         }
                     }
                 }
                 finally
                 {
-                    _streamingLayer.Writer = null;
-                    channel.Writer.TryComplete();
-                    try
-                    {
-                        await renderTask;
-                    }
-                    catch (Exception)
-                    {
-                        // UI/rendering failure must not replace the agent failure
-                    }
-
-                    turnCts.Cancel(); // Ensure task closes if exited normally
+                    renderer.Complete();
+                    turnCts.Cancel();
                     try
                     {
                         await keyListenerTask;
@@ -146,21 +143,6 @@ public class ChatUI
             }
 
             AnsiConsole.WriteLine();
-        }
-    }
-
-    private static async Task RenderStreamAsync(ConsoleStreamRenderer renderer, ChannelReader<object> reader, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await foreach (var output in reader.ReadAllAsync(cancellationToken))
-            {
-                renderer.Write(output);
-            }
-        }
-        finally
-        {
-            renderer.Complete();
         }
     }
 
