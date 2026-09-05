@@ -10,8 +10,10 @@ namespace AgentCore.LLM.Chat
     public record ToolResult(
         [property: JsonPropertyName("call_id")] string CallId,
         [property: JsonPropertyName("contents")] IReadOnlyList<IContent> Contents
-    ) : IContent
+    ) : IContent, IStreamingContent
     {
+        public IContent ToContent() => this;
+
         public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
 
         public virtual int EstimateTokens() => Contents.Sum(c => c.EstimateTokens());

@@ -29,3 +29,8 @@
 - Correct code is naturally lean. Never write repetitive flows or verbose boilerplate.
 - Leverage modern language constructs (e.g. primary constructors, concise guard clauses) to minimize lines while preserving clarity and zero-allocation performance.
 - Zero bloat, zero speculative layers, zero redundant checks.
+
+## 7. DESIGN FIRST — DO NOT RUN TESTS UNTIL USER EXPLICITLY COMMANDS
+- Focus on sound architecture and clean design first.
+- DO NOT run tests automatically or prematurely.
+- Only run and check tests when the user explicitly commands: "run and check tests" or "run tests".

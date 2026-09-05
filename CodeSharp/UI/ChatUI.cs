@@ -106,7 +106,7 @@ public class ChatUI
                                     renderer.Write(delta);
                                 break;
 
-                            case AgentCore.LLM.Chat.ToolResult toolResult:
+                            case ToolResult toolResult:
                                 renderer.Write(toolResult);
                                 break;
 

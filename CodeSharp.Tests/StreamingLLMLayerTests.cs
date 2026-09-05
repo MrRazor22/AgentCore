@@ -91,8 +91,8 @@ public class StreamingLLMLayerTests
         Assert.Equal(3, streamedContents.Count);
         Assert.Equal(expectedOutputs.Count, channelResults.Count);
 
-        Assert.Equal("Thinking hard", ((Reasoning)streamedContents[0]).Thought);
-        Assert.Equal("Hello world!", ((Text)streamedContents[1]).Value);
+        Assert.Equal("Thinking hard", (streamedContents[0] is IStreamingContent sc0 ? sc0.ToContent() : streamedContents[0]) is Reasoning r ? r.Thought : "");
+        Assert.Equal("Hello world!", (streamedContents[1] is IStreamingContent sc1 ? sc1.ToContent() : streamedContents[1]) is Text t ? t.Value : "");
         Assert.Equal("tc-1", ((ToolCall)streamedContents[2]).Id);
     }
 

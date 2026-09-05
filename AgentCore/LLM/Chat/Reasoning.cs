@@ -7,9 +7,17 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public record Reasoning([property: JsonPropertyName("Thought")] string Thought) : IContent
+    public class Reasoning : IContent
     {
         private const int CharsPerToken = 4;
+
+        [JsonPropertyName("Thought")]
+        public virtual string Thought { get; }
+
+        public Reasoning(string thought)
+        {
+            Thought = thought ?? "";
+        }
 
         public override string ToString() => Thought;
 

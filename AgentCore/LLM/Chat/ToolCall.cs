@@ -8,12 +8,24 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public record ToolCall(
-        [property: JsonPropertyName("id")] string Id,
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("arguments")] JsonObject Arguments
-    ) : IContent
+    public class ToolCall : IContent
     {
+        [JsonPropertyName("id")]
+        public string Id { get; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; }
+
+        [JsonPropertyName("arguments")]
+        public virtual JsonObject Arguments { get; }
+
+        public ToolCall(string id, string name, JsonObject arguments)
+        {
+            Id = id;
+            Name = name;
+            Arguments = arguments ?? new JsonObject();
+        }
+
         public virtual int EstimateTokens() => (int)Math.Ceiling((Name.Length + (Arguments?.ToJsonString().Length ?? 0)) / 4.0);
 
         public virtual IContent Truncate(int maxTokens, string? notice = null) => this;

@@ -5,8 +5,9 @@ using AgentCore.LLM.Chat;
 
 namespace CodeSharp;
 
-public record CodeSharpText(string Value, string? SpilloverDirectory = null) : Text(Value)
+public class CodeSharpText(string value, string? spilloverDirectory = null) : Text(value)
 {
+    public string? SpilloverDirectory { get; } = spilloverDirectory;
     public override string ToString() => Value;
 
     public override IContent Truncate(int maxTokens, string? notice = null)

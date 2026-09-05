@@ -135,7 +135,7 @@ public class AgentTests
             contents.Add(ev);
         }
 
-        var fullText = string.Concat(contents.OfType<Text>().Select(t => t.Value));
+        var fullText = string.Concat(contents.Select(c => c is IStreamingContent sc ? sc.ToContent() : c).OfType<Text>().Select(t => t.Value));
         Assert.Equal("Streaming reply", fullText);
     }
 

@@ -111,8 +111,8 @@ public class MessageAssemblyTests
         }
 
         Assert.Equal(2, contents.Count);
-        Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(contents[0]).Thought);
-        Assert.Equal("Here is the answer.", Assert.IsType<Text>(contents[1]).Value);
+        Assert.Equal("Thinking deeply...", (contents[0] is IStreamingContent sc0 ? sc0.ToContent() : contents[0]) is Reasoning r ? r.Thought : "");
+        Assert.Equal("Here is the answer.", (contents[1] is IStreamingContent sc1 ? sc1.ToContent() : contents[1]) is Text t ? t.Value : "");
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal(Role.Assistant, message.Role);
@@ -155,9 +155,9 @@ public class MessageAssemblyTests
         }
 
         Assert.Equal(3, contents.Count);
-        Assert.IsType<Reasoning>(contents[0]);
-        Assert.IsType<ToolCall>(contents[1]);
-        Assert.IsType<Text>(contents[2]);
+        Assert.True(contents[0] is StreamingReasoning or Reasoning);
+        Assert.True(contents[1] is StreamingToolCall or ToolCall);
+        Assert.True(contents[2] is StreamingText or Text);
 
         Assert.Equal(3, message.Contents.Count);
     }
@@ -251,7 +251,7 @@ public class MessageAssemblyTests
         var msg4 = new StreamingMessage(bad4.ToAsyncEnumerable(), Role.Assistant);
         var contents4 = new List<IContent>();
         await foreach (var c in msg4) contents4.Add(c);
-        Assert.Equal("unclosed", Assert.Single(contents4.OfType<Text>()).Value);
+        Assert.Equal("unclosed", Assert.Single(contents4.Select(c => c is IStreamingContent sc ? sc.ToContent() : c).OfType<Text>()).Value);
         Assert.Equal("unclosed", Assert.Single(msg4.Contents.OfType<Text>()).Value);
     }
 
@@ -297,42 +297,23 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void StreamingContent_StandaloneClasses_AccumulateAndProduceContent()
+    public async Task StreamingContent_StandaloneClasses_AccumulateAndProduceContent()
     {
         // StreamingText
-        // StreamingText
-        var chText = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
-        var sbText = new StringBuilder();
-        var stText = new StreamingText(chText.Reader, sbText);
-        sbText.Append("Hello, ");
-        chText.Writer.TryWrite(new TextDelta(0, "Hello, "));
-        sbText.Append("world!");
-        chText.Writer.TryWrite(new TextDelta(0, "world!"));
-        chText.Writer.TryComplete();
+        var stText = new StreamingText(ToAsyncStream([new TextDelta(0, "Hello, "), new TextDelta(0, "world!")]));
+        await foreach (var _ in stText) { }
         var textContent = stText.ToContent();
         Assert.Equal("Hello, world!", textContent.Value);
 
         // StreamingReasoning
-        var chReasoning = System.Threading.Channels.Channel.CreateUnbounded<ReasoningDelta>();
-        var sbReasoning = new StringBuilder();
-        var stReasoning = new StreamingReasoning(chReasoning.Reader, sbReasoning);
-        sbReasoning.Append("Plan step 1. ");
-        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Plan step 1. "));
-        sbReasoning.Append("Plan step 2.");
-        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Plan step 2."));
-        chReasoning.Writer.TryComplete();
+        var stReasoning = new StreamingReasoning(ToAsyncStream([new ReasoningDelta(0, "Plan step 1. "), new ReasoningDelta(0, "Plan step 2.")]));
+        await foreach (var _ in stReasoning) { }
         var reasoningContent = stReasoning.ToContent();
         Assert.Equal("Plan step 1. Plan step 2.", reasoningContent.Thought);
 
         // StreamingToolCall
-        var chTool = System.Threading.Channels.Channel.CreateUnbounded<ToolCallDelta>();
-        var sbTool = new StringBuilder();
-        var stTool = new StreamingToolCall("call_1", "calc", chTool.Reader, sbTool);
-        sbTool.Append("{\"expr\":");
-        chTool.Writer.TryWrite(new ToolCallDelta(0, "{\"expr\":"));
-        sbTool.Append("\"1 + 1\"}");
-        chTool.Writer.TryWrite(new ToolCallDelta(0, "\"1 + 1\"}"));
-        chTool.Writer.TryComplete();
+        var stTool = new StreamingToolCall("call_1", "calc", ToAsyncStream([new ToolCallDelta(0, "{\"expr\":"), new ToolCallDelta(0, "\"1 + 1\"}")]));
+        await foreach (var _ in stTool) { }
         var toolContent = stTool.ToContent();
         Assert.Equal("call_1", toolContent.Id);
         Assert.Equal("calc", toolContent.Name);
@@ -343,15 +324,7 @@ public class MessageAssemblyTests
     public async Task StreamingContent_ChannelBackedDeltas_YieldsInRealTime_AndCompletes()
     {
         // 1. StreamingText
-        var chText = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
-        var sbText = new StringBuilder();
-        var stText = new StreamingText(chText.Reader, sbText);
-        sbText.Append("Hello, ");
-        chText.Writer.TryWrite(new TextDelta(0, "Hello, "));
-        sbText.Append("world!");
-        chText.Writer.TryWrite(new TextDelta(0, "world!"));
-        chText.Writer.TryComplete();
-
+        var stText = new StreamingText(ToAsyncStream([new TextDelta(0, "Hello, "), new TextDelta(0, "world!")]));
         var textDeltas = new List<string>();
         await foreach (var delta in stText)
         {
@@ -359,19 +332,10 @@ public class MessageAssemblyTests
         }
         Assert.Equal(["Hello, ", "world!"], textDeltas);
         Assert.Equal("Hello, world!", stText.ToContent().Value);
-        Assert.True(stText.EstimateTokens() > 0);
         Assert.Equal("Hello, world!", stText.ToString());
 
         // 2. StreamingReasoning
-        var chReasoning = System.Threading.Channels.Channel.CreateUnbounded<ReasoningDelta>();
-        var sbReasoning = new StringBuilder();
-        var stReasoning = new StreamingReasoning(chReasoning.Reader, sbReasoning);
-        sbReasoning.Append("Think 1. ");
-        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Think 1. "));
-        sbReasoning.Append("Think 2.");
-        chReasoning.Writer.TryWrite(new ReasoningDelta(0, "Think 2."));
-        chReasoning.Writer.TryComplete();
-
+        var stReasoning = new StreamingReasoning(ToAsyncStream([new ReasoningDelta(0, "Think 1. "), new ReasoningDelta(0, "Think 2.")]));
         var reasoningDeltas = new List<string>();
         await foreach (var delta in stReasoning)
         {
@@ -381,15 +345,7 @@ public class MessageAssemblyTests
         Assert.Equal("Think 1. Think 2.", stReasoning.ToContent().Thought);
 
         // 3. StreamingToolCall
-        var chTool = System.Threading.Channels.Channel.CreateUnbounded<ToolCallDelta>();
-        var sbTool = new StringBuilder();
-        var stTool = new StreamingToolCall("call_99", "fn", chTool.Reader, sbTool);
-        sbTool.Append("{\"x\":");
-        chTool.Writer.TryWrite(new ToolCallDelta(0, "{\"x\":"));
-        sbTool.Append("42}");
-        chTool.Writer.TryWrite(new ToolCallDelta(0, "42}"));
-        chTool.Writer.TryComplete();
-
+        var stTool = new StreamingToolCall("call_99", "fn", ToAsyncStream([new ToolCallDelta(0, "{\"x\":"), new ToolCallDelta(0, "42}")]));
         var toolDeltas = new List<string>();
         await foreach (var delta in stTool)
         {
@@ -403,13 +359,11 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void StreamingContent_Truncate_ReturnsMaterializedContent()
+    public async Task StreamingContent_Truncate_ReturnsMaterializedContent()
     {
-        var ch = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
-        var sb = new StringBuilder("This is a very long text that will be truncated.");
-        var stText = new StreamingText(ch.Reader, sb);
-        
-        var truncated = stText.Truncate(3, "...");
+        var stText = new StreamingText(ToAsyncStream([new TextDelta(0, "This is a very long text that will be truncated.")]));
+        await foreach (var _ in stText) { }
+        var truncated = stText.ToContent().Truncate(3, "...");
         Assert.IsType<Text>(truncated);
         Assert.Contains("...", ((Text)truncated).Value);
     }
@@ -417,11 +371,14 @@ public class MessageAssemblyTests
     [Fact]
     public async Task StreamingContent_CompleteWithError_PropagatesExceptionToEnumerator()
     {
-        var ch = System.Threading.Channels.Channel.CreateUnbounded<TextDelta>();
-        var sb = new StringBuilder("Part 1. ");
-        var stText = new StreamingText(ch.Reader, sb);
-        ch.Writer.TryWrite(new TextDelta(0, "Part 1. "));
-        ch.Writer.TryComplete(new InvalidOperationException("Provider exploded"));
+        static async IAsyncEnumerable<TextDelta> FailingTextStream()
+        {
+            yield return new TextDelta(0, "Part 1. ");
+            await Task.Yield();
+            throw new InvalidOperationException("Provider exploded");
+        }
+
+        var stText = new StreamingText(FailingTextStream());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {

@@ -31,7 +31,7 @@ public class WorkflowTests
         }
 
         // Assert
-        var textContent = Assert.Single(contents.OfType<Text>());
+        var textContent = Assert.Single(contents.Select(c => c is IStreamingContent sc ? sc.ToContent() : c).OfType<Text>());
         Assert.Equal("Today is sunny.", textContent.Value);
 
         // Assert messages were added to context (User and Assistant)
@@ -83,7 +83,7 @@ public class WorkflowTests
         // Assert
         Assert.Contains(contents, c => c is ToolCall tc && tc.Name == "get_weather");
         Assert.Contains(contents, c => c is ToolResult tr && tr.ToString() == "Rainy");
-        var finalResponse = contents.OfType<Text>().Single();
+        var finalResponse = contents.Select(c => c is IStreamingContent sc ? sc.ToContent() : c).OfType<Text>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Value);
 
         // Verify conversation history captured by provider on the second call

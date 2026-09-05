@@ -50,6 +50,11 @@ public sealed partial class Agent : IAgent
             {
                 sb.Append(t.Value);
             }
+            else if (content is StreamingText st)
+            {
+                await foreach (var delta in st.WithCancellation(ct).ConfigureAwait(false))
+                    sb.Append(delta.Text);
+            }
         }
 
         var fullText = sb.ToString();

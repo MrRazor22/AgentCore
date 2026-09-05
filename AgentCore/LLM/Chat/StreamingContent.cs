@@ -9,51 +9,77 @@ public interface IStreamingContent : IContent
     IContent ToContent();
 }
 
-public interface IStreamingContent<out TContent> : IStreamingContent where TContent : IContent
+public sealed class StreamingText(IAsyncEnumerable<TextDelta> stream) : Text(""), IStreamingContent, IAsyncEnumerable<TextDelta>
 {
-    new TContent ToContent();
-}
+    private readonly StringBuilder _sb = new();
 
-public sealed class StreamingText(ChannelReader<TextDelta> reader, StringBuilder sb)
-    : IStreamingContent<Text>, IAsyncEnumerable<TextDelta>
-{
-    public IAsyncEnumerator<TextDelta> GetAsyncEnumerator(CancellationToken ct = default)
-        => reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
+    public override string Value => _sb.ToString();
 
-    public Text ToContent() => new(sb.ToString());
+    public async IAsyncEnumerator<TextDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    {
+        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
+        {
+            _sb.Append(delta.Text);
+            yield return delta;
+        }
+    }
+
+    public Text ToContent() => new(Value);
     IContent IStreamingContent.ToContent() => ToContent();
-
-    public int EstimateTokens() => (int)Math.Ceiling(sb.Length / 4.0);
-    public IContent Truncate(int maxTokens, string? notice = null) => ToContent().Truncate(maxTokens, notice);
-    public override string ToString() => sb.ToString();
 }
 
-public sealed class StreamingReasoning(ChannelReader<ReasoningDelta> reader, StringBuilder sb)
-    : IStreamingContent<Reasoning>, IAsyncEnumerable<ReasoningDelta>
+public sealed class StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) : Reasoning(""), IStreamingContent, IAsyncEnumerable<ReasoningDelta>
 {
-    public IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
-        => reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
+    private readonly StringBuilder _sb = new();
 
-    public Reasoning ToContent() => new(sb.ToString());
+    public override string Thought => _sb.ToString();
+
+    public async IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    {
+        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
+        {
+            _sb.Append(delta.Thought);
+            yield return delta;
+        }
+    }
+
+    public Reasoning ToContent() => new(Thought);
     IContent IStreamingContent.ToContent() => ToContent();
-
-    public int EstimateTokens() => (int)Math.Ceiling(sb.Length / 4.0);
-    public IContent Truncate(int maxTokens, string? notice = null) => ToContent().Truncate(maxTokens, notice);
-    public override string ToString() => sb.ToString();
 }
 
-public sealed class StreamingToolCall(string id, string name, ChannelReader<ToolCallDelta> reader, StringBuilder args)
-    : IStreamingContent<ToolCall>, IAsyncEnumerable<ToolCallDelta>
+public sealed class StreamingToolCall(string id, string name, IAsyncEnumerable<ToolCallDelta> stream) : ToolCall(id, name, new JsonObject()), IStreamingContent, IAsyncEnumerable<ToolCallDelta>
 {
-    public string Id => id;
-    public string Name => name;
+    private readonly StringBuilder _args = new();
 
-    public IAsyncEnumerator<ToolCallDelta> GetAsyncEnumerator(CancellationToken ct = default)
-        => reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
+    public override JsonObject Arguments
+    {
+        get
+        {
+            var raw = _args.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) return new JsonObject();
+            try
+            {
+                return JsonNode.Parse(raw)?.AsObject() ?? new JsonObject();
+            }
+            catch
+            {
+                return new JsonObject();
+            }
+        }
+    }
+
+    public async IAsyncEnumerator<ToolCallDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    {
+        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
+        {
+            _args.Append(delta.Arguments);
+            yield return delta;
+        }
+    }
 
     public ToolCall ToContent()
     {
-        var raw = args.ToString();
+        var raw = _args.ToString();
         JsonObject? parsedArgs = null;
         if (!string.IsNullOrWhiteSpace(raw))
         {
@@ -61,18 +87,14 @@ public sealed class StreamingToolCall(string id, string name, ChannelReader<Tool
             {
                 parsedArgs = JsonNode.Parse(raw)?.AsObject();
             }
-            catch (Exception ex)
+            catch (Exception parseEx)
             {
-                throw new FormatException($"Malformed JSON arguments for tool '{name}' (id: '{id}'): {raw}", ex);
+                throw new FormatException($"Malformed JSON arguments for tool '{Name}' (id: '{Id}'): {raw}", parseEx);
             }
         }
 
-        return new ToolCall(id, name, parsedArgs ?? new JsonObject());
+        return new ToolCall(Id, Name, parsedArgs ?? new JsonObject());
     }
 
     IContent IStreamingContent.ToContent() => ToContent();
-
-    public int EstimateTokens() => (int)Math.Ceiling((name.Length + args.Length) / 4.0);
-    public IContent Truncate(int maxTokens, string? notice = null) => ToContent().Truncate(maxTokens, notice);
-    public override string ToString() => $"{name}({args})";
 }

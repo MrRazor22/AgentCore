@@ -7,7 +7,7 @@ namespace AgentCore.LLM.Chat;
 /// Derived from <see cref="Text"/> so it functions seamlessly as plain text for models and downstream pipelines,
 /// while allowing persistence and context layers to detect compaction boundaries.
 /// </summary>
-public record CompactedSummary(string Value) : Text(Value)
+public class CompactedSummary(string value) : Text(value)
 {
     public override string ToString() => Value;
 }
