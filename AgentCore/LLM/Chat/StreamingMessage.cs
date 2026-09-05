@@ -2,7 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
 namespace AgentCore.LLM.Chat;
-
+public interface IStreamingContent : IContent
+{
+    IContent ToContent();
+}
 public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
 {
     private readonly IAsyncEnumerable<IMessageEvent> _stream;
@@ -38,29 +41,13 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
                         Role = s.Role; id = s.Id; model = s.Model;
                         break;
 
-                    case TextStart s:
+                    case IBlockStartEvent s:
                     {
-                        var ch = Channel.CreateUnbounded<TextDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
-                        var text = new StreamingText(ch.Reader.ReadAllAsync(ct));
-                        active[s.Index] = (text, d => ch.Writer.TryWrite((TextDelta)d), () => ch.Writer.TryComplete());
-                        yield return text;
-                        break;
-                    }
-
-                    case ReasoningStart s:
-                    {
-                        var ch = Channel.CreateUnbounded<ReasoningDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
-                        var reasoning = new StreamingReasoning(ch.Reader.ReadAllAsync(ct));
-                        active[s.Index] = (reasoning, d => ch.Writer.TryWrite((ReasoningDelta)d), () => ch.Writer.TryComplete());
-                        yield return reasoning;
-                        break;
-                    }
-
-                    case ToolCallStart s:
-                    {
-                        var ch = Channel.CreateUnbounded<ToolCallDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
-                        var toolCall = new StreamingToolCall(s.Id, s.Name, ch.Reader.ReadAllAsync(ct));
-                        active[s.Index] = (toolCall, d => ch.Writer.TryWrite((ToolCallDelta)d), () => ch.Writer.TryComplete());
+                        var ch = Channel.CreateUnbounded<IBlockDeltaEvent>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+                        var content = s.CreateStream(ch.Reader.ReadAllAsync(ct));
+                        active[s.Index] = (content, d => ch.Writer.TryWrite(d), () => ch.Writer.TryComplete());
+                        if (content is not ToolCall)
+                            yield return content;
                         break;
                     }
 

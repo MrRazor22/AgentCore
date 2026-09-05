@@ -4,11 +4,6 @@ using System.Threading.Channels;
 
 namespace AgentCore.LLM.Chat;
 
-public interface IStreamingContent : IContent
-{
-    IContent ToContent();
-}
-
 public sealed class StreamingText(IAsyncEnumerable<TextDelta> stream) : Text(""), IStreamingContent, IAsyncEnumerable<TextDelta>
 {
     private readonly StringBuilder _sb = new();
@@ -32,7 +27,8 @@ public sealed class StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) 
 {
     private readonly StringBuilder _sb = new();
 
-    public override string Thought => _sb.ToString();
+    public override string Value => _sb.ToString();
+    public override string Thought => Value;
 
     public async IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
     {
