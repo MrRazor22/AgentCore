@@ -28,7 +28,6 @@ public sealed class StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) 
     private readonly StringBuilder _sb = new();
 
     public override string Value => _sb.ToString();
-    public override string Thought => Value;
 
     public async IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
     {
@@ -39,7 +38,7 @@ public sealed class StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) 
         }
     }
 
-    public Reasoning ToContent() => new(Thought);
+    public Reasoning ToContent() => new(Value);
     IContent IStreamingContent.ToContent() => ToContent();
 }
 

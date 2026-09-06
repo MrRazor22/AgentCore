@@ -8,17 +8,12 @@ using System.Threading.Tasks;
 
 namespace AgentCore.LLM.Chat
 {
-    public class Text : IContent
+    public class Text(string value) : IContent
     {
         private const int CharsPerToken = 4;
 
         [JsonPropertyName("Value")]
-        public virtual string Value { get; }
-
-        public Text(string value)
-        {
-            Value = value ?? "";
-        }
+        public virtual string Value { get; } = value ?? "";
 
         public static implicit operator Text(string text) => new(text);
         public override string ToString() => Value;
@@ -34,30 +29,44 @@ namespace AgentCore.LLM.Chat
             int maxChars = Math.Max(0, maxTokens * CharsPerToken - notice.Length);
 
             if (maxChars <= 0)
-            {
-                int cappedNoticeLen = Math.Min(notice.Length, maxTokens * CharsPerToken);
-                return new Text(notice[..cappedNoticeLen]);
-            }
+                return new Text(notice[..Math.Min(notice.Length, maxTokens * CharsPerToken)]);
 
             if (maxChars >= Value.Length)
                 return this;
 
             int headChars = maxChars / 2;
-            int tailChars = maxChars - headChars;
-
-            return new Text(Value[..headChars] + notice + Value[^tailChars..]);
+            return new Text(Value[..headChars] + notice + Value[^(maxChars - headChars)..]);
         }
     }
 
-    public class Reasoning(string thought) : Text(thought)
+    public class Reasoning(string value) : IContent
     {
-        [JsonPropertyName("Thought")]
-        public virtual string Thought => Value;
+        private const int CharsPerToken = 4;
 
-        public override IContent Truncate(int maxTokens, string? notice = null)
+        [JsonPropertyName("Value")]
+        public virtual string Value { get; } = value ?? "";
+        public string Thought => Value;
+
+        public override string ToString() => Value;
+
+        public virtual int EstimateTokens() => (int)Math.Ceiling(Value.Length / (double)CharsPerToken);
+
+        public virtual IContent Truncate(int maxTokens, string? notice = null)
         {
-            var truncated = (Text)base.Truncate(maxTokens, notice);
-            return ReferenceEquals(truncated, this) ? this : new Reasoning(truncated.Value);
+            if (EstimateTokens() <= maxTokens)
+                return this;
+
+            notice ??= "\n... [truncated]";
+            int maxChars = Math.Max(0, maxTokens * CharsPerToken - notice.Length);
+
+            if (maxChars <= 0)
+                return new Reasoning(notice[..Math.Min(notice.Length, maxTokens * CharsPerToken)]);
+
+            if (maxChars >= Value.Length)
+                return this;
+
+            int headChars = maxChars / 2;
+            return new Reasoning(Value[..headChars] + notice + Value[^(maxChars - headChars)..]);
         }
     }
 
