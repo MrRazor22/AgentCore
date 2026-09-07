@@ -71,42 +71,15 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
     /// </summary>
     internal static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)
     {
-        if (history.Count == 0) return history;
-
-        int latestSummaryIndex = -1;
         for (int i = history.Count - 1; i >= 0; i--)
         {
-            if (history[i].Contents.Any(c => c is CompactedSummary))
+            if (history[i].Contents.Any(c => c is Summary))
             {
-                latestSummaryIndex = i;
-                break;
+                var system = history.FirstOrDefault(m => m.Role == Role.System);
+                return system != null ? [system, .. history.Skip(i)] : [.. history.Skip(i)];
             }
         }
-
-        if (latestSummaryIndex == -1)
-            return history;
-
-        var context = new List<Message>();
-        var systemIndex = -1;
-        for (int i = 0; i < latestSummaryIndex; i++)
-        {
-            if (history[i].Role == Role.System)
-            {
-                systemIndex = i;
-                break;
-            }
-        }
-        if (systemIndex >= 0)
-        {
-            context.Add(history[systemIndex]);
-        }
-
-        for (int i = latestSummaryIndex; i < history.Count; i++)
-        {
-            context.Add(history[i]);
-        }
-
-        return context;
+        return history;
     }
 
     public void Dispose() => _lock.Dispose();

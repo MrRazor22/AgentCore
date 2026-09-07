@@ -1,46 +1,58 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json.Serialization;
 using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat; 
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum Role { System, Assistant, User, Tool }
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
-[JsonDerivedType(typeof(Text), "text")]
-[JsonDerivedType(typeof(CompactedSummary), "compactedSummary")]
-[JsonDerivedType(typeof(ToolCall), "toolCall")]
-[JsonDerivedType(typeof(ToolResult), "toolResult")]
-[JsonDerivedType(typeof(Reasoning), "reasoning")]
-[JsonDerivedType(typeof(Image), "image")]
 public interface IContent 
 { 
+    string Type => GetType().Name;
     int EstimateTokens();
     IContent Truncate(int maxTokens, string? notice = null);
 } 
 
+public interface IMetadata
+{
+    string Type => GetType().Name;
+}
+
 public sealed record MessageMetadata(
-    [property: JsonPropertyName("id")] string? Id = null,
-    [property: JsonPropertyName("model")] string? Model = null,
-    [property: JsonPropertyName("finish_reason")] string? FinishReason = null,
-    [property: JsonPropertyName("usage")] TokenUsage? Usage = null
-);
+    string? Id = null,
+    string? Model = null,
+    string? FinishReason = null,
+    TokenUsage? Usage = null
+) : IMetadata;
 
 public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
-    MessageMetadata? metadata = null)
+    IReadOnlyList<IMetadata>? metadata = null)
 {
     protected readonly List<IContent> _contents = contents != null ? [.. contents] : [];
 
-    [JsonPropertyName("role")]
+    public Message(Role role, IReadOnlyList<IContent>? contents, MessageMetadata? metadata)
+        : this(role, contents, metadata != null ? [metadata] : null) { }
+
     public Role Role { get; protected set; } = role;
-
-    [JsonPropertyName("contents")]
     public IReadOnlyList<IContent> Contents => _contents;
-
-    [JsonPropertyName("metadata")]
-    public MessageMetadata? Metadata { get; protected set; } = metadata;
+    public IReadOnlyList<IMetadata> Metadata { get; set; } = metadata ?? [];
 }
+
+public static class MetadataExtensions
+{
+    public static T? Get<T>(this IEnumerable<IMetadata>? metadata) where T : class, IMetadata =>
+        metadata?.OfType<T>().FirstOrDefault();
+
+    public static IEnumerable<T> GetAll<T>(this IEnumerable<IMetadata>? metadata) where T : class, IMetadata =>
+        metadata?.OfType<T>() ?? [];
+
+    public static T? Get<T>(this Message message) where T : class, IMetadata =>
+        message.Metadata.Get<T>();
+
+    public static IEnumerable<T> GetAll<T>(this Message message) where T : class, IMetadata =>
+        message.Metadata.GetAll<T>();
+}
+
+
 

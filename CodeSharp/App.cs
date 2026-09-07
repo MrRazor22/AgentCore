@@ -147,10 +147,13 @@ internal class App
             var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
             var chatClient = new OpenAIChatClient(openAIClient.GetChatClient(config.Model));
 
+            var behaviors = new AgentCore.LLM.Chat.ContentBehaviors()
+                .With(new CodeSharpTextBehavior(spilloverDir));
+
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
                 .WithMEAI(chatClient)
-                .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
+                .WithChatContext(contextWindow: 50000, reserveTokens: 2500, contentBehaviors: behaviors)
                 .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())
                 .AddLLMLayer(new ToolCallDetectionLayer())

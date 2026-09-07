@@ -15,6 +15,7 @@ public class ChatContext : IContext
     private readonly List<Message> _chat = new();
     private readonly ICompactor? _compactor;
     private readonly ILogger<ChatContext>? _logger;
+    private readonly ContentBehaviors? _contentBehaviors;
     private readonly int _contextWindow, _reserveTokens, _limit, _maxSingleMessageTokens;
     private int _committedTokens;
     private const double SafetyMargin = 1.15;
@@ -26,7 +27,8 @@ public class ChatContext : IContext
         int? maxSingleMessageTokens = null,
         ICompactor? compactor = null,
         ILLM? summarizer = null, 
-        ILogger<ChatContext>? logger = null)
+        ILogger<ChatContext>? logger = null,
+        ContentBehaviors? contentBehaviors = null)
     {
         _contextWindow = contextWindow;
         _reserveTokens = reserveTokens ?? Math.Min(4_000, contextWindow / 10);
@@ -34,6 +36,7 @@ public class ChatContext : IContext
         _maxSingleMessageTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
         _compactor = compactor ?? (summarizer != null ? new Summarizer(summarizer) : null);
         _logger = logger;
+        _contentBehaviors = contentBehaviors;
     }
 
     public Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
@@ -96,10 +99,15 @@ public class ChatContext : IContext
     private Message TruncateMessage(Message message)
     {
         if (message.Role == Role.System) return message; // Protect ONLY System, truncates User, Tool, and Assistant
-        return new Message(message.Role, message.Contents.Select(c => c.Truncate(_maxSingleMessageTokens)).ToList(), message.Metadata);
+        return new Message(
+            message.Role, 
+            message.Contents.Select(c => _contentBehaviors != null 
+                ? _contentBehaviors.Truncate(c, _maxSingleMessageTokens) 
+                : c.Truncate(_maxSingleMessageTokens)).ToList(), 
+            message.Metadata);
     }
 
-    private static int Estimate(Message message) =>
-        (int)((1 + message.Contents.Sum(c => c.EstimateTokens())) * SafetyMargin);
+    private int Estimate(Message message) =>
+        (int)((1 + message.Contents.Sum(c => _contentBehaviors != null ? _contentBehaviors.Estimate(c) : c.EstimateTokens())) * SafetyMargin);
 }
 

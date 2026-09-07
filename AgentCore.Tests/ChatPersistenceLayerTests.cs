@@ -86,7 +86,7 @@ public class ChatPersistenceLayerTests
     }
 
     [Fact]
-    public async Task RestoreAsync_RestoresWorkingContext_FromLatestCompactedSummary()
+    public async Task RestoreAsync_RestoresWorkingContext_FromLatestSummary()
     {
         var store = new InMemoryChatStore();
         // Session history with multiple compactions
@@ -95,10 +95,10 @@ public class ChatPersistenceLayerTests
             new(Role.System, [new Text("System instruction")]),
             new(Role.User, [new Text("First message")]),
             new(Role.Assistant, [new Text("First answer")]),
-            new(Role.User, [new CompactedSummary("Summary 1")]),
+            new(Role.User, [new Summary("Summary 1")]),
             new(Role.User, [new Text("Second message")]),
             new(Role.Assistant, [new Text("Second answer")]),
-            new(Role.User, [new CompactedSummary("Latest Summary 2")]),
+            new(Role.User, [new Summary("Latest Summary 2")]),
             new(Role.User, [new Text("Third message")]),
             new(Role.Assistant, [new Text("Third answer")])
         ];
@@ -112,7 +112,7 @@ public class ChatPersistenceLayerTests
         // Should reconstruct: System + Latest Summary 2 + Third message + Third answer
         Assert.Equal(4, workingContext.Count);
         Assert.Equal(Role.System, workingContext[0].Role);
-        Assert.IsType<CompactedSummary>(workingContext[1].Contents[0]);
+        Assert.IsType<Summary>(workingContext[1].Contents[0]);
         Assert.Equal("Latest Summary 2", workingContext[1].Contents[0].ToString());
         Assert.Equal("Third message", workingContext[2].Contents[0].ToString());
         Assert.Equal("Third answer", workingContext[3].Contents[0].ToString());

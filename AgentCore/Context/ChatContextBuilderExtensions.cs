@@ -11,7 +11,8 @@ public static class ChatContextBuilderExtensions
         int? reserveTokens = null,
         int? maxSingleMessageTokens = null,
         ICompactor? compactor = null,
-        ILLM? summarizer = null)
+        ILLM? summarizer = null,
+        ContentBehaviors? contentBehaviors = null)
     {
         return builder.WithContext(lf => new ChatContext(
             contextWindow: contextWindow,
@@ -19,7 +20,8 @@ public static class ChatContextBuilderExtensions
             maxSingleMessageTokens: maxSingleMessageTokens,
             compactor: compactor,
             summarizer: summarizer,
-            logger: lf.CreateLogger<ChatContext>()
+            logger: lf.CreateLogger<ChatContext>(),
+            contentBehaviors: contentBehaviors
         ));
     }
 }

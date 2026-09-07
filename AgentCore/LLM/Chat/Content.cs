@@ -161,4 +161,9 @@ namespace AgentCore.LLM.Chat
         }
     }
 
+    public class Summary(string value) : Text(value)
+    {
+        public override string ToString() => Value;
+    }
+
 }

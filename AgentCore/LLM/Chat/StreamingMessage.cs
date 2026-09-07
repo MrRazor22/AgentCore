@@ -89,7 +89,7 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
             }
 
             _contents.AddRange(completed.Values);
-            Metadata = new MessageMetadata(id, model, finishReason, usage);
+            AddMetadata(new MessageMetadata(id, model, finishReason, usage));
             success = true;
         }
         finally
