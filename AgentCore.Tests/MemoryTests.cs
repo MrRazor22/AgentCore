@@ -37,7 +37,7 @@ public class MemoryTests
         var context = new Context.ChatContext(
             contextWindow: 100, // limit = 90
             reserveTokens: 10,
-            summarizer: mockLlm
+            compactor: new Context.Summarizer(mockLlm)
         );
 
         var system = new Message(Role.System, [new Text("System instructions")]);
@@ -64,7 +64,7 @@ public class MemoryTests
         var context = new Context.ChatContext(
             contextWindow: 25, // very small limit to trigger compaction easily
             reserveTokens: 5,
-            summarizer: mockLlm
+            compactor: new Context.Summarizer(mockLlm)
         );
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
@@ -95,8 +95,7 @@ public class MemoryTests
         var context = new Context.ChatContext(
             contextWindow: 30,
             reserveTokens: 10,
-            compactor: null,
-            summarizer: null
+            compactor: null
         );
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
@@ -121,7 +120,7 @@ public class MemoryTests
         var context = new Context.ChatContext(
             contextWindow: 30,
             reserveTokens: 5,
-            summarizer: mockLlm
+            compactor: new Context.Summarizer(mockLlm)
         );
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
@@ -170,33 +169,36 @@ public class MemoryTests
     }
 
     [Fact]
-    public void IContent_PolymorphicTruncationBehavior()
+    public void ContentTruncator_MultiModalTruncationBehavior()
     {
+        var estimator = new Context.Tokenizer();
+        var truncator = new Context.Truncator(estimator);
+
         // 1. Text truncation (10 tokens -> ~40 chars)
         var shortText = new Text("Hello");
-        Assert.Same(shortText, shortText.Truncate(10));
+        Assert.Same(shortText, truncator.Truncate(shortText, 10));
 
         var longText = new Text(new string('Z', 100));
-        var truncatedText = longText.Truncate(10);
+        var truncatedText = truncator.Truncate(longText, 10);
         Assert.NotSame(longText, truncatedText);
         Assert.Contains("truncated", truncatedText.ToString());
 
         // 2. ToolResult truncation
         var toolResult = new ToolResult("call_1", [longText]);
-        var truncatedResult = toolResult.Truncate(10);
+        var truncatedResult = truncator.Truncate(toolResult, 10);
         Assert.NotSame(toolResult, truncatedResult);
         Assert.Contains("truncated", truncatedResult.ToString());
 
         // 3. ToolCall returns itself unchanged
         IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());
-        Assert.Same(toolCall, toolCall.Truncate(10));
+        Assert.Same(toolCall, truncator.Truncate(toolCall, 10));
 
         // 4. Reasoning truncates thought string when over budget
         IContent shortReasoning = new Reasoning("Short thought");
-        Assert.Same(shortReasoning, shortReasoning.Truncate(10));
+        Assert.Same(shortReasoning, truncator.Truncate(shortReasoning, 10));
 
         IContent longReasoning = new Reasoning(new string('R', 100));
-        var truncatedReasoning = longReasoning.Truncate(10);
+        var truncatedReasoning = truncator.Truncate(longReasoning, 10);
         Assert.NotSame(longReasoning, truncatedReasoning);
         Assert.Contains("truncated", truncatedReasoning.ToString());
     }
@@ -210,26 +212,32 @@ public class MemoryTests
     [InlineData(50)]
     public void Text_Truncate_AlwaysSatisfiesBudgetInvariant(int maxTokens)
     {
-        var text = new Text(string.Join("\n", Enumerable.Range(1, 200).Select(i => $"Line {i}: some log payload content here")));
-        var truncated = (Text)text.Truncate(maxTokens);
+        var estimator = new Context.Tokenizer();
+        var truncator = new Context.Truncator(estimator);
 
-        Assert.True(truncated.EstimateTokens() <= maxTokens,
-            $"Expected EstimateTokens() ({truncated.EstimateTokens()}) <= maxTokens ({maxTokens})");
+        var text = new Text(string.Join("\n", Enumerable.Range(1, 200).Select(i => $"Line {i}: some log payload content here")));
+        var truncated = (Text)truncator.Truncate(text, maxTokens);
+
+        Assert.True(estimator.Estimate(truncated) <= maxTokens,
+            $"Expected Estimate() ({estimator.Estimate(truncated)}) <= maxTokens ({maxTokens})");
     }
 
     [Fact]
     public void Text_Truncate_PreservesHeadAndTail()
     {
+        var estimator = new Context.Tokenizer();
+        var truncator = new Context.Truncator(estimator);
+
         var content = "HEAD_START" + new string('x', 500) + "TAIL_END";
         var text = new Text(content);
 
-        var truncated = (Text)text.Truncate(30);
+        var truncated = (Text)truncator.Truncate(text, 30);
         var str = truncated.ToString();
 
         Assert.StartsWith("HEAD_START", str);
         Assert.EndsWith("TAIL_END", str);
         Assert.Contains("truncated", str);
-        Assert.True(truncated.EstimateTokens() <= 30);
+        Assert.True(estimator.Estimate(truncated) <= 30);
     }
 
     [Fact]

@@ -1,169 +1,40 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
-namespace AgentCore.LLM.Chat
+namespace AgentCore.LLM.Chat;
+
+public class Text(string value) : IContent
 {
-    public class Text(string value) : IContent
-    {
-        private const int CharsPerToken = 4;
+    public virtual string Value { get; } = value ?? "";
+    public static implicit operator Text(string text) => new(text);
+    public override string ToString() => Value;
+}
 
-        [JsonPropertyName("Value")]
-        public virtual string Value { get; } = value ?? "";
+public class Reasoning(string value) : IContent
+{
+    public virtual string Value { get; } = value ?? "";
+    public string Thought => Value;
+    public override string ToString() => Value;
+}
 
-        public static implicit operator Text(string text) => new(text);
-        public override string ToString() => Value;
+public class ToolCall(string id, string name, JsonObject? arguments = null) : IContent
+{
+    public string Id { get; } = id;
+    public string Name { get; } = name;
+    public virtual JsonObject Arguments { get; } = arguments ?? new JsonObject();
 
-        public virtual int EstimateTokens() => (int)Math.Ceiling(Value.Length / (double)CharsPerToken);
+    public override string ToString() =>
+        Arguments.Count == 0 ? Name : $"{Name}({string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"))})";
+}
 
-        public virtual IContent Truncate(int maxTokens, string? notice = null)
-        {
-            if (EstimateTokens() <= maxTokens)
-                return this;
+public record ToolResult(string CallId, IReadOnlyList<IContent> Contents) : IContent, IStreamingContent
+{
+    public IContent ToContent() => this;
+    public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
+}
 
-            notice ??= "\n... [truncated]";
-            int maxChars = Math.Max(0, maxTokens * CharsPerToken - notice.Length);
-
-            if (maxChars <= 0)
-                return new Text(notice[..Math.Min(notice.Length, maxTokens * CharsPerToken)]);
-
-            if (maxChars >= Value.Length)
-                return this;
-
-            int headChars = maxChars / 2;
-            return new Text(Value[..headChars] + notice + Value[^(maxChars - headChars)..]);
-        }
-    }
-
-    public class Reasoning(string value) : IContent
-    {
-        private const int CharsPerToken = 4;
-
-        [JsonPropertyName("Value")]
-        public virtual string Value { get; } = value ?? "";
-        public string Thought => Value;
-
-        public override string ToString() => Value;
-
-        public virtual int EstimateTokens() => (int)Math.Ceiling(Value.Length / (double)CharsPerToken);
-
-        public virtual IContent Truncate(int maxTokens, string? notice = null)
-        {
-            if (EstimateTokens() <= maxTokens)
-                return this;
-
-            notice ??= "\n... [truncated]";
-            int maxChars = Math.Max(0, maxTokens * CharsPerToken - notice.Length);
-
-            if (maxChars <= 0)
-                return new Reasoning(notice[..Math.Min(notice.Length, maxTokens * CharsPerToken)]);
-
-            if (maxChars >= Value.Length)
-                return this;
-
-            int headChars = maxChars / 2;
-            return new Reasoning(Value[..headChars] + notice + Value[^(maxChars - headChars)..]);
-        }
-    }
-
-    public class ToolCall : IContent
-    {
-        [JsonPropertyName("id")]
-        public string Id { get; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; }
-
-        [JsonPropertyName("arguments")]
-        public virtual JsonObject Arguments { get; }
-
-        public ToolCall(string id, string name, JsonObject arguments)
-        {
-            Id = id;
-            Name = name;
-            Arguments = arguments ?? new JsonObject();
-        }
-
-        public virtual int EstimateTokens() => (int)Math.Ceiling((Name.Length + (Arguments?.ToJsonString().Length ?? 0)) / 4.0);
-
-        public virtual IContent Truncate(int maxTokens, string? notice = null) => this;
-
-        public override string ToString()
-        {
-            if (Arguments.Count == 0)
-                return Name;
-
-            var args = string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"));
-            return $"{Name}({args})";
-        }
-    }
-
-    public record ToolResult(
-        [property: JsonPropertyName("call_id")] string CallId,
-        [property: JsonPropertyName("contents")] IReadOnlyList<IContent> Contents
-    ) : IContent, IStreamingContent
-    {
-        public IContent ToContent() => this;
-
-        public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
-
-        public virtual int EstimateTokens() => Contents.Sum(c => c.EstimateTokens());
-
-        public virtual IContent Truncate(int maxTokens, string? notice = null)
-        {
-            var truncatedList = new List<IContent>();
-            int remaining = maxTokens;
-            foreach (var c in Contents)
-            {
-                if (remaining <= 0) break;
-                var result = c.Truncate(remaining, notice);
-                truncatedList.Add(result);
-                remaining -= result.EstimateTokens();
-            }
-            return new ToolResult(CallId, truncatedList);
-        }
-    }
-
-    public record Image(
+public record Image(
     ReadOnlyMemory<byte>? Data = null,
     Uri? Uri = null,
-    [property: JsonPropertyName("media_type")] string MediaType = "image/png",
-    [property: JsonPropertyName("width")] int? Width = null,
-    [property: JsonPropertyName("height")] int? Height = null) : IContent
-    {
-        // Framework heuristics for preflight context budgeting (provider token accounting will vary)
-        private const int DefaultEstimatedTokens = 1000;
-        private const int MinEstimatedTokens = 85;
-        private const double PixelsPerToken = 750.0;
-
-        public virtual int EstimateTokens()
-        {
-            if (Width is > 0 && Height is > 0)
-            {
-                long pixels = (long)Width.Value * Height.Value;
-                double estimated = Math.Ceiling(pixels / PixelsPerToken);
-                return (int)Math.Min(int.MaxValue, Math.Max(MinEstimatedTokens, estimated));
-            }
-
-            return DefaultEstimatedTokens;
-        }
-
-        public virtual IContent Truncate(int maxTokens, string? notice = null)
-        {
-            if (EstimateTokens() <= maxTokens)
-                return this;
-
-            return new Text(notice ?? $"[Image ({MediaType}) omitted: exceeds context budget]");
-        }
-    }
-
-    public class Summary(string value) : Text(value)
-    {
-        public override string ToString() => Value;
-    }
-
-}
+    string MediaType = "image/png",
+    int? Width = null,
+    int? Height = null) : IContent;

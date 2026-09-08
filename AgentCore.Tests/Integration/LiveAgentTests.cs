@@ -100,7 +100,7 @@ public class LiveAgentTests
         var directMessage = new StreamingMessage(tornadoLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }), Role.Assistant);
         await foreach (var _ in directMessage) { }
 
-        var metadataItem = directMessage.Metadata?.Usage;
+        var metadataItem = directMessage.Get<MessageMetadata>()?.Usage;
         if (metadataItem != null)
         {
             // If the provider supports token usage extraction, verify it captures it

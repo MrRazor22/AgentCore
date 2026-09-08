@@ -114,8 +114,12 @@ internal class App
                 baseUrl += "/";
             }
 
-            // Universal PowerShell execution tool with workspace boundary enforcement
-            var shellTool = new CodeSharp.Tools.ShellTool(workspacePath);
+            var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
+            var sessionStore = new JsonFileChatStore(sessionsDir);
+            var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
+
+            // Universal PowerShell execution tool with workspace boundary enforcement and spillover
+            var shellTool = new CodeSharp.Tools.ShellTool(workspacePath, spilloverDir: spilloverDir);
             var skillManager = new SkillManager(workspacePath);
             var skillTool = new SkillTool(skillManager);
 
@@ -139,21 +143,10 @@ internal class App
                     : (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text("[DENIED] User rejected execution.");
             });
 
-            var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
-            var sessionStore = new JsonFileChatStore(sessionsDir);
-            var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
-
-            var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(baseUrl) };
-            var openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), clientOptions);
-            var chatClient = new OpenAIChatClient(openAIClient.GetChatClient(config.Model));
-
-            var behaviors = new AgentCore.LLM.Chat.ContentBehaviors()
-                .With(new CodeSharpTextBehavior(spilloverDir));
-
             IAgent agent = Agent.Create()
                 .WithLoggerFactory(lf)
-                .WithMEAI(chatClient)
-                .WithChatContext(contextWindow: 50000, reserveTokens: 2500, contentBehaviors: behaviors)
+                .WithTornado(config.ApiKey, config.Model, baseUrl)
+                .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())
                 .AddLLMLayer(new ToolCallDetectionLayer())

@@ -10,23 +10,26 @@ using CodeSharp.Security;
 namespace CodeSharp.Tools;
 
 /// <summary>
-/// Hardened, sandboxed shell tool executing PowerShell inside an isolated Docker container.
+/// Hardened, sandboxed shell tool executing PowerShell inside an isolated Docker container with automatic output spillover.
 /// </summary>
 public sealed class ShellTool
 {
     private readonly string _workspaceRoot;
     private readonly int _maxOutputChars;
+    private readonly string? _spilloverDir;
     private readonly DockerSandbox _sandbox;
     private readonly ConcurrentDictionary<string, BackgroundCommandTracker> _backgroundTasks = new();
 
     public ShellTool(
         string workspaceRoot,
         int maxOutputChars = 20_000,
+        string? spilloverDir = null,
         string image = "mcr.microsoft.com/powershell:lts-alpine")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceRoot);
         _workspaceRoot = Path.GetFullPath(workspaceRoot);
         _maxOutputChars = maxOutputChars;
+        _spilloverDir = spilloverDir;
         _sandbox = new DockerSandbox(_workspaceRoot, image: image);
     }
 
@@ -86,8 +89,7 @@ public sealed class ShellTool
                 ? result.StandardError
                 : $"{result.StandardOutput}\n[STDERR]\n{result.StandardError}");
 
-        var formatted = OutputHelpers.HeadTail(combined, Math.Min(outputCharacterCount, _maxOutputChars));
-        return $"Command completed with exit code {result.ExitCode}.\n\nOutput:\n{formatted}";
+        return FormatExecutionResult(result.ExitCode, combined, Math.Min(outputCharacterCount, _maxOutputChars));
     }
 
     private string GetCommandStatus(string commandId, int maxChars)
@@ -105,8 +107,47 @@ public sealed class ShellTool
             ? result.StandardOutput
             : $"{result.StandardOutput}\n[STDERR]\n{result.StandardError}";
 
-        var formatted = OutputHelpers.HeadTail(combined, Math.Min(maxChars, _maxOutputChars));
-        return $"CommandId: {commandId}\nStatus: Completed (Exit code: {result.ExitCode})\n\nOutput:\n{formatted}";
+        return FormatExecutionResult(result.ExitCode, combined, Math.Min(maxChars, _maxOutputChars), commandId);
+    }
+
+    private string FormatExecutionResult(int exitCode, string output, int limit, string? commandId = null)
+    {
+        var prefix = commandId != null
+            ? $"CommandId: {commandId}\nStatus: Completed (Exit code: {exitCode})"
+            : $"Command completed with exit code {exitCode}.";
+
+        if (output.Length <= limit)
+        {
+            return $"{prefix}\n\nOutput:\n{output}";
+        }
+
+        string? spillFile = TrySaveSpillover(output);
+        int totalLines = output.AsSpan().Count('\n') + 1;
+        var formatted = OutputHelpers.HeadTail(output, limit);
+
+        var spillNotice = spillFile != null
+            ? $"[Output truncated ({totalLines} lines). Full output saved to: {spillFile}. Use RunCommand with Get-Content to inspect.]"
+            : $"[Output truncated ({totalLines} lines)]";
+
+        return $"{prefix}\n\n{spillNotice}\n\nOutput:\n{formatted}";
+    }
+
+    private string? TrySaveSpillover(string content)
+    {
+        if (string.IsNullOrWhiteSpace(_spilloverDir)) return null;
+
+        try
+        {
+            Directory.CreateDirectory(_spilloverDir);
+            string fileName = $"output_{DateTime.UtcNow:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}.log";
+            string fullPath = Path.Combine(_spilloverDir, fileName);
+            File.WriteAllText(fullPath, content);
+            return fullPath;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private sealed record BackgroundCommandTracker(

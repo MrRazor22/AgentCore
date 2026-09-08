@@ -1,4 +1,8 @@
-using AgentCore.LLM;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
 
@@ -14,29 +18,33 @@ public class ChatContext : IContext
 {
     private readonly List<Message> _chat = new();
     private readonly ICompactor? _compactor;
-    private readonly ILogger<ChatContext>? _logger;
-    private readonly ContentBehaviors? _contentBehaviors;
+    private readonly ITokenizer _counter;
+    private readonly ITruncator _truncator;
     private readonly int _contextWindow, _reserveTokens, _limit, _maxSingleMessageTokens;
     private int _committedTokens;
     private const double SafetyMargin = 1.15;
     private readonly object _lock = new();
+    private readonly ILogger<ChatContext>? _logger;
 
     public ChatContext(
         int contextWindow = 50000, 
         int? reserveTokens = null, 
         int? maxSingleMessageTokens = null,
         ICompactor? compactor = null,
-        ILLM? summarizer = null, 
-        ILogger<ChatContext>? logger = null,
-        ContentBehaviors? contentBehaviors = null)
+        ITokenizer? counter = null,
+        ITruncator? truncator = null, 
+        ILogger<ChatContext>? logger = null)
     {
         _contextWindow = contextWindow;
         _reserveTokens = reserveTokens ?? Math.Min(4_000, contextWindow / 10);
         _limit = Math.Max(1, _contextWindow - _reserveTokens);
         _maxSingleMessageTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
-        _compactor = compactor ?? (summarizer != null ? new Summarizer(summarizer) : null);
+        _compactor = compactor;
         _logger = logger;
-        _contentBehaviors = contentBehaviors;
+
+        var cnt = counter ?? new Tokenizer();
+        _counter = cnt;
+        _truncator = truncator ?? new Truncator(cnt);
     }
 
     public Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
@@ -52,7 +60,7 @@ public class ChatContext : IContext
                 _chat.Add(msg);
             }
 
-            var usage = compactedMsg.FindLast(m => m.Metadata?.Usage != null)?.Metadata?.Usage;
+            var usage = compactedMsg.FindLast(m => m.Get<MessageMetadata>()?.Usage != null)?.Get<MessageMetadata>()?.Usage;
             _committedTokens = usage?.TotalTokens ?? _chat.Sum(Estimate);
         }
 
@@ -101,13 +109,10 @@ public class ChatContext : IContext
         if (message.Role == Role.System) return message; // Protect ONLY System, truncates User, Tool, and Assistant
         return new Message(
             message.Role, 
-            message.Contents.Select(c => _contentBehaviors != null 
-                ? _contentBehaviors.Truncate(c, _maxSingleMessageTokens) 
-                : c.Truncate(_maxSingleMessageTokens)).ToList(), 
+            message.Contents.Select(c => _truncator.Truncate(c, _maxSingleMessageTokens)).ToList(), 
             message.Metadata);
     }
 
     private int Estimate(Message message) =>
-        (int)((1 + message.Contents.Sum(c => _contentBehaviors != null ? _contentBehaviors.Estimate(c) : c.EstimateTokens())) * SafetyMargin);
+        (int)((1 + message.Contents.Sum(_counter.Estimate)) * SafetyMargin);
 }
-

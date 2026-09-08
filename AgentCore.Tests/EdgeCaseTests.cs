@@ -123,7 +123,7 @@ namespace AgentCore.Tests
             var context = new Context.ChatContext(
                 contextWindow: 120,
                 reserveTokens: 10,
-                summarizer: mockSummarizer
+                compactor: new Context.Summarizer(mockSummarizer)
             );
 
             // Add some messages to trigger pruning. 

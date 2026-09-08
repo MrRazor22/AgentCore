@@ -132,7 +132,7 @@ public sealed partial class Agent
 
             IContext context = _contextFactory != null
                 ? _contextFactory(lf)
-                : new ChatContext(summarizer: baseProvider, logger: lf.CreateLogger<ChatContext>());
+                : new ChatContext(compactor: new Summarizer(baseProvider), logger: lf.CreateLogger<ChatContext>());
 
             foreach (var layer in _contextLayers)
             {

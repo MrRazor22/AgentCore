@@ -32,6 +32,10 @@ Skills, scratchpads, and memory items are data structures, not behavioral object
 
 We compact context after LLM calls, not before. Pre-counting tokens is approximate and adds complexity. Using actual token counts from responses is exact and requires no additional infrastructure.
 
+### Context and Compactor Decoupling
+
+`ChatContext` depends strictly on `ICompactor`, never directly on `ILLM` or concrete compaction strategies. LLM dependencies belong solely to compactor implementations (such as `Summarizer(ILLM llm)`). This keeps the context contract minimal and prevents implementation details from leaking into context management.
+
 ### Explicit Over Implicit
 
 The agent explicitly loads skills via tool calls. Skills are not silently injected into context. This makes the agent's reasoning traceable and the system predictable.

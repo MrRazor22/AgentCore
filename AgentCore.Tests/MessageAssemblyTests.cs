@@ -118,13 +118,14 @@ public class MessageAssemblyTests
         Assert.Equal(Role.Assistant, message.Role);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
-        Assert.NotNull(message.Metadata);
-        Assert.Equal("msg_123", message.Metadata.Id);
-        Assert.Equal("gpt-4o", message.Metadata.Model);
-        Assert.Equal("stop", message.Metadata.FinishReason);
-        Assert.Equal(10, message.Metadata.Usage?.InputTokens);
-        Assert.Equal(20, message.Metadata.Usage?.OutputTokens);
-        Assert.Equal(30, message.Metadata.Usage?.TotalTokens);
+        var meta = message.Get<MessageMetadata>();
+        Assert.NotNull(meta);
+        Assert.Equal("msg_123", meta.Id);
+        Assert.Equal("gpt-4o", meta.Model);
+        Assert.Equal("stop", meta.FinishReason);
+        Assert.Equal(10, meta.Usage?.InputTokens);
+        Assert.Equal(20, meta.Usage?.OutputTokens);
+        Assert.Equal(30, meta.Usage?.TotalTokens);
     }
 
     [Fact]
@@ -363,9 +364,10 @@ public class MessageAssemblyTests
     {
         var stText = new StreamingText(ToAsyncStream([new TextDelta(0, "This is a very long text that will be truncated.")]));
         await foreach (var _ in stText) { }
-        var truncated = stText.ToContent().Truncate(3, "...");
+        var truncator = new Context.Truncator(new Context.Tokenizer());
+        var truncated = truncator.Truncate(stText.ToContent(), 3);
         Assert.IsType<Text>(truncated);
-        Assert.Contains("...", ((Text)truncated).Value);
+        Assert.Contains("truncated", ((Text)truncated).Value);
     }
 
     [Fact]

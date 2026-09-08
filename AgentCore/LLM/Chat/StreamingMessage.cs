@@ -44,7 +44,8 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
                     case IBlockStartEvent s:
                     {
                         var ch = Channel.CreateUnbounded<IBlockDeltaEvent>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
-                        var content = s.CreateStream(ch.Reader.ReadAllAsync(ct));
+                        var deltas = ch.Reader.ReadAllAsync(ct);
+                        var content = CreateStreamingContent(s, deltas);
                         active[s.Index] = (content, d => ch.Writer.TryWrite(d), () => ch.Writer.TryComplete());
                         if (content is not ToolCall)
                             yield return content;
@@ -89,7 +90,7 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
             }
 
             _contents.AddRange(completed.Values);
-            AddMetadata(new MessageMetadata(id, model, finishReason, usage));
+            Metadata = [new MessageMetadata(id, model, finishReason, usage)];
             success = true;
         }
         finally
@@ -102,6 +103,23 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
         }
     }
 
+    private static IStreamingContent CreateStreamingContent(IBlockStartEvent start, IAsyncEnumerable<IBlockDeltaEvent> deltas) => start switch
+    {
+        TextStart => new StreamingText(Filter<TextDelta>(deltas)),
+        ReasoningStart => new StreamingReasoning(Filter<ReasoningDelta>(deltas)),
+        ToolCallStart t => new StreamingToolCall(t.Id, t.Name, Filter<ToolCallDelta>(deltas)),
+        _ => throw new NotSupportedException($"Unsupported start event: {start.GetType().Name}")
+    };
+
+    private static async IAsyncEnumerable<T> Filter<T>(IAsyncEnumerable<IBlockDeltaEvent> source, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await foreach (var item in source.WithCancellation(ct).ConfigureAwait(false))
+        {
+            if (item is T typed)
+                yield return typed;
+        }
+    }
+
     /// <summary>
     /// Asynchronously drains the stream to completion and returns this message with fully populated contents and metadata.
     /// </summary>
@@ -111,4 +129,3 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
         return this;
     }
 }
- 

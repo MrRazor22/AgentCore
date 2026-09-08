@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.Tasks;
 using AgentCore.Tools;
 using Microsoft.Extensions.AI;
 
@@ -17,8 +18,8 @@ public sealed class AgentCoreAIFunction(ToolDefinition tool) : AIFunction
 
     public override JsonElement JsonSchema => _tool.ParametersSchema.ToJsonElement();
 
-    protected override Task<object?> InvokeCoreAsync(
-        IEnumerable<KeyValuePair<string, object?>> arguments,
+    protected override ValueTask<object?> InvokeCoreAsync(
+        AIFunctionArguments arguments,
         CancellationToken cancellationToken)
     {
         throw new NotSupportedException("Tool execution is managed by AgentCore's tooling pipeline, not via direct MEAI invocation.");

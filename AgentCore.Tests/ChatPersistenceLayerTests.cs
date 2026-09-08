@@ -20,9 +20,14 @@ public class ChatPersistenceLayerTests
             return Task.FromResult<IReadOnlyList<Message>?>(null);
         }
 
-        public Task SaveAsync(string sessionId, IReadOnlyList<Message> messages, CancellationToken ct = default)
+        public Task AppendAsync(string sessionId, IReadOnlyList<Message> messages, CancellationToken ct = default)
         {
-            Storage[sessionId] = messages.ToList();
+            if (!Storage.TryGetValue(sessionId, out var list))
+            {
+                list = new List<Message>();
+                Storage[sessionId] = list;
+            }
+            list.AddRange(messages);
             return Task.CompletedTask;
         }
     }
@@ -49,7 +54,7 @@ public class ChatPersistenceLayerTests
     }
 
     [Fact]
-    public async Task AddAsync_SavesSnapshotToStore()
+    public async Task AddAsync_AppendsMessagesToStore()
     {
         var store = new InMemoryChatStore();
         var innerContext = new MockMemoryProvider();
@@ -81,8 +86,8 @@ public class ChatPersistenceLayerTests
         Assert.Empty(messages);
 
         await layer.AddAsync([new Message(Role.User, [new Text("Fresh message")])]);
-        Assert.Single(store.Storage["session-3"]);
-        Assert.Equal("Fresh message", store.Storage["session-3"][0].Contents[0].ToString());
+        Assert.Equal(2, store.Storage["session-3"].Count);
+        Assert.Equal("Fresh message", store.Storage["session-3"][1].Contents[0].ToString());
     }
 
     [Fact]
@@ -95,10 +100,10 @@ public class ChatPersistenceLayerTests
             new(Role.System, [new Text("System instruction")]),
             new(Role.User, [new Text("First message")]),
             new(Role.Assistant, [new Text("First answer")]),
-            new(Role.User, [new Summary("Summary 1")]),
+            new(Role.User, [new Text("Summary 1")], [new SummaryMetadata(3)]),
             new(Role.User, [new Text("Second message")]),
             new(Role.Assistant, [new Text("Second answer")]),
-            new(Role.User, [new Summary("Latest Summary 2")]),
+            new(Role.User, [new Text("Latest Summary 2")], [new SummaryMetadata(6)]),
             new(Role.User, [new Text("Third message")]),
             new(Role.Assistant, [new Text("Third answer")])
         ];
@@ -112,7 +117,7 @@ public class ChatPersistenceLayerTests
         // Should reconstruct: System + Latest Summary 2 + Third message + Third answer
         Assert.Equal(4, workingContext.Count);
         Assert.Equal(Role.System, workingContext[0].Role);
-        Assert.IsType<Summary>(workingContext[1].Contents[0]);
+        Assert.NotNull(workingContext[1].Get<SummaryMetadata>());
         Assert.Equal("Latest Summary 2", workingContext[1].Contents[0].ToString());
         Assert.Equal("Third message", workingContext[2].Contents[0].ToString());
         Assert.Equal("Third answer", workingContext[3].Contents[0].ToString());
