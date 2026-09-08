@@ -4,47 +4,120 @@ using System.Threading.Channels;
 
 namespace AgentCore.LLM.Chat;
 
-public sealed class StreamingText(IAsyncEnumerable<TextDelta> stream) : Text(""), IStreamingContent, IAsyncEnumerable<TextDelta>
+public interface IStreamingContent : IContent
+{
+    void Complete();
+    IContent ToContent();
+}
+
+public sealed class StreamingText : Text, IStreamingContent, IAsyncEnumerable<TextDelta>
 {
     private readonly StringBuilder _sb = new();
+    private readonly Channel<TextDelta> _channel = Channel.CreateUnbounded<TextDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+
+    public StreamingText() : base("") { }
+
+    public StreamingText(IAsyncEnumerable<TextDelta> stream) : base("")
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var delta in stream.ConfigureAwait(false))
+                {
+                    Append(delta);
+                }
+            }
+            finally
+            {
+                Complete();
+            }
+        });
+    }
 
     public override string Value => _sb.ToString();
 
-    public async IAsyncEnumerator<TextDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    public void Append(TextDelta delta)
     {
-        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
-        {
-            _sb.Append(delta.Text);
-            yield return delta;
-        }
+        _sb.Append(delta.Text);
+        _channel.Writer.TryWrite(delta);
     }
+
+    public void Complete() => _channel.Writer.TryComplete();
+
+    public IAsyncEnumerator<TextDelta> GetAsyncEnumerator(CancellationToken ct = default)
+        => _channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
 
     public Text ToContent() => new(Value);
     IContent IStreamingContent.ToContent() => ToContent();
 }
 
-public sealed class StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) : Reasoning(""), IStreamingContent, IAsyncEnumerable<ReasoningDelta>
+public sealed class StreamingReasoning : Reasoning, IStreamingContent, IAsyncEnumerable<ReasoningDelta>
 {
     private readonly StringBuilder _sb = new();
+    private readonly Channel<ReasoningDelta> _channel = Channel.CreateUnbounded<ReasoningDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+
+    public StreamingReasoning() : base("") { }
+
+    public StreamingReasoning(IAsyncEnumerable<ReasoningDelta> stream) : base("")
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var delta in stream.ConfigureAwait(false))
+                {
+                    Append(delta);
+                }
+            }
+            finally
+            {
+                Complete();
+            }
+        });
+    }
 
     public override string Value => _sb.ToString();
 
-    public async IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    public void Append(ReasoningDelta delta)
     {
-        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
-        {
-            _sb.Append(delta.Thought);
-            yield return delta;
-        }
+        _sb.Append(delta.Thought);
+        _channel.Writer.TryWrite(delta);
     }
+
+    public void Complete() => _channel.Writer.TryComplete();
+
+    public IAsyncEnumerator<ReasoningDelta> GetAsyncEnumerator(CancellationToken ct = default)
+        => _channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
 
     public Reasoning ToContent() => new(Value);
     IContent IStreamingContent.ToContent() => ToContent();
 }
 
-public sealed class StreamingToolCall(string id, string name, IAsyncEnumerable<ToolCallDelta> stream) : ToolCall(id, name, new JsonObject()), IStreamingContent, IAsyncEnumerable<ToolCallDelta>
+public sealed class StreamingToolCall : ToolCall, IStreamingContent, IAsyncEnumerable<ToolCallDelta>
 {
     private readonly StringBuilder _args = new();
+    private readonly Channel<ToolCallDelta> _channel = Channel.CreateUnbounded<ToolCallDelta>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
+
+    public StreamingToolCall(string id, string name) : base(id, name, new JsonObject()) { }
+
+    public StreamingToolCall(string id, string name, IAsyncEnumerable<ToolCallDelta> stream) : base(id, name, new JsonObject())
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var delta in stream.ConfigureAwait(false))
+                {
+                    Append(delta);
+                }
+            }
+            finally
+            {
+                Complete();
+            }
+        });
+    }
 
     public override JsonObject Arguments
     {
@@ -63,14 +136,16 @@ public sealed class StreamingToolCall(string id, string name, IAsyncEnumerable<T
         }
     }
 
-    public async IAsyncEnumerator<ToolCallDelta> GetAsyncEnumerator(CancellationToken ct = default)
+    public void Append(ToolCallDelta delta)
     {
-        await foreach (var delta in stream.WithCancellation(ct).ConfigureAwait(false))
-        {
-            _args.Append(delta.Arguments);
-            yield return delta;
-        }
+        _args.Append(delta.Arguments);
+        _channel.Writer.TryWrite(delta);
     }
+
+    public void Complete() => _channel.Writer.TryComplete();
+
+    public IAsyncEnumerator<ToolCallDelta> GetAsyncEnumerator(CancellationToken ct = default)
+        => _channel.Reader.ReadAllAsync(ct).GetAsyncEnumerator(ct);
 
     public ToolCall ToContent()
     {

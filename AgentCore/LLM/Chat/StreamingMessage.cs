@@ -1,20 +1,8 @@
-using System.Runtime.CompilerServices;
-using System.Threading.Channels;
-
 namespace AgentCore.LLM.Chat;
-public interface IStreamingContent : IContent
-{
-    IContent ToContent();
-}
-public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
-{
-    private readonly IAsyncEnumerable<IMessageEvent> _stream;
 
-    public StreamingMessage(IAsyncEnumerable<IMessageEvent> stream, Role role = Role.Assistant) : base(role)
-    {
-        _stream = stream ?? throw new ArgumentNullException(nameof(stream));
-    }
-
+public sealed class StreamingMessage(IAsyncEnumerable<IMessageEvent> stream, Role role = Role.Assistant) 
+    : Message(role), IAsyncEnumerable<IContent>
+{
     /// <summary>
     /// Returns an immutable snapshot of the currently accumulated message state.
     /// </summary>
@@ -25,99 +13,86 @@ public sealed class StreamingMessage : Message, IAsyncEnumerable<IContent>
     /// </summary>
     public async IAsyncEnumerator<IContent> GetAsyncEnumerator(CancellationToken ct = default)
     {
-        var active = new Dictionary<int, (IStreamingContent Content, Action<IBlockDeltaEvent> Write, Action Complete)>();
+        var active = new Dictionary<int, IStreamingContent>();
         var completed = new SortedDictionary<int, IContent>();
         string? id = null, model = null, finishReason = null;
         TokenUsage? usage = null;
 
-        bool success = false;
-        try
+        await foreach (var evt in stream.WithCancellation(ct).ConfigureAwait(false))
         {
-            await foreach (var evt in _stream.WithCancellation(ct).ConfigureAwait(false))
+            switch (evt)
             {
-                switch (evt)
-                {
-                    case MessageStart s:
-                        Role = s.Role; id = s.Id; model = s.Model;
-                        break;
+                case MessageStart s:
+                    Role = s.Role; id = s.Id; model = s.Model;
+                    break;
 
-                    case IBlockStartEvent s:
+                case TextStart s:
+                    var text = new StreamingText();
+                    active[s.Index] = text;
+                    yield return text;
+                    break;
+
+                case ReasoningStart s:
+                    var reasoning = new StreamingReasoning();
+                    active[s.Index] = reasoning;
+                    yield return reasoning;
+                    break;
+
+                case ToolCallStart s:
+                    active[s.Index] = new StreamingToolCall(s.Id, s.Name);
+                    break;
+
+                case TextDelta d:
+                    if (!active.TryGetValue(d.Index, out var tc))
+                        throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
+                    ((StreamingText)tc).Append(d);
+                    break;
+
+                case ReasoningDelta d:
+                    if (!active.TryGetValue(d.Index, out var rc))
+                        throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
+                    ((StreamingReasoning)rc).Append(d);
+                    break;
+
+                case ToolCallDelta d:
+                    if (!active.TryGetValue(d.Index, out var toolc))
+                        throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
+                    ((StreamingToolCall)toolc).Append(d);
+                    break;
+
+                case IBlockEndEvent e:
+                    if (!active.Remove(e.Index, out var endEntry))
+                        throw new InvalidOperationException($"Protocol violation: Received End event for index {e.Index} before a Start event (or already ended).");
+                    endEntry.Complete();
+                    var materialized = endEntry.ToContent();
+                    completed[e.Index] = materialized;
+                    if (materialized is ToolCall tool)
                     {
-                        var ch = Channel.CreateUnbounded<IBlockDeltaEvent>(new UnboundedChannelOptions { SingleWriter = true, SingleReader = false });
-                        var deltas = ch.Reader.ReadAllAsync(ct);
-                        var content = CreateStreamingContent(s, deltas);
-                        active[s.Index] = (content, d => ch.Writer.TryWrite(d), () => ch.Writer.TryComplete());
-                        if (content is not ToolCall)
-                            yield return content;
-                        break;
+                        yield return tool;
                     }
+                    break;
 
-                    case IBlockDeltaEvent d:
-                        if (!active.TryGetValue(d.Index, out var entry))
-                            throw new InvalidOperationException($"Protocol violation: Received delta for index {d.Index} before a Start event.");
-                        entry.Write(d);
-                        break;
-
-                    case IBlockEndEvent e:
-                        if (!active.Remove(e.Index, out var endEntry))
-                            throw new InvalidOperationException($"Protocol violation: Received End event for index {e.Index} before a Start event (or already ended).");
-                        endEntry.Complete();
-                        var materialized = endEntry.Content.ToContent();
-                        completed[e.Index] = materialized;
-                        if (materialized is ToolCall tc)
-                        {
-                            yield return tc;
-                        }
-                        break;
-
-                    case MessageEnd end:
-                        finishReason = end.FinishReason;
-                        usage = end.Usage;
-                        break;
-                }
+                case MessageEnd end:
+                    finishReason = end.FinishReason;
+                    usage = end.Usage;
+                    break;
             }
-
-            // Gracefully complete any unclosed active blocks
-            foreach (var (idx, entry) in active.OrderBy(x => x.Key))
-            {
-                entry.Complete();
-                var materialized = entry.Content.ToContent();
-                completed[idx] = materialized;
-                if (materialized is ToolCall tc)
-                {
-                    yield return tc;
-                }
-            }
-
-            _contents.AddRange(completed.Values);
-            Metadata = [new MessageMetadata(id, model, finishReason, usage)];
-            success = true;
         }
-        finally
+
+        // Gracefully complete any unclosed active blocks
+        foreach (var (idx, entry) in active.OrderBy(x => x.Key))
         {
-            if (!success)
+            entry.Complete();
+            var materialized = entry.ToContent();
+            completed[idx] = materialized;
+            if (materialized is ToolCall tool)
             {
-                foreach (var entry in active.Values)
-                    entry.Complete();
+                yield return tool;
             }
         }
-    }
 
-    private static IStreamingContent CreateStreamingContent(IBlockStartEvent start, IAsyncEnumerable<IBlockDeltaEvent> deltas) => start switch
-    {
-        TextStart => new StreamingText(Filter<TextDelta>(deltas)),
-        ReasoningStart => new StreamingReasoning(Filter<ReasoningDelta>(deltas)),
-        ToolCallStart t => new StreamingToolCall(t.Id, t.Name, Filter<ToolCallDelta>(deltas)),
-        _ => throw new NotSupportedException($"Unsupported start event: {start.GetType().Name}")
-    };
-
-    private static async IAsyncEnumerable<T> Filter<T>(IAsyncEnumerable<IBlockDeltaEvent> source, [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        await foreach (var item in source.WithCancellation(ct).ConfigureAwait(false))
-        {
-            if (item is T typed)
-                yield return typed;
-        }
+        _contents.AddRange(completed.Values);
+        Metadata = [new MessageMetadata(id, model, finishReason, usage)];
     }
 
     /// <summary>

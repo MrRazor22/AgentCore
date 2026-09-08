@@ -416,4 +416,124 @@ public class MessageAssemblyTests
         });
         Assert.Equal("Connection terminated abruptly", ex.Message);
     }
+
+    [Fact]
+    public async Task Message_SkippedInnerEnumeration_AutoDrainsAndPopulatesContents()
+    {
+        var sequence = new List<IMessageEvent>
+        {
+            new ReasoningStart(0),
+            new ReasoningDelta(0, "Thinking step 1. "),
+            new ReasoningDelta(0, "Thinking step 2."),
+            new ReasoningEnd(0),
+            new TextStart(1),
+            new TextDelta(1, "Hello "),
+            new TextDelta(1, "world!"),
+            new TextEnd(1),
+            new MessageEnd()
+        };
+
+        // 1. Draining outer without iterating inner items
+        var msg1 = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
+        var yielded = new List<IContent>();
+        await foreach (var item in msg1)
+        {
+            yielded.Add(item);
+            // Notice: caller does NOT iterate item!
+        }
+
+        Assert.Equal(2, yielded.Count);
+        Assert.Equal("Thinking step 1. Thinking step 2.", Assert.IsAssignableFrom<Reasoning>(yielded[0]).Thought);
+        Assert.Equal("Hello world!", Assert.IsAssignableFrom<Text>(yielded[1]).Value);
+
+        Assert.Equal(2, msg1.Contents.Count);
+        Assert.Equal("Thinking step 1. Thinking step 2.", Assert.IsType<Reasoning>(msg1.Contents[0]).Thought);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(msg1.Contents[1]).Value);
+
+        // 2. ToMessageAsync() directly
+        var msg2 = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
+        var directMessage = await msg2.ToMessageAsync();
+        Assert.Equal(2, directMessage.Contents.Count);
+        Assert.Equal("Thinking step 1. Thinking step 2.", Assert.IsType<Reasoning>(directMessage.Contents[0]).Thought);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(directMessage.Contents[1]).Value);
+    }
+
+    [Fact]
+    public async Task Message_PartialInnerEnumeration_AutoDrainsRemainingDeltas()
+    {
+        var sequence = new List<IMessageEvent>
+        {
+            new TextStart(0),
+            new TextDelta(0, "Part 1. "),
+            new TextDelta(0, "Part 2. "),
+            new TextDelta(0, "Part 3."),
+            new TextEnd(0),
+            new MessageEnd()
+        };
+
+        var msg = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
+
+        await foreach (var content in msg)
+        {
+            if (content is StreamingText st)
+            {
+                await foreach (var delta in st)
+                {
+                    Assert.Equal("Part 1. ", delta.Text);
+                    break; // break early after reading only the first delta!
+                }
+            }
+        }
+
+        // Even with partial inner enumeration, the coordinator auto-drained the remainder
+        Assert.Single(msg.Contents);
+        Assert.Equal("Part 1. Part 2. Part 3.", Assert.IsType<Text>(msg.Contents[0]).Value);
+    }
+
+    [Fact]
+    public async Task Message_InterleavedReasoningTextAndToolCalls_AllAccumulateCorrectly()
+    {
+        var sequence = new List<IMessageEvent>
+        {
+            new ReasoningStart(0),
+            new ReasoningDelta(0, "Planning "),
+            new ToolCallStart(1, "call_1", "Calculator"),
+            new ReasoningDelta(0, "carefully..."),
+            new ToolCallDelta(1, "{\"a\": 1}"),
+            new ReasoningEnd(0),
+            new ToolCallEnd(1),
+            new TextStart(2),
+            new TextDelta(2, "Done."),
+            new TextEnd(2),
+            new MessageEnd()
+        };
+
+        var msg = new StreamingMessage(sequence.ToAsyncEnumerable(), Role.Assistant);
+
+        var innerDeltas = new List<string>();
+        var outerYields = new List<IContent>();
+
+        await foreach (var content in msg)
+        {
+            outerYields.Add(content);
+            if (content is StreamingReasoning sr)
+            {
+                await foreach (var d in sr)
+                    innerDeltas.Add(d.Thought);
+            }
+            else if (content is StreamingText st)
+            {
+                await foreach (var d in st)
+                    innerDeltas.Add(d.Text);
+            }
+        }
+
+        Assert.Equal(3, outerYields.Count);
+        Assert.Equal(["Planning ", "carefully...", "Done."], innerDeltas);
+
+        Assert.Equal(3, msg.Contents.Count);
+        Assert.Equal("Planning carefully...", Assert.IsType<Reasoning>(msg.Contents[0]).Thought);
+        Assert.Equal("call_1", Assert.IsType<ToolCall>(msg.Contents[1]).Id);
+        Assert.Equal("Done.", Assert.IsType<Text>(msg.Contents[2]).Value);
+    }
 }
