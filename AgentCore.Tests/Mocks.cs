@@ -163,6 +163,15 @@ public class MockMemoryProvider : IContext
         _internalMessages.AddRange(messages);
         return Task.CompletedTask;
     }
+
+    public Task UpdateAsync(
+        Message message,
+        CancellationToken ct = default)
+    {
+        int index = _internalMessages.IndexOf(message);
+        if (index >= 0) _internalMessages[index] = message;
+        return Task.CompletedTask;
+    }
 }
 
 public class MockTooling : ITooling

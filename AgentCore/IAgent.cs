@@ -1,4 +1,5 @@
 using AgentCore.Context;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using System.Runtime.CompilerServices;
@@ -27,7 +28,7 @@ public sealed partial class Agent(IContext context, IAgentWorkflow workflow) : I
 
         await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
         {
-            if (evt is TextDeltaEvent td) sb.Append(td.Text);
+            if (evt is TextDelta td) sb.Append(td.Text);
         }
 
         var text = sb.ToString();

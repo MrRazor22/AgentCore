@@ -8,10 +8,6 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Context;
 
-public sealed record SummaryMetadata(
-    int SummarizedCount = 0
-) : IMetadata;
-
 public interface ICompactor
 {
     Task<IReadOnlyList<Message>> CompactAsync(

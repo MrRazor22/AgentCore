@@ -488,7 +488,7 @@ internal static class ListExtensions
         {
             assembler.Push(evt);
         }
-        return [.. assembler.Blocks()];
+        return [.. assembler.ToMessage().Contents];
     }
 
     public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
