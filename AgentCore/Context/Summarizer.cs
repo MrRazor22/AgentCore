@@ -39,7 +39,12 @@ public class Summarizer(
         request.Add(new Message(Role.User, [new Text(_prompt)]));
 
         var eventStream = _llm.StreamAsync(request, responseSchema: null, tools: null, ct: ct);
-        var response = await new StreamingMessage(eventStream, Role.Assistant).ToMessageAsync(ct).ConfigureAwait(false);
+        var assembler = new BlockAssembler();
+        await foreach (var evt in eventStream.WithCancellation(ct).ConfigureAwait(false))
+        {
+            assembler.Push(evt);
+        }
+        var response = assembler.ToMessage();
         var summaryText = response.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
 
         return BuildCompactedHistory(messages, summaryText);

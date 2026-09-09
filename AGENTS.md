@@ -39,3 +39,17 @@
 - Focus on sound architecture and clean design first.
 - DO NOT run tests automatically or prematurely.
 - Only run and check tests when the user explicitly commands: "run and check tests" or "run tests".
+
+## 9. STRICT GROUNDING & MANDATORY EXHAUSTIVE VERIFICATION
+- ABSOLUTE PROHIBITION ON SPECULATION: Never state assumptions, guesses, or extrapolations as facts. If code was not directly inspected in the turn, you must not make claims about how it works.
+- MANDATORY EXHAUSTIVE MULTI-SOURCE INSPECTION: When asked to analyze, compare, or answer across multiple repositories, agents, or files, you MUST explicitly search, open, and verify the relevant files in EVERY SINGLE requested repository/source before formulating an answer. Never inspect 1 or 2 files and generalize to the rest.
+- CITE DIRECT CODE EVIDENCE: Every architectural claim about third-party frameworks must cite the exact file path and symbol/line range verified.
+- IMMEDIATE ADMISSION OF UNVERIFIED FACTS: If a repository or file cannot be checked or is unavailable, explicitly state that it was not checked rather than guessing its behavior.
+
+## 10. NO COMPLETED LISTS WITHOUT DIRECT FILE INSPECTION PROOF
+- It is STRICTLY FORBIDDEN to output an itemized list or summary of multiple repositories, frameworks, or files if even ONE item was not directly viewed (`view_file`) or searched in the active turn.
+- NEVER fabricate, fill in, or guess details for uninspected items just to complete a list or count.
+- If inspection of any item is incomplete or interrupted, you must explicitly state: "The following items were NOT inspected yet: [list]", and only discuss what was directly verified with exact line links.
+
+
+

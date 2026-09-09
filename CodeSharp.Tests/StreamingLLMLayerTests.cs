@@ -73,12 +73,11 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var message = new StreamingMessage(layer.StreamAsync(messages), Role.Assistant);
+        var assembler = new BlockAssembler();
 
-        var streamedContents = new List<IContent>();
-        await foreach (var content in message)
+        await foreach (var evt in layer.StreamAsync(messages))
         {
-            streamedContents.Add(content);
+            assembler.Push(evt);
         }
 
         channel.Writer.Complete();
@@ -88,12 +87,13 @@ public class StreamingLLMLayerTests
             channelResults.Add(output);
         }
 
-        Assert.Equal(3, streamedContents.Count);
+        var message = assembler.ToMessage();
+        Assert.Equal(3, message.Contents.Count);
         Assert.Equal(expectedOutputs.Count, channelResults.Count);
 
-        Assert.Equal("Thinking hard", (streamedContents[0] is IStreamingContent sc0 ? sc0.ToContent() : streamedContents[0]) is Reasoning r ? r.Thought : "");
-        Assert.Equal("Hello world!", (streamedContents[1] is IStreamingContent sc1 ? sc1.ToContent() : streamedContents[1]) is Text t ? t.Value : "");
-        Assert.Equal("tc-1", ((ToolCall)streamedContents[2]).Id);
+        Assert.Equal("Thinking hard", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
+        Assert.Equal("Hello world!", Assert.IsType<Text>(message.Contents[1]).Value);
+        Assert.Equal("tc-1", Assert.IsType<ToolCall>(message.Contents[2]).Id);
     }
 
     [Fact]
@@ -116,10 +116,11 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var message = new StreamingMessage(layer.StreamAsync(messages), Role.Assistant);
+        var assembler = new BlockAssembler();
 
-        await foreach (var _ in message)
+        await foreach (var evt in layer.StreamAsync(messages))
         {
+            assembler.Push(evt);
         }
 
         channel.Writer.Complete();
@@ -147,8 +148,7 @@ public class StreamingLLMLayerTests
         var messages = new List<Message>();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            var message = new StreamingMessage(layer.StreamAsync(messages, ct: cts.Token), Role.Assistant);
-            await foreach (var unused in message.WithCancellation(cts.Token))
+            await foreach (var unused in layer.StreamAsync(messages, ct: cts.Token).WithCancellation(cts.Token))
             {
             }
         });

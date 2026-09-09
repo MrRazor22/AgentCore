@@ -26,9 +26,8 @@ public class ToolCall(string id, string name, JsonObject? arguments = null) : IC
         Arguments.Count == 0 ? Name : $"{Name}({string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"))})";
 }
 
-public record ToolResult(string CallId, IReadOnlyList<IContent> Contents) : IContent, IStreamingContent
+public record ToolResult(string CallId, IReadOnlyList<IContent> Contents) : IContent
 {
-    public IContent ToContent() => this;
     public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
 }
 

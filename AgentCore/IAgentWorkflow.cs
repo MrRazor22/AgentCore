@@ -3,86 +3,61 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
-using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore
+namespace AgentCore;
+
+public interface IAgentWorkflow
 {
-    public interface IAgentWorkflow
+    IAsyncEnumerable<IAgentEvent> ExecuteAsync(
+        IContext context,
+        IContent input,
+        JsonSchema? responseSchema,
+        CancellationToken ct = default);
+}
+
+public class ReActWorkflow(ILLM llm, ITooling tooling, int maxIterations = 20) : IAgentWorkflow
+{
+    public async IAsyncEnumerable<IAgentEvent> ExecuteAsync(
+        IContext context,
+        IContent input,
+        JsonSchema? responseSchema,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        IAsyncEnumerable<IContent> ExecuteAsync(
-            IContext context,
-            IContent input,
-            JsonSchema? responseSchema,
-            CancellationToken ct = default);
-    }
+        await context.AddAsync([new Message(Role.User, [input])], ct);
 
-    public class ReActWorkflow : IAgentWorkflow
-    {
-        private readonly ILLM _llm;
-        private readonly ITooling _tooling;
-        private readonly int? _maxIterations;
-        private readonly ILogger<ReActWorkflow>? _logger;
-
-        public ReActWorkflow(
-            ILLM llm,
-            ITooling tooling,
-            int? maxIterations = null,
-            ILogger<ReActWorkflow>? logger = null)
+        for (int i = 0; i < maxIterations; i++)
         {
-            _llm = llm;
-            _tooling = tooling;
-            _maxIterations = maxIterations;
-            _logger = logger;
-        }
+            ct.ThrowIfCancellationRequested();
+            var messages = await context.GetMessagesAsync(ct);
+            var assembler = new BlockAssembler();
 
-        public async IAsyncEnumerable<IContent> ExecuteAsync(
-            IContext context,
-            IContent input,
-            JsonSchema? responseSchema,
-            [EnumeratorCancellation] CancellationToken ct = default)
-        {
-            int iterations = 0;
-            StreamingMessage assistantResponse;
-            await context.AddAsync([new Message(Role.User, [input])], ct).ConfigureAwait(false);
-
-            do
+            await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
-                ct.ThrowIfCancellationRequested();
-
-                if (_maxIterations.HasValue && iterations >= _maxIterations.Value)
-                    throw new InvalidOperationException($"Execution exceeded the maximum limit of {_maxIterations.Value} iterations.");
-
-                var chatMessages = await context.GetMessagesAsync(ct).ConfigureAwait(false);
-
-                _logger?.LogInformation("Executing workflow iteration. Iteration={Iteration}, MessageCount={MessageCount}", iterations, chatMessages.Count);
-
-                var msgEvents = _llm.StreamAsync(chatMessages, responseSchema, _tooling.GetDefinitions(), ct);
-                assistantResponse = new (msgEvents, Role.Assistant);
-                var toolExecutionTasks = new List<Task<ToolResult>>();
-
-                await foreach (var content in assistantResponse.WithCancellation(ct).ConfigureAwait(false))
-                { 
-                    yield return content;
-                    if (content is ToolCall toolCall)
-                        toolExecutionTasks.Add(_tooling.ExecuteAsync(toolCall, ct));
-                }
-
-                await context.AddAsync([assistantResponse], ct).ConfigureAwait(false); 
-
-                while (toolExecutionTasks.Count > 0)
-                {
-                    var completedTask = await Task.WhenAny(toolExecutionTasks).ConfigureAwait(false);
-                    toolExecutionTasks.Remove(completedTask);
-                    var result = await completedTask.ConfigureAwait(false);
-
-                    await context.AddAsync([new Message(Role.Tool, [result])], ct).ConfigureAwait(false);
-                    yield return result;
-                }
-
-                iterations++;
+                assembler.Push(evt);
+                yield return evt;
             }
-            while (assistantResponse.Contents.OfType<ToolCall>().Any());
+
+            var assistantMsg = assembler.ToMessage();
+            await context.AddAsync([assistantMsg], ct);
+
+            var toolCalls = assistantMsg.Contents.OfType<ToolCall>().ToList();
+            if (toolCalls.Count == 0) yield break;
+
+            foreach (var call in toolCalls)
+            {
+                yield return call;
+            }
+
+            var results = await Task.WhenAll(toolCalls.Select(tc => tooling.ExecuteAsync(tc, ct)));
+            await context.AddAsync([new Message(Role.Tool, [.. results])], ct);
+
+            foreach (var result in results)
+            {
+                yield return result;
+            }
         }
+
+        throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
     }
 }

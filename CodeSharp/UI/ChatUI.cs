@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 using AgentCore;
 using AgentCore.LLM;
@@ -30,11 +29,9 @@ public class ChatUI
 
     public async Task RunAsync(CancellationToken ct = default)
     {
-        // Get dynamic version
         var assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version;
         string versionStr = assemblyVersion != null ? $"{assemblyVersion.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}" : "1.0.0";
 
-        // Render beautiful header
         AnsiConsole.Clear();
         AnsiConsole.MarkupLine($"[bold purple]CodeSharp v{versionStr}[/] | [grey]Model:[/] {_modelName} | [grey]Workspace:[/] {_workspacePath}");
         AnsiConsole.MarkupLine("[grey]Tip: Press [white]Esc[/] to stop a response in progress.[/]");
@@ -87,33 +84,9 @@ public class ChatUI
             {
                 try
                 {
-                    await foreach (var content in _agent.InvokeStreamingAsync(new AgentText(input), turnCts.Token))
+                    await foreach (var evt in _agent.InvokeStreamingAsync(new AgentText(input), turnCts.Token))
                     {
-                        switch (content)
-                        {
-                            case StreamingReasoning reasoning:
-                                await foreach (var delta in reasoning.WithCancellation(turnCts.Token))
-                                    renderer.Write(delta);
-                                break;
-
-                            case StreamingText text:
-                                await foreach (var delta in text.WithCancellation(turnCts.Token))
-                                    renderer.Write(delta);
-                                break;
-
-                            case StreamingToolCall tool:
-                                await foreach (var delta in tool.WithCancellation(turnCts.Token))
-                                    renderer.Write(delta);
-                                break;
-
-                            case ToolResult toolResult:
-                                renderer.Write(toolResult);
-                                break;
-
-                            default:
-                                renderer.Write(content);
-                                break;
-                        }
+                        renderer.Write(evt);
                     }
                 }
                 finally
@@ -127,7 +100,6 @@ public class ChatUI
                     catch (Exception) { }
                 }
 
-                // End of turn: print done duration in grey
                 AnsiConsole.WriteLine();
                 AnsiConsole.WriteLine();
                 AnsiConsole.MarkupLine($"[grey]Done in {FormatDuration(totalSw.Elapsed)}[/]");
@@ -155,8 +127,3 @@ public class ChatUI
         return $"{duration.TotalSeconds:F0}s";
     }
 }
-
-
-
-
-

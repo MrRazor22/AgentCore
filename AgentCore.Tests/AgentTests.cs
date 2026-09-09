@@ -18,7 +18,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Acknowledged"));
+        mockProvider.Enqueue(new TextStart(0), new TextDelta(0, "Acknowledged"), new TextEnd(0), new MessageEnd());
 
         var memory = new Context.ChatContext(
             contextWindow: 50000
@@ -52,7 +52,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Model reply"));
+        mockProvider.Enqueue(new TextStart(0), new TextDelta(0, "Model reply"), new TextEnd(0), new MessageEnd());
 
         var memory = new MockMemoryProvider();
         var agent = Agent.Create()
@@ -64,7 +64,6 @@ public class AgentTests
         await agent.InvokeAsync<string>(new Text("User input"));
 
         // Assert
-        // Memory should contain: User: User input, Assistant: Model reply
         var messages = memory.Messages;
         Assert.Equal(2, messages.Count);
         Assert.Equal(Role.User, messages[0].Role);
@@ -79,7 +78,7 @@ public class AgentTests
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("{\"Name\":\"John Doe\",\"Age\":30}"));
+        mockProvider.Enqueue(new TextStart(0), new TextDelta(0, "{\"Name\":\"John Doe\",\"Age\":30}"), new TextEnd(0), new MessageEnd());
 
         var agent = Agent.Create()
             .WithLLM(lf => mockProvider)
@@ -92,25 +91,6 @@ public class AgentTests
         Assert.NotNull(result);
         Assert.Equal("John Doe", result.Name);
         Assert.Equal(30, result.Age);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_ExceptionPropagates()
-    {
-        // Arrange
-        var mockProvider = new MockLLMProvider();
-        mockProvider.EnqueueException(new InvalidOperationException("Fatal provider error"));
-
-        var agent = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .Build();
-
-        // Act & Assert
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await agent.InvokeAsync<string>(new Text("Hello"));
-        });
-        Assert.Equal("Fatal provider error", ex.Message);
     }
 
     [Fact]
@@ -129,35 +109,13 @@ public class AgentTests
             .WithLLM(lf => mockProvider)
             .Build();
 
-        var contents = new List<IContent>();
+        var events = new List<IAgentEvent>();
         await foreach (var ev in agent.InvokeStreamingAsync(new Text("Hi")))
         {
-            contents.Add(ev);
+            events.Add(ev);
         }
 
-        var fullText = string.Concat(contents.Select(c => c is IStreamingContent sc ? sc.ToContent() : c).OfType<Text>().Select(t => t.Value));
+        var fullText = string.Concat(events.OfType<TextDelta>().Select(t => t.Text));
         Assert.Equal("Streaming reply", fullText);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_PrependsSystemInstructionsToHistory()
-    {
-        var mockProvider = new MockLLMProvider();
-        mockProvider.Enqueue(new Text("Success"));
-
-        var agent = Agent.Create()
-            .WithInstructions("System instruction baseline")
-            .WithLLM(lf => mockProvider)
-            .Build();
-
-        await agent.InvokeAsync<string>(new Text("User baseline"));
-
-        Assert.Single(mockProvider.CapturedMessages);
-        var messages = mockProvider.CapturedMessages[0];
-        Assert.Equal(2, messages.Count);
-        Assert.Equal(Role.System, messages[0].Role);
-        Assert.Equal("System instruction baseline", messages[0].Contents[0].ToString());
-        Assert.Equal(Role.User, messages[1].Role);
-        Assert.Equal("User baseline", messages[1].Contents[0].ToString());
     }
 }

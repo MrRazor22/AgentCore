@@ -13,7 +13,7 @@ public interface ILLM
         CancellationToken ct = default);
 }
 
-public interface IMessageEvent;
+public interface IMessageEvent : IAgentEvent;
 public interface IBlockEvent : IMessageEvent { int Index { get; } }
 public interface IBlockStartEvent : IBlockEvent;
 public interface IBlockDeltaEvent : IBlockEvent;

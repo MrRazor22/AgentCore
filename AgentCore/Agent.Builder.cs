@@ -147,7 +147,7 @@ public sealed partial class Agent
 
             var workflow = _workflowFactory != null
                 ? _workflowFactory(provider, tooling, lf)
-                : new ReActWorkflow(provider, tooling, logger: lf.CreateLogger<ReActWorkflow>());
+                : new ReActWorkflow(provider, tooling);
 
             _logger.LogInformation("Agent built: Tools={ToolCount} Provider={ProviderType} Context={ContextType} Workflow={WorkflowType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
                 frozenTools.Length,

@@ -1,7 +1,6 @@
 using AgentCore.Context;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using Microsoft.Extensions.Logging;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -11,79 +10,42 @@ public interface IAgent
 {
     Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
     Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
 }
 
-public sealed partial class Agent : IAgent
+public sealed partial class Agent(IContext context, IAgentWorkflow workflow) : IAgent
 {
-    public static Builder Create() => new Builder();
+    public static Builder Create() => new();
 
-    private readonly IContext _context;
-    private readonly IAgentWorkflow _workflow; 
-
-    public Agent(
-        IContext memory,
-        IAgentWorkflow workflow)
-    {
-        _context = memory;
-        _workflow = workflow; 
-    }
-
-    private static T? Deserialize<T>(string? response)
-    {
-        if (typeof(T) == typeof(string))
-        {
-            return (T?)(object)(response ?? "");
-        }
-        if (string.IsNullOrWhiteSpace(response)) return default;
-        return System.Text.Json.JsonSerializer.Deserialize<T>(response);
-    }
-
-    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) => InvokeAsync<string>(input, ct);
+    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) =>
+        InvokeAsync<string>(input, ct);
 
     public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
     {
         var sb = new StringBuilder();
-        await foreach (var content in InvokeStreamingAsyncInternal<T>(input, ct))
+        var schema = typeof(T) == typeof(string) ? null : typeof(T).GetSchemaForType();
+
+        await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
         {
-            if (content is Text t)
-            {
-                sb.Append(t.Value);
-            }
-            else if (content is StreamingText st)
-            {
-                await foreach (var delta in st.WithCancellation(ct).ConfigureAwait(false))
-                    sb.Append(delta.Text);
-            }
+            if (evt is TextDeltaEvent td) sb.Append(td.Text);
         }
 
-        var fullText = sb.ToString();
-        return Deserialize<T>(fullText);
+        var text = sb.ToString();
+        if (typeof(T) == typeof(string)) return (T?)(object)text;
+        return string.IsNullOrWhiteSpace(text) ? default : System.Text.Json.JsonSerializer.Deserialize<T>(text);
     }
 
-    public IAsyncEnumerable<IContent> InvokeStreamingAsync(IContent input, CancellationToken ct = default) => ExecuteStreamAsync(input, null, ct);
+    public IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default) =>
+        ExecuteStreamAsync(input, null, ct);
 
-    private IAsyncEnumerable<IContent> InvokeStreamingAsyncInternal<T>(
-        IContent input,
-        CancellationToken ct = default)
-    {
-        JsonSchema? schema = null;
-        if (typeof(T) != typeof(string))
-        {
-            schema = typeof(T).GetSchemaForType();
-        }
-
-        return ExecuteStreamAsync(input, schema, ct);
-    }
-
-    private async IAsyncEnumerable<IContent> ExecuteStreamAsync(
+    private async IAsyncEnumerable<IAgentEvent> ExecuteStreamAsync(
         IContent input,
         JsonSchema? responseSchema,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await foreach (var content in _workflow.ExecuteAsync(_context, input, responseSchema, ct))
+        await foreach (var evt in workflow.ExecuteAsync(context, input, responseSchema, ct))
         {
-            yield return content;
+            yield return evt;
         }
     }
 }

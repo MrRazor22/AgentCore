@@ -1,11 +1,10 @@
-using System.Runtime.CompilerServices;
 using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat; 
 
 public enum Role { System, Assistant, User, Tool }
 
-public interface IContent;
+public interface IContent : IAgentEvent;
 
 public interface IMetadata;
 
