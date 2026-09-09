@@ -54,8 +54,6 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
 
         await foreach (var evt in innerStream.WithCancellation(ct).ConfigureAwait(false))
         {
-            yield return evt;
-
             switch (evt)
             {
                 case TextStart s:
@@ -63,61 +61,74 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                     eventIndex = Math.Max(eventIndex, s.Index + 1);
                     break;
 
-                case ReasoningStart rs:
-                    buffers[rs.Index] = new();
-                    eventIndex = Math.Max(eventIndex, rs.Index + 1);
-                    break;
-
                 case TextDelta d:
                     if (!buffers.TryGetValue(d.Index, out var tb)) buffers[d.Index] = tb = new();
                     tb.Append(d.Text);
                     break;
 
-                case ReasoningDelta rd:
-                    if (!buffers.TryGetValue(rd.Index, out var rb)) buffers[rd.Index] = rb = new();
-                    rb.Append(rd.Thought);
-                    break;
-
                 case TextEnd te when buffers.Remove(te.Index, out var sb):
-                    foreach (var tcEvt in EmitToolCalls(sb.ToString()))
+                    foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                     {
-                        yield return tcEvt;
-                        if (_options.StopAfterFirstToolCall) yield break;
-                    }
-                    break;
-
-                case ReasoningEnd re when buffers.Remove(re.Index, out var sb):
-                    foreach (var tcEvt in EmitToolCalls(sb.ToString()))
-                    {
-                        yield return tcEvt;
-                        if (_options.StopAfterFirstToolCall) yield break;
+                        yield return parsedEvt;
+                        if (parsedEvt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
                     }
                     break;
 
                 case MessageEnd:
                     foreach (var (_, sb) in buffers)
-                        foreach (var tcEvt in EmitToolCalls(sb.ToString()))
+                    {
+                        foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                         {
-                            yield return tcEvt;
-                            if (_options.StopAfterFirstToolCall) yield break;
+                            yield return parsedEvt;
+                            if (parsedEvt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
                         }
+                    }
                     buffers.Clear();
+                    yield return evt;
+                    break;
+
+                default:
+                    yield return evt;
+                    if (evt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
                     break;
             }
         }
 
-        IEnumerable<IMessageEvent> EmitToolCalls(string text)
+        IEnumerable<IMessageEvent> EmitParsedText(string text)
         {
             int lastIndex = 0;
             while (lastIndex < text.Length)
             {
                 var match = FindToolCall(text, lastIndex, toolNames);
-                if (match == null) break;
+                if (match == null)
+                {
+                    var remaining = text[lastIndex..];
+                    if (!string.IsNullOrEmpty(remaining))
+                    {
+                        int idx = eventIndex++;
+                        yield return new TextStart(idx);
+                        yield return new TextDelta(idx, remaining);
+                        yield return new TextEnd(idx);
+                    }
+                    break;
+                }
 
-                int idx = eventIndex++;
-                yield return new ToolCallStart(idx, match.Call.Id, match.Call.Name);
-                yield return new ToolCallDelta(idx, match.Call.Arguments?.ToJsonString() ?? "{}");
-                yield return new ToolCallEnd(idx);
+                if (match.Index > lastIndex)
+                {
+                    var leading = text[lastIndex..match.Index];
+                    if (!string.IsNullOrEmpty(leading))
+                    {
+                        int idx = eventIndex++;
+                        yield return new TextStart(idx);
+                        yield return new TextDelta(idx, leading);
+                        yield return new TextEnd(idx);
+                    }
+                }
+
+                int tcIdx = eventIndex++;
+                yield return new ToolCallStart(tcIdx, match.Call.Id, match.Call.Name);
+                yield return new ToolCallDelta(tcIdx, match.Call.Arguments?.ToJsonString() ?? "{}");
+                yield return new ToolCallEnd(tcIdx);
 
                 lastIndex = match.Index + match.Length;
             }

@@ -27,6 +27,8 @@ internal class App
         public string Model { get; set; } = string.Empty;
         public string ApiKey { get; set; } = string.Empty;
         public string? Provider { get; set; }
+        public string? GgufPath { get; set; }
+        public string? Backend { get; set; }
     }
 
     private static async Task Main(string[] args)
@@ -143,9 +145,19 @@ internal class App
                     : (AgentCore.LLM.Chat.IContent?)new AgentCore.LLM.Chat.Text("[DENIED] User rejected execution.");
             });
 
-            IAgent agent = Agent.Create()
-                .WithLoggerFactory(lf)
-                .WithTornado(config.ApiKey, config.Model, baseUrl)
+            var agentBuilder = Agent.Create()
+                .WithLoggerFactory(lf);
+
+            if (string.Equals(config.Provider, "tensorsharp", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(config.GgufPath))
+            {
+                agentBuilder.WithTensorSharpModel(config.GgufPath ?? config.Model);
+            }
+            else
+            {
+                agentBuilder.WithTornado(config.ApiKey, config.Model, baseUrl);
+            }
+
+            IAgent agent = agentBuilder
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())
