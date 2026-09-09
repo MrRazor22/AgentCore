@@ -21,13 +21,13 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual Task<IReadOnlyList<Message>> GetMessagesAsync(
+    public virtual Task<IReadOnlyList<Message>> GetAsync(
         CancellationToken ct = default)
-        => Inner.GetMessagesAsync(ct);
+        => Inner.GetAsync(ct);
 
-    public virtual Task AddAsync(
+    public virtual Task AppendAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default)
-        => Inner.AddAsync(messages, ct);
+        => Inner.AppendAsync(messages, ct);
 
 }

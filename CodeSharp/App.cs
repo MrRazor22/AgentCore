@@ -115,7 +115,7 @@ internal class App
             }
 
             var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
-            var sessionStore = new JsonFileChatStore(sessionsDir);
+            var sessionStore = new CodeSharp.Storage.JsonLinesChatStore(sessionsDir);
             var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
 
             // Universal PowerShell execution tool with workspace boundary enforcement and spillover

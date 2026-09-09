@@ -7,16 +7,16 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
 {
     private bool _restored;
 
-    public override async Task<IReadOnlyList<Message>> GetMessagesAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
-        return await base.GetMessagesAsync(ct).ConfigureAwait(false);
+        return await base.GetAsync(ct).ConfigureAwait(false);
     }
 
-    public override async Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
+    public override async Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
-        await base.AddAsync(messages, ct).ConfigureAwait(false);
+        await base.AppendAsync(messages, ct).ConfigureAwait(false);
         await store.AppendAsync(sessionId, messages, ct).ConfigureAwait(false);
     }
 
@@ -25,7 +25,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         if (_restored || !autoRestore) return;
         _restored = true;
         if (await store.LoadAsync(sessionId, ct).ConfigureAwait(false) is { Count: > 0 } history)
-            await Inner.AddAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
+            await Inner.AppendAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
     }
 
     internal static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)

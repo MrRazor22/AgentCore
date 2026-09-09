@@ -13,8 +13,8 @@ public static class TensorSharpBuilderExtensions
     /// <summary>
     /// Configures the Agent.Builder to use an in-process TensorSharp InferenceEngine.
     /// </summary>
-    public static Agent.Builder WithTensorSharp(
-        this Agent.Builder builder,
+    public static AgentBuilder WithTensorSharp(
+        this AgentBuilder builder,
         InferenceEngine engine,
         IModelArchitecture model,
         SamplingConfig? samplingConfig = null)
@@ -33,8 +33,8 @@ public static class TensorSharpBuilderExtensions
     /// <param name="ggufPath">The full path to the .gguf model file.</param>
     /// <param name="backend">The compute backend: GgmlCuda (for NVIDIA GPUs like RTX 3060), GgmlVulkan, GgmlMetal, or Cpu.</param>
     /// <param name="samplingConfig">Optional sampling parameters (temperature, top_p, max_tokens, etc.).</param>
-    public static Agent.Builder WithTensorSharpModel(
-        this Agent.Builder builder,
+    public static AgentBuilder WithTensorSharpModel(
+        this AgentBuilder builder,
         string ggufPath,
         BackendType backend = BackendType.GgmlCuda,
         SamplingConfig? samplingConfig = null)

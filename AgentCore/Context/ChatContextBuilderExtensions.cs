@@ -4,8 +4,8 @@ namespace AgentCore.Context;
 
 public static class ChatContextBuilderExtensions
 {
-    public static Agent.Builder WithChatContext(
-        this Agent.Builder builder,
+    public static AgentBuilder WithChatContext(
+        this AgentBuilder builder,
         int contextWindow = 50000,
         int? reserveTokens = null,
         int? maxSingleMessageTokens = null,

@@ -14,8 +14,8 @@ public static class TornadoBuilderExtensions
     /// <summary>
     /// Registers the LLMTornado provider on the Agent.Builder.
     /// </summary>
-    public static Agent.Builder WithTornado(
-        this Agent.Builder builder,
+    public static AgentBuilder WithTornado(
+        this AgentBuilder builder,
         TornadoApi api,
         ChatModel model)
     {
@@ -29,8 +29,8 @@ public static class TornadoBuilderExtensions
     /// <summary>
     /// Registers the LLMTornado provider using an API key, model name, and optional custom endpoint.
     /// </summary>
-    public static Agent.Builder WithTornado(
-        this Agent.Builder builder,
+    public static AgentBuilder WithTornado(
+        this AgentBuilder builder,
         string apiKey,
         string model,
         string? baseUrl = null,

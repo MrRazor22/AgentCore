@@ -51,5 +51,6 @@
 - NEVER fabricate, fill in, or guess details for uninspected items just to complete a list or count.
 - If inspection of any item is incomplete or interrupted, you must explicitly state: "The following items were NOT inspected yet: [list]", and only discuss what was directly verified with exact line links.
 
-
-
+## 11. NO TOKEN-WASTING MECHANICAL RENAMES — ASK USER
+- Never waste tokens performing mechanical symbol, type, or file renames across multiple files or updating cascading call sites.
+- Always ask the user to perform widespread renaming changes directly in their IDE—even mid-task or mid-refactor—as it is trivial for the user and saves tokens and context.

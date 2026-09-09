@@ -2,51 +2,113 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
+using AgentCore.Tools;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 
 namespace AgentCore;
 
 public interface IAgent
 {
-    Task<string?> InvokeAsync(IContent input, CancellationToken ct = default);
-    Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default);
-    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default);
+    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+        IContent input,
+        JsonSchema? responseSchema = null,
+        CancellationToken ct = default);
 }
 
-public sealed partial class Agent(IContext context, IAgentWorkflow workflow) : IAgent
+public sealed class Agent(
+    IContext context,
+    ILLM llm,
+    ITooling tooling,
+    int maxIterations = 20) : IAgent
 {
-    public static Builder Create() => new();
+    public IContext Context => context;
+    public ILLM LLM => llm;
+    public ITooling Tooling => tooling;
+    public int MaxIterations => maxIterations;
 
-    public Task<string?> InvokeAsync(IContent input, CancellationToken ct = default) =>
-        InvokeAsync<string>(input, ct);
+    public static AgentBuilder Create() => new();
 
-    public async Task<T?> InvokeAsync<T>(IContent input, CancellationToken ct = default)
+    public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+        IContent input,
+        JsonSchema? responseSchema = null,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await context.AppendAsync([new Message(Role.User, [input])], ct);
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var messages = await context.GetAsync(ct);
+            var assistant = new StreamingMessage(Role.Assistant);
+
+            await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
+            {
+                yield return evt;
+                if (assistant.Push(evt) is { } content)
+                {
+                    yield return content;
+                }
+            }
+
+            if (assistant.Contents.Count == 0) yield break;
+
+            await context.AppendAsync([assistant], ct);
+
+            var toolCalls = assistant.Contents
+                .OfType<ToolCall>()
+                .DistinctBy(tc => tc.Id)
+                .ToList();
+
+            if (toolCalls.Count == 0) yield break;
+
+            var toolTasks = toolCalls.Select(async tc =>
+            {
+                var result = await tooling.ExecuteAsync(tc, ct);
+                await context.AppendAsync([new Message(Role.Tool, [result])], CancellationToken.None);
+                return result;
+            }).ToList();
+
+            while (toolTasks.Count > 0)
+            {
+                var completed = await Task.WhenAny(toolTasks);
+                toolTasks.Remove(completed);
+                yield return await completed;
+            }
+        }
+
+        throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
+    }
+}
+
+public static class AgentExtensions
+{
+    public static IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct) => agent.InvokeStreamingAsync(input, null, ct);
+
+    public static Task<string?> InvokeAsync(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct = default) => agent.InvokeAsync<string>(input, ct);
+
+    public static async Task<T?> InvokeAsync<T>(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct = default)
     {
         var sb = new StringBuilder();
         var schema = typeof(T) == typeof(string) ? null : typeof(T).GetSchemaForType();
 
-        await foreach (var evt in ExecuteStreamAsync(input, schema, ct))
+        await foreach (var evt in agent.InvokeStreamingAsync(input, schema, ct))
         {
             if (evt is TextDelta td) sb.Append(td.Text);
         }
 
         var text = sb.ToString();
         if (typeof(T) == typeof(string)) return (T?)(object)text;
-        return string.IsNullOrWhiteSpace(text) ? default : System.Text.Json.JsonSerializer.Deserialize<T>(text);
-    }
-
-    public IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, CancellationToken ct = default) =>
-        ExecuteStreamAsync(input, null, ct);
-
-    private async IAsyncEnumerable<IAgentEvent> ExecuteStreamAsync(
-        IContent input,
-        JsonSchema? responseSchema,
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        await foreach (var evt in workflow.ExecuteAsync(context, input, responseSchema, ct))
-        {
-            yield return evt;
-        }
+        return string.IsNullOrWhiteSpace(text) ? default : JsonSerializer.Deserialize<T>(text);
     }
 }

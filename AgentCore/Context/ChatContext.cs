@@ -10,8 +10,8 @@ namespace AgentCore.Context;
 
 public interface IContext
 {
-    Task<IReadOnlyList<Message>> GetMessagesAsync(CancellationToken ct = default); 
-    Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
+    Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
+    Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
 }
 
 public class ChatContext : IContext
@@ -47,7 +47,7 @@ public class ChatContext : IContext
         _truncator = truncator ?? new Truncator(cnt);
     }
 
-    public Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
+    public Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
     {
         if (messages == null) throw new ArgumentNullException(nameof(messages));
         var compactedMsg = messages.Select(TruncateMessage).ToList();
@@ -84,7 +84,7 @@ public class ChatContext : IContext
         }
     }
 
-    public async Task<IReadOnlyList<Message>> GetMessagesAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
     {
         int estimatedTotal;
         lock (_lock) estimatedTotal = _committedTokens; 

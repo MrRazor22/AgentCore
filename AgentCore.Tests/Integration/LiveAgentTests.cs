@@ -63,7 +63,7 @@ public class LiveAgentTests
         }
     }
 
-    private Agent.Builder CreateAgentBuilder()
+    private AgentBuilder CreateAgentBuilder()
     {
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         return Agent.Create()
@@ -136,7 +136,7 @@ public class LiveAgentTests
         // If result is null, try to extract and deserialize from Reasoning content in context messages
         if (result == null)
         {
-            var assistantMsg = (await context.GetMessagesAsync()).LastOrDefault(m => m.Role == Role.Assistant);
+            var assistantMsg = (await context.GetAsync()).LastOrDefault(m => m.Role == Role.Assistant);
             if (assistantMsg != null)
             {
                 var thoughts = new List<string>();
@@ -218,7 +218,7 @@ public class LiveAgentTests
         var result = await agent.InvokeAsync<string>(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
 
         _output.WriteLine("=== Conversation Messages ===");
-        foreach (var msg in await context.GetMessagesAsync())
+        foreach (var msg in await context.GetAsync())
         {
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
@@ -256,7 +256,7 @@ public class LiveAgentTests
         var result = await agent.InvokeAsync<string>(new Text("Execute the tool FailTool with input 'test'. Do not explain; execute the tool directly."));
 
         _output.WriteLine("=== Conversation Messages (Test 5) ===");
-        foreach (var msg in await context.GetMessagesAsync())
+        foreach (var msg in await context.GetAsync())
         {
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
@@ -269,7 +269,7 @@ public class LiveAgentTests
         // Assert
         Assert.Contains("FailTool", tools.InvokedTools);
         // Verify that the error was captured in context messages
-        var toolResultMessages = (await context.GetMessagesAsync())
+        var toolResultMessages = (await context.GetAsync())
             .Where(m => m.Role == Role.Tool)
             .SelectMany(m => m.Contents)
             .OfType<ToolResult>()

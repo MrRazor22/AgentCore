@@ -150,13 +150,13 @@ public class MockMemoryProvider : IContext
         }
     }
 
-    public Task<IReadOnlyList<Message>> GetMessagesAsync(
+    public Task<IReadOnlyList<Message>> GetAsync(
         CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<Message>>(new List<Message>(Messages));
     }
 
-    public Task AddAsync(
+    public Task AppendAsync(
         IReadOnlyList<Message> messages,
         CancellationToken ct = default)
     {

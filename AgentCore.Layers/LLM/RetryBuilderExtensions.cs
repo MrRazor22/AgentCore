@@ -5,8 +5,8 @@ namespace AgentCore.Layers.LLM;
 
 public static class RetryBuilderExtensions
 {
-    public static Agent.Builder AddRetryLayer(
-        this Agent.Builder builder,
+    public static AgentBuilder AddRetryLayer(
+        this AgentBuilder builder,
         int maxRetries = 3,
         TimeSpan? initialDelay = null,
         TimeSpan? maxDelay = null,

@@ -69,7 +69,7 @@ public class TornadoTests
 
         var agent = builder.Build();
         Assert.NotNull(agent);
-        var llm = builder.GetService<ILLM>();
+        var llm = agent.LLM;
         Assert.NotNull(llm);
         Assert.IsType<TornadoLLM>(llm);
     }

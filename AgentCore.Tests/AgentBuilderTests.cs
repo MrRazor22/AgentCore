@@ -86,19 +86,19 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public override Task<IReadOnlyList<Message>> GetMessagesAsync(
+        public override Task<IReadOnlyList<Message>> GetAsync(
             CancellationToken ct = default)
         {
             CallLog.Add("GetMessages");
-            return base.GetMessagesAsync(ct);
+            return base.GetAsync(ct);
         }
 
-        public override async Task AddAsync(
+        public override async Task AppendAsync(
             IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
             CallLog.Add("Add");
-            await base.AddAsync(messages, ct).ConfigureAwait(false);
+            await base.AppendAsync(messages, ct).ConfigureAwait(false);
         }
     }
 
@@ -156,19 +156,19 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Task<IReadOnlyList<Message>> GetMessagesAsync(
+        public override Task<IReadOnlyList<Message>> GetAsync(
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.GetMessagesAsync(ct);
+            return base.GetAsync(ct);
         }
 
-        public override async Task AddAsync(
+        public override async Task AppendAsync(
             IReadOnlyList<Message> messages,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            await base.AddAsync(messages, ct).ConfigureAwait(false);
+            await base.AppendAsync(messages, ct).ConfigureAwait(false);
         }
     }
 
@@ -222,12 +222,8 @@ public class AgentBuilderTests
 
         var agent = builder.Build();
 
-        var llm = builder.GetRequiredService<ILLM>();
-        var memory = builder.GetRequiredService<IContext>();
-        var tooling = builder.GetRequiredService<ITooling>();
-
-        Assert.NotNull(llm);
-        Assert.NotNull(memory);
-        Assert.NotNull(tooling);
+        Assert.NotNull(agent.LLM);
+        Assert.NotNull(agent.Context);
+        Assert.NotNull(agent.Tooling);
     }
 }

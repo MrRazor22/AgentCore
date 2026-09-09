@@ -4,12 +4,12 @@ namespace AgentCore.Tools;
 
 public static class MethodToolBuilderExtensions
 {
-    public static Agent.Builder WithTools<T>(this Agent.Builder builder)
+    public static AgentBuilder WithTools<T>(this AgentBuilder builder)
     {
         return builder.WithTools(typeof(T));
     }
 
-    public static Agent.Builder WithTools(this Agent.Builder builder, object instance)
+    public static AgentBuilder WithTools(this AgentBuilder builder, object instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
         
@@ -27,7 +27,7 @@ public static class MethodToolBuilderExtensions
         return builder;
     }
 
-    public static Agent.Builder WithTools(this Agent.Builder builder, Type type)
+    public static AgentBuilder WithTools(this AgentBuilder builder, Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
         foreach (var tool in MethodTool.FromType(type))

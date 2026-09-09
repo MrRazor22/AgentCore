@@ -46,7 +46,7 @@ public class ChatPersistenceLayerTests
         var layer = new ChatPersistenceLayer(store, "session-1", autoRestore: true);
         layer.Attach(innerContext);
 
-        var messages = await layer.GetMessagesAsync();
+        var messages = await layer.GetAsync();
 
         Assert.Equal(2, messages.Count);
         Assert.Equal("Hello from previous session", messages[0].Contents[0].ToString());
@@ -62,7 +62,7 @@ public class ChatPersistenceLayerTests
         layer.Attach(innerContext);
 
         var userMessage = new Message(Role.User, [new Text("New question")]);
-        await layer.AddAsync([userMessage]);
+        await layer.AppendAsync([userMessage]);
 
         Assert.True(store.Storage.ContainsKey("session-2"));
         Assert.Single(store.Storage["session-2"]);
@@ -82,10 +82,10 @@ public class ChatPersistenceLayerTests
         var layer = new ChatPersistenceLayer(store, "session-3", autoRestore: false);
         layer.Attach(innerContext);
 
-        var messages = await layer.GetMessagesAsync();
+        var messages = await layer.GetAsync();
         Assert.Empty(messages);
 
-        await layer.AddAsync([new Message(Role.User, [new Text("Fresh message")])]);
+        await layer.AppendAsync([new Message(Role.User, [new Text("Fresh message")])]);
         Assert.Equal(2, store.Storage["session-3"].Count);
         Assert.Equal("Fresh message", store.Storage["session-3"][1].Contents[0].ToString());
     }
@@ -112,7 +112,7 @@ public class ChatPersistenceLayerTests
         var layer = new ChatPersistenceLayer(store, "session-compacted", autoRestore: true);
         layer.Attach(innerContext);
 
-        var workingContext = await layer.GetMessagesAsync();
+        var workingContext = await layer.GetAsync();
 
         // Should reconstruct: System + Latest Summary 2 + Third message + Third answer
         Assert.Equal(4, workingContext.Count);
@@ -139,7 +139,7 @@ public class ChatPersistenceLayerTests
         var store = new InMemoryChatStore();
         var mockLLM = new MockLLMProvider();
 
-        var agent = new Agent.Builder()
+        var agent = Agent.Create()
             .WithLLM(_ => mockLLM)
             .AddChatPersistence(store, "session-builder-test")
             .Build();

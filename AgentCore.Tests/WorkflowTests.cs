@@ -19,13 +19,13 @@ public class WorkflowTests
         provider.Enqueue(new TextStart(0), new TextDelta(0, "Today is sunny."), new TextEnd(0), new MessageEnd());
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
         var input = new Text("Hello");
 
         // Act
         var events = new List<IAgentEvent>();
-        await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
+        await foreach (var item in agent.InvokeStreamingAsync(input))
         {
             events.Add(item);
         }
@@ -69,13 +69,13 @@ public class WorkflowTests
         };
 
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
         var input = new Text("Weather in London?");
 
         // Act
         var events = new List<IAgentEvent>();
-        await foreach (var item in executor.ExecuteAsync(context, input, responseSchema: null))
+        await foreach (var item in agent.InvokeStreamingAsync(input))
         {
             events.Add(item);
         }
@@ -116,11 +116,11 @@ public class WorkflowTests
 
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
 
         var events = new List<IAgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(context, new Text("Calculate"), null))
+        await foreach (var evt in agent.InvokeStreamingAsync(new Text("Calculate")))
         {
             events.Add(evt);
         }
@@ -158,10 +158,10 @@ public class WorkflowTests
 
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
 
-        await foreach (var _ in executor.ExecuteAsync(context, new Text("Start"), null)) { }
+        await foreach (var _ in agent.InvokeStreamingAsync(new Text("Start"))) { }
 
         // Must have: 1 User, 1 Assistant, 1 Tool
         var assistantMessages = context.Messages.Where(m => m.Role == Role.Assistant).ToList();
@@ -202,9 +202,9 @@ public class WorkflowTests
         };
 
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
+        var agent = new Agent(context, llm, tooling);
 
-        await foreach (var _ in executor.ExecuteAsync(context, new Text("Test phasing"), null)) { }
+        await foreach (var _ in agent.InvokeStreamingAsync(new Text("Test phasing"))) { }
 
         Assert.True(assistantWasCommittedWhenToolRan);
     }
@@ -225,10 +225,10 @@ public class WorkflowTests
         );
 
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
 
-        await foreach (var _ in executor.ExecuteAsync(context, new Text("Run"), null)) { }
+        await foreach (var _ in agent.InvokeStreamingAsync(new Text("Run"))) { }
 
         var toolMessages = context.Messages.Where(m => m.Role == Role.Tool).ToList();
         Assert.Single(toolMessages);
@@ -262,12 +262,12 @@ public class WorkflowTests
 
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var _ in executor.ExecuteAsync(context, new Text("Interrupt me"), null, cts.Token)) { }
+            await foreach (var _ in agent.InvokeStreamingAsync(new Text("Interrupt me"), ct: cts.Token)) { }
         });
 
         // User message was added, but partial assistant was not committed
@@ -298,17 +298,17 @@ public class WorkflowTests
         };
 
         var (llm, _) = CreateServices(provider, tooling);
-        var executor = new ReActWorkflow(llm, tooling);
         var context = new MockMemoryProvider();
+        var agent = new Agent(context, llm, tooling);
 
-        await foreach (var _ in executor.ExecuteAsync(context, new Text("Run"), null)) { }
+        await foreach (var _ in agent.InvokeStreamingAsync(new Text("Run"))) { }
 
         // Tool was only executed once despite duplicate call ID
         Assert.Equal(1, executionCount);
 
         // Also test recovery scenario: pre-existing ToolResult in context prevents execution
         var recoveryContext = new MockMemoryProvider();
-        await recoveryContext.AddAsync([
+        await recoveryContext.AppendAsync([
             new Message(Role.Tool, [new ToolResult("call_dup", [new Text("previously executed")])])
         ]);
 
@@ -318,7 +318,8 @@ public class WorkflowTests
             new MessageEnd(FinishReason: "stop")
         );
 
-        await foreach (var _ in executor.ExecuteAsync(recoveryContext, new Text("Recover"), null)) { }
+        var recoveryAgent = new Agent(recoveryContext, llm, tooling);
+        await foreach (var _ in recoveryAgent.InvokeStreamingAsync(new Text("Recover"))) { }
 
         // Count should still be 1 (did not execute again)
         Assert.Equal(1, executionCount);

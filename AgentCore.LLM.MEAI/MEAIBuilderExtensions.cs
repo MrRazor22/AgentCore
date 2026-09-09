@@ -11,7 +11,7 @@ public static class MEAIBuilderExtensions
     /// <summary>
     /// Registers the Microsoft.Extensions.AI IChatClient on the Agent.Builder.
     /// </summary>
-    public static Agent.Builder WithMEAI(this Agent.Builder builder, IChatClient chatClient)
+    public static AgentBuilder WithMEAI(this AgentBuilder builder, IChatClient chatClient)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(chatClient);

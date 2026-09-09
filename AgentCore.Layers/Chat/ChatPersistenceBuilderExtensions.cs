@@ -4,8 +4,8 @@ namespace AgentCore;
 
 public static class ChatPersistenceBuilderExtensions
 {
-    public static Agent.Builder AddChatPersistence(
-        this Agent.Builder builder,
+    public static AgentBuilder AddChatPersistence(
+        this AgentBuilder builder,
         IChatStore store,
         string sessionId,
         bool autoRestore = true)

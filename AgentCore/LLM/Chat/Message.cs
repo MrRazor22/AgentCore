@@ -22,10 +22,8 @@ public sealed record SummaryMetadata(
 public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
-    IReadOnlyList<IMetadata>? metadata = null,
-    Guid? id = null)
+    IReadOnlyList<IMetadata>? metadata = null)
 {
-    public Guid Id { get; init; } = id ?? Guid.NewGuid();
     protected readonly List<IContent> _contents = contents != null ? [.. contents] : [];
 
     public Message(Role role, IReadOnlyList<IContent>? contents, MessageMetadata? metadata)
@@ -34,8 +32,6 @@ public class Message(
     public Role Role { get; protected set; } = role;
     public IReadOnlyList<IContent> Contents => _contents;
     public IReadOnlyList<IMetadata> Metadata { get; set; } = metadata ?? [];
-
-    public void Append(IContent content) => _contents.Add(content);
 
     public T? Get<T>() where T : class, IMetadata =>
         Metadata.OfType<T>().FirstOrDefault();

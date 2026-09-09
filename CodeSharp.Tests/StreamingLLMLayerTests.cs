@@ -115,7 +115,7 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var assembler = new BlockAssembler();
+        var assembler = new StreamingMessage(Role.Assistant);
 
         await foreach (var evt in layer.StreamAsync(messages))
         {
