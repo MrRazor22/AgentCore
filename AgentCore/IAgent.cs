@@ -9,23 +9,23 @@ using System.Text.Json;
 
 namespace AgentCore;
 
+public interface IAgentEvent;
 public interface IAgent
 {
-    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
-        IContent input,
-        JsonSchema? responseSchema = null,
-        CancellationToken ct = default);
+    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, JsonSchema? responseSchema = null, CancellationToken ct = default);
 }
 
 public sealed class Agent(
     IContext context,
     ILLM llm,
     ITooling tooling,
+    IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
     public IContext Context => context;
     public ILLM LLM => llm;
     public ITooling Tooling => tooling;
+    public IReadOnlyList<IContent>? Instructions => instructions;
     public int MaxIterations => maxIterations;
 
     public static AgentBuilder Create() => new();
@@ -35,7 +35,14 @@ public sealed class Agent(
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await context.AppendAsync([new Message(Role.User, [input])], ct);
+        var existing = await context.GetAsync(ct);
+        var toAppend = new List<Message>();
+        if (instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System))
+        {
+            toAppend.Add(new Message(Role.System, instructions));
+        }
+        toAppend.Add(new Message(Role.User, [input]));
+        await context.AppendAsync(toAppend, ct);
 
         for (int i = 0; i < maxIterations; i++)
         {

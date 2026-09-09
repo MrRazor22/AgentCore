@@ -155,14 +155,19 @@ internal class App
                 .WithTools(skillTool)
                 .AddToolingLayer(approvalLayer)
                 .WithInstructions(
-                    "You are CodeSharp, an expert agentic AI coding assistant.\n" +
-                    "Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.\n" +
-                    "You have a universal execution tool: RunCommand.\n" +
-                    "Use PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.\n\n" +
-                    "Available skills:\n" +
-                    skillManager.FormatIndex() + "\n\n" +
-                    "When a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions."
-                )
+                    """
+                    You are CodeSharp, an expert agentic AI coding assistant.
+                    Keep your responses precise, direct, and to the point. Do not add needless filler, conversational bloat, or generic pleasantries.
+                    You have a universal execution tool: RunCommand.
+                    Use PowerShell cmdlets and standard CLI utilities to inspect files, edit code, search directory structures, run builds, execute tests, and manage git repositories.
+                    """)
+                .WithInstructions(
+                    $"""
+                    Available skills:
+                    {skillManager.FormatIndex()}
+
+                    When a task requires specialized workflows or domain expertise, call ViewSkill with the skill name to load the complete instructions.
+                    """)
                 .Build();
 
             var chatUi = new ChatUI(agent, config.Model, workspacePath, formatter);

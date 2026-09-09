@@ -9,21 +9,44 @@ namespace AgentCore;
 
 public class AgentBuilder
 {
-    private readonly List<Tool> _tools = [];
     private ILogger<AgentBuilder> _logger = NullLogger<AgentBuilder>.Instance;
-    private IContent? _instructions;
-
-    private Func<ILoggerFactory, ILLM>? _llmFactory;
-    private Func<ILoggerFactory, IContext>? _contextFactory;
-    private Func<ILoggerFactory, ITooling>? _toolingFactory;
     private int _maxIterations = 20;
-    private ILoggerFactory? _loggerFactory;
-
+    private readonly List<IContent> _instructions = [];
+    private Func<ILoggerFactory, ILLM>? _llmFactory;
+    private Func<ILoggerFactory, ITooling>? _toolingFactory;
+    private Func<ILoggerFactory, IContext>? _contextFactory;
+    private readonly List<LLMLayer> _llmLayers = []; 
+    private readonly List<Tool> _tools = [];
     private readonly List<ToolingLayer> _toolingLayers = [];
-    private readonly List<LLMLayer> _llmLayers = [];
-    private readonly List<ContextLayer> _contextLayers = [];
+    private readonly List<ContextLayer> _contextLayers = []; 
+    private ILoggerFactory? _loggerFactory; 
 
-    public AgentBuilder WithInstructions(string prompt) { _instructions = new Text(prompt); return this; }
+    public AgentBuilder WithMaxIterations(int maxIterations)
+    {
+        _maxIterations = maxIterations;
+        return this;
+    }
+
+    public AgentBuilder WithInstructions(string prompt) => WithInstructions([new Text(prompt)]);
+
+    public AgentBuilder WithInstructions(IEnumerable<IContent> contents)
+    {
+        ArgumentNullException.ThrowIfNull(contents);
+        foreach (var content in contents)
+        {
+            if (content != null) _instructions.Add(content);
+        }
+        return this;
+    }
+
+     
+    public AgentBuilder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; } 
+    public AgentBuilder WithLLM(Func<ILoggerFactory, ILLM> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        _llmFactory = factory;
+        return this;
+    }
 
     public AgentBuilder WithTools(params Tool[] tools)
     {
@@ -35,44 +58,29 @@ public class AgentBuilder
         }
         return this;
     }
-
-    public AgentBuilder WithContext(Func<ILoggerFactory, IContext> factory)
-    {
-        ArgumentNullException.ThrowIfNull(factory);
-        _contextFactory = factory;
-        return this;
-    }
-
-    public AgentBuilder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
-
     public AgentBuilder WithTooling(Func<ILoggerFactory, ITooling> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         _toolingFactory = factory;
         return this;
     }
-
-    public AgentBuilder AddToolingLayer(ToolingLayer layer) { _toolingLayers.Add(layer); return this; }
+    public AgentBuilder AddToolingLayer(ToolingLayer layer)
+    {
+        _toolingLayers.Add(layer); return this;
+    }
+    
+    public AgentBuilder WithContext(Func<ILoggerFactory, IContext> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        _contextFactory = factory;
+        return this;
+    } 
+    public AgentBuilder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
         _loggerFactory = loggerFactory;
         _logger = loggerFactory?.CreateLogger<AgentBuilder>() ?? NullLogger<AgentBuilder>.Instance;
-        return this;
-    }
-
-    public AgentBuilder WithLLM(Func<ILoggerFactory, ILLM> factory)
-    {
-        ArgumentNullException.ThrowIfNull(factory);
-        _llmFactory = factory;
-        return this;
-    }
-
-    public AgentBuilder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; }
-
-    public AgentBuilder WithMaxIterations(int maxIterations)
-    {
-        _maxIterations = maxIterations;
         return this;
     }
 
@@ -113,19 +121,17 @@ public class AgentBuilder
             context = layer;
         }
 
-        if (_instructions != null)
-        {
-            context.AppendAsync([new Message(Role.System, [_instructions])]).GetAwaiter().GetResult();
-        }
+        var frozenInstructions = _instructions.Count > 0 ? _instructions.ToArray() : null;
 
-        _logger.LogInformation("Agent built: Tools={ToolCount} Provider={ProviderType} Context={ContextType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
+        _logger.LogInformation("Agent built: Tools={ToolCount} Instructions={InstructionCount} Provider={ProviderType} Context={ContextType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
             frozenTools.Length,
+            frozenInstructions?.Length ?? 0,
             provider.GetType().Name,
             context.GetType().Name,
             _llmLayers.Count,
             _toolingLayers.Count,
             _contextLayers.Count);
 
-        return new Agent(context, provider, tooling, _maxIterations);
+        return new Agent(context, provider, tooling, frozenInstructions, _maxIterations);
     }
 }
