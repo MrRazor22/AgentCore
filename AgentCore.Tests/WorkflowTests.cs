@@ -175,52 +175,38 @@ public class WorkflowTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ToolExecutionStarts_BeforeRemainingStreamFinishes()
+    public async Task ExecuteAsync_AssistantCommitted_BeforeToolExecutionStarts()
     {
-        var toolStartedTcs = new TaskCompletionSource<bool>();
-        var allowStreamToFinishTcs = new TaskCompletionSource<bool>();
-
         var provider = new MockLLMProvider();
-        provider.Enqueue(ct =>
-        {
-            return StreamGenerator(ct);
+        provider.Enqueue(
+            new ToolCallStart(0, "call_1", "tool_1"),
+            new ToolCallEnd(0),
+            new MessageEnd(FinishReason: "tool_calls")
+        );
+        provider.Enqueue(
+            new TextStart(0),
+            new TextDelta(0, "Done"),
+            new TextEnd(0),
+            new MessageEnd(FinishReason: "stop")
+        );
 
-            async IAsyncEnumerable<IMessageEvent> StreamGenerator([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
-            {
-                yield return new MessageStart();
-                yield return new ToolCallStart(0, "call_early", "early_tool");
-                yield return new ToolCallEnd(0);
-
-                // Wait until the tool has actually started execution before emitting the rest of the stream
-                await toolStartedTcs.Task;
-
-                yield return new TextStart(1);
-                yield return new TextDelta(1, "LLM finished after tool started");
-                yield return new TextEnd(1);
-                yield return new MessageEnd(FinishReason: "stop");
-            }
-        });
+        var context = new MockMemoryProvider();
+        bool assistantWasCommittedWhenToolRan = false;
 
         var tooling = new MockTooling();
         tooling.Handler = (calls, ct) =>
         {
-            toolStartedTcs.TrySetResult(true);
-            var results = calls.Select(c => new ToolResult(c.Id, [new Text("Done")])).ToList();
+            assistantWasCommittedWhenToolRan = context.Messages.Any(m => m.Role == Role.Assistant);
+            var results = calls.Select(c => new ToolResult(c.Id, [new Text("ok")])).ToList();
             return Task.FromResult<IReadOnlyList<ToolResult>>(results);
         };
 
         var (llm, _) = CreateServices(provider, tooling);
         var executor = new ReActWorkflow(llm, tooling);
-        var context = new MockMemoryProvider();
 
-        var events = new List<IAgentEvent>();
-        await foreach (var evt in executor.ExecuteAsync(context, new Text("Test concurrency"), null))
-        {
-            events.Add(evt);
-        }
+        await foreach (var _ in executor.ExecuteAsync(context, new Text("Test phasing"), null)) { }
 
-        Assert.True(toolStartedTcs.Task.IsCompletedSuccessfully);
-        Assert.Contains(events, e => e is ToolResult tr && tr.CallId == "call_early");
+        Assert.True(assistantWasCommittedWhenToolRan);
     }
 
     [Fact]
@@ -252,7 +238,7 @@ public class WorkflowTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_Cancellation_RetainsAlreadyPersistedContent()
+    public async Task ExecuteAsync_Cancellation_DoesNotCorruptContext()
     {
         using var cts = new CancellationTokenSource();
 
@@ -265,12 +251,9 @@ public class WorkflowTests
             {
                 yield return new MessageStart();
                 yield return new TextStart(0);
-                yield return new TextDelta(0, "Persisted text");
+                yield return new TextDelta(0, "Partial text");
                 yield return new TextEnd(0);
-                yield return new ToolCallStart(1, "call_saved", "saved_tool");
-                yield return new ToolCallEnd(1);
 
-                // Cancel the operation during streaming
                 cts.Cancel();
                 token.ThrowIfCancellationRequested();
                 yield return new MessageEnd(FinishReason: "stop");
@@ -287,15 +270,9 @@ public class WorkflowTests
             await foreach (var _ in executor.ExecuteAsync(context, new Text("Interrupt me"), null, cts.Token)) { }
         });
 
-        // Verify already-persisted contents are retained in context
-        var assistantMsg = Assert.Single(context.Messages, m => m.Role == Role.Assistant);
-        Assert.Equal(2, assistantMsg.Contents.Count);
-        Assert.Equal("Persisted text", Assert.IsType<Text>(assistantMsg.Contents[0]).Value);
-        Assert.Equal("call_saved", Assert.IsType<ToolCall>(assistantMsg.Contents[1]).Id);
-
-        // Turn was interrupted, so metadata finish reason is NOT normally completed ("stop")
-        var metadata = assistantMsg.Get<MessageMetadata>();
-        Assert.NotEqual("stop", metadata?.FinishReason);
+        // User message was added, but partial assistant was not committed
+        Assert.Single(context.Messages);
+        Assert.Equal(Role.User, context.Messages[0].Role);
     }
 
     [Fact]

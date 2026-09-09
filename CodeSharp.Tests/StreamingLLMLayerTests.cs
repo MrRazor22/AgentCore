@@ -73,11 +73,11 @@ public class StreamingLLMLayerTests
         layer.Writer = channel.Writer;
 
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
-        var assembler = new BlockAssembler();
+        var message = new StreamingMessage();
 
         await foreach (var evt in layer.StreamAsync(messages))
         {
-            assembler.Push(evt);
+            message.Push(evt);
         }
 
         channel.Writer.Complete();
@@ -87,7 +87,6 @@ public class StreamingLLMLayerTests
             channelResults.Add(output);
         }
 
-        var message = assembler.ToMessage();
         Assert.Equal(3, message.Contents.Count);
         Assert.Equal(expectedOutputs.Count, channelResults.Count);
 

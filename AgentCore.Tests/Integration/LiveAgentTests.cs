@@ -96,9 +96,11 @@ public class LiveAgentTests
         // Also call the underlying LLM direct stream to verify Metadata / token capturing
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         var tornadoLlm = new TornadoLLM(api, model);
-        
-        var directMessage = new StreamingMessage(tornadoLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }), Role.Assistant);
-        await foreach (var _ in directMessage) { }
+        var directMessage = new StreamingMessage(Role.Assistant);
+        await foreach (var evt in tornadoLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
+        {
+            directMessage.Push(evt);
+        }
 
         var metadataItem = directMessage.Get<MessageMetadata>()?.Usage;
         if (metadataItem != null)

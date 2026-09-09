@@ -22,8 +22,10 @@ public sealed record SummaryMetadata(
 public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
-    IReadOnlyList<IMetadata>? metadata = null)
+    IReadOnlyList<IMetadata>? metadata = null,
+    Guid? id = null)
 {
+    public Guid Id { get; init; } = id ?? Guid.NewGuid();
     protected readonly List<IContent> _contents = contents != null ? [.. contents] : [];
 
     public Message(Role role, IReadOnlyList<IContent>? contents, MessageMetadata? metadata)

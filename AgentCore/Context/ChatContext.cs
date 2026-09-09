@@ -12,7 +12,6 @@ public interface IContext
 {
     Task<IReadOnlyList<Message>> GetMessagesAsync(CancellationToken ct = default); 
     Task AddAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
-    Task UpdateAsync(Message message, CancellationToken ct = default);
 }
 
 public class ChatContext : IContext
@@ -71,19 +70,6 @@ public class ChatContext : IContext
         return Task.CompletedTask;
     }
 
-    public Task UpdateAsync(Message message, CancellationToken ct = default)
-    {
-        if (message == null) throw new ArgumentNullException(nameof(message));
-
-        lock (_lock)
-        {
-            int index = _chat.IndexOf(message);
-            if (index >= 0) _chat[index] = TruncateMessage(message);
-            _committedTokens = _chat.Sum(Estimate);
-        }
-
-        return Task.CompletedTask;
-    }
 
     private void StripReasoningFromChat()
     {

@@ -11,15 +11,13 @@ namespace AgentCore.Tests;
 public class MessageAssemblyTests
 {
     [Fact]
-    public void BlockAssembler_SequentialToolCalls_MergesCorrectly()
+    public void StreamingMessage_SequentialToolCalls_MergesCorrectly()
     {
-        var assembler = new BlockAssembler();
-        assembler.Push(new ToolCallStart(0, "ABC", "RunCommand"));
-        assembler.Push(new ToolCallDelta(0, "{\"commandLine\":\"ls\"}"));
-        assembler.Push(new ToolCallEnd(0));
-        assembler.Push(new MessageEnd());
-
-        var message = assembler.ToMessage();
+        var message = new StreamingMessage(Role.Assistant);
+        message.Push(new ToolCallStart(0, "ABC", "RunCommand"));
+        message.Push(new ToolCallDelta(0, "{\"commandLine\":\"ls\"}"));
+        message.Push(new ToolCallEnd(0));
+        message.Push(new MessageEnd());
 
         var calls = message.Contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
@@ -29,20 +27,18 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void BlockAssembler_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
+    public void StreamingMessage_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
     {
-        var assembler = new BlockAssembler();
-        assembler.Push(new ToolCallStart(0, "A", "RunCommand"));
-        assembler.Push(new ToolCallStart(1, "B", "SearchWeb"));
-        assembler.Push(new ToolCallDelta(0, "{\"commandLine\":"));
-        assembler.Push(new ToolCallDelta(1, "{\"query\":"));
-        assembler.Push(new ToolCallDelta(0, "\"ls\"}"));
-        assembler.Push(new ToolCallDelta(1, "\"test\"}"));
-        assembler.Push(new ToolCallEnd(0));
-        assembler.Push(new ToolCallEnd(1));
-        assembler.Push(new MessageEnd());
-
-        var message = assembler.ToMessage();
+        var message = new StreamingMessage(Role.Assistant);
+        message.Push(new ToolCallStart(0, "A", "RunCommand"));
+        message.Push(new ToolCallStart(1, "B", "SearchWeb"));
+        message.Push(new ToolCallDelta(0, "{\"commandLine\":"));
+        message.Push(new ToolCallDelta(1, "{\"query\":"));
+        message.Push(new ToolCallDelta(0, "\"ls\"}"));
+        message.Push(new ToolCallDelta(1, "\"test\"}"));
+        message.Push(new ToolCallEnd(0));
+        message.Push(new ToolCallEnd(1));
+        message.Push(new MessageEnd());
 
         var calls = message.Contents.OfType<ToolCall>().ToList();
         Assert.Equal(2, calls.Count);
@@ -57,19 +53,17 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void BlockAssembler_FluidAndStructuralStreaming_BehavesCorrectly()
+    public void StreamingMessage_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var assembler = new BlockAssembler();
-        assembler.Push(new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"));
-        assembler.Push(new ReasoningStart(0));
-        assembler.Push(new ReasoningDelta(0, "Thinking deeply..."));
-        assembler.Push(new ReasoningEnd(0));
-        assembler.Push(new TextStart(1));
-        assembler.Push(new TextDelta(1, "Here is the answer."));
-        assembler.Push(new TextEnd(1));
-        assembler.Push(new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20)));
-
-        var message = assembler.ToMessage();
+        var message = new StreamingMessage();
+        message.Push(new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"));
+        message.Push(new ReasoningStart(0));
+        message.Push(new ReasoningDelta(0, "Thinking deeply..."));
+        message.Push(new ReasoningEnd(0));
+        message.Push(new TextStart(1));
+        message.Push(new TextDelta(1, "Here is the answer."));
+        message.Push(new TextEnd(1));
+        message.Push(new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20)));
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal(Role.Assistant, message.Role);
@@ -87,18 +81,16 @@ public class MessageAssemblyTests
     }
 
     [Fact]
-    public void BlockAssembler_PreservesInterleavedOrder()
+    public void StreamingMessage_PreservesInterleavedOrder()
     {
-        var assembler = new BlockAssembler();
-        assembler.Push(new TextStart(0));
-        assembler.Push(new TextDelta(0, "First text. "));
-        assembler.Push(new ToolCallStart(1, "call_1", "Search"));
-        assembler.Push(new ToolCallDelta(1, "{\"q\": \"c#\"}"));
-        assembler.Push(new TextStart(2));
-        assembler.Push(new TextDelta(2, "Second text."));
-        assembler.Push(new MessageEnd());
-
-        var message = assembler.ToMessage();
+        var message = new StreamingMessage(Role.Assistant);
+        message.Push(new TextStart(0));
+        message.Push(new TextDelta(0, "First text. "));
+        message.Push(new ToolCallStart(1, "call_1", "Search"));
+        message.Push(new ToolCallDelta(1, "{\"q\": \"c#\"}"));
+        message.Push(new TextStart(2));
+        message.Push(new TextDelta(2, "Second text."));
+        message.Push(new MessageEnd());
 
         Assert.Equal(3, message.Contents.Count);
         Assert.Equal("First text. ", Assert.IsType<Text>(message.Contents[0]).Value);

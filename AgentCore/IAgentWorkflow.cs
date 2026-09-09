@@ -37,42 +37,40 @@ public class ReActWorkflow(ILLM llm, ITooling tooling, int maxIterations = 20) :
         {
             ct.ThrowIfCancellationRequested();
             var messages = await context.GetMessagesAsync(ct);
-            var assembler = new BlockAssembler();
-            var assistant = new Message(Role.Assistant);
-            await context.AddAsync([assistant], ct);
-
-            var runningTools = new List<Task<ToolResult>>();
+            var assistant = new StreamingMessage(Role.Assistant);
 
             await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
-                assembler.Push(evt);
                 yield return evt;
-
-                if (evt is IBlockEndEvent end && assembler.CompleteBlock(end.Index) is { } content)
+                if (assistant.Push(evt) is { } content)
                 {
-                    assistant.Append(content);
-                    await context.UpdateAsync(assistant, ct);
                     yield return content;
-
-                    if (content is ToolCall tc && executedToolCallIds.Add(tc.Id))
-                    {
-                        runningTools.Add(tooling.ExecuteAsync(tc, ct));
-                    }
                 }
             }
 
-            assistant.Metadata = [assembler.Metadata];
-            await context.UpdateAsync(assistant, ct);
+            if (assistant.Contents.Count == 0) yield break;
 
-            var toolCalls = assistant.Contents.OfType<ToolCall>().ToList();
+            await context.AddAsync([assistant], ct);
+
+            var toolCalls = assistant.Contents
+                .OfType<ToolCall>()
+                .Where(tc => executedToolCallIds.Add(tc.Id))
+                .ToList();
+
             if (toolCalls.Count == 0) yield break;
 
-            var results = await Task.WhenAll(runningTools);
-            await context.AddAsync([new Message(Role.Tool, [.. results])], ct);
-
-            foreach (var result in results)
+            var toolTasks = toolCalls.Select(async tc =>
             {
-                yield return result;
+                var result = await tooling.ExecuteAsync(tc, ct);
+                await context.AddAsync([new Message(Role.Tool, [result])], CancellationToken.None);
+                return result;
+            }).ToList();
+
+            while (toolTasks.Count > 0)
+            {
+                var completed = await Task.WhenAny(toolTasks);
+                toolTasks.Remove(completed);
+                yield return await completed;
             }
         }
 
