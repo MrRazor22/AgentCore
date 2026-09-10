@@ -2,6 +2,7 @@ using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 namespace AgentCore.Tools;
@@ -9,86 +10,90 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default);
+    IAsyncEnumerable<ToolResult> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
-internal sealed class Tooling : ITooling
+internal sealed class Tooling(
+    IEnumerable<ITool>? tools,
+    ILogger<Tooling>? logger = null,
+    bool parallel = true,
+    int? maxConcurrency = null,
+    TimeSpan? timeout = null) : ITooling
 {
-    private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
-    private readonly IReadOnlyDictionary<string, ITool> _tools;
-    private readonly ILogger<Tooling> _logger;
+    private readonly Dictionary<string, ITool> _tools = tools?.ToDictionary(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase) ?? [];
+    private readonly ToolDefinition[] _definitions = tools?.Select(t => t.Definition).ToArray() ?? [];
+    private readonly ILogger _logger = logger ?? NullLogger<Tooling>.Instance;
 
-    public Tooling(
-        IReadOnlyList<ITool> tools,
-        ILogger<Tooling>? logger = null)
+    public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
+
+    public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+        IReadOnlyList<ToolCall> calls,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var toolList = tools ?? Array.Empty<ITool>();
+        if (calls is not { Count: > 0 }) yield break;
 
-        var duplicates = toolList
-            .GroupBy(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key)
-            .ToList();
-
-        if (duplicates.Count > 0)
+        if (!parallel || calls.Count == 1)
         {
-            throw new ArgumentException($"Duplicate tool names registered: {string.Join(", ", duplicates)}");
+            foreach (var call in calls) yield return await ExecuteAsync(call, ct).ConfigureAwait(false);
+            yield break;
         }
 
-        _toolDefinitions = toolList.Select(t => t.Definition).ToList();
-        _tools = toolList.ToDictionary(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase);
-        _logger = logger ?? NullLogger<Tooling>.Instance;
-    }
+        using var sem = maxConcurrency is > 0 and int max ? new SemaphoreSlim(max) : null;
+        var tasks = calls.Select(async call =>
+        {
+            if (sem != null) await sem.WaitAsync(ct).ConfigureAwait(false);
+            try { return await ExecuteAsync(call, ct).ConfigureAwait(false); }
+            finally { sem?.Release(); }
+        }).ToList();
 
-    public IReadOnlyList<ToolDefinition> GetDefinitions() => _toolDefinitions;
+        while (tasks.Count > 0)
+        {
+            var done = await Task.WhenAny(tasks).ConfigureAwait(false);
+            tasks.Remove(done);
+            yield return await done;
+        }
+    }
 
     public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(call.Name))
-        {
-            _logger.LogWarning("Tool validation failed. Reason='Tool name empty'");
-            return Failed(call.Id, "Unknown", "Tool name cannot be empty.");
-        }
+            return Fail(call.Id, "Unknown", "Tool name cannot be empty.");
 
-        _tools.TryGetValue(call.Name, out var tool);
-        if (tool == null)
-        {
-            _logger.LogWarning("Tool validation failed. ToolName={ToolName}, Reason='Not registered'", call.Name);
-            return Failed(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
-        }
+        if (!_tools.TryGetValue(call.Name, out var tool))
+            return Fail(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
 
         var errors = tool.Definition.ParametersSchema.Validate(call.Arguments);
-        if (errors.Any())
-        {
-            var errorMessage = string.Join("; ", errors);
-            _logger.LogWarning("Tool validation failed. ToolName={ToolName}, Error={Error}", call.Name, errorMessage);
-            return Failed(call.Id, call.Name, errorMessage);
-        }
+        if (errors.Count > 0)
+            return Fail(call.Id, call.Name, string.Join("; ", errors));
+
+        using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+        cts?.CancelAfter(timeout!.Value);
 
         var sw = Stopwatch.StartNew();
-
         try
         {
-            var contents = await tool.InvokeAsync(call.Arguments, ct).ConfigureAwait(false);
-            sw.Stop();
-            _logger.LogInformation("Tool executed. ToolName={ToolName}, DurationMs={DurationMs}", call.Name, sw.ElapsedMilliseconds);
+            var contents = await tool.InvokeAsync(call.Arguments, cts?.Token ?? ct).ConfigureAwait(false);
+            _logger.LogInformation("Tool '{Tool}' executed in {Elapsed}ms", call.Name, sw.ElapsedMilliseconds);
             return new ToolResult(call.Id, contents);
+        }
+        catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
+        {
+            return Fail(call.Id, call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            sw.Stop();
-            var actualEx = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
-                ? tie.InnerException
-                : ex;
-
-            _logger.LogError(actualEx, "Tool execution failed. ToolName={ToolName}, DurationMs={DurationMs}, Error={Message}", call.Name, sw.ElapsedMilliseconds, actualEx.Message);
-            return Failed(call.Id, call.Name, actualEx.Message);
+            var msg = ex.GetBaseException().Message;
+            _logger.LogError(ex, "Tool '{Tool}' failed after {Elapsed}ms: {Error}", call.Name, sw.ElapsedMilliseconds, msg);
+            return Fail(call.Id, call.Name, msg);
         }
     }
 
-    private static ToolResult Failed(string callId, string toolName, string message)
-        => new(callId, [new Text($"Error calling tool '{toolName}': {message}")]);
+    private ToolResult Fail(string id, string name, string message)
+    {
+        _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
+        return new(id, [new Text($"Error calling tool '{name}': {message}")]);
+    }
 }

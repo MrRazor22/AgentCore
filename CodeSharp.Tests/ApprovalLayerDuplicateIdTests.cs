@@ -20,6 +20,17 @@ public class ApprovalLayerDuplicateIdTests
     private class MockTooling(ITool tool) : ITooling
     {
         public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Definition };
+
+        public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+            IReadOnlyList<ToolCall> calls,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            foreach (var call in calls)
+            {
+                yield return new ToolResult(call.Id, [new Text($"Output for {call.Name}")]);
+            }
+        }
+
         public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
             return Task.FromResult(new ToolResult(call.Id, [new Text($"Output for {call.Name}")]));

@@ -14,12 +14,12 @@ namespace CodeSharp.UI;
 
 public class ChatUI
 {
-    private readonly IAgent _agent;
+    private readonly Agent _agent;
     private readonly string _modelName;
     private readonly string _workspacePath;
     private readonly IToolDisplayFormatter _formatter;
 
-    public ChatUI(IAgent agent, string modelName, string workspacePath, IToolDisplayFormatter formatter)
+    public ChatUI(Agent agent, string modelName, string workspacePath, IToolDisplayFormatter formatter)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _modelName = modelName;

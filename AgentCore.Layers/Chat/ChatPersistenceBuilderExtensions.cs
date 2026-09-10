@@ -1,6 +1,6 @@
-using AgentCore.Layers.Chat;
+using AgentCore;
 
-namespace AgentCore;
+namespace AgentCore.Layers.Chat;
 
 public static class ChatPersistenceBuilderExtensions
 {

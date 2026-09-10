@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using AgentCore;
 using AgentCore.LLM;
+using AgentCore.LLM.TensorSharp;
+using AgentCore.LLM.Tornado;
 using AgentCore.Tools;
 using AgentCore.Context;
 using Spectre.Console;
@@ -158,7 +160,7 @@ internal class App
                 agentBuilder.WithTornado(config.ApiKey, config.Model, baseUrl);
             }
 
-            IAgent agent = agentBuilder
+            Agent agent = agentBuilder
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
                 .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
                 .AddLLMLayer(new RetryLayer())

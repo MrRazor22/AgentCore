@@ -70,19 +70,12 @@ public sealed class Agent(
 
             if (toolCalls.Count == 0) yield break;
 
-            var toolTasks = toolCalls.Select(async tc =>
+            await foreach (var result in tooling.ExecuteAsync(toolCalls, ct))
             {
-                var result = await tooling.ExecuteAsync(tc, ct);
-                await context.AppendAsync([new Message(Role.Tool, [result])], CancellationToken.None);
-                return result;
-            }).ToList();
-
-            while (toolTasks.Count > 0)
-            {
-                var completed = await Task.WhenAny(toolTasks);
-                toolTasks.Remove(completed);
-                yield return await completed;
+                await context.AppendAsync([new Message(Role.Tool, [result])], ct);
+                yield return result;
             }
+
         }
 
         throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
@@ -92,17 +85,17 @@ public sealed class Agent(
 public static class AgentExtensions
 {
     public static IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
-        this IAgent agent,
+        this Agent agent,
         IContent input,
         CancellationToken ct) => agent.InvokeStreamingAsync(input, null, ct);
 
     public static Task<string?> InvokeAsync(
-        this IAgent agent,
+        this Agent agent,
         IContent input,
         CancellationToken ct = default) => agent.InvokeAsync<string>(input, ct);
 
     public static async Task<T?> InvokeAsync<T>(
-        this IAgent agent,
+        this Agent agent,
         IContent input,
         CancellationToken ct = default)
     {

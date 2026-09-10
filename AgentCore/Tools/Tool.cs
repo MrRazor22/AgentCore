@@ -1,13 +1,32 @@
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging; 
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tools; 
 
+public sealed record ToolDefinition(string Name, string Description, JsonSchema ParametersSchema);
 public interface ITool
 {
     ToolDefinition Definition { get; }
     Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default);
 }
 
-public sealed record ToolDefinition(string Name, string Description, JsonSchema ParametersSchema);
+public static class ToolingBuilderExtensions
+{
+    public static AgentBuilder WithTooling(
+        this AgentBuilder builder,
+        bool parallel = true,
+        int? maxConcurrency = null,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.WithTooling((tools, lf) => new Tooling(
+            tools: tools,
+            logger: lf.CreateLogger<Tooling>(),
+            parallel: parallel,
+            maxConcurrency: maxConcurrency,
+            timeout: timeout
+        ));
+    }
+}

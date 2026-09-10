@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
 
-public sealed class AgentTool(IAgent agent, string name, string description) : ITool
+public sealed class AgentTool(Agent agent, string name, string description) : ITool
 {
     private static readonly JsonSchema PromptSchema = new JsonSchemaBuilder()
         .Type<object>()
@@ -22,6 +22,6 @@ public sealed class AgentTool(IAgent agent, string name, string description) : I
 
 public static class AgentToolExtensions
 {
-    public static AgentTool AsTool(this IAgent agent, string name, string description)
+    public static AgentTool AsTool(this Agent agent, string name, string description)
         => new(agent, name, description);
 }

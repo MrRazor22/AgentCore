@@ -6,7 +6,7 @@ using TensorSharp.Models;
 using TensorSharp.Runtime;
 using TensorSharp.Runtime.Scheduling;
 
-namespace AgentCore;
+namespace AgentCore.LLM.TensorSharp;
 
 public static class TensorSharpBuilderExtensions
 {

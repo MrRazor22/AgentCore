@@ -23,6 +23,6 @@ public sealed class ToolApprovalLayer : ToolingLayer
         if (denial is { Count: > 0 })
             return new ToolResult(call.Id, denial);
 
-        return await Inner.ExecuteAsync(call, ct).ConfigureAwait(false);
+        return await base.ExecuteAsync(call, ct).ConfigureAwait(false);
     }
 }

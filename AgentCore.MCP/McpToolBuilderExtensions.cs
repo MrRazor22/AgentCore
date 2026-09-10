@@ -22,7 +22,7 @@ public static class McpToolBuilderExtensions
 }
 public static class AgentMcpExtensions
 {
-    public static McpServerTool AsMcpTool(this IAgent agent, string name, string description)
+    public static McpServerTool AsMcpTool(this Agent agent, string name, string description)
         => McpServerTool.Create(
             (string prompt, CancellationToken ct) => agent.InvokeAsync(new Text(prompt), ct),
             new() { Name = name, Description = description });

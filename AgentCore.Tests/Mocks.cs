@@ -176,6 +176,14 @@ public class MockTooling : ITooling
             calls.Select(c => new ToolResult(c.Id, [new Text("Success")])).ToList()
         );
 
+    public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+        IReadOnlyList<ToolCall> calls,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var results = await Handler(calls, ct).ConfigureAwait(false);
+        foreach (var r in results) yield return r;
+    }
+
     public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
     {
         var results = await Handler(new[] { call }, ct).ConfigureAwait(false);

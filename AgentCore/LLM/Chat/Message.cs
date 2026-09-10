@@ -33,6 +33,5 @@ public class Message(
     public IReadOnlyList<IContent> Contents => _contents;
     public IReadOnlyList<IMetadata> Metadata { get; set; } = metadata ?? [];
 
-    public T? Get<T>() where T : class, IMetadata =>
-        Metadata.OfType<T>().FirstOrDefault();
+    public T? Get<T>() where T : class, IMetadata => Metadata.OfType<T>().FirstOrDefault();
 }

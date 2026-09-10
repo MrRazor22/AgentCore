@@ -3,8 +3,9 @@ using AgentCore.LLM.Tornado;
 using LlmTornado;
 using LlmTornado.Chat.Models;
 using LlmTornado.Code;
+using AgentCore;
 
-namespace AgentCore;
+namespace AgentCore.LLM.Tornado;
 
 /// <summary>
 /// Builder extension methods for registering LLMTornado provider.

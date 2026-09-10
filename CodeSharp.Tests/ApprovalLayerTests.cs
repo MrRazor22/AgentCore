@@ -24,6 +24,17 @@ public class ApprovalLayerTests
         public bool ExecuteCalled { get; private set; }
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
+        public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+            IReadOnlyList<ToolCall> calls,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            ExecuteCalled = true;
+            foreach (var call in calls)
+            {
+                yield return new ToolResult(call.Id, [new Text("Execution Ok")]);
+            }
+        }
+
         public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
             ExecuteCalled = true;
@@ -167,6 +178,19 @@ public class ApprovalLayerTests
     private class TimedMockTooling : ITooling
     {
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
+
+        public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+            IReadOnlyList<ToolCall> calls,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            var tasks = calls.Select(call => ExecuteAsync(call, ct)).ToList();
+            while (tasks.Count > 0)
+            {
+                var completed = await Task.WhenAny(tasks);
+                tasks.Remove(completed);
+                yield return await completed;
+            }
+        }
 
         public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {

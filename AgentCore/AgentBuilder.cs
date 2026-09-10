@@ -13,13 +13,13 @@ public class AgentBuilder
     private int _maxIterations = 20;
     private readonly List<IContent> _instructions = [];
     private Func<ILoggerFactory, ILLM>? _llmFactory;
-    private Func<ILoggerFactory, ITooling>? _toolingFactory;
+    private Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling>? _toolingFactory;
     private Func<ILoggerFactory, IContext>? _contextFactory;
     private readonly List<LLMLayer> _llmLayers = []; 
     private readonly List<ITool> _tools = [];
     private readonly List<ToolingLayer> _toolingLayers = [];
     private readonly List<ContextLayer> _contextLayers = []; 
-    private ILoggerFactory? _loggerFactory; 
+    private ILoggerFactory? _loggerFactory;
 
     public AgentBuilder WithMaxIterations(int maxIterations)
     {
@@ -58,10 +58,16 @@ public class AgentBuilder
         }
         return this;
     }
-    public AgentBuilder WithTooling(Func<ILoggerFactory, ITooling> factory)
+    public AgentBuilder WithTooling(Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         _toolingFactory = factory;
+        return this;
+    }
+    public AgentBuilder WithTooling(Func<ILoggerFactory, ITooling> factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        _toolingFactory = (_, lf) => factory(lf);
         return this;
     }
     public AgentBuilder AddToolingLayer(ToolingLayer layer)
@@ -103,7 +109,7 @@ public class AgentBuilder
         var frozenTools = _tools.ToArray();
 
         ITooling tooling = _toolingFactory != null
-            ? _toolingFactory(lf)
+            ? _toolingFactory(frozenTools, lf)
             : new Tooling(frozenTools, lf.CreateLogger<Tooling>());
         foreach (var layer in _toolingLayers)
         {
