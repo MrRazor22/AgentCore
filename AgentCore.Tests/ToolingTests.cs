@@ -73,10 +73,14 @@ public class ToolingTests
         Assert.Equal("25", toolResult.ToString());
     }
 
-    private class NullNameTool : Tool
+    private class NullNameTool(string name) : ITool
     {
-        public NullNameTool(string name) : base(new ToolDefinition(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())) { }
-        public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Task.FromResult<object?>(null);
+        public ToolDefinition Definition { get; } = !string.IsNullOrWhiteSpace(name)
+            ? new(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())
+            : throw new ArgumentException("Name cannot be null or whitespace", nameof(name));
+
+        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<IContent>>(Array.Empty<IContent>());
     }
 
     [Theory]

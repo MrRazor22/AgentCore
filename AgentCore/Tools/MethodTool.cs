@@ -1,3 +1,4 @@
+using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using System.ComponentModel;
 using System.Reflection;
@@ -15,11 +16,11 @@ public sealed class ToolAttribute(string? name = null, string? description = nul
 }
 
 /// <summary>
-/// A <see cref="Tool"/> that wraps any C# method via <see cref="MethodInfo"/> + optional target instance.
+/// An <see cref="ITool"/> that wraps any C# method via <see cref="MethodInfo"/> + optional target instance.
 /// Name, description, and parameter schema are derived automatically from the method signature
 /// and <see cref="ToolAttribute"/> / <see cref="DescriptionAttribute"/> annotations.
 /// </summary>
-public sealed class MethodTool : Tool
+public sealed class MethodTool : ITool
 {
     private readonly MethodInfo _method;
     private readonly object? _target;
@@ -28,16 +29,16 @@ public sealed class MethodTool : Tool
     private readonly bool _returnsGenericTask;
     private readonly PropertyInfo? _taskResultProperty;
 
+    public ToolDefinition Definition { get; }
+
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null)
-        : base(new ToolDefinition(
-            GetName(method, name),
-            GetDescription(method, description),
-            BuildSchema(method)))
     {
         ArgumentNullException.ThrowIfNull(method);
 
         if (!method.IsStatic && target == null)
             throw new ArgumentException("Instance methods require a target instance.", nameof(target));
+
+        Definition = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
 
         _method = method;
         _target = target;
@@ -52,7 +53,7 @@ public sealed class MethodTool : Tool
         }
     }
 
-    public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
+    public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
     {
         var args = new object?[_parameters.Length];
 
@@ -72,35 +73,29 @@ public sealed class MethodTool : Tool
 
         if (_returnsTask)
         {
-            await (Task)result!;
-            return null;
+            await ((Task)result!).ConfigureAwait(false);
+            return [new Text(string.Empty)];
         }
 
         if (_returnsGenericTask)
         {
             var task = (Task)result!;
             await task.ConfigureAwait(false);
-            return _taskResultProperty!.GetValue(task);
+            result = _taskResultProperty!.GetValue(task);
         }
 
-        return result;
+        return ToContentList(result);
     }
 
-    public static IEnumerable<MethodTool> FromType(Type type, object? instance = null)
+    private static IReadOnlyList<IContent> ToContentList(object? raw) => raw switch
     {
-        ArgumentNullException.ThrowIfNull(type);
-
-        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
-            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
-
-        foreach (var method in methods)
-        {
-            if (!method.IsStatic && instance == null)
-                throw new ArgumentException($"Method '{method.Name}' is an instance method, but no instance was provided.", nameof(instance));
-
-            yield return new MethodTool(method, method.IsStatic ? null : instance);
-        }
-    }
+        null => [new Text(string.Empty)],
+        IContent c => [c],
+        IReadOnlyList<IContent> list => list,
+        IEnumerable<IContent> enumContents => enumContents.ToList(),
+        string s => [new Text(s)],
+        _ => [new Text(JsonSerializer.Serialize(raw))]
+    };
 
     private static string GetName(MethodInfo method, string? name)
     {

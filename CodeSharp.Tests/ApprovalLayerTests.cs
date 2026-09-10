@@ -13,10 +13,10 @@ namespace CodeSharp.Tests;
 
 public class ApprovalLayerTests
 {
-    private class TestTool : Tool
+    private class TestTool(string name) : ITool
     {
-        public TestTool(string name) : base(new ToolDefinition(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build())) { }
-        public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct) => Task.FromResult<object?>("ok");
+        public ToolDefinition Definition { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
+        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<IContent>>([new Text("ok")]);
     }
 
     private class MockTooling : ITooling

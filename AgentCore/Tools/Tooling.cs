@@ -15,14 +15,14 @@ public interface ITooling
 internal sealed class Tooling : ITooling
 {
     private readonly IReadOnlyList<ToolDefinition> _toolDefinitions;
-    private readonly IReadOnlyDictionary<string, Tool> _tools;
+    private readonly IReadOnlyDictionary<string, ITool> _tools;
     private readonly ILogger<Tooling> _logger;
 
     public Tooling(
-        IReadOnlyList<Tool> tools,
+        IReadOnlyList<ITool> tools,
         ILogger<Tooling>? logger = null)
     {
-        var toolList = tools ?? Array.Empty<Tool>();
+        var toolList = tools ?? Array.Empty<ITool>();
 
         var duplicates = toolList
             .GroupBy(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase)
@@ -71,19 +71,10 @@ internal sealed class Tooling : ITooling
 
         try
         {
-            var rawResult = await tool.InvokeAsync(call.Arguments, ct).ConfigureAwait(false);
-            IContent result = rawResult switch
-            {
-                IContent c => c,
-                null => new Text(string.Empty),
-                string s => new Text(s),
-                Exception ex => new Text(ex.Message),
-                _ => new Text(JsonSerializer.Serialize(rawResult))
-            };
-
+            var contents = await tool.InvokeAsync(call.Arguments, ct).ConfigureAwait(false);
             sw.Stop();
             _logger.LogInformation("Tool executed. ToolName={ToolName}, DurationMs={DurationMs}", call.Name, sw.ElapsedMilliseconds);
-            return new ToolResult(call.Id, [result]);
+            return new ToolResult(call.Id, contents);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

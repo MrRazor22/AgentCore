@@ -69,26 +69,20 @@ namespace AgentCore.Tests
             }
         }
 
-        private class TestExecutionTool : Tool
+        private class TestExecutionTool(string name, int delayMs = 0) : ITool
         {
+            public ToolDefinition Definition { get; } = new(name, "Mock Tool Description", new(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }));
             public List<string> ExecutionLog { get; } = new();
-            private readonly int _delayMs;
 
-            public TestExecutionTool(string name, int delayMs = 0)
-                : base(new ToolDefinition(name, "Mock Tool Description", new LLM.Schema.JsonSchema(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() })))
-            {
-                _delayMs = delayMs;
-            }
-
-            public override async Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
+            public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
             {
                 ExecutionLog.Add($"Started {Definition.Name}");
-                if (_delayMs > 0)
+                if (delayMs > 0)
                 {
-                    await Task.Delay(_delayMs, ct);
+                    await Task.Delay(delayMs, ct);
                 }
                 ExecutionLog.Add($"Completed {Definition.Name}");
-                return $"Result of {Definition.Name}";
+                return [new Text($"Result of {Definition.Name}")];
             }
         }
 

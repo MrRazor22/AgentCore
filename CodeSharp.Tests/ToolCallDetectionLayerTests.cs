@@ -24,16 +24,11 @@ public class ToolCallDetectionLayerTests
         }
     }
 
-    private class DummyTool : Tool
+    private class DummyTool(string name) : ITool
     {
-        public DummyTool(string name) : base(new ToolDefinition(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject())))
-        {
-        }
-
-        public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
-        {
-            return Task.FromResult<object?>("result");
-        }
+        public ToolDefinition Definition { get; } = new(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject()));
+        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<IContent>>([new Text("result")]);
     }
 
     private static void AttachMockInner(ToolCallDetectionLayer layer, ILLM mockInner)

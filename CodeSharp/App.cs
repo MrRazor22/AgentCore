@@ -150,7 +150,8 @@ internal class App
 
             if (string.Equals(config.Provider, "tensorsharp", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(config.GgufPath))
             {
-                agentBuilder.WithTensorSharpModel(config.GgufPath ?? config.Model);
+                TensorSharp.Runtime.BackendType? preferredBackend = Enum.TryParse<TensorSharp.Runtime.BackendType>(config.Backend, true, out var b) ? b : null;
+                agentBuilder.WithTensorSharpModel(config.GgufPath ?? config.Model, backend: preferredBackend);
             }
             else
             {
@@ -188,6 +189,10 @@ internal class App
         catch (Exception ex)
         {
             AnsiConsole.MarkupLine($"[bold red]Error building agent:[/] {Markup.Escape(ex.Message)}");
+            if (ex.InnerException != null)
+            {
+                AnsiConsole.MarkupLine($"[dim red]Details:[/] {Markup.Escape(ex.InnerException.Message)}");
+            }
             Serilog.Log.Error(ex, "Error starting CodeSharp");
         }
     }

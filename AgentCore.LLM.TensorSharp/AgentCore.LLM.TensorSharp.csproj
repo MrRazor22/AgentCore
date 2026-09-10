@@ -17,6 +17,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Native\cuda_kernels\*.ptx">
+      <Link>cuda_kernels\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
   </ItemGroup>
 

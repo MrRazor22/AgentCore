@@ -1,3 +1,4 @@
+using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 using System.Text.Json.Nodes;
 
@@ -37,7 +38,7 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(args, CancellationToken.None);
 
-        Assert.Equal(5, result);
+        Assert.Equal("5", ((Text)result[0]).Value);
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(new JsonObject(), CancellationToken.None);
 
-        Assert.Null(result);
+        Assert.Equal("", ((Text)result[0]).Value);
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(new JsonObject(), CancellationToken.None);
 
-        Assert.Null(result);
+        Assert.Equal("", ((Text)result[0]).Value);
     }
 
     [Fact]
@@ -71,7 +72,7 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(args, CancellationToken.None);
 
-        Assert.Equal(30, result);
+        Assert.Equal("30", ((Text)result[0]).Value);
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(new JsonObject(), cts.Token);
 
-        Assert.True((bool?)result);
+        Assert.Equal("true", ((Text)result[0]).Value);
     }
 
     [Fact]
@@ -94,12 +95,12 @@ public class MethodToolTests
 
         // Call with empty arguments
         var resultEmpty = await tool.InvokeAsync(new JsonObject(), CancellationToken.None);
-        Assert.Equal("default", resultEmpty);
+        Assert.Equal("default", ((Text)resultEmpty[0]).Value);
 
         // Call with explicit argument
         var args = new JsonObject { ["input"] = "custom" };
         var resultCustom = await tool.InvokeAsync(args, CancellationToken.None);
-        Assert.Equal("custom", resultCustom);
+        Assert.Equal("custom", ((Text)resultCustom[0]).Value);
     }
 
     [Fact]
@@ -111,14 +112,13 @@ public class MethodToolTests
 
         var result = await tool.InvokeAsync(args, CancellationToken.None);
 
-        Assert.Equal(SampleMethods.Mode.Slow, result);
+        Assert.Equal("\"Slow\"", ((Text)result[0]).Value);
     }
 
     [Fact]
     public void Constructor_InstanceMethodWithoutTarget_ThrowsArgumentException()
     {
         var method = typeof(BrokenMethods).GetMethod(nameof(BrokenMethods.InstanceMethod))!;
-
         Assert.Throws<ArgumentException>(() => new MethodTool(method, target: null));
     }
 

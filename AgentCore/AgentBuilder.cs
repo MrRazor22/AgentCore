@@ -16,7 +16,7 @@ public class AgentBuilder
     private Func<ILoggerFactory, ITooling>? _toolingFactory;
     private Func<ILoggerFactory, IContext>? _contextFactory;
     private readonly List<LLMLayer> _llmLayers = []; 
-    private readonly List<Tool> _tools = [];
+    private readonly List<ITool> _tools = [];
     private readonly List<ToolingLayer> _toolingLayers = [];
     private readonly List<ContextLayer> _contextLayers = []; 
     private ILoggerFactory? _loggerFactory; 
@@ -48,7 +48,7 @@ public class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithTools(params Tool[] tools)
+    public AgentBuilder WithTools(params ITool[] tools)
     {
         ArgumentNullException.ThrowIfNull(tools);
         foreach (var tool in tools)

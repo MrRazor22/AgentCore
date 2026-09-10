@@ -9,19 +9,17 @@ namespace CodeSharp.Tests;
 
 public class ApprovalLayerDuplicateIdTests
 {
-    private class DummyTool : Tool
+    private class DummyTool(string name) : ITool
     {
-        public DummyTool(string name) : base(new ToolDefinition(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build())) { }
+        public ToolDefinition Definition { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
 
-        public override Task<object?> InvokeAsync(JsonObject arguments, CancellationToken ct)
-            => Task.FromResult<object?>($"Output for {Definition.Name}");
+        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<IContent>>([new Text($"Output for {Definition.Name}")]);
     }
 
-    private class MockTooling : ITooling
+    private class MockTooling(ITool tool) : ITooling
     {
-        private readonly Tool _tool;
-        public MockTooling(Tool tool) => _tool = tool;
-        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { _tool.Definition };
+        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Definition };
         public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
         {
             return Task.FromResult(new ToolResult(call.Id, [new Text($"Output for {call.Name}")]));
