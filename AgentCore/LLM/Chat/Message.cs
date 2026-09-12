@@ -4,7 +4,11 @@ namespace AgentCore.LLM.Chat;
 
 public enum Role { System, Assistant, User, Tool }
 
-public interface IContent : IAgentEvent;
+public interface IContent
+{
+    string? Id => null;
+    IReadOnlyList<IMetadata> Metadata { get; }
+}
 
 public interface IMetadata;
 
@@ -19,10 +23,15 @@ public sealed record SummaryMetadata(
     int SummarizedCount = 0
 ) : IMetadata;
 
+public sealed record ErrorMetadata(
+    string Message,
+    string? Code = null
+) : IMetadata;
+
 public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
-    IReadOnlyList<IMetadata>? metadata = null)
+    IReadOnlyList<IMetadata>? metadata = null) : IAgentEvent
 {
     protected readonly List<IContent> _contents = contents != null ? [.. contents] : [];
 
@@ -30,6 +39,7 @@ public class Message(
         : this(role, contents, metadata != null ? [metadata] : null) { }
 
     public Role Role { get; protected set; } = role;
+    public string? Id => Get<MessageMetadata>()?.Id;
     public IReadOnlyList<IContent> Contents => _contents;
     public IReadOnlyList<IMetadata> Metadata { get; set; } = metadata ?? [];
 

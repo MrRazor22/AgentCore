@@ -13,15 +13,20 @@ public class ApprovalLayerDuplicateIdTests
     {
         public ToolDefinition Definition { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
 
-        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<IContent>>([new Text($"Output for {Definition.Name}")]);
+        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+            string callId,
+            JsonObject arguments,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ToolResult(callId, [new Text($"Output for {Definition.Name}")]);
+        }
     }
 
     private class MockTooling(ITool tool) : ITooling
     {
         public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Definition };
 
-        public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+        public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
             IReadOnlyList<ToolCall> calls,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -29,11 +34,6 @@ public class ApprovalLayerDuplicateIdTests
             {
                 yield return new ToolResult(call.Id, [new Text($"Output for {call.Name}")]);
             }
-        }
-
-        public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
-        {
-            return Task.FromResult(new ToolResult(call.Id, [new Text($"Output for {call.Name}")]));
         }
     }
 
@@ -58,9 +58,9 @@ public class ApprovalLayerDuplicateIdTests
         };
 
         var results = new List<ToolResult>();
-        foreach (var call in calls)
+        await foreach (var evt in approvalLayer.ExecuteStreamingAsync(calls))
         {
-            results.Add(await approvalLayer.ExecuteAsync(call));
+            if (evt is ToolResult tr) results.Add(tr);
         }
 
         Assert.Equal(4, results.Count);

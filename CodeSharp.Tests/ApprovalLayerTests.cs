@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
@@ -11,12 +12,30 @@ using Xunit;
 
 namespace CodeSharp.Tests;
 
+internal static class ApprovalTestExtensions
+{
+    public static async Task<ToolResult> ExecuteAsync(this ToolingLayer layer, ToolCall call)
+    {
+        await foreach (var evt in layer.ExecuteStreamingAsync([call]))
+        {
+            if (evt is ToolResult tr) return tr;
+        }
+        throw new InvalidOperationException("No tool result produced");
+    }
+}
+
 public class ApprovalLayerTests
 {
     private class TestTool(string name) : ITool
     {
         public ToolDefinition Definition { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
-        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<IContent>>([new Text("ok")]);
+        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+            string callId,
+            JsonObject arguments,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ToolResult(callId, [new Text("ok")]);
+        }
     }
 
     private class MockTooling : ITooling
@@ -24,7 +43,7 @@ public class ApprovalLayerTests
         public bool ExecuteCalled { get; private set; }
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
-        public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+        public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
             IReadOnlyList<ToolCall> calls,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -33,12 +52,6 @@ public class ApprovalLayerTests
             {
                 yield return new ToolResult(call.Id, [new Text("Execution Ok")]);
             }
-        }
-
-        public Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
-        {
-            ExecuteCalled = true;
-            return Task.FromResult(new ToolResult(call.Id, [new Text("Execution Ok")]));
         }
     }
 

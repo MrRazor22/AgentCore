@@ -9,7 +9,6 @@ using System.Text.Json;
 
 namespace AgentCore;
 
-public interface IAgentEvent;
 public interface IAgent
 {
     IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, JsonSchema? responseSchema = null, CancellationToken ct = default);
@@ -36,46 +35,39 @@ public sealed class Agent(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var existing = await context.GetAsync(ct);
-        var toAppend = new List<Message>();
         if (instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System))
         {
-            toAppend.Add(new Message(Role.System, instructions));
+            await context.AppendAsync(new Message(Role.System, instructions), ct);
         }
-        toAppend.Add(new Message(Role.User, [input]));
-        await context.AppendAsync(toAppend, ct);
+        await context.AppendAsync(new Message(Role.User, [input]), ct);
 
         for (int i = 0; i < maxIterations; i++)
         {
             ct.ThrowIfCancellationRequested();
             var messages = await context.GetAsync(ct);
-            var assistant = new StreamingMessage(Role.Assistant);
 
             await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
                 yield return evt;
-                if (assistant.Push(evt) is { } content)
-                {
-                    yield return content;
-                }
+                await context.AppendAsync(evt, ct);
             }
 
-            if (assistant.Contents.Count == 0) yield break;
+            var currentHistory = await context.GetAsync(ct);
+            var lastAssistant = currentHistory.LastOrDefault(m => m.Role == Role.Assistant);
+            if (lastAssistant == null || lastAssistant.Contents.Count == 0) yield break;
 
-            await context.AppendAsync([assistant], ct);
-
-            var toolCalls = assistant.Contents
+            var toolCalls = lastAssistant.Contents
                 .OfType<ToolCall>()
                 .DistinctBy(tc => tc.Id)
                 .ToList();
 
             if (toolCalls.Count == 0) yield break;
 
-            await foreach (var result in tooling.ExecuteAsync(toolCalls, ct))
+            await foreach (var evt in tooling.ExecuteStreamingAsync(toolCalls, ct))
             {
-                await context.AppendAsync([new Message(Role.Tool, [result])], ct);
-                yield return result;
+                yield return evt;
+                await context.AppendAsync(evt, ct);
             }
-
         }
 
         throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");

@@ -1,5 +1,7 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging; 
 
@@ -9,7 +11,7 @@ public sealed record ToolDefinition(string Name, string Description, JsonSchema 
 public interface ITool
 {
     ToolDefinition Definition { get; }
-    Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default);
+    IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }
 
 public static class ToolingBuilderExtensions

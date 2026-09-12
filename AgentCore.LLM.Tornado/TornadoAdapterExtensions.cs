@@ -25,6 +25,11 @@ public static class TornadoAdapterExtensions
         var role = message.Role.ToTornadoRole();
         var tornadoMsg = new ChatMessage(role);
 
+        if (message.Role == Role.Tool && message.Id != null)
+        {
+            tornadoMsg.ToolCallId = message.Id;
+        }
+
         var textParts = new List<string>();
         List<LlmTornado.ChatFunctions.ToolCall>? toolCalls = null;
 
@@ -52,11 +57,6 @@ public static class TornadoAdapterExtensions
                             Arguments = argsStr
                         }
                     });
-                    break;
-
-                case ToolResult tr:
-                    tornadoMsg.ToolCallId = tr.CallId;
-                    textParts.Add(tr.ToString());
                     break;
             }
         }

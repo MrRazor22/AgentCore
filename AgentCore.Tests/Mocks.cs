@@ -133,6 +133,7 @@ public class MockLLMProvider : ILLM
 public class MockMemoryProvider : IContext
 {
     private readonly List<Message> _internalMessages = new();
+    private StreamingMessage? _currentAssistant;
 
     public string RecallResult { get; set; } = "";
 
@@ -145,7 +146,12 @@ public class MockMemoryProvider : IContext
             {
                 list.Add(new Message(Role.System, [new Text(RecallResult)]));
             }
-            list.AddRange(_internalMessages);
+            foreach (var m in _internalMessages)
+            {
+                list.Add(ReferenceEquals(m, _currentAssistant) && _currentAssistant != null
+                    ? _currentAssistant.ToSnapshot()
+                    : m);
+            }
             return list;
         }
     }
@@ -154,6 +160,43 @@ public class MockMemoryProvider : IContext
         CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<Message>>(new List<Message>(Messages));
+    }
+
+    public Task<IContent?> AppendAsync(
+        IAgentEvent evt,
+        CancellationToken ct = default)
+    {
+        IContent? completed = null;
+        switch (evt)
+        {
+            case IMessageEvent msgEvt:
+                if (_currentAssistant == null)
+                {
+                    var role = msgEvt is MessageStart ms ? ms.Role : Role.Assistant;
+                    _currentAssistant = new StreamingMessage(role);
+                    _internalMessages.Add(_currentAssistant);
+                }
+
+                completed = _currentAssistant.Push(msgEvt);
+
+                if (msgEvt is MessageEnd)
+                {
+                    _currentAssistant.CompleteAllBlocks();
+                    _currentAssistant = null;
+                }
+                break;
+
+            case ToolResult tr:
+                _internalMessages.Add(new Message(Role.Tool, [tr]));
+                completed = tr;
+                break;
+
+            case IContent c:
+                completed = c;
+                break;
+        }
+
+        return Task.FromResult(completed);
     }
 
     public Task AppendAsync(
@@ -176,17 +219,15 @@ public class MockTooling : ITooling
             calls.Select(c => new ToolResult(c.Id, [new Text("Success")])).ToList()
         );
 
-    public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+    public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var results = await Handler(calls, ct).ConfigureAwait(false);
-        foreach (var r in results) yield return r;
-    }
-
-    public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
-    {
-        var results = await Handler(new[] { call }, ct).ConfigureAwait(false);
-        return results[0];
+        foreach (var r in results)
+        {
+            yield return new ToolStart(r.CallId, "mock_tool");
+            yield return r;
+        }
     }
 }

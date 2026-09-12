@@ -1,5 +1,8 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Tools;
@@ -13,10 +16,23 @@ public sealed class AgentTool(Agent agent, string name, string description) : IT
 
     public ToolDefinition Definition { get; } = new(name, description, PromptSchema);
 
-    public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+    public async IAsyncEnumerable<IContentBlockEvent> InvokeStreamingAsync(
+        JsonObject arguments,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var text = await agent.InvokeAsync(new Text((string?)arguments?["prompt"] ?? string.Empty), ct).ConfigureAwait(false);
-        return [new Text(text ?? string.Empty)];
+        var prompt = (string?)arguments?["prompt"] ?? string.Empty;
+
+        yield return new TextStart(0);
+
+        await foreach (var evt in agent.InvokeStreamingAsync(new Text(prompt), ct).ConfigureAwait(false))
+        {
+            if (evt is TextDelta td)
+            {
+                yield return new TextDelta(0, td.Text);
+            }
+        }
+
+        yield return new TextEnd(0);
     }
 }
 

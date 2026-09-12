@@ -11,20 +11,13 @@
   <ItemGroup>
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.1" />
     <PackageReference Include="MessagePack" Version="3.1.8" />
-    <PackageReference Include="TensorSharp.Runtime" Version="3.1.2" />
-    <PackageReference Include="TensorSharp.Models" Version="3.1.2" />
-    <PackageReference Include="TensorSharp.Backends.GGML" Version="3.1.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Native\cuda_kernels\*.ptx">
-      <Link>cuda_kernels\%(Filename)%(Extension)</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </None>
-  </ItemGroup>
-
-  <ItemGroup>
+    <ProjectReference Include="..\extern\TensorSharp\TensorSharp.Runtime\TensorSharp.Runtime.csproj" />
+    <ProjectReference Include="..\extern\TensorSharp\TensorSharp.Models\TensorSharp.Models.csproj" />
+    <ProjectReference Include="..\extern\TensorSharp\TensorSharp.Backends.Cuda\TensorSharp.Backends.Cuda.csproj" />
+    <ProjectReference Include="..\extern\TensorSharp\TensorSharp.Backends.GGML\TensorSharp.Backends.GGML.csproj" />
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
   </ItemGroup>
 

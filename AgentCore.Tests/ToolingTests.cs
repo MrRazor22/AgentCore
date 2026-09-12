@@ -1,3 +1,4 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 using System.ComponentModel;
@@ -5,8 +6,22 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
+internal static class ToolingTestExtensions
+{
+    public static async Task<ToolResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
+    {
+        ToolResult? result = null;
+        await foreach (var evt in tooling.ExecuteStreamingAsync([call], ct))
+        {
+            if (evt is ToolResult tr) result = tr;
+        }
+        return result ?? new ToolResult(call.Id, [new Text("No tool result produced.")]);
+    }
+}
+
 public class ToolingTests
 {
+
     public class SampleTools
     {
         [Description("Add two integers")]
@@ -79,8 +94,13 @@ public class ToolingTests
             ? new(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())
             : throw new ArgumentException("Name cannot be null or whitespace", nameof(name));
 
-        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<IContent>>(Array.Empty<IContent>());
+        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+            string callId,
+            JsonObject arguments,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ToolResult(callId, Array.Empty<IContent>());
+        }
     }
 
     [Theory]

@@ -1,4 +1,6 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tools;
 
@@ -16,13 +18,38 @@ public sealed class ToolApprovalLayer : ToolingLayer
     public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
         : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
-    public override async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
+    public override async IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(
+        IReadOnlyList<ToolCall> calls,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var denial = await _approver(call, ct).ConfigureAwait(false);
+        var allowedCalls = new List<ToolCall>();
 
-        if (denial is { Count: > 0 })
-            return new ToolResult(call.Id, denial);
+        foreach (var call in calls)
+        {
+            var denial = await _approver(call, ct).ConfigureAwait(false);
+            if (denial is { Count: > 0 })
+            {
+                yield return new MessageStart(Role.Tool, Id: call.Id);
+                for (int i = 0; i < denial.Count; i++)
+                {
+                    var item = denial[i];
+                    var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
+                    yield return new ContentBlock(i, content, MessageId: call.Id);
+                }
+                yield return new MessageEnd(MessageId: call.Id);
+            }
+            else
+            {
+                allowedCalls.Add(call);
+            }
+        }
 
-        return await base.ExecuteAsync(call, ct).ConfigureAwait(false);
+        if (allowedCalls.Count > 0)
+        {
+            await foreach (var evt in base.ExecuteStreamingAsync(allowedCalls, ct).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
+        }
     }
 }

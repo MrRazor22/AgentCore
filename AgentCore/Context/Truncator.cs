@@ -29,7 +29,6 @@ public class Truncator(
         {
             Text t => new Text(SliceString(t.Value, maxTokens)),
             Reasoning r => new Reasoning(SliceString(r.Value, maxTokens)),
-            ToolResult tr => TruncateToolResult(tr, maxTokens),
             _ => new Text($"[{content.GetType().Name} omitted: exceeds context budget]")
         };
     }
@@ -51,19 +50,5 @@ public class Truncator(
         if (head == 0) return _notice + text[^tail..];
         if (tail == 0) return text[..head] + _notice;
         return text[..head] + _notice + text[^tail..];
-    }
-
-    protected virtual ToolResult TruncateToolResult(ToolResult tr, int maxTokens)
-    {
-        var list = new List<IContent>();
-        int remaining = maxTokens;
-        foreach (var item in tr.Contents)
-        {
-            if (remaining <= 0) break;
-            var truncated = Truncate(item, remaining);
-            list.Add(truncated);
-            remaining -= _tokenizer.Estimate(truncated);
-        }
-        return new ToolResult(tr.CallId, list);
     }
 }

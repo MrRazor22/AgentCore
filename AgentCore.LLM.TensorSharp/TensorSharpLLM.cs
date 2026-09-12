@@ -33,7 +33,7 @@ public sealed class TensorSharpLLM(
 
     private enum BlockType { None, Text, Reasoning, Tool }
 
-    public async IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public async IAsyncEnumerable<ILLMEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,

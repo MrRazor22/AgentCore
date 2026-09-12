@@ -35,12 +35,13 @@ public class Summarizer(
         request.Add(new Message(Role.User, [new Text(_prompt)]));
 
         var eventStream = _llm.StreamAsync(request, responseSchema: null, tools: null, ct: ct);
-        var message = new StreamingMessage();
+        var assembler = new MessageAssembler(Role.Assistant);
         await foreach (var evt in eventStream.WithCancellation(ct).ConfigureAwait(false))
         {
-            message.Push(evt);
+            assembler.Push(evt);
         }
-        var summaryText = message.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
+        var summaryMsg = assembler.ToMessage();
+        var summaryText = summaryMsg.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
 
         return BuildCompactedHistory(messages, summaryText);
     }

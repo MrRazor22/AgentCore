@@ -1,16 +1,17 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
+using System.Threading.Channels;
 
 namespace AgentCore.Tools;
 
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    IAsyncEnumerable<ToolResult> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
+    IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling(
@@ -26,7 +27,7 @@ internal sealed class Tooling(
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
 
-    public async IAsyncEnumerable<ToolResult> ExecuteAsync(
+    public async IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -34,66 +35,176 @@ internal sealed class Tooling(
 
         if (!parallel || calls.Count == 1)
         {
-            foreach (var call in calls) yield return await ExecuteAsync(call, ct).ConfigureAwait(false);
+            foreach (var call in calls)
+            {
+                await foreach (var evt in ExecuteCallStreamingAsync(call, ct).ConfigureAwait(false))
+                {
+                    yield return evt;
+                }
+            }
             yield break;
         }
 
+        var channel = Channel.CreateUnbounded<IToolEvent>(new UnboundedChannelOptions { SingleReader = true });
         using var sem = maxConcurrency is > 0 and int max ? new SemaphoreSlim(max) : null;
+
         var tasks = calls.Select(async call =>
         {
             if (sem != null) await sem.WaitAsync(ct).ConfigureAwait(false);
-            try { return await ExecuteAsync(call, ct).ConfigureAwait(false); }
-            finally { sem?.Release(); }
+            try
+            {
+                await foreach (var evt in ExecuteCallStreamingAsync(call, ct).ConfigureAwait(false))
+                {
+                    await channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                sem?.Release();
+            }
         }).ToList();
 
-        while (tasks.Count > 0)
+        _ = Task.WhenAll(tasks).ContinueWith(t =>
         {
-            var done = await Task.WhenAny(tasks).ConfigureAwait(false);
-            tasks.Remove(done);
-            yield return await done;
+            if (t.IsFaulted) channel.Writer.TryComplete(t.Exception!.InnerException);
+            else channel.Writer.TryComplete();
+        }, TaskScheduler.Default);
+
+        while (await channel.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+        {
+            while (channel.Reader.TryRead(out var evt))
+            {
+                yield return evt;
+            }
         }
     }
 
-    public async Task<ToolResult> ExecuteAsync(ToolCall call, CancellationToken ct = default)
+    private async IAsyncEnumerable<IToolEvent> ExecuteCallStreamingAsync(
+        ToolCall call,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return new MessageStart(Role.Tool, Id: call.Id);
+
+        await foreach (var evt in ExecuteCallInternalAsync(call, ct).ConfigureAwait(false))
+        {
+            yield return evt;
+        }
+
+        yield return new MessageEnd(MessageId: call.Id);
+    }
+
+    private async IAsyncEnumerable<IToolEvent> ExecuteCallInternalAsync(
+        ToolCall call,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
         if (string.IsNullOrWhiteSpace(call.Name))
-            return Fail(call.Id, "Unknown", "Tool name cannot be empty.");
+        {
+            yield return Fail(call.Id, "Unknown", "Tool name cannot be empty.");
+            yield break;
+        }
 
         if (!_tools.TryGetValue(call.Name, out var tool))
-            return Fail(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
+        {
+            yield return Fail(call.Id, call.Name, $"Tool '{call.Name}' not registered.");
+            yield break;
+        }
 
         var errors = tool.Definition.ParametersSchema.Validate(call.Arguments);
         if (errors.Count > 0)
-            return Fail(call.Id, call.Name, string.Join("; ", errors));
+        {
+            yield return Fail(call.Id, call.Name, string.Join("; ", errors));
+            yield break;
+        }
 
         using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
         cts?.CancelAfter(timeout!.Value);
 
         var sw = Stopwatch.StartNew();
+        IAsyncEnumerator<IContentBlockEvent>? enumerator = null;
+        string? initError = null;
         try
         {
-            var contents = await tool.InvokeAsync(call.Arguments, cts?.Token ?? ct).ConfigureAwait(false);
-            _logger.LogInformation("Tool '{Tool}' executed in {Elapsed}ms", call.Name, sw.ElapsedMilliseconds);
-            return new ToolResult(call.Id, contents);
+            enumerator = tool.InvokeStreamingAsync(call.Arguments, cts?.Token ?? ct).GetAsyncEnumerator(cts?.Token ?? ct);
         }
-        catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
-        {
-            return Fail(call.Id, call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.");
-        }
-        catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            var msg = ex.GetBaseException().Message;
-            _logger.LogError(ex, "Tool '{Tool}' failed after {Elapsed}ms: {Error}", call.Name, sw.ElapsedMilliseconds, msg);
-            return Fail(call.Id, call.Name, msg);
+            initError = ex.GetBaseException().Message;
+            _logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, initError);
+        }
+
+        if (initError != null)
+        {
+            yield return Fail(call.Id, call.Name, initError);
+            yield break;
+        }
+
+        bool hasResult = false;
+        string? loopError = null;
+        try
+        {
+            while (true)
+            {
+                IContentBlockEvent? evt = null;
+                try
+                {
+                    if (!await enumerator!.MoveNextAsync().ConfigureAwait(false))
+                        break;
+                    evt = enumerator.Current;
+                }
+                catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
+                {
+                    loopError = $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.";
+                    break;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    loopError = ex.GetBaseException().Message;
+                    _logger.LogError(ex, "Tool '{Tool}' failed after {Elapsed}ms: {Error}", call.Name, sw.ElapsedMilliseconds, loopError);
+                    break;
+                }
+
+                if (evt != null)
+                {
+                    hasResult = true;
+                    yield return WithCallId(evt, call.Id);
+                }
+            }
+        }
+        finally
+        {
+            if (enumerator != null)
+                await enumerator.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (loopError != null)
+        {
+            yield return Fail(call.Id, call.Name, loopError);
+            yield break;
+        }
+
+        _logger.LogInformation("Tool '{Tool}' executed in {Elapsed}ms", call.Name, sw.ElapsedMilliseconds);
+
+        if (!hasResult)
+        {
+            yield return new ContentBlock(0, new Text(string.Empty), MessageId: call.Id);
         }
     }
 
-    private ToolResult Fail(string id, string name, string message)
+    private ContentBlock Fail(string id, string name, string message)
     {
         _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
-        return new(id, [new Text($"Error calling tool '{name}': {message}")]);
+        return new ContentBlock(0, new Text($"Error calling tool '{name}': {message}", [new ErrorMetadata(message)]), MessageId: id);
     }
+
+    private static IContentBlockEvent WithCallId(IContentBlockEvent evt, string callId) => evt switch
+    {
+        TextStart s => s.MessageId == null ? s with { MessageId = callId } : s,
+        TextDelta d => d.MessageId == null ? d with { MessageId = callId } : d,
+        TextEnd e => e.MessageId == null ? e with { MessageId = callId } : e,
+        ContentBlock cb => cb.MessageId == null ? cb with { MessageId = callId } : cb,
+        _ => evt
+    };
 }

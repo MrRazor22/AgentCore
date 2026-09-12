@@ -1,7 +1,9 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Tools;
@@ -18,7 +20,9 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
             : new JsonSchema(new JsonObject());
     public ToolDefinition Definition { get; } = new(tool.Name, tool.Description ?? tool.Name, ParseSchema(tool.InputSchema));
 
-    public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+    public async IAsyncEnumerable<IContentBlockEvent> InvokeStreamingAsync(
+        JsonObject arguments,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var dict = arguments?.Count > 0
             ? JsonSerializer.Deserialize<Dictionary<string, object?>>(arguments.ToJsonString())
@@ -32,11 +36,16 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
             throw new InvalidOperationException($"MCP tool '{Definition.Name}' failed: {msg}");
         }
 
-        return result.Content.Select<ContentBlock, IContent>(b => b switch
+        int index = 0;
+        foreach (var b in result.Content)
         {
-            TextContentBlock tb => new Text(tb.Text),
-            ImageContentBlock ib => new Image(Data: ib.Data, MediaType: ib.MimeType),
-            _ => new Text(b.ToString() ?? string.Empty)
-        }).ToList();
+            IContent content = b switch
+            {
+                TextContentBlock tb => new Text(tb.Text),
+                ImageContentBlock ib => new Image(Data: ib.Data, MediaType: ib.MimeType),
+                _ => new Text(b.ToString() ?? string.Empty)
+            };
+            yield return new AgentCore.ContentBlock(index++, content);
+        }
     }
 }

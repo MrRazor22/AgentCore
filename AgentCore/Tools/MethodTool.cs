@@ -1,7 +1,9 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using System.ComponentModel;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -53,7 +55,9 @@ public sealed class MethodTool : ITool
         }
     }
 
-    public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+    public async IAsyncEnumerable<IContentBlockEvent> InvokeStreamingAsync(
+        JsonObject arguments,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         var args = new object?[_parameters.Length];
 
@@ -74,7 +78,8 @@ public sealed class MethodTool : ITool
         if (_returnsTask)
         {
             await ((Task)result!).ConfigureAwait(false);
-            return [new Text(string.Empty)];
+            yield return new ContentBlock(0, new Text(string.Empty));
+            yield break;
         }
 
         if (_returnsGenericTask)
@@ -84,7 +89,11 @@ public sealed class MethodTool : ITool
             result = _taskResultProperty!.GetValue(task);
         }
 
-        return ToContentList(result);
+        var contents = ToContentList(result);
+        for (int i = 0; i < contents.Count; i++)
+        {
+            yield return new ContentBlock(i, contents[i]);
+        }
     }
 
     private static IReadOnlyList<IContent> ToContentList(object? raw) => raw switch

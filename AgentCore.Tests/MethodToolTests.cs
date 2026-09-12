@@ -1,8 +1,21 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
+
+internal static class MethodToolTestExtensions
+{
+    public static async Task<IReadOnlyList<IContent>> InvokeAsync(this ITool tool, JsonObject arguments, CancellationToken ct = default)
+    {
+        await foreach (var evt in tool.InvokeStreamingAsync("call_1", arguments, ct))
+        {
+            if (evt is ToolResult tr) return tr.Contents;
+        }
+        return Array.Empty<IContent>();
+    }
+}
 
 public class MethodToolTests
 {

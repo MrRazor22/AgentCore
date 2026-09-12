@@ -11,12 +11,13 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
-    Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
+    Task AppendAsync(IAgentEvent evt, CancellationToken ct = default);
 }
 
 public class ChatContext : IContext
 {
-    private readonly List<Message> _chat = new();
+    private readonly List<Message> _chat = [];
+    private readonly Dictionary<string, MessageAssembler> _openAssemblers = new(StringComparer.Ordinal);
     private readonly ICompactor? _compactor;
     private readonly ITokenizer _counter;
     private readonly ITruncator _truncator;
@@ -47,29 +48,47 @@ public class ChatContext : IContext
         _truncator = truncator ?? new Truncator(cnt);
     }
 
-    public Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
+    public Task AppendAsync(IAgentEvent evt, CancellationToken ct = default)
     {
-        if (messages == null) throw new ArgumentNullException(nameof(messages));
-        var compactedMsg = messages.Select(TruncateMessage).ToList();
+        ArgumentNullException.ThrowIfNull(evt);
 
         lock (_lock)
         {
-            foreach (var msg in compactedMsg)
+            switch (evt)
             {
-                if (msg.Role == Role.User) StripReasoningFromChat();
-                _chat.Add(msg);
+                case Message m:
+                    if (m.Role == Role.User) StripReasoningFromChat();
+                    _chat.Add(TruncateMessage(m));
+                    _committedTokens = _chat.Sum(Estimate);
+                    break;
+
+                case MessageStart ms:
+                    var key = ms.Id ?? "__default__";
+                    _openAssemblers[key] = new MessageAssembler(ms.Role, ms.Id, ms.Model);
+                    break;
+
+                case IBlockEvent be:
+                    var blockKey = be.MessageId ?? "__default__";
+                    if (_openAssemblers.TryGetValue(blockKey, out var asmBlock))
+                    {
+                        asmBlock.Push(be);
+                    }
+                    break;
+
+                case MessageEnd me:
+                    var endKey = me.MessageId ?? "__default__";
+                    if (_openAssemblers.Remove(endKey, out var asmEnd))
+                    {
+                        asmEnd.Push(me);
+                        _chat.Add(TruncateMessage(asmEnd.ToMessage()));
+                        _committedTokens = me.Usage?.TotalTokens ?? _chat.Sum(Estimate);
+                    }
+                    break;
             }
-
-            var usage = compactedMsg.FindLast(m => m.Get<MessageMetadata>()?.Usage != null)?.Get<MessageMetadata>()?.Usage;
-            _committedTokens = usage?.TotalTokens ?? _chat.Sum(Estimate);
         }
-
-        _logger?.LogInformation("Messages added: Added={Added}, Total={Total}, CommittedTokens={Tokens}",
-            compactedMsg.Count, _chat.Count, _committedTokens);
 
         return Task.CompletedTask;
     }
-
 
     private void StripReasoningFromChat()
     {
@@ -92,7 +111,7 @@ public class ChatContext : IContext
         if (estimatedTotal > _limit && _compactor != null)
         {
             List<Message> snapshot;
-            lock (_lock) snapshot = _chat.ToList();
+            lock (_lock) snapshot = GetSnapshotLocked();
             var compacted = await _compactor.CompactAsync(snapshot, _limit, ct).ConfigureAwait(false);
             lock (_lock)
             {
@@ -102,12 +121,23 @@ public class ChatContext : IContext
             }
         }
 
-        lock (_lock) return _chat.ToList();
+        lock (_lock) return GetSnapshotLocked();
+    }
+
+    private List<Message> GetSnapshotLocked()
+    {
+        var list = new List<Message>(_chat.Count + _openAssemblers.Count);
+        list.AddRange(_chat);
+        foreach (var open in _openAssemblers.Values)
+        {
+            list.Add(open.ToSnapshot());
+        }
+        return list;
     }
 
     private Message TruncateMessage(Message message)
     {
-        if (message.Role == Role.System) return message; // Protect ONLY System, truncates User, Tool, and Assistant
+        if (message.Role == Role.System) return message;
         return new Message(
             message.Role, 
             message.Contents.Select(c => _truncator.Truncate(c, _maxSingleMessageTokens)).ToList(), 

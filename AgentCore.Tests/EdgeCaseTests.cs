@@ -74,15 +74,19 @@ namespace AgentCore.Tests
             public ToolDefinition Definition { get; } = new(name, "Mock Tool Description", new(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }));
             public List<string> ExecutionLog { get; } = new();
 
-            public async Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+            public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+                string callId,
+                JsonObject arguments,
+                [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
             {
+                yield return new ToolStart(callId, Definition.Name);
                 ExecutionLog.Add($"Started {Definition.Name}");
                 if (delayMs > 0)
                 {
                     await Task.Delay(delayMs, ct);
                 }
                 ExecutionLog.Add($"Completed {Definition.Name}");
-                return [new Text($"Result of {Definition.Name}")];
+                yield return new ToolResult(callId, [new Text($"Result of {Definition.Name}")]);
             }
         }
 

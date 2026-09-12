@@ -1,3 +1,4 @@
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tools;
@@ -14,7 +15,15 @@ public class ToolingServiceTests
         public Func<JsonObject, CancellationToken, Task<IReadOnlyList<IContent>>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("Result")]);
 
-        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default) => Invoker(arguments, ct);
+        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+            string callId,
+            JsonObject arguments,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new ToolStart(callId, Definition.Name);
+            var contents = await Invoker(arguments, ct);
+            yield return new ToolResult(callId, contents);
+        }
     }
 
     [Fact]
