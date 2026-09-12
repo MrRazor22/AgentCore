@@ -18,7 +18,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
     public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
         : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
-    public override async IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(
+    public override async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -29,7 +29,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
             var denial = await _approver(call, ct).ConfigureAwait(false);
             if (denial is { Count: > 0 })
             {
-                yield return new MessageStart(Role.Tool, Id: call.Id);
+                yield return new MessageStart(Role.Tool, MessageId: call.Id, Metadata: [new ToolMetadata(call.Id, call.Name)]);
                 for (int i = 0; i < denial.Count; i++)
                 {
                     var item = denial[i];

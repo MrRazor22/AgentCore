@@ -43,7 +43,7 @@ public sealed class RetryLayer : LLMLayer
         _onRetry = onRetry;
     }
 
-    public override async IAsyncEnumerable<ILLMEvent> StreamAsync(
+    public override async IAsyncEnumerable<IAgentEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -53,7 +53,7 @@ public sealed class RetryLayer : LLMLayer
         while (true)
         {
             var yielded = false;
-            IAsyncEnumerator<ILLMEvent>? enumerator = null;
+            IAsyncEnumerator<IAgentEvent>? enumerator = null;
 
             try
             {
@@ -63,7 +63,7 @@ public sealed class RetryLayer : LLMLayer
                 while (true)
                 {
                     bool hasNext;
-                    ILLMEvent? item = null;
+                    IAgentEvent? item = null;
 
                     try
                     {

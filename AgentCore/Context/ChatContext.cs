@@ -63,8 +63,8 @@ public class ChatContext : IContext
                     break;
 
                 case MessageStart ms:
-                    var key = ms.Id ?? "__default__";
-                    _openAssemblers[key] = new MessageAssembler(ms.Role, ms.Id, ms.Model);
+                    var key = ms.MessageId ?? "__default__";
+                    _openAssemblers[key] = new MessageAssembler(ms.Role, ms.MessageId, metadata: ms.Metadata);
                     break;
 
                 case IBlockEvent be:

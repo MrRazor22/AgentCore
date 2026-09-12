@@ -55,7 +55,7 @@ public sealed class MethodTool : ITool
         }
     }
 
-    public async IAsyncEnumerable<IContentBlockEvent> InvokeStreamingAsync(
+    public async IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {

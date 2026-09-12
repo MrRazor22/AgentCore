@@ -4,11 +4,11 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Context;
 
-internal sealed class MessageAssembler(Role role, string? id = null, string? model = null)
+internal sealed class MessageAssembler(Role role, string? id = null, string? model = null, IReadOnlyList<IMetadata>? metadata = null)
 {
     private readonly SortedDictionary<int, (IBlockStartEvent Start, StringBuilder Buffer, List<IContent> Chunks)> _blocks = [];
     private readonly List<IContent> _contents = [];
-    private readonly List<IMetadata> _metadata = id != null || model != null ? [new MessageMetadata(id, model)] : [];
+    private readonly List<IMetadata> _metadata = metadata != null ? [.. metadata] : (id != null || model != null ? [new MessageMetadata(id, model)] : []);
 
     public Role Role { get; private set; } = role;
     public string? Id => _metadata.OfType<MessageMetadata>().FirstOrDefault()?.Id;
@@ -20,7 +20,8 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
             case MessageStart s:
                 Role = s.Role;
                 _metadata.Clear();
-                _metadata.Add(new MessageMetadata(s.Id, s.Model));
+                if (s.Metadata != null) _metadata.AddRange(s.Metadata);
+                else if (s.MessageId != null) _metadata.Add(new MessageMetadata(s.MessageId));
                 break;
 
             case ContentBlock cb:
@@ -48,9 +49,20 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
                 break;
 
             case MessageEnd end:
-                var current = _metadata.OfType<MessageMetadata>().FirstOrDefault();
-                _metadata.Clear();
-                _metadata.Add(new MessageMetadata(current?.Id ?? end.MessageId, current?.Model, end.FinishReason, end.Usage));
+                if (end.Metadata != null) _metadata.AddRange(end.Metadata);
+                if (end.FinishReason != null || end.Usage != null)
+                {
+                    var current = _metadata.OfType<MessageMetadata>().FirstOrDefault();
+                    if (current != null)
+                    {
+                        _metadata.Remove(current);
+                        _metadata.Add(current with { FinishReason = end.FinishReason ?? current.FinishReason, Usage = end.Usage ?? current.Usage });
+                    }
+                    else
+                    {
+                        _metadata.Add(new MessageMetadata(end.MessageId, FinishReason: end.FinishReason, Usage: end.Usage));
+                    }
+                }
                 CompleteAllBlocks();
                 break;
         }

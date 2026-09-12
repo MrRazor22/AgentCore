@@ -11,7 +11,7 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
+    IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling(
@@ -27,7 +27,7 @@ internal sealed class Tooling(
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
 
-    public async IAsyncEnumerable<IToolEvent> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -45,7 +45,7 @@ internal sealed class Tooling(
             yield break;
         }
 
-        var channel = Channel.CreateUnbounded<IToolEvent>(new UnboundedChannelOptions { SingleReader = true });
+        var channel = Channel.CreateUnbounded<IAgentEvent>(new UnboundedChannelOptions { SingleReader = true });
         using var sem = maxConcurrency is > 0 and int max ? new SemaphoreSlim(max) : null;
 
         var tasks = calls.Select(async call =>
@@ -79,11 +79,11 @@ internal sealed class Tooling(
         }
     }
 
-    private async IAsyncEnumerable<IToolEvent> ExecuteCallStreamingAsync(
+    private async IAsyncEnumerable<IAgentEvent> ExecuteCallStreamingAsync(
         ToolCall call,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        yield return new MessageStart(Role.Tool, Id: call.Id);
+        yield return new MessageStart(Role.Tool, MessageId: call.Id, Metadata: [new ToolMetadata(call.Id, call.Name)]);
 
         await foreach (var evt in ExecuteCallInternalAsync(call, ct).ConfigureAwait(false))
         {
@@ -93,7 +93,7 @@ internal sealed class Tooling(
         yield return new MessageEnd(MessageId: call.Id);
     }
 
-    private async IAsyncEnumerable<IToolEvent> ExecuteCallInternalAsync(
+    private async IAsyncEnumerable<IAgentEvent> ExecuteCallInternalAsync(
         ToolCall call,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -122,7 +122,7 @@ internal sealed class Tooling(
         cts?.CancelAfter(timeout!.Value);
 
         var sw = Stopwatch.StartNew();
-        IAsyncEnumerator<IContentBlockEvent>? enumerator = null;
+        IAsyncEnumerator<IBlockEvent>? enumerator = null;
         string? initError = null;
         try
         {
@@ -146,7 +146,7 @@ internal sealed class Tooling(
         {
             while (true)
             {
-                IContentBlockEvent? evt = null;
+                IBlockEvent? evt = null;
                 try
                 {
                     if (!await enumerator!.MoveNextAsync().ConfigureAwait(false))
@@ -196,10 +196,10 @@ internal sealed class Tooling(
     private ContentBlock Fail(string id, string name, string message)
     {
         _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
-        return new ContentBlock(0, new Text($"Error calling tool '{name}': {message}", [new ErrorMetadata(message)]), MessageId: id);
+        return new ContentBlock(0, new Text($"Error calling tool '{name}': {message}"), MessageId: id);
     }
 
-    private static IContentBlockEvent WithCallId(IContentBlockEvent evt, string callId) => evt switch
+    private static IBlockEvent WithCallId(IBlockEvent evt, string callId) => evt switch
     {
         TextStart s => s.MessageId == null ? s with { MessageId = callId } : s,
         TextDelta d => d.MessageId == null ? d with { MessageId = callId } : d,

@@ -10,11 +10,11 @@ using AgentCore.Tools;
 
 namespace AgentCore.LLM;
 
-public sealed class StreamingEventLayer<T>(Func<ILLMEvent, T>? mapper = null) : LLMLayer
+public sealed class StreamingEventLayer<T>(Func<IAgentEvent, T>? mapper = null) : LLMLayer
 {
     public ChannelWriter<T>? Writer { get; set; }
 
-    public override IAsyncEnumerable<ILLMEvent> StreamAsync(
+    public override IAsyncEnumerable<IAgentEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -23,8 +23,8 @@ public sealed class StreamingEventLayer<T>(Func<ILLMEvent, T>? mapper = null) : 
         return InterceptEventsAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), ct);
     }
 
-    private async IAsyncEnumerable<ILLMEvent> InterceptEventsAsync(
-        IAsyncEnumerable<ILLMEvent> innerEvents,
+    private async IAsyncEnumerable<IAgentEvent> InterceptEventsAsync(
+        IAsyncEnumerable<IAgentEvent> innerEvents,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var writer = Writer;

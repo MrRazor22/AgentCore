@@ -16,7 +16,7 @@ public sealed class AgentTool(Agent agent, string name, string description) : IT
 
     public ToolDefinition Definition { get; } = new(name, description, PromptSchema);
 
-    public async IAsyncEnumerable<IContentBlockEvent> InvokeStreamingAsync(
+    public async IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
