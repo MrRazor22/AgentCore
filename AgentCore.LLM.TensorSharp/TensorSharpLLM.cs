@@ -108,7 +108,7 @@ public sealed class TensorSharpLLM(
                 yield return new TextDelta(currentId, piece);
         }
 
-        yield return new MetadataEvent(new TokenUsage(InputTokens: promptTokens.Count, OutputTokens: outTokens, TotalTokens: promptTokens.Count + outTokens));
+        yield return new MessageDelta(Metadata: new TokenUsage(InputTokens: promptTokens.Count, OutputTokens: outTokens, TotalTokens: promptTokens.Count + outTokens));
         yield return new MessageEnd();
     }
 }

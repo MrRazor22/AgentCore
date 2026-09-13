@@ -61,8 +61,13 @@ namespace CodeSharp.UI
         {
             switch (output)
             {
+                case MessageDelta md when md.Content != null:
+                    Write(md.Content);
+                    break;
+
                 case MessageEvent me:
-                    Write(me.Event);
+                    foreach (var content in me.Message.Contents)
+                        Write(content);
                     break;
 
                 case ReasoningDelta r:

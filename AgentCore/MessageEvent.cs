@@ -3,10 +3,10 @@ using AgentCore.LLM.Chat;
 namespace AgentCore;
  
 public interface IMessageEvent { string? MessageId => null; } 
-public sealed record MessageEvent(string MessageId, IMessageEvent Event) : IMessageEvent;
 public sealed record MessageStart(Role Role = Role.Assistant, string? MessageId = null) : IMessageEvent;
+public sealed record MessageDelta(string? MessageId = null, IContentEvent? Content = null, IMetadata? Metadata = null) : IMessageEvent;
 public sealed record MessageEnd(string? MessageId = null) : IMessageEvent;
-public sealed record MetadataEvent(IMetadata Metadata, string? MessageId = null) : IMessageEvent;
+public sealed record MessageEvent(Message Message) : IMessageEvent;
 
  
 public interface IContentEvent : IMessageEvent { int Index { get; } }

@@ -49,8 +49,15 @@ public sealed class Agent(
             await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
                 await context.AppendAsync(evt, ct);
-                if (evt is IContentEvent contentEvt)
-                    yield return contentEvt;
+                if (evt is MessageDelta { Content: { } innerEvt })
+                    yield return innerEvt;
+                else if (evt is IContentEvent directEvt)
+                    yield return directEvt;
+                else if (evt is MessageEvent me)
+                {
+                    for (int cIdx = 0; cIdx < me.Message.Contents.Count; cIdx++)
+                        yield return new ContentEvent(cIdx, me.Message.Contents[cIdx]);
+                }
             }
 
             var currentHistory = await context.GetAsync(ct);
@@ -67,10 +74,15 @@ public sealed class Agent(
             await foreach (var evt in tooling.ExecuteStreamingAsync(toolCalls, ct))
             {
                 await context.AppendAsync(evt, ct);
-                if (evt is MessageEvent me && me.Event is IContentEvent innerContentEvt)
-                    yield return innerContentEvt;
-                else if (evt is IContentEvent directContentEvt)
-                    yield return directContentEvt;
+                if (evt is MessageDelta { Content: { } innerEvt })
+                    yield return innerEvt;
+                else if (evt is IContentEvent directEvt)
+                    yield return directEvt;
+                else if (evt is MessageEvent me)
+                {
+                    for (int cIdx = 0; cIdx < me.Message.Contents.Count; cIdx++)
+                        yield return new ContentEvent(cIdx, me.Message.Contents[cIdx]);
+                }
             }
         }
 

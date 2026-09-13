@@ -50,10 +50,16 @@ public class ChatContext(
         ArgumentNullException.ThrowIfNull(evt);
         lock (_lock)
         {
-            var targetEvt = evt is MessageEvent me ? me.Event : evt;
-            var id = (evt as IMessageEvent)?.MessageId;
+            if (evt is MessageEvent me)
+            {
+                if (me.Message.Role == Role.User) StripReasoning();
+                Commit(me.Message, me.Message.Metadata.Get<TokenUsage>()?.TotalTokens);
+                return Task.CompletedTask;
+            }
 
-            if (targetEvt is MessageStart ms)
+            var id = evt.MessageId;
+
+            if (evt is MessageStart ms)
             {
                 id ??= Guid.NewGuid().ToString("N");
                 if (ms.Role != Role.Tool) _activeId = id;
@@ -65,8 +71,8 @@ public class ChatContext(
                 id ??= _activeId ??= Guid.NewGuid().ToString("N");
                 if (_open.TryGetValue(id, out var asm))
                 {
-                    asm.Push(targetEvt);
-                    if (targetEvt is MessageEnd)
+                    asm.Push(evt);
+                    if (evt is MessageEnd)
                     {
                         _open.Remove(id);
                         if (id == _activeId) _activeId = null;

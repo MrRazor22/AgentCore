@@ -49,14 +49,14 @@ internal sealed class Tooling(
     private async Task ExecuteCallAsync(ToolCall call, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
         await writer.WriteAsync(new MessageStart(Role.Tool, MessageId: call.Id), ct).ConfigureAwait(false);
-        await writer.WriteAsync(new MessageEvent(call.Id, new MetadataEvent(new ToolCallId(call.Id), call.Id)), ct).ConfigureAwait(false);
+        await writer.WriteAsync(new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id)), ct).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(call.Name))
-            await writer.WriteAsync(new MessageEvent(call.Id, Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
+            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
         else if (!_tools.TryGetValue(call.Name, out var tool))
-            await writer.WriteAsync(new MessageEvent(call.Id, Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
+            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
         else if (tool.Definition.ParametersSchema.Validate(call.Arguments) is { Count: > 0 } errors)
-            await writer.WriteAsync(new MessageEvent(call.Id, Fail(call.Name, string.Join("; ", errors))), ct).ConfigureAwait(false);
+            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, string.Join("; ", errors))), ct).ConfigureAwait(false);
         else
         {
             using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
@@ -68,20 +68,20 @@ internal sealed class Tooling(
                 await foreach (var evt in tool.InvokeStreamingAsync(call.Arguments, cts?.Token ?? ct).ConfigureAwait(false))
                 {
                     hasResult = true;
-                    await writer.WriteAsync(new MessageEvent(call.Id, evt), ct).ConfigureAwait(false);
+                    await writer.WriteAsync(new MessageDelta(call.Id, Content: evt), ct).ConfigureAwait(false);
                 }
 
                 if (!hasResult)
-                    await writer.WriteAsync(new MessageEvent(call.Id, new ContentEvent(0, new Text(string.Empty))), ct).ConfigureAwait(false);
+                    await writer.WriteAsync(new MessageDelta(call.Id, Content: new ContentEvent(0, new Text(string.Empty))), ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
             {
-                await writer.WriteAsync(new MessageEvent(call.Id, Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.")), ct).ConfigureAwait(false);
+                await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.")), ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, ex.GetBaseException().Message);
-                await writer.WriteAsync(new MessageEvent(call.Id, Fail(call.Name, ex.GetBaseException().Message)), ct).ConfigureAwait(false);
+                await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, ex.GetBaseException().Message)), ct).ConfigureAwait(false);
             }
         }
 

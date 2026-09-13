@@ -152,7 +152,7 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                             int inTokens = data.Usage.PromptTokens;
                             int outTokens = data.Usage.CompletionTokens;
                             int totalTokens = data.Usage.TotalTokens > 0 ? data.Usage.TotalTokens : inTokens + outTokens;
-                            await channel.Writer.WriteAsync(new MetadataEvent(new TokenUsage(inTokens, outTokens, totalTokens)), ct);
+                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TokenUsage(inTokens, outTokens, totalTokens)), ct);
                         }
 
                         await channel.Writer.WriteAsync(new MessageEnd(), ct);

@@ -24,8 +24,9 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
                 _metadata.Clear();
                 break;
 
-            case MetadataEvent m:
-                _metadata.Add(m.Metadata);
+            case MessageDelta d:
+                if (d.Metadata != null) _metadata.Add(d.Metadata);
+                if (d.Content != null) Push(d.Content);
                 break;
 
             case ContentEvent cb:

@@ -57,14 +57,14 @@ public class MessageAssemblyTests
     {
         var message = new StreamingMessage();
         message.Push(new MessageStart(Role.Assistant, MessageId: "msg_123"));
-        message.Push(new MetadataEvent(new ToolCallId("call_abc")));
+        message.Push(new MessageDelta(Metadata: new ToolCallId("call_abc")));
         message.Push(new ReasoningStart(0));
         message.Push(new ReasoningDelta(0, "Thinking deeply..."));
         message.Push(new ReasoningEnd(0));
         message.Push(new TextStart(1));
         message.Push(new TextDelta(1, "Here is the answer."));
         message.Push(new TextEnd(1));
-        message.Push(new MetadataEvent(new TokenUsage(10, 20, 30)));
+        message.Push(new MessageDelta(Metadata: new TokenUsage(10, 20, 30)));
         message.Push(new MessageEnd());
 
         Assert.Equal(2, message.Contents.Count);

@@ -30,7 +30,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
             if (denial is { Count: > 0 })
             {
                 yield return new MessageStart(Role.Tool, MessageId: call.Id);
-                yield return new MetadataEvent(new ToolCallId(call.Id), call.Id);
+                yield return new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id));
                 for (int i = 0; i < denial.Count; i++)
                 {
                     var item = denial[i];
