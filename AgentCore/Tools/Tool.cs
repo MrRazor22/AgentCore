@@ -9,5 +9,5 @@ public sealed record ToolDefinition(string Name, string Description, JsonSchema 
 public interface ITool
 {
     ToolDefinition Definition { get; }
-    IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
+    IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }

@@ -6,7 +6,7 @@ namespace AgentCore.Context;
 
 internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyList<IMetadata>? metadata = null)
 {
-    private readonly SortedDictionary<int, (IBlockStartEvent Start, StringBuilder Buffer, List<IContent> Chunks)> _blocks = [];
+    private readonly SortedDictionary<int, (IContentStart Start, StringBuilder Buffer, List<IContent> Chunks)> _blocks = [];
     private readonly List<IContent> _contents = [];
     private readonly List<IMetadata> _metadata = metadata != null ? [.. metadata] : [];
 
@@ -14,7 +14,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
     public string? Id { get; private set; } = id;
     public IReadOnlyList<IMetadata> Metadata => _metadata;
 
-    public void Push(IAgentEvent evt)
+    public void Push(IMessageEvent evt)
     {
         switch (evt)
         {
@@ -32,7 +32,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
                 _contents.Add(cb.Content);
                 break;
 
-            case IBlockStartEvent s:
+            case IContentStart s:
                 _blocks[s.Index] = (s, new StringBuilder(), []);
                 break;
 
@@ -48,7 +48,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
                 b.Buffer.Append(d.Arguments);
                 break;
 
-            case IBlockEndEvent end:
+            case IContentEnd end:
                 CompleteBlock(end.Index);
                 break;
 
@@ -94,7 +94,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
         _contents.Add(CreateContent(b.Start, b.Buffer.ToString(), b.Chunks));
     }
 
-    private static IContent CreateContent(IBlockStartEvent start, string text, List<IContent> chunks) => start switch
+    private static IContent CreateContent(IContentStart start, string text, List<IContent> chunks) => start switch
     {
         TextStart => new Text(text),
         ReasoningStart => new Reasoning(text),

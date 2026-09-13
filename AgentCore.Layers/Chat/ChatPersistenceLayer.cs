@@ -13,7 +13,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         return await base.GetAsync(ct).ConfigureAwait(false);
     }
 
-    public override async Task AppendAsync(IAgentEvent evt, CancellationToken ct = default)
+    public override async Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
         await base.AppendAsync(evt, ct).ConfigureAwait(false);

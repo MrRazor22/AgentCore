@@ -11,7 +11,7 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
-    Task AppendAsync(IAgentEvent evt, CancellationToken ct = default);
+    Task AppendAsync(IMessageEvent evt, CancellationToken ct = default);
     Task AppendAsync(Message message, CancellationToken ct = default);
 }
 
@@ -45,7 +45,7 @@ public class ChatContext(
         return Task.CompletedTask;
     }
 
-    public Task AppendAsync(IAgentEvent evt, CancellationToken ct = default)
+    public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(evt);
         lock (_lock)

@@ -26,7 +26,7 @@ public abstract class ContextLayer : IContext
         => Inner.GetAsync(ct);
 
     public virtual Task AppendAsync(
-        IAgentEvent evt,
+        IMessageEvent evt,
         CancellationToken ct = default)
         => Inner.AppendAsync(evt, ct);
 

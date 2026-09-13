@@ -10,7 +10,7 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling(
@@ -26,13 +26,13 @@ internal sealed class Tooling(
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
 
-    public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (calls is not { Count: > 0 }) yield break;
 
-        var channel = Channel.CreateUnbounded<IAgentEvent>();
+        var channel = Channel.CreateUnbounded<IMessageEvent>();
         var options = new ParallelOptions
         {
             MaxDegreeOfParallelism = parallel ? (maxConcurrency is > 0 and int max ? max : -1) : 1,
@@ -46,7 +46,7 @@ internal sealed class Tooling(
             yield return evt;
     }
 
-    private async Task ExecuteCallAsync(ToolCall call, ChannelWriter<IAgentEvent> writer, CancellationToken ct)
+    private async Task ExecuteCallAsync(ToolCall call, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
         await writer.WriteAsync(new MessageStart(Role.Tool, MessageId: call.Id), ct).ConfigureAwait(false);
         await writer.WriteAsync(new MessageEvent(call.Id, new MetadataEvent(new ToolCallId(call.Id), call.Id)), ct).ConfigureAwait(false);

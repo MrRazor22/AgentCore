@@ -23,7 +23,7 @@ namespace AgentCore.LLM.Tornado;
 /// </summary>
 public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 {
-    public async IAsyncEnumerable<IAgentEvent> StreamAsync(
+    public async IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -40,7 +40,7 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
         conv.RequestParameters.StreamOptions = ChatStreamOptions.KnownOptionsIncludeUsage;
         conv.RequestParameters.MaxTokens = 4096;
 
-        var channel = Channel.CreateUnbounded<IAgentEvent>();
+        var channel = Channel.CreateUnbounded<IMessageEvent>();
 
         _ = Task.Run(async () =>
         {

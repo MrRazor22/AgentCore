@@ -44,7 +44,7 @@ public sealed class MethodTool : ITool
         Definition = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
     }
 
-    public async IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(
+    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {

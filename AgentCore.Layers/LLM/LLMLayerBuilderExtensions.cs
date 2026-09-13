@@ -29,13 +29,13 @@ public static class LLMLayerBuilderExtensions
         return builder.UseLLM(llm => llm.WithMessageCoalescing());
     }
 
-    public static LLMBuilder WithStreamingEvents<T>(this LLMBuilder builder, Func<IAgentEvent, T>? mapper = null)
+    public static LLMBuilder WithStreamingEvents<T>(this LLMBuilder builder, Func<IMessageEvent, T>? mapper = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.AddLayer(new StreamingEventLayer<T>(mapper));
     }
 
-    public static AgentBuilder AddStreamingEvents<T>(this AgentBuilder builder, Func<IAgentEvent, T>? mapper = null)
+    public static AgentBuilder AddStreamingEvents<T>(this AgentBuilder builder, Func<IMessageEvent, T>? mapper = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
         return builder.UseLLM(llm => llm.WithStreamingEvents(mapper));

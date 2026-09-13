@@ -32,7 +32,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
     private static readonly Regex XmlParamPattern = new(
         @"<parameter\s*=\s*""?(?<name>[a-zA-Z0-9_\-]+)""?\s*>(?<val>[\s\S]*?)</parameter>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    public override IAsyncEnumerable<IAgentEvent> StreamAsync(
+    public override IAsyncEnumerable<IMessageEvent> StreamAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -44,8 +44,8 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
             : ProcessStreamAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), toolNames, ct);
     }
 
-    private async IAsyncEnumerable<IAgentEvent> ProcessStreamAsync(
-        IAsyncEnumerable<IAgentEvent> innerStream,
+    private async IAsyncEnumerable<IMessageEvent> ProcessStreamAsync(
+        IAsyncEnumerable<IMessageEvent> innerStream,
         HashSet<string> toolNames,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -94,7 +94,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
             }
         }
 
-        IEnumerable<IAgentEvent> EmitParsedText(string text)
+        IEnumerable<IMessageEvent> EmitParsedText(string text)
         {
             int lastIndex = 0;
             while (lastIndex < text.Length)

@@ -18,7 +18,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
     public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
         : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
-    public override async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
+    public override async IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {

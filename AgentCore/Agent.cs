@@ -11,7 +11,7 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(IContent input, JsonSchema? responseSchema = null, CancellationToken ct = default);
+    IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(IContent input, JsonSchema? responseSchema = null, CancellationToken ct = default);
 }
 
 public sealed class Agent(
@@ -29,7 +29,7 @@ public sealed class Agent(
 
     public static AgentBuilder Create() => new();
 
-    public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IContent input,
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -49,7 +49,8 @@ public sealed class Agent(
             await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
                 await context.AppendAsync(evt, ct);
-                yield return evt;
+                if (evt is IContentEvent contentEvt)
+                    yield return contentEvt;
             }
 
             var currentHistory = await context.GetAsync(ct);
@@ -66,7 +67,10 @@ public sealed class Agent(
             await foreach (var evt in tooling.ExecuteStreamingAsync(toolCalls, ct))
             {
                 await context.AppendAsync(evt, ct);
-                yield return evt;
+                if (evt is MessageEvent me && me.Event is IContentEvent innerContentEvt)
+                    yield return innerContentEvt;
+                else if (evt is IContentEvent directContentEvt)
+                    yield return directContentEvt;
             }
         }
 
@@ -76,7 +80,7 @@ public sealed class Agent(
 
 public static class AgentExtensions
 {
-    public static IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         this Agent agent,
         IContent input,
         CancellationToken ct) => agent.InvokeStreamingAsync(input, null, ct);

@@ -20,7 +20,7 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
             : new JsonSchema(new JsonObject());
     public ToolDefinition Definition { get; } = new(tool.Name, tool.Description ?? tool.Name, ParseSchema(tool.InputSchema));
 
-    public async IAsyncEnumerable<IBlockEvent> InvokeStreamingAsync(
+    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
