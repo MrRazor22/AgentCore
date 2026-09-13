@@ -46,15 +46,14 @@ public sealed class Agent(
             ct.ThrowIfCancellationRequested();
             var messages = await context.GetAsync(ct);
 
-            Message? assistant = null;
+            List<ToolCall>? toolCalls = null;
             await foreach (var evt in context.IngestAsync(llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
             {
-                if (evt is Message m) assistant = m;
+                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 else if (evt is MessageDelta { Content: { } c }) yield return c;
                 else if (evt is IContentEvent direct) yield return direct;
             }
 
-            var toolCalls = assistant?.Contents.OfType<ToolCall>().ToList();
             if (toolCalls is not { Count: > 0 }) yield break;
 
             await foreach (var evt in context.IngestAsync(tooling.ExecuteAsync(toolCalls, ct), ct))

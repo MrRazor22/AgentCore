@@ -30,13 +30,11 @@ public class MessageMergingLayerTests
     public void MergeTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
         var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
-        var toolResult = new ToolResult("1", [new Text("search result content")]);
-
         var input = new List<Message>
         {
             new Message(Role.User, [new Text("find files")]),
             new Message(Role.Assistant, [toolCall]),
-            new Message(Role.Tool, [toolResult]),
+            new Message(Role.Tool, [new Text("search result content")], metadata: [new ToolCallId("1")]),
             new Message(Role.Assistant, [new Text("here are the files")])
         };
 

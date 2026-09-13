@@ -48,7 +48,7 @@ internal sealed class Tooling(
 
     private async Task ExecuteCallAsync(ToolCall call, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
-        await writer.WriteAsync(new MessageStart(Role.Tool, MessageId: call.Id), ct).ConfigureAwait(false);
+        await writer.WriteAsync(new MessageStart(Role.Tool, Id: call.Id), ct).ConfigureAwait(false);
         await writer.WriteAsync(new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id)), ct).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(call.Name))
@@ -85,7 +85,7 @@ internal sealed class Tooling(
             }
         }
 
-        await writer.WriteAsync(new MessageEnd(MessageId: call.Id), ct).ConfigureAwait(false);
+        await writer.WriteAsync(new MessageEnd(Id: call.Id), ct).ConfigureAwait(false);
     }
 
     private Text Fail(string name, string message)

@@ -96,12 +96,13 @@ public class LiveAgentTests
         // Also call the underlying LLM direct stream to verify Metadata / token capturing
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         var tornadoLlm = new TornadoLLM(api, model);
-        var directMessage = new StreamingMessage(Role.Assistant);
+        var directAssembler = new MessageAssembler(Role.Assistant);
         await foreach (var evt in tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
         {
-            directMessage.Push(evt);
+            directAssembler.Push(evt);
         }
 
+        var directMessage = directAssembler.ToMessage();
         var metadataItem = directMessage.Get<TokenUsage>();
         if (metadataItem != null)
         {
@@ -272,13 +273,13 @@ public class LiveAgentTests
         var toolResultMessages = (await context.GetAsync())
             .Where(m => m.Role == Role.Tool)
             .SelectMany(m => m.Contents)
-            .OfType<ToolResult>()
+            .OfType<Text>()
             .ToList();
 
         Assert.NotEmpty(toolResultMessages);
         var failedResult = toolResultMessages.FirstOrDefault();
         Assert.NotNull(failedResult);
-        Assert.Contains("Simulation tool failure", failedResult.ToString());
+        Assert.Contains("Simulation tool failure", failedResult.Value);
         
         // Ensure the conversation history remains clean and agent loop finished successfully
         Assert.False(string.IsNullOrWhiteSpace(result));

@@ -22,8 +22,6 @@ public class Message(
     public string? Id { get; } = id;
     public IReadOnlyList<IMetadata> Metadata { get; } = metadata ?? [];
 
-    string? IMessageEvent.MessageId => Id;
-
     public Message(Role role, IReadOnlyList<IContent>? contents, IReadOnlyList<IMetadata>? metadata)
         : this(role, contents, null, metadata) { }
 }

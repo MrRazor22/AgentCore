@@ -155,7 +155,7 @@ public class MemoryTests
         // Arrange - contextWindow = 1000, maxSingleMessageTokens = 200 -> ~800 chars
         var context = new Context.ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
         string giantOutput = new string('A', 5000);
-        var toolResult = new Message(Role.Tool, [new ToolResult("call_1", [new Text(giantOutput)])]);
+        var toolResult = new Message(Role.Tool, [new Text(giantOutput)], metadata: [new ToolCallId("call_1")]);
 
         // Act
         await context.AppendAsync([toolResult]);
@@ -183,11 +183,10 @@ public class MemoryTests
         Assert.NotSame(longText, truncatedText);
         Assert.Contains("truncated", truncatedText.ToString());
 
-        // 2. ToolResult truncation
-        var toolResult = new ToolResult("call_1", [longText]);
-        var truncatedResult = truncator.Truncate(toolResult, 10);
-        Assert.NotSame(toolResult, truncatedResult);
-        Assert.Contains("truncated", truncatedResult.ToString());
+        // 2. Non-text/reasoning content omitted when exceeding budget
+        var image = new Image(new byte[1000]);
+        var truncatedImage = truncator.Truncate(image, 0);
+        Assert.Contains("Image omitted", truncatedImage.ToString());
 
         // 3. ToolCall returns itself unchanged
         IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());

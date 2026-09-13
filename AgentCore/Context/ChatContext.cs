@@ -22,10 +22,12 @@ public class ChatContext(
     ICompactor? compactor = null,
     ITokenizer? counter = null,
     ITruncator? truncator = null,
+    Func<Role, string?, IMessageAssembler>? assemblerFactory = null,
     ILogger<ChatContext>? logger = null) : IContext
 {
     private readonly List<Message> _chat = [];
-    private readonly Dictionary<string, MessageAssembler> _open = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IMessageAssembler> _open = new(StringComparer.Ordinal);
+    private readonly Func<Role, string?, IMessageAssembler> _assemblerFactory = assemblerFactory ?? ((r, id) => new MessageAssembler(r, id));
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
     private readonly ITruncator _truncator = truncator ?? new Truncator(counter ?? new Tokenizer());
     private readonly int _limit = Math.Max(1, contextWindow - (reserveTokens ?? Math.Min(4_000, contextWindow / 10)));
@@ -49,9 +51,9 @@ public class ChatContext(
 
             yield return evt;
 
-            if (completedContent is not null)
+            if (completedContent is ToolCall tc)
             {
-                yield return completedContent;
+                yield return tc;
             }
 
             if (evt is MessageEnd)
@@ -78,37 +80,38 @@ public class ChatContext(
             return null;
         }
 
-        var id = evt.MessageId;
+        var id = evt.Id;
 
         if (evt is MessageStart ms)
         {
             id ??= Guid.NewGuid().ToString("N");
             if (ms.Role != Role.Tool) _activeId = id;
             if (ms.Role == Role.User) StripReasoning();
-            _open[id] = new(ms.Role, ms.MessageId);
+            _open[id] = _assemblerFactory(ms.Role, ms.Id);
             return null;
         }
 
         id ??= _activeId ??= Guid.NewGuid().ToString("N");
-        if (_open.TryGetValue(id, out var asm))
+        if (!_open.TryGetValue(id, out var asm))
         {
-            var content = asm.Push(evt);
-            if (evt is MessageEnd)
-            {
-                _open.Remove(id);
-                if (id == _activeId) _activeId = null;
-                Commit(asm.ToMessage(), asm.Metadata.Get<TokenUsage>()?.TotalTokens);
-            }
-            return content;
+            asm = _open[id] = _assemblerFactory(Role.Assistant, id);
         }
 
-        return null;
+        var content = asm.Push(evt);
+        if (evt is MessageEnd)
+        {
+            _open.Remove(id);
+            if (id == _activeId) _activeId = null;
+            var msg = asm.ToMessage();
+            Commit(msg, msg.Metadata.Get<TokenUsage>()?.TotalTokens);
+        }
+        return content;
     }
 
     public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
     {
         List<Message> snapshot;
-        lock (_lock) snapshot = [.. _chat, .. _open.Values.Select(a => a.ToSnapshot())];
+        lock (_lock) snapshot = [.. _chat, .. _open.Values.Select(a => a.ToMessage())];
 
         if (_tokens > _limit && compactor != null)
         {
@@ -119,7 +122,7 @@ public class ChatContext(
                 _chat.Clear();
                 _chat.AddRange(compacted);
                 _tokens = _chat.Sum(Estimate);
-                snapshot = [.. _chat, .. _open.Values.Select(a => a.ToSnapshot())];
+                snapshot = [.. _chat, .. _open.Values.Select(a => a.ToMessage())];
             }
             logger?.LogInformation("Compacted: {Count} messages ({Tokens} tokens).", snapshot.Count, _tokens);
         }
@@ -155,18 +158,30 @@ public static class ContextExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(evt);
-        await foreach (var _ in context.IngestAsync(evt, ct).ConfigureAwait(false)) { }
+        await foreach (var _ in context.IngestAsync(ToAsync(evt), ct).ConfigureAwait(false)) { }
+    }
+
+    public static async Task AppendAsync(this IContext context, IEnumerable<IMessageEvent> events, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(events);
+        await foreach (var _ in context.IngestAsync(ToAsync(events), ct).ConfigureAwait(false)) { }
     }
 
     public static IAsyncEnumerable<IMessageEvent> IngestAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(evt);
-        return context.IngestAsync(ToAsyncEnumerable(evt), ct);
+        return context.IngestAsync(ToAsync(evt), ct);
     }
 
-    private static async IAsyncEnumerable<IMessageEvent> ToAsyncEnumerable(IMessageEvent evt)
+    private static async IAsyncEnumerable<IMessageEvent> ToAsync(IMessageEvent evt)
     {
         yield return evt;
+    }
+
+    private static async IAsyncEnumerable<IMessageEvent> ToAsync(IEnumerable<IMessageEvent> events)
+    {
+        foreach (var evt in events) yield return evt;
     }
 }

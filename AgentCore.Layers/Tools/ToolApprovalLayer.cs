@@ -29,7 +29,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
             var denial = await _approver(call, ct).ConfigureAwait(false);
             if (denial is { Count: > 0 })
             {
-                yield return new MessageStart(Role.Tool, MessageId: call.Id);
+                yield return new MessageStart(Role.Tool, Id: call.Id);
                 yield return new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id));
                 for (int i = 0; i < denial.Count; i++)
                 {
@@ -37,7 +37,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
                     var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
                     yield return content;
                 }
-                yield return new MessageEnd(MessageId: call.Id);
+                yield return new MessageEnd(Id: call.Id);
             }
             else
             {

@@ -29,7 +29,8 @@ public sealed class ContextBuilder
         int? maxSingleMessageTokens = null,
         ICompactor? compactor = null,
         ITokenizer? counter = null,
-        ITruncator? truncator = null)
+        ITruncator? truncator = null,
+        Func<Role, string?, IMessageAssembler>? assemblerFactory = null)
     {
         return Use(lf => new ChatContext(
             contextWindow: contextWindow,
@@ -38,6 +39,7 @@ public sealed class ContextBuilder
             compactor: compactor,
             counter: counter,
             truncator: truncator,
+            assemblerFactory: assemblerFactory,
             logger: lf.CreateLogger<ChatContext>()
         ));
     }

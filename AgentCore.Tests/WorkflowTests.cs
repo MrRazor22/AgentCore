@@ -1,3 +1,4 @@
+using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
@@ -24,7 +25,7 @@ public class WorkflowTests
         var input = new Text("Hello");
 
         // Act
-        var events = new List<IAgentEvent>();
+        var events = new List<IContentEvent>();
         await foreach (var item in agent.InvokeStreamingAsync(input))
         {
             events.Add(item);
@@ -64,8 +65,8 @@ public class WorkflowTests
         var tooling = new MockTooling();
         tooling.Handler = (calls, ct) =>
         {
-            var results = calls.Select(c => new ToolResult(c.Id, [new Text("Rainy")])).ToList();
-            return Task.FromResult<IReadOnlyList<ToolResult>>(results);
+            var results = calls.Select(c => (IContent)new Text("Rainy")).ToList();
+            return Task.FromResult<IReadOnlyList<IContent>>(results);
         };
 
         var (llm, _) = CreateServices(provider, tooling);
@@ -74,7 +75,7 @@ public class WorkflowTests
         var input = new Text("Weather in London?");
 
         // Act
-        var events = new List<IAgentEvent>();
+        var events = new List<IContentEvent>();
         await foreach (var item in agent.InvokeStreamingAsync(input))
         {
             events.Add(item);
@@ -82,7 +83,7 @@ public class WorkflowTests
 
         // Assert
         Assert.Contains(events, e => e is ToolCall tc && tc.Name == "get_weather");
-        Assert.Contains(events, e => e is ToolResult tr && tr.ToString() == "Rainy");
+        Assert.Contains(events, e => e is Text t && t.Value == "Rainy");
         var finalResponse = events.OfType<TextDelta>().Single();
         Assert.Equal("It is sunny in London.", finalResponse.Text);
 
@@ -119,7 +120,7 @@ public class WorkflowTests
         var context = new MockMemoryProvider();
         var agent = new Agent(context, llm, tooling);
 
-        var events = new List<IAgentEvent>();
+        var events = new List<IContentEvent>();
         await foreach (var evt in agent.InvokeStreamingAsync(new Text("Calculate")))
         {
             events.Add(evt);
@@ -197,8 +198,8 @@ public class WorkflowTests
         tooling.Handler = (calls, ct) =>
         {
             assistantWasCommittedWhenToolRan = context.Messages.Any(m => m.Role == Role.Assistant);
-            var results = calls.Select(c => new ToolResult(c.Id, [new Text("ok")])).ToList();
-            return Task.FromResult<IReadOnlyList<ToolResult>>(results);
+            var results = calls.Select(c => (IContent)new Text("ok")).ToList();
+            return Task.FromResult<IReadOnlyList<IContent>>(results);
         };
 
         var (llm, _) = CreateServices(provider, tooling);
@@ -220,8 +221,8 @@ public class WorkflowTests
         );
 
         var tooling = new MockTooling();
-        tooling.Handler = (calls, ct) => Task.FromResult<IReadOnlyList<ToolResult>>(
-            calls.Select(c => new ToolResult(c.Id, [new Text("Output123")])).ToList()
+        tooling.Handler = (calls, ct) => Task.FromResult<IReadOnlyList<IContent>>(
+            calls.Select(c => (IContent)new Text("Output123")).ToList()
         );
 
         var (llm, _) = CreateServices(provider, tooling);
@@ -232,8 +233,8 @@ public class WorkflowTests
 
         var toolMessages = context.Messages.Where(m => m.Role == Role.Tool).ToList();
         Assert.Single(toolMessages);
-        var toolResult = Assert.Single(toolMessages[0].Contents.OfType<ToolResult>());
-        Assert.Equal("call_p", toolResult.CallId);
+        var toolResult = Assert.Single(toolMessages[0].Contents.OfType<Text>());
+        Assert.Equal("call_p", toolMessages[0].Metadata.Get<ToolCallId>()?.Value);
         Assert.Equal("Output123", toolResult.ToString());
     }
 
@@ -292,8 +293,8 @@ public class WorkflowTests
         tooling.Handler = (calls, ct) =>
         {
             Interlocked.Increment(ref executionCount);
-            return Task.FromResult<IReadOnlyList<ToolResult>>(
-                calls.Select(c => new ToolResult(c.Id, [new Text("ok")])).ToList()
+            return Task.FromResult<IReadOnlyList<IContent>>(
+                calls.Select(c => (IContent)new Text("ok")).ToList()
             );
         };
 
@@ -309,7 +310,7 @@ public class WorkflowTests
         // Also test recovery scenario: pre-existing ToolResult in context prevents execution
         var recoveryContext = new MockMemoryProvider();
         await recoveryContext.AppendAsync([
-            new Message(Role.Tool, [new ToolResult("call_dup", [new Text("previously executed")])])
+            new Message(Role.Tool, [new Text("previously executed")], metadata: [new ToolCallId("call_dup")])
         ]);
 
         provider.Enqueue(

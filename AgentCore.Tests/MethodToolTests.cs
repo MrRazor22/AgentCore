@@ -9,11 +9,12 @@ internal static class MethodToolTestExtensions
 {
     public static async Task<IReadOnlyList<IContent>> InvokeAsync(this ITool tool, JsonObject arguments, CancellationToken ct = default)
     {
-        await foreach (var evt in tool.InvokeStreamingAsync("call_1", arguments, ct))
+        var results = new List<IContent>();
+        await foreach (var evt in tool.InvokeStreamingAsync(arguments, ct))
         {
-            if (evt is ToolResult tr) return tr.Contents;
+            if (evt is IContent c) results.Add(c);
         }
-        return Array.Empty<IContent>();
+        return results;
     }
 }
 

@@ -174,7 +174,7 @@ public class MockTooling : ITooling
         for (int i = 0; i < calls.Count && i < results.Count; i++)
         {
             var call = calls[i];
-            yield return new MessageStart(Role.Tool, MessageId: call.Id);
+            yield return new MessageStart(Role.Tool, Id: call.Id);
             yield return new MessageDelta(call.Id, Content: results[i], Metadata: new ToolCallId(call.Id));
             yield return new MessageEnd(call.Id);
         }

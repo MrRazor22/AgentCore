@@ -4,24 +4,27 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Context;
 
-internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyList<IMetadata>? metadata = null)
+public interface IMessageAssembler
 {
-    private readonly SortedDictionary<int, (IContentStart Start, StringBuilder Buffer, List<IContent> Chunks)> _blocks = [];
-    private readonly List<IContent> _contents = [];
-    private readonly List<IMetadata> _metadata = metadata != null ? [.. metadata] : [];
+    IContent? Push(IMessageEvent evt);
+    Message ToMessage();
+}
 
-    public Role Role { get; private set; } = role;
-    public string? Id { get; private set; } = id;
-    public IReadOnlyList<IMetadata> Metadata => _metadata;
+public sealed class MessageAssembler(Role role = Role.Assistant, string? id = null) : IMessageAssembler
+{
+    private readonly SortedDictionary<int, (IContentStart Start, StringBuilder Buffer)> _blocks = [];
+    private readonly List<IContent> _contents = [];
+    private readonly List<IMetadata> _metadata = [];
+    private Role _role = role;
+    private string? _id = id;
 
     public IContent? Push(IMessageEvent evt)
     {
         switch (evt)
         {
             case MessageStart s:
-                Role = s.Role;
-                Id = s.MessageId;
-                _metadata.Clear();
+                _role = s.Role;
+                _id = s.Id;
                 return null;
 
             case MessageDelta d:
@@ -33,7 +36,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
                 return c;
 
             case IContentStart s:
-                _blocks[s.Index] = (s, new StringBuilder(), []);
+                _blocks[s.Index] = (s, new StringBuilder());
                 return null;
 
             case TextDelta d when _blocks.TryGetValue(d.Index, out var b):
@@ -60,26 +63,15 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
         }
     }
 
-    public Message ToSnapshot()
-    {
-        var snapshotContents = new List<IContent>(_contents);
-        foreach (var b in _blocks.Values)
-        {
-            snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString(), b.Chunks));
-        }
-        return BuildMessage(snapshotContents);
-    }
-
     public Message ToMessage()
     {
-        CompleteAllBlocks();
-        return BuildMessage(_contents);
-    }
-
-    private Message BuildMessage(List<IContent> contents)
-    {
+        var contents = new List<IContent>(_contents);
+        foreach (var b in _blocks.Values)
+        {
+            contents.Add(CreateContent(b.Start, b.Buffer.ToString()));
+        }
         var msgContents = contents.Count > 0 ? contents : [new Text(string.Empty)];
-        return new Message(Role, msgContents, Id, _metadata);
+        return new Message(_role, msgContents, _id, _metadata);
     }
 
     private void CompleteAllBlocks()
@@ -93,12 +85,12 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
     private IContent? CompleteBlock(int index)
     {
         if (!_blocks.Remove(index, out var b)) return null;
-        var content = CreateContent(b.Start, b.Buffer.ToString(), b.Chunks);
+        var content = CreateContent(b.Start, b.Buffer.ToString());
         _contents.Add(content);
         return content;
     }
 
-    private static IContent CreateContent(IContentStart start, string text, List<IContent> chunks) => start switch
+    private static IContent CreateContent(IContentStart start, string text) => start switch
     {
         TextStart => new Text(text),
         ReasoningStart => new Reasoning(text),
