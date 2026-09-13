@@ -67,7 +67,7 @@ internal sealed class Tooling(
                 await foreach (var evt in tool.InvokeStreamingAsync(call.Arguments, cts?.Token ?? ct).ConfigureAwait(false))
                 {
                     hasResult = true;
-                    await writer.WriteAsync(Tag(evt, call.Id), ct).ConfigureAwait(false);
+                    await writer.WriteAsync(evt.WithMessageId(call.Id), ct).ConfigureAwait(false);
                 }
 
                 if (!hasResult)
@@ -92,13 +92,4 @@ internal sealed class Tooling(
         _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
         return new ContentEvent(0, new Text($"Error calling tool '{name}': {message}"), MessageId: id);
     }
-
-    private static IAgentEvent Tag(IAgentEvent evt, string id) => evt switch
-    {
-        ContentEvent c => c.MessageId != null ? c : c with { MessageId = id },
-        TextDelta td => td.MessageId != null ? td : td with { MessageId = id },
-        TextStart ts => ts.MessageId != null ? ts : ts with { MessageId = id },
-        TextEnd te => te.MessageId != null ? te : te with { MessageId = id },
-        _ => evt
-    };
 }
