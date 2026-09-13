@@ -12,7 +12,6 @@ public interface IContext
 {
     Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
     Task AppendAsync(IMessageEvent evt, CancellationToken ct = default);
-    Task AppendAsync(Message message, CancellationToken ct = default);
 }
 
 public class ChatContext(
@@ -33,17 +32,6 @@ public class ChatContext(
     private readonly object _lock = new();
     private string? _activeId;
     private int _tokens;
-
-    public Task AppendAsync(Message message, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-        lock (_lock)
-        {
-            if (message.Role == Role.User) StripReasoning();
-            Commit(message);
-        }
-        return Task.CompletedTask;
-    }
 
     public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
     {

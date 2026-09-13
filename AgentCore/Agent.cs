@@ -37,9 +37,9 @@ public sealed class Agent(
         var existing = await context.GetAsync(ct);
         if (instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System))
         {
-            await context.AppendAsync(new Message(Role.System, instructions), ct);
+            await context.AppendAsync(new MessageEvent(new Message(Role.System, instructions)), ct);
         }
-        await context.AppendAsync(new Message(Role.User, [input]), ct);
+        await context.AppendAsync(new MessageEvent(new Message(Role.User, [input])), ct);
 
         for (int i = 0; i < maxIterations; i++)
         {

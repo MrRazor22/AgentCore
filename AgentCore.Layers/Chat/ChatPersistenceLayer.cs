@@ -17,9 +17,9 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
         await base.AppendAsync(evt, ct).ConfigureAwait(false);
-        if (evt is Message m)
+        if (evt is MessageEvent me)
         {
-            await store.AppendAsync(sessionId, [m], ct).ConfigureAwait(false);
+            await store.AppendAsync(sessionId, [me.Message], ct).ConfigureAwait(false);
         }
         else if (evt is MessageEnd)
         {
@@ -39,7 +39,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         {
             foreach (var msg in ExtractWorkingContext(history))
             {
-                await Inner.AppendAsync(msg, ct).ConfigureAwait(false);
+                await Inner.AppendAsync(new MessageEvent(msg), ct).ConfigureAwait(false);
             }
         }
     }

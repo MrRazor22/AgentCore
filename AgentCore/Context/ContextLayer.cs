@@ -29,9 +29,4 @@ public abstract class ContextLayer : IContext
         IMessageEvent evt,
         CancellationToken ct = default)
         => Inner.AppendAsync(evt, ct);
-
-    public virtual Task AppendAsync(
-        Message message,
-        CancellationToken ct = default)
-        => Inner.AppendAsync(message, ct);
 }
