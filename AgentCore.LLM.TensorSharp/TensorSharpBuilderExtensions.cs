@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using AgentCore;
+using AgentCore.LLM;
 using AgentCore.LLM.TensorSharp;
 using TensorSharp;
 using TensorSharp.Models;
@@ -11,10 +13,10 @@ namespace AgentCore.LLM.TensorSharp;
 public static class TensorSharpBuilderExtensions
 {
     /// <summary>
-    /// Configures the Agent.Builder to use an in-process TensorSharp InferenceEngine.
+    /// Configures the LLMBuilder to use an in-process TensorSharp InferenceEngine.
     /// </summary>
-    public static AgentBuilder WithTensorSharp(
-        this AgentBuilder builder,
+    public static LLMBuilder WithTensorSharp(
+        this LLMBuilder builder,
         InferenceEngine engine,
         IModelArchitecture model,
         SamplingConfig? samplingConfig = null)
@@ -23,18 +25,14 @@ public static class TensorSharpBuilderExtensions
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(model);
 
-        return builder.WithLLM(_ => new TensorSharpLLM(engine, model, samplingConfig));
+        return builder.Use(_ => new TensorSharpLLM(engine, model, samplingConfig));
     }
 
     /// <summary>
-    /// Loads a local GGUF model via TensorSharp with natural backend fallback (GgmlCuda -> Cuda -> Cpu) and attaches it to the Agent.Builder.
+    /// Loads a local GGUF model via TensorSharp with natural backend fallback (GgmlCuda -> Cuda -> Cpu) and attaches it to LLMBuilder.
     /// </summary>
-    /// <param name="builder">The Agent.Builder instance.</param>
-    /// <param name="ggufPath">The full path to the .gguf model file.</param>
-    /// <param name="backend">Optional preferred backend. If null, attempts GgmlCuda -> Cuda -> Cpu.</param>
-    /// <param name="samplingConfig">Optional sampling parameters (temperature, top_p, max_tokens, etc.).</param>
-    public static AgentBuilder WithTensorSharpModel(
-        this AgentBuilder builder,
+    public static LLMBuilder WithTensorSharpModel(
+        this LLMBuilder builder,
         string ggufPath,
         BackendType? backend = null,
         SamplingConfig? samplingConfig = null)
@@ -77,5 +75,31 @@ public static class TensorSharpBuilderExtensions
         var engine = new InferenceEngine(model, schedulerConfig);
 
         return builder.WithTensorSharp(engine, model, samplingConfig);
+    }
+
+    /// <summary>
+    /// Configures the AgentBuilder to use an in-process TensorSharp InferenceEngine via UseLLM.
+    /// </summary>
+    public static AgentBuilder WithTensorSharp(
+        this AgentBuilder builder,
+        InferenceEngine engine,
+        IModelArchitecture model,
+        SamplingConfig? samplingConfig = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.UseLLM(llm => llm.WithTensorSharp(engine, model, samplingConfig));
+    }
+
+    /// <summary>
+    /// Loads a local GGUF model via TensorSharp with natural backend fallback and attaches it to AgentBuilder via UseLLM.
+    /// </summary>
+    public static AgentBuilder WithTensorSharpModel(
+        this AgentBuilder builder,
+        string ggufPath,
+        BackendType? backend = null,
+        SamplingConfig? samplingConfig = null)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.UseLLM(llm => llm.WithTensorSharpModel(ggufPath, backend, samplingConfig));
     }
 }

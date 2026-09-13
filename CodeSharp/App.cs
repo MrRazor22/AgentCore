@@ -12,6 +12,7 @@ using Spectre.Console;
 using CodeSharp.UI;
 using AgentCore.Layers.Chat;
 using AgentCore.Layers.LLM;
+using AgentCore.Layers.Tools;
 using Serilog;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.AI;
@@ -161,14 +162,16 @@ internal class App
             }
 
             Agent agent = agentBuilder
-                .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddChatPersistence(sessionStore, Guid.NewGuid().ToString())
-                .AddLLMLayer(new RetryLayer())
-                .AddLLMLayer(new ToolCallDetectionLayer())
-                .AddLLMLayer(new MessageCoalescingLayer())
-                .WithTools(shellTool)
-                .WithTools(skillTool)
-                .AddToolingLayer(approvalLayer)
+                .UseContext(ctx => ctx
+                    .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
+                    .AddChatPersistence(sessionStore, Guid.NewGuid().ToString()))
+                .UseLLM(llm => llm
+                    .WithRetry()
+                    .WithToolCallDetection()
+                    .WithMessageCoalescing())
+                .UseTooling(tools => tools
+                    .WithTools(shellTool, skillTool)
+                    .AddLayer(approvalLayer))
                 .WithInstructions(
                     """
                     You are CodeSharp, an expert agentic AI coding assistant.

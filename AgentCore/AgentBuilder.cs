@@ -12,13 +12,9 @@ public class AgentBuilder
     private ILogger<AgentBuilder> _logger = NullLogger<AgentBuilder>.Instance;
     private int _maxIterations = 20;
     private readonly List<IContent> _instructions = [];
-    private Func<ILoggerFactory, ILLM>? _llmFactory;
-    private Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling>? _toolingFactory;
-    private Func<ILoggerFactory, IContext>? _contextFactory;
-    private readonly List<LLMLayer> _llmLayers = []; 
-    private readonly List<ITool> _tools = [];
-    private readonly List<ToolingLayer> _toolingLayers = [];
-    private readonly List<ContextLayer> _contextLayers = []; 
+    private readonly LLMBuilder _llm = new();
+    private readonly ToolingBuilder _tooling = new();
+    private readonly ContextBuilder _context = new();
     private ILoggerFactory? _loggerFactory;
 
     public AgentBuilder WithMaxIterations(int maxIterations)
@@ -39,49 +35,26 @@ public class AgentBuilder
         return this;
     }
 
-     
-    public AgentBuilder AddLLMLayer(LLMLayer layer) { _llmLayers.Add(layer); return this; } 
-    public AgentBuilder WithLLM(Func<ILoggerFactory, ILLM> factory)
+    public AgentBuilder UseLLM(Action<LLMBuilder> configure)
     {
-        ArgumentNullException.ThrowIfNull(factory);
-        _llmFactory = factory;
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(_llm);
         return this;
     }
 
-    public AgentBuilder WithTools(params ITool[] tools)
+    public AgentBuilder UseTooling(Action<ToolingBuilder> configure)
     {
-        ArgumentNullException.ThrowIfNull(tools);
-        foreach (var tool in tools)
-        {
-            ArgumentNullException.ThrowIfNull(tool);
-            _tools.Add(tool);
-        }
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(_tooling);
         return this;
     }
-    public AgentBuilder WithTooling(Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling> factory)
+
+    public AgentBuilder UseContext(Action<ContextBuilder> configure)
     {
-        ArgumentNullException.ThrowIfNull(factory);
-        _toolingFactory = factory;
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(_context);
         return this;
     }
-    public AgentBuilder WithTooling(Func<ILoggerFactory, ITooling> factory)
-    {
-        ArgumentNullException.ThrowIfNull(factory);
-        _toolingFactory = (_, lf) => factory(lf);
-        return this;
-    }
-    public AgentBuilder AddToolingLayer(ToolingLayer layer)
-    {
-        _toolingLayers.Add(layer); return this;
-    }
-    
-    public AgentBuilder WithContext(Func<ILoggerFactory, IContext> factory)
-    {
-        ArgumentNullException.ThrowIfNull(factory);
-        _contextFactory = factory;
-        return this;
-    } 
-    public AgentBuilder AddContextLayer(ContextLayer layer) { _contextLayers.Add(layer); return this; }
 
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
@@ -94,49 +67,20 @@ public class AgentBuilder
     {
         var lf = _loggerFactory ?? NullLoggerFactory.Instance;
 
-        if (_llmFactory == null)
-            throw new InvalidOperationException("No LLM provider registered. Call WithLLM().");
-
-        var baseProvider = _llmFactory(lf);
-
-        ILLM provider = baseProvider;
-        foreach (var layer in _llmLayers)
-        {
-            layer.Attach(provider);
-            provider = layer;
-        }
-
-        var frozenTools = _tools.ToArray();
-
-        ITooling tooling = _toolingFactory != null
-            ? _toolingFactory(frozenTools, lf)
-            : new Tooling(frozenTools, lf.CreateLogger<Tooling>());
-        foreach (var layer in _toolingLayers)
-        {
-            layer.Attach(tooling);
-            tooling = layer;
-        }
-
-        IContext context = _contextFactory != null
-            ? _contextFactory(lf)
-            : new ChatContext(compactor: new Summarizer(baseProvider), logger: lf.CreateLogger<ChatContext>());
-
-        foreach (var layer in _contextLayers)
-        {
-            layer.Attach(context);
-            context = layer;
-        }
+        var (baseProvider, provider) = _llm.Build(lf);
+        var tooling = _tooling.Build(lf);
+        var context = _context.Build(lf, baseProvider);
 
         var frozenInstructions = _instructions.Count > 0 ? _instructions.ToArray() : null;
 
         _logger.LogInformation("Agent built: Tools={ToolCount} Instructions={InstructionCount} Provider={ProviderType} Context={ContextType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
-            frozenTools.Length,
+            _tooling.Tools.Count,
             frozenInstructions?.Length ?? 0,
             provider.GetType().Name,
             context.GetType().Name,
-            _llmLayers.Count,
-            _toolingLayers.Count,
-            _contextLayers.Count);
+            _llm.Layers.Count,
+            _tooling.Layers.Count,
+            _context.Layers.Count);
 
         return new Agent(context, provider, tooling, frozenInstructions, _maxIterations);
     }
