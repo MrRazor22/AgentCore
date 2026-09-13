@@ -16,16 +16,21 @@ public sealed record ToolMetadata(string CallId, string? ToolName = null) : IMet
 public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
-    IReadOnlyList<IMetadata>? metadata = null,
-    string? id = null) : IAgentEvent, IHasMetadata
+    MessageMetadata? info = null,
+    IReadOnlyList<IMetadata>? metadata = null) : IHasMetadata
 {
     public Role Role { get; } = role;
-    public string? Id { get; } = id ?? metadata?.OfType<MessageMetadata>().FirstOrDefault()?.Id;
     public IReadOnlyList<IContent> Contents { get; } = contents ?? [];
+    public MessageMetadata Info { get; } = info ?? new();
+    public string? Id => Info.Id;
     public IReadOnlyList<IMetadata> Metadata { get; } = metadata ?? [];
 
-    public Message(Role role, IReadOnlyList<IContent>? contents, MessageMetadata? metadata)
-        : this(role, contents, metadata != null ? [metadata] : null) { }
+    public Message(Role role, IReadOnlyList<IContent>? contents, IReadOnlyList<IMetadata>? metadata)
+        : this(
+            role,
+            contents,
+            metadata?.OfType<MessageMetadata>().FirstOrDefault(),
+            metadata?.Where(m => m is not MessageMetadata).ToList()) { }
 }
 
 public static class MetadataExtensions

@@ -48,8 +48,8 @@ public sealed class Agent(
 
             await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
             {
-                yield return evt;
                 await context.AppendAsync(evt, ct);
+                yield return evt;
             }
 
             var currentHistory = await context.GetAsync(ct);
@@ -65,8 +65,8 @@ public sealed class Agent(
 
             await foreach (var evt in tooling.ExecuteStreamingAsync(toolCalls, ct))
             {
-                yield return evt;
                 await context.AppendAsync(evt, ct);
+                yield return evt;
             }
         }
 
