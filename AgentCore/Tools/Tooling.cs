@@ -189,14 +189,14 @@ internal sealed class Tooling(
 
         if (!hasResult)
         {
-            yield return new ContentBlock(0, new Text(string.Empty), MessageId: call.Id);
+            yield return new ContentEvent(0, new Text(string.Empty), MessageId: call.Id);
         }
     }
 
-    private ContentBlock Fail(string id, string name, string message)
+    private ContentEvent Fail(string id, string name, string message)
     {
         _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
-        return new ContentBlock(0, new Text($"Error calling tool '{name}': {message}"), MessageId: id);
+        return new ContentEvent(0, new Text($"Error calling tool '{name}': {message}"), MessageId: id);
     }
 
     private static IBlockEvent WithCallId(IBlockEvent evt, string callId) => evt switch
@@ -204,7 +204,7 @@ internal sealed class Tooling(
         TextStart s => s.MessageId == null ? s with { MessageId = callId } : s,
         TextDelta d => d.MessageId == null ? d with { MessageId = callId } : d,
         TextEnd e => e.MessageId == null ? e with { MessageId = callId } : e,
-        ContentBlock cb => cb.MessageId == null ? cb with { MessageId = callId } : cb,
+        ContentEvent cb => cb.MessageId == null ? cb with { MessageId = callId } : cb,
         _ => evt
     };
 }

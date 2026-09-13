@@ -45,7 +45,7 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
                 ImageContentBlock ib => new Image(Data: ib.Data, MediaType: ib.MimeType),
                 _ => new Text(b.ToString() ?? string.Empty)
             };
-            yield return new AgentCore.ContentBlock(index++, content);
+            yield return new AgentCore.ContentEvent(index++, content);
         }
     }
 }

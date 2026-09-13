@@ -78,7 +78,7 @@ public sealed class MethodTool : ITool
         if (_returnsTask)
         {
             await ((Task)result!).ConfigureAwait(false);
-            yield return new ContentBlock(0, new Text(string.Empty));
+            yield return new ContentEvent(0, new Text(string.Empty));
             yield break;
         }
 
@@ -92,7 +92,7 @@ public sealed class MethodTool : ITool
         var contents = ToContentList(result);
         for (int i = 0; i < contents.Count; i++)
         {
-            yield return new ContentBlock(i, contents[i]);
+            yield return new ContentEvent(i, contents[i]);
         }
     }
 

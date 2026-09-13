@@ -24,7 +24,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
                 else if (s.MessageId != null) _metadata.Add(new MessageMetadata(s.MessageId));
                 break;
 
-            case ContentBlock cb:
+            case ContentEvent cb:
                 _contents.Add(cb.Content);
                 break;
 

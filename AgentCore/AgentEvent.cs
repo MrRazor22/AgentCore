@@ -32,11 +32,7 @@ public interface IBlockEvent : IAgentEvent
 }
 
 // Complete Content Block (for non-streaming or multimodal content like Image/Text)
-public sealed record ContentBlock(int Index, IContent Content, string? MessageId = null) : IBlockEvent
-{
-    public string? Id => Content.Id;
-    public ContentBlock(IContent content, string? messageId = null) : this(0, content, messageId) { }
-}
+public sealed record ContentEvent(int Index, IContent Content, string? MessageId = null) : IBlockEvent;
 
 public interface IBlockStartEvent : IBlockEvent { string? Id { get; } } 
 public interface IBlockDeltaEvent : IBlockEvent;
