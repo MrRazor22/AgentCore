@@ -102,7 +102,7 @@ public class AgentTests
             new TextDelta(0, "Streaming "),
             new TextDelta(0, "reply"),
             new TextEnd(0),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var agent = Agent.Create()

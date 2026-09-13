@@ -6,7 +6,6 @@ using LlmTornado.ChatFunctions;
 using LlmTornado.Code;
 using LlmTornado.Common;
 using ToolCall = AgentCore.LLM.Chat.ToolCall;
-using ToolMetadata = AgentCore.LLM.Chat.ToolMetadata;
 
 namespace AgentCore.LLM.Tornado;
 
@@ -26,7 +25,7 @@ public static class TornadoAdapterExtensions
         var role = message.Role.ToTornadoRole();
         var tornadoMsg = new ChatMessage(role);
 
-        if (message.Role == Role.Tool && (message.Get<ToolMetadata>()?.CallId ?? message.Id) is { } callId)
+        if (message.Role == Role.Tool && (message.Get<ToolCallId>()?.Value ?? message.Id) is { } callId)
         {
             tornadoMsg.ToolCallId = callId;
         }

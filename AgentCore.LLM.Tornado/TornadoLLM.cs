@@ -59,7 +59,7 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                     if (!started)
                     {
                         started = true;
-                        await channel.Writer.WriteAsync(new MessageStart(Role.Assistant, null, model.Name), ct);
+                        await channel.Writer.WriteAsync(new MessageStart(Role.Assistant), ct);
                     }
                 }
 
@@ -147,11 +147,15 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                         }
                         toolBlocks.Clear();
 
-                        string? finishReasonStr = data.FinishReason.ToString();
-                        int inTokens = data.Usage?.PromptTokens ?? 0;
-                        int outTokens = data.Usage?.CompletionTokens ?? 0;
+                        if (data.Usage != null)
+                        {
+                            int inTokens = data.Usage.PromptTokens;
+                            int outTokens = data.Usage.CompletionTokens;
+                            int totalTokens = data.Usage.TotalTokens > 0 ? data.Usage.TotalTokens : inTokens + outTokens;
+                            await channel.Writer.WriteAsync(new MetadataEvent(new TokenUsage(inTokens, outTokens, totalTokens)), ct);
+                        }
 
-                        await channel.Writer.WriteAsync(new MessageEnd(finishReasonStr, new TokenUsage(inTokens, outTokens)), ct);
+                        await channel.Writer.WriteAsync(new MessageEnd(), ct);
                     }
                 };
 

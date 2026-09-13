@@ -102,7 +102,7 @@ public class LiveAgentTests
             directMessage.Push(evt);
         }
 
-        var metadataItem = directMessage.Get<MessageMetadata>()?.Usage;
+        var metadataItem = directMessage.Get<TokenUsage>();
         if (metadataItem != null)
         {
             // If the provider supports token usage extraction, verify it captures it

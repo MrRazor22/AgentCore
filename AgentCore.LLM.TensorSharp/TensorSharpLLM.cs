@@ -62,7 +62,7 @@ public sealed class TensorSharpLLM(
             samplingConfig: _defaultSampling);
 
         var handle = _engine.SubmitRequest(seq, ct);
-        yield return new MessageStart(Role.Assistant, Id: seq.RequestId, Model: _model.Config?.Architecture ?? "local");
+        yield return new MessageStart(Role.Assistant, MessageId: seq.RequestId);
 
         int nextBlockId = 0, currentId = 0, outTokens = 0;
         var currentType = BlockType.None;
@@ -108,9 +108,7 @@ public sealed class TensorSharpLLM(
                 yield return new TextDelta(currentId, piece);
         }
 
-        foreach (var e in SwitchBlock(BlockType.None)) yield return e;
-        yield return new MessageEnd(
-            FinishReason: "stop",
-            Usage: new TokenUsage(InputTokens: promptTokens.Count, OutputTokens: outTokens));
+        yield return new MetadataEvent(new TokenUsage(InputTokens: promptTokens.Count, OutputTokens: outTokens, TotalTokens: promptTokens.Count + outTokens));
+        yield return new MessageEnd();
     }
 }

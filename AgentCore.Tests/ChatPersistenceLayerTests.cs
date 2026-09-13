@@ -100,10 +100,10 @@ public class ChatPersistenceLayerTests
             new(Role.System, [new Text("System instruction")]),
             new(Role.User, [new Text("First message")]),
             new(Role.Assistant, [new Text("First answer")]),
-            new(Role.User, [new Text("Summary 1")], [new SummaryMetadata(3)]),
+            new(Role.User, [new Text("Summary 1")], [new Summary(3)]),
             new(Role.User, [new Text("Second message")]),
             new(Role.Assistant, [new Text("Second answer")]),
-            new(Role.User, [new Text("Latest Summary 2")], [new SummaryMetadata(6)]),
+            new(Role.User, [new Text("Latest Summary 2")], [new Summary(6)]),
             new(Role.User, [new Text("Third message")]),
             new(Role.Assistant, [new Text("Third answer")])
         ];
@@ -117,7 +117,7 @@ public class ChatPersistenceLayerTests
         // Should reconstruct: System + Latest Summary 2 + Third message + Third answer
         Assert.Equal(4, workingContext.Count);
         Assert.Equal(Role.System, workingContext[0].Role);
-        Assert.NotNull(workingContext[1].Get<SummaryMetadata>());
+        Assert.NotNull(workingContext[1].Get<Summary>());
         Assert.Equal("Latest Summary 2", workingContext[1].Contents[0].ToString());
         Assert.Equal("Third message", workingContext[2].Contents[0].ToString());
         Assert.Equal("Third answer", workingContext[3].Contents[0].ToString());

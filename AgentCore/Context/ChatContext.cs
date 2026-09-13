@@ -50,21 +50,28 @@ public class ChatContext(
         ArgumentNullException.ThrowIfNull(evt);
         lock (_lock)
         {
-            var id = (evt as IMessageEvent)?.MessageId ?? (evt as IBlockEvent)?.MessageId ?? (_activeId ??= Guid.NewGuid().ToString("N"));
+            var targetEvt = evt is MessageEvent me ? me.Event : evt;
+            var id = (evt as IMessageEvent)?.MessageId;
 
-            if (evt is MessageStart ms)
+            if (targetEvt is MessageStart ms)
             {
+                id ??= Guid.NewGuid().ToString("N");
+                if (ms.Role != Role.Tool) _activeId = id;
                 if (ms.Role == Role.User) StripReasoning();
-                _open[id] = new(ms.Role, ms.MessageId, metadata: ms.Metadata);
+                _open[id] = new(ms.Role, ms.MessageId);
             }
-            else if (_open.TryGetValue(id, out var asm))
+            else
             {
-                asm.Push(evt);
-                if (evt is MessageEnd me)
+                id ??= _activeId ??= Guid.NewGuid().ToString("N");
+                if (_open.TryGetValue(id, out var asm))
                 {
-                    _open.Remove(id);
-                    if (id == _activeId) _activeId = null;
-                    Commit(asm.ToMessage(), me.Usage?.TotalTokens);
+                    asm.Push(targetEvt);
+                    if (targetEvt is MessageEnd)
+                    {
+                        _open.Remove(id);
+                        if (id == _activeId) _activeId = null;
+                        Commit(asm.ToMessage(), asm.Metadata.Get<TokenUsage>()?.TotalTokens);
+                    }
                 }
             }
         }
@@ -96,7 +103,7 @@ public class ChatContext(
 
     private void Commit(Message m, int? tokens = null)
     {
-        var truncated = m.Role == Role.System ? m : new Message(m.Role, m.Contents.Select(c => _truncator.Truncate(c, _maxTokens)).ToList(), m.Info, m.Metadata);
+        var truncated = m.Role == Role.System ? m : new Message(m.Role, m.Contents.Select(c => _truncator.Truncate(c, _maxTokens)).ToList(), m.Id, m.Metadata);
         _chat.Add(truncated);
         _tokens = tokens ?? (_tokens + Estimate(truncated));
     }
@@ -107,7 +114,7 @@ public class ChatContext(
         {
             var kept = _chat[i].Contents.Where(c => c is not Reasoning).ToList();
             if (kept.Count < _chat[i].Contents.Count && kept.Count > 0)
-                _chat[i] = new Message(_chat[i].Role, kept, _chat[i].Info, _chat[i].Metadata);
+                _chat[i] = new Message(_chat[i].Role, kept, _chat[i].Id, _chat[i].Metadata);
         }
     }
 

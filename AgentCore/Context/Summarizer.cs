@@ -56,7 +56,7 @@ public class Summarizer(
         result.Add(new Message(
             Role.User, 
             [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")],
-            [new SummaryMetadata(original.Count)]));
+            [new Summary(original.Count)]));
 
         if (lastMessage != null && lastMessage.Role != Role.System)
         {

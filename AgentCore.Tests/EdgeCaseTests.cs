@@ -47,7 +47,7 @@ namespace AgentCore.Tests
                         new TextStart(0),
                         new TextDelta(0, text),
                         new TextEnd(0),
-                        new MessageEnd("stop")
+                        new MessageEnd()
                     }.ToAsyncEnumerable()
                 ));
             }
@@ -129,7 +129,7 @@ namespace AgentCore.Tests
             // Let's add multiple large messages so it exceeds the budget.
             var system = new Message(Role.System, [new Text("Instructions")]);
             var user = new Message(Role.User, [new Text(new string('A', 300))]);
-            var assistant = new Message(Role.Assistant, [new Text(new string('B', 300))], new MessageMetadata(Usage: new TokenUsage(105, 0)));
+            var assistant = new Message(Role.Assistant, [new Text(new string('B', 300))], metadata: [new TokenUsage(105, 0, 105)]);
             await context.AppendAsync(new[] { system, user, assistant });
 
             var agent = Agent.Create()
@@ -163,7 +163,7 @@ namespace AgentCore.Tests
             );
 
             var system = new Message(Role.System, [new Text("Instructions")]);
-            await context.AppendAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], new MessageMetadata(Usage: new TokenUsage(10, 0))) });
+            await context.AppendAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], metadata: [new TokenUsage(10, 0, 10)]) });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)

@@ -61,7 +61,8 @@ public class StreamingLLMLayerTests
             new TextEnd(1),
             new ToolCallStart(2, "tc-1", "test_tool"),
             new ToolCallEnd(2),
-            new MessageEnd("stop", new TokenUsage(10, 20))
+            new MetadataEvent(new TokenUsage(10, 20, 30)),
+            new MessageEnd()
         };
 
         var mockInner = new MockLLM(expectedOutputs);

@@ -56,28 +56,29 @@ public class MessageAssemblyTests
     public void StreamingMessage_FluidAndStructuralStreaming_BehavesCorrectly()
     {
         var message = new StreamingMessage();
-        message.Push(new MessageStart(Role.Assistant, Id: "msg_123", Model: "gpt-4o"));
+        message.Push(new MessageStart(Role.Assistant, MessageId: "msg_123"));
+        message.Push(new MetadataEvent(new ToolCallId("call_abc")));
         message.Push(new ReasoningStart(0));
         message.Push(new ReasoningDelta(0, "Thinking deeply..."));
         message.Push(new ReasoningEnd(0));
         message.Push(new TextStart(1));
         message.Push(new TextDelta(1, "Here is the answer."));
         message.Push(new TextEnd(1));
-        message.Push(new MessageEnd(FinishReason: "stop", Usage: new TokenUsage(10, 20)));
+        message.Push(new MetadataEvent(new TokenUsage(10, 20, 30)));
+        message.Push(new MessageEnd());
 
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal(Role.Assistant, message.Role);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
 
-        var meta = message.Get<MessageMetadata>();
-        Assert.NotNull(meta);
-        Assert.Equal("msg_123", meta.Id);
-        Assert.Equal("gpt-4o", meta.Model);
-        Assert.Equal("stop", meta.FinishReason);
-        Assert.Equal(10, meta.Usage?.InputTokens);
-        Assert.Equal(20, meta.Usage?.OutputTokens);
-        Assert.Equal(30, meta.Usage?.TotalTokens);
+        Assert.Equal("msg_123", message.Id);
+        Assert.Equal("call_abc", message.Get<ToolCallId>()?.Value);
+        var usage = message.Get<TokenUsage>();
+        Assert.NotNull(usage);
+        Assert.Equal(10, usage.InputTokens);
+        Assert.Equal(20, usage.OutputTokens);
+        Assert.Equal(30, usage.TotalTokens);
     }
 
     [Fact]

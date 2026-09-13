@@ -29,12 +29,13 @@ public sealed class ToolApprovalLayer : ToolingLayer
             var denial = await _approver(call, ct).ConfigureAwait(false);
             if (denial is { Count: > 0 })
             {
-                yield return new MessageStart(Role.Tool, MessageId: call.Id, Metadata: [new ToolMetadata(call.Id, call.Name)]);
+                yield return new MessageStart(Role.Tool, MessageId: call.Id);
+                yield return new MetadataEvent(new ToolCallId(call.Id), call.Id);
                 for (int i = 0; i < denial.Count; i++)
                 {
                     var item = denial[i];
                     var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
-                    yield return new ContentEvent(i, content, MessageId: call.Id);
+                    yield return new ContentEvent(i, content);
                 }
                 yield return new MessageEnd(MessageId: call.Id);
             }

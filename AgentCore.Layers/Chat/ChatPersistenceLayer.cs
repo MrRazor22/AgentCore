@@ -46,7 +46,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
 
     internal static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)
     {
-        int lastSummary = history.ToList().FindLastIndex(m => m.Get<SummaryMetadata>() is not null);
+        int lastSummary = history.ToList().FindLastIndex(m => m.Get<Summary>() is not null);
         if (lastSummary < 0) return history;
         var system = history.FirstOrDefault(m => m.Role == Role.System);
         return system != null ? [system, .. history.Skip(lastSummary)] : [.. history.Skip(lastSummary)];

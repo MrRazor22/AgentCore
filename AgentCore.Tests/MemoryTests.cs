@@ -45,7 +45,7 @@ public class MemoryTests
         var prompt = await context.GetAsync();
         
         // Add a message with high token usage (95 tokens, exceeding limit of 90) via Message Metadata
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(95, 0)))]);
+        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(95, 0, 95)])]);
 
         // Act - GetMessages again, which should trigger compaction immediately due to high TokenUsage
         var finalPrompt = await context.GetAsync();
@@ -71,7 +71,7 @@ public class MemoryTests
         var firstUser = new Message(Role.User, [new Text("Hello")]);
         await context.AppendAsync(new[] { system, firstUser });
         var prompt1 = await context.GetAsync();
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
+        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
 
@@ -129,7 +129,7 @@ public class MemoryTests
         
         await context.AppendAsync(new[] { system, firstUser, assistant });
         var prompt1 = await context.GetAsync();
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], new MessageMetadata(Usage: new TokenUsage(10, 0)))]);
+        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
         await context.AppendAsync(new[] { secondUser });

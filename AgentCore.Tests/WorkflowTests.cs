@@ -52,13 +52,13 @@ public class WorkflowTests
             new ToolCallStart(0, "call_1", "get_weather"),
             new ToolCallDelta(0, "{\"location\": \"London\"}"),
             new ToolCallEnd(0),
-            new MessageEnd(FinishReason: "tool_calls")
+            new MessageEnd()
         );
         provider.Enqueue(
             new TextStart(0),
             new TextDelta(0, "It is sunny in London."),
             new TextEnd(0),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var tooling = new MockTooling();
@@ -111,7 +111,7 @@ public class WorkflowTests
             new TextEnd(1),
             new ToolCallStart(2, "call_calc", "calculator"),
             new ToolCallEnd(2),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var tooling = new MockTooling();
@@ -153,7 +153,7 @@ public class WorkflowTests
             new TextEnd(1),
             new ToolCallStart(2, "call_1", "step3"),
             new ToolCallEnd(2),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var tooling = new MockTooling();
@@ -181,13 +181,13 @@ public class WorkflowTests
         provider.Enqueue(
             new ToolCallStart(0, "call_1", "tool_1"),
             new ToolCallEnd(0),
-            new MessageEnd(FinishReason: "tool_calls")
+            new MessageEnd()
         );
         provider.Enqueue(
             new TextStart(0),
             new TextDelta(0, "Done"),
             new TextEnd(0),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var context = new MockMemoryProvider();
@@ -216,7 +216,7 @@ public class WorkflowTests
         provider.Enqueue(
             new ToolCallStart(0, "call_p", "persisted_tool"),
             new ToolCallEnd(0),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var tooling = new MockTooling();
@@ -256,7 +256,7 @@ public class WorkflowTests
 
                 cts.Cancel();
                 token.ThrowIfCancellationRequested();
-                yield return new MessageEnd(FinishReason: "stop");
+                yield return new MessageEnd();
             }
         });
 
@@ -285,7 +285,7 @@ public class WorkflowTests
             new ToolCallEnd(0),
             new ToolCallStart(1, "call_dup", "my_tool"), // Duplicate ID in stream
             new ToolCallEnd(1),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var tooling = new MockTooling();
@@ -315,7 +315,7 @@ public class WorkflowTests
         provider.Enqueue(
             new ToolCallStart(0, "call_dup", "my_tool"),
             new ToolCallEnd(0),
-            new MessageEnd(FinishReason: "stop")
+            new MessageEnd()
         );
 
         var recoveryAgent = new Agent(recoveryContext, llm, tooling);

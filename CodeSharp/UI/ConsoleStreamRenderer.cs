@@ -61,6 +61,10 @@ namespace CodeSharp.UI
         {
             switch (output)
             {
+                case MessageEvent me:
+                    Write(me.Event);
+                    break;
+
                 case ReasoningDelta r:
                     WriteReasoningDelta(r.Thought);
                     break;

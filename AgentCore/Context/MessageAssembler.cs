@@ -4,14 +4,15 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Context;
 
-internal sealed class MessageAssembler(Role role, string? id = null, string? model = null, IReadOnlyList<IMetadata>? metadata = null)
+internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyList<IMetadata>? metadata = null)
 {
     private readonly SortedDictionary<int, (IBlockStartEvent Start, StringBuilder Buffer, List<IContent> Chunks)> _blocks = [];
     private readonly List<IContent> _contents = [];
-    private readonly List<IMetadata> _metadata = metadata != null ? [.. metadata] : (id != null || model != null ? [new MessageMetadata(id, model)] : []);
+    private readonly List<IMetadata> _metadata = metadata != null ? [.. metadata] : [];
 
     public Role Role { get; private set; } = role;
-    public string? Id => _metadata.OfType<MessageMetadata>().FirstOrDefault()?.Id;
+    public string? Id { get; private set; } = id;
+    public IReadOnlyList<IMetadata> Metadata => _metadata;
 
     public void Push(IAgentEvent evt)
     {
@@ -19,9 +20,12 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
         {
             case MessageStart s:
                 Role = s.Role;
+                Id = s.MessageId;
                 _metadata.Clear();
-                if (s.Metadata != null) _metadata.AddRange(s.Metadata);
-                else if (s.MessageId != null) _metadata.Add(new MessageMetadata(s.MessageId));
+                break;
+
+            case MetadataEvent m:
+                _metadata.Add(m.Metadata);
                 break;
 
             case ContentEvent cb:
@@ -48,21 +52,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
                 CompleteBlock(end.Index);
                 break;
 
-            case MessageEnd end:
-                if (end.Metadata != null) _metadata.AddRange(end.Metadata);
-                if (end.FinishReason != null || end.Usage != null)
-                {
-                    var current = _metadata.OfType<MessageMetadata>().FirstOrDefault();
-                    if (current != null)
-                    {
-                        _metadata.Remove(current);
-                        _metadata.Add(current with { FinishReason = end.FinishReason ?? current.FinishReason, Usage = end.Usage ?? current.Usage });
-                    }
-                    else
-                    {
-                        _metadata.Add(new MessageMetadata(end.MessageId, FinishReason: end.FinishReason, Usage: end.Usage));
-                    }
-                }
+            case MessageEnd:
                 CompleteAllBlocks();
                 break;
         }
@@ -87,7 +77,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, string? mod
     private Message BuildMessage(List<IContent> contents)
     {
         var msgContents = contents.Count > 0 ? contents : [new Text(string.Empty)];
-        return new Message(Role, msgContents, _metadata);
+        return new Message(Role, msgContents, Id, _metadata);
     }
 
     private void CompleteAllBlocks()
