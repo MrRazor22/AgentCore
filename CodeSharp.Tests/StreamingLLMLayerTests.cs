@@ -76,7 +76,7 @@ public class StreamingLLMLayerTests
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
         var message = new StreamingMessage();
 
-        await foreach (var evt in layer.StreamAsync(messages))
+        await foreach (var evt in layer.GenerateAsync(messages))
         {
             message.Push(evt);
         }
@@ -118,7 +118,7 @@ public class StreamingLLMLayerTests
         var messages = new List<Message> { new Message(Role.User, [new Text("Hi")]) };
         var assembler = new StreamingMessage(Role.Assistant);
 
-        await foreach (var evt in layer.StreamAsync(messages))
+        await foreach (var evt in layer.GenerateAsync(messages))
         {
             assembler.Push(evt);
         }
@@ -148,7 +148,7 @@ public class StreamingLLMLayerTests
         var messages = new List<Message>();
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var unused in layer.StreamAsync(messages, ct: cts.Token).WithCancellation(cts.Token))
+            await foreach (var unused in layer.GenerateAsync(messages, ct: cts.Token).WithCancellation(cts.Token))
             {
             }
         });

@@ -21,8 +21,8 @@ public abstract class ToolingLayer : ITooling
 
     public virtual IReadOnlyList<ToolDefinition> GetDefinitions() => Inner.GetDefinitions();
 
-    public virtual IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(
+    public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         CancellationToken ct = default)
-        => Inner.ExecuteStreamingAsync(calls, ct);
+        => Inner.ExecuteAsync(calls, ct);
 }

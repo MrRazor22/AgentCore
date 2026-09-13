@@ -93,12 +93,15 @@ public class AgentBuilderTests
             return base.GetAsync(ct);
         }
 
-        public override async Task AppendAsync(
-            IReadOnlyList<Message> messages,
-            CancellationToken ct = default)
+        public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+            IAsyncEnumerable<IMessageEvent> events,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             CallLog.Add("Add");
-            await base.AppendAsync(messages, ct).ConfigureAwait(false);
+            await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
         }
     }
 
@@ -138,10 +141,10 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override IAsyncEnumerable<IMessageEvent> StreamAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<IMessageEvent> GenerateAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.StreamAsync(messages, responseSchema, tools, ct);
+            return base.GenerateAsync(messages, responseSchema, tools, ct);
         }
     }
 
@@ -163,12 +166,15 @@ public class AgentBuilderTests
             return base.GetAsync(ct);
         }
 
-        public override async Task AppendAsync(
-            IReadOnlyList<Message> messages,
-            CancellationToken ct = default)
+        public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+            IAsyncEnumerable<IMessageEvent> events,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            await base.AppendAsync(messages, ct).ConfigureAwait(false);
+            await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
         }
     }
 

@@ -115,7 +115,7 @@ public class MockLLMProvider : ILLM
 
 
 
-    public IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
@@ -132,80 +132,27 @@ public class MockLLMProvider : ILLM
 
 public class MockMemoryProvider : IContext
 {
-    private readonly List<Message> _internalMessages = new();
-    private StreamingMessage? _currentAssistant;
+    private readonly ChatContext _inner = new();
 
     public string RecallResult { get; set; } = "";
 
-    public IReadOnlyList<Message> Messages
+    public IReadOnlyList<Message> Messages => GetAsync().GetAwaiter().GetResult();
+
+    public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
     {
-        get
+        var list = new List<Message>();
+        if (!string.IsNullOrEmpty(RecallResult))
         {
-            var list = new List<Message>();
-            if (!string.IsNullOrEmpty(RecallResult))
-            {
-                list.Add(new Message(Role.System, [new Text(RecallResult)]));
-            }
-            foreach (var m in _internalMessages)
-            {
-                list.Add(ReferenceEquals(m, _currentAssistant) && _currentAssistant != null
-                    ? _currentAssistant.ToSnapshot()
-                    : m);
-            }
-            return list;
+            list.Add(new Message(Role.System, [new Text(RecallResult)]));
         }
+        list.AddRange(await _inner.GetAsync(ct));
+        return list;
     }
 
-    public Task<IReadOnlyList<Message>> GetAsync(
+    public IAsyncEnumerable<IMessageEvent> IngestAsync(
+        IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
-    {
-        return Task.FromResult<IReadOnlyList<Message>>(new List<Message>(Messages));
-    }
-
-    public Task<IContent?> AppendAsync(
-        IAgentEvent evt,
-        CancellationToken ct = default)
-    {
-        IContent? completed = null;
-        switch (evt)
-        {
-            case IMessageEvent msgEvt:
-                if (_currentAssistant == null)
-                {
-                    var role = msgEvt is MessageStart ms ? ms.Role : Role.Assistant;
-                    _currentAssistant = new StreamingMessage(role);
-                    _internalMessages.Add(_currentAssistant);
-                }
-
-                completed = _currentAssistant.Push(msgEvt);
-
-                if (msgEvt is MessageEnd)
-                {
-                    _currentAssistant.CompleteAllBlocks();
-                    _currentAssistant = null;
-                }
-                break;
-
-            case ToolResult tr:
-                _internalMessages.Add(new Message(Role.Tool, [tr]));
-                completed = tr;
-                break;
-
-            case IContent c:
-                completed = c;
-                break;
-        }
-
-        return Task.FromResult(completed);
-    }
-
-    public Task AppendAsync(
-        IReadOnlyList<Message> messages,
-        CancellationToken ct = default)
-    {
-        _internalMessages.AddRange(messages);
-        return Task.CompletedTask;
-    }
+        => _inner.IngestAsync(events, ct);
 }
 
 public class MockTooling : ITooling
@@ -214,20 +161,22 @@ public class MockTooling : ITooling
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
 
-    public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<ToolResult>>> Handler { get; set; } =
-        (calls, ct) => Task.FromResult<IReadOnlyList<ToolResult>>(
-            calls.Select(c => new ToolResult(c.Id, [new Text("Success")])).ToList()
+    public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<IContent>>> Handler { get; set; } =
+        (calls, ct) => Task.FromResult<IReadOnlyList<IContent>>(
+            calls.Select(_ => (IContent)new Text("Success")).ToList()
         );
 
-    public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var results = await Handler(calls, ct).ConfigureAwait(false);
-        foreach (var r in results)
+        for (int i = 0; i < calls.Count && i < results.Count; i++)
         {
-            yield return new ToolStart(r.CallId, "mock_tool");
-            yield return r;
+            var call = calls[i];
+            yield return new MessageStart(Role.Tool, MessageId: call.Id);
+            yield return new MessageDelta(call.Id, Content: results[i], Metadata: new ToolCallId(call.Id));
+            yield return new MessageEnd(call.Id);
         }
     }
 }

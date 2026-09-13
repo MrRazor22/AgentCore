@@ -58,7 +58,7 @@ public class ApprovalLayerDuplicateIdTests
         };
 
         var results = new List<ToolResult>();
-        await foreach (var evt in approvalLayer.ExecuteStreamingAsync(calls))
+        await foreach (var evt in approvalLayer.ExecuteAsync(calls))
         {
             if (evt is ToolResult tr) results.Add(tr);
         }

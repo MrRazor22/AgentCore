@@ -4,7 +4,7 @@ namespace AgentCore.LLM.Chat;
 
 public enum Role { System, Assistant, User, Tool }
 
-public interface IContent;
+public interface IContent : IContentEvent;
 public interface IMetadata;
 
 public sealed record ToolCallId(string Value) : IMetadata;
@@ -15,12 +15,14 @@ public class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
     string? id = null,
-    IReadOnlyList<IMetadata>? metadata = null)
+    IReadOnlyList<IMetadata>? metadata = null) : IMessageEvent
 {
     public Role Role { get; } = role;
     public IReadOnlyList<IContent> Contents { get; } = contents ?? [];
     public string? Id { get; } = id;
     public IReadOnlyList<IMetadata> Metadata { get; } = metadata ?? [];
+
+    string? IMessageEvent.MessageId => Id;
 
     public Message(Role role, IReadOnlyList<IContent>? contents, IReadOnlyList<IMetadata>? metadata)
         : this(role, contents, null, metadata) { }

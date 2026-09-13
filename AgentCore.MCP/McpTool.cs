@@ -36,7 +36,6 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
             throw new InvalidOperationException($"MCP tool '{Definition.Name}' failed: {msg}");
         }
 
-        int index = 0;
         foreach (var b in result.Content)
         {
             IContent content = b switch
@@ -45,7 +44,7 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
                 ImageContentBlock ib => new Image(Data: ib.Data, MediaType: ib.MimeType),
                 _ => new Text(b.ToString() ?? string.Empty)
             };
-            yield return new AgentCore.ContentEvent(index++, content);
+            yield return content;
         }
     }
 }

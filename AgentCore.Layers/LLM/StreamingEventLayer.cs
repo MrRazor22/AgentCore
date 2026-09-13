@@ -14,13 +14,13 @@ public sealed class StreamingEventLayer<T>(Func<IMessageEvent, T>? mapper = null
 {
     public ChannelWriter<T>? Writer { get; set; }
 
-    public override IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public override IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
     {
-        return InterceptEventsAsync(Inner.StreamAsync(messages, responseSchema, tools, ct), ct);
+        return InterceptEventsAsync(Inner.GenerateAsync(messages, responseSchema, tools, ct), ct);
     }
 
     private async IAsyncEnumerable<IMessageEvent> InterceptEventsAsync(

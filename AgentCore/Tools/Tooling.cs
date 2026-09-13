@@ -10,7 +10,7 @@ namespace AgentCore.Tools;
 public interface ITooling
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
-    IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
 internal sealed class Tooling(
@@ -26,7 +26,7 @@ internal sealed class Tooling(
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
 
-    public async IAsyncEnumerable<IMessageEvent> ExecuteStreamingAsync(
+    public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -72,7 +72,7 @@ internal sealed class Tooling(
                 }
 
                 if (!hasResult)
-                    await writer.WriteAsync(new MessageDelta(call.Id, Content: new ContentEvent(0, new Text(string.Empty))), ct).ConfigureAwait(false);
+                    await writer.WriteAsync(new MessageDelta(call.Id, Content: new Text(string.Empty)), ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
             {
@@ -88,9 +88,9 @@ internal sealed class Tooling(
         await writer.WriteAsync(new MessageEnd(MessageId: call.Id), ct).ConfigureAwait(false);
     }
 
-    private ContentEvent Fail(string name, string message)
+    private Text Fail(string name, string message)
     {
         _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
-        return new ContentEvent(0, new Text($"Error calling tool '{name}': {message}"));
+        return new Text($"Error calling tool '{name}': {message}");
     }
 }

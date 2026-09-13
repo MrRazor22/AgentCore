@@ -16,7 +16,7 @@ internal static class ApprovalTestExtensions
 {
     public static async Task<ToolResult> ExecuteAsync(this ToolingLayer layer, ToolCall call)
     {
-        await foreach (var evt in layer.ExecuteStreamingAsync([call]))
+        await foreach (var evt in layer.ExecuteAsync([call]))
         {
             if (evt is ToolResult tr) return tr;
         }

@@ -12,13 +12,13 @@ namespace AgentCore.Layers.LLM;
 /// </summary>
 public class MessageCoalescingLayer : LLMLayer
 { 
-    public override IAsyncEnumerable<IMessageEvent> StreamAsync(
+    public override IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
         JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
         CancellationToken ct = default)
     { 
-        return Inner.StreamAsync(MergeTextMessages(messages), responseSchema, tools, ct);
+        return Inner.GenerateAsync(MergeTextMessages(messages), responseSchema, tools, ct);
     }
 
     public static IReadOnlyList<Message> MergeTextMessages(IReadOnlyList<Message> messages)

@@ -6,16 +6,22 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
 
+internal record ToolExecutionResult(string CallId, IReadOnlyList<IContent> Contents)
+{
+    public override string ToString() => string.Join("\n", Contents.Select(c => c.ToString()));
+}
+
 internal static class ToolingTestExtensions
 {
-    public static async Task<ToolResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
+    public static async Task<ToolExecutionResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
     {
-        ToolResult? result = null;
-        await foreach (var evt in tooling.ExecuteStreamingAsync([call], ct))
+        var assembler = new Context.MessageAssembler(Role.Tool, call.Id);
+        await foreach (var evt in tooling.ExecuteAsync([call], ct))
         {
-            if (evt is ToolResult tr) result = tr;
+            assembler.Push(evt);
         }
-        return result ?? new ToolResult(call.Id, [new Text("No tool result produced.")]);
+        var msg = assembler.ToMessage();
+        return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
     }
 }
 
@@ -94,12 +100,11 @@ public class ToolingTests
             ? new(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())
             : throw new ArgumentException("Name cannot be null or whitespace", nameof(name));
 
-        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
-            string callId,
+        public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
             JsonObject arguments,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ToolResult(callId, Array.Empty<IContent>());
+            yield break;
         }
     }
 

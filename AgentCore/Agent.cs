@@ -37,52 +37,30 @@ public sealed class Agent(
         var existing = await context.GetAsync(ct);
         if (instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System))
         {
-            await context.AppendAsync(new MessageEvent(new Message(Role.System, instructions)), ct);
+            await context.AppendAsync(new Message(Role.System, instructions), ct);
         }
-        await context.AppendAsync(new MessageEvent(new Message(Role.User, [input])), ct);
+        await context.AppendAsync(new Message(Role.User, [input]), ct);
 
         for (int i = 0; i < maxIterations; i++)
         {
             ct.ThrowIfCancellationRequested();
             var messages = await context.GetAsync(ct);
 
-            await foreach (var evt in llm.StreamAsync(messages, responseSchema, tooling.GetDefinitions(), ct))
+            Message? assistant = null;
+            await foreach (var evt in context.IngestAsync(llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
             {
-                await context.AppendAsync(evt, ct);
-                if (evt is MessageDelta { Content: { } innerEvt })
-                    yield return innerEvt;
-                else if (evt is IContentEvent directEvt)
-                    yield return directEvt;
-                else if (evt is MessageEvent me)
-                {
-                    for (int cIdx = 0; cIdx < me.Message.Contents.Count; cIdx++)
-                        yield return new ContentEvent(cIdx, me.Message.Contents[cIdx]);
-                }
+                if (evt is Message m) assistant = m;
+                else if (evt is MessageDelta { Content: { } c }) yield return c;
+                else if (evt is IContentEvent direct) yield return direct;
             }
 
-            var currentHistory = await context.GetAsync(ct);
-            var lastAssistant = currentHistory.LastOrDefault(m => m.Role == Role.Assistant);
-            if (lastAssistant == null || lastAssistant.Contents.Count == 0) yield break;
+            var toolCalls = assistant?.Contents.OfType<ToolCall>().ToList();
+            if (toolCalls is not { Count: > 0 }) yield break;
 
-            var toolCalls = lastAssistant.Contents
-                .OfType<ToolCall>()
-                .DistinctBy(tc => tc.Id)
-                .ToList();
-
-            if (toolCalls.Count == 0) yield break;
-
-            await foreach (var evt in tooling.ExecuteStreamingAsync(toolCalls, ct))
+            await foreach (var evt in context.IngestAsync(tooling.ExecuteAsync(toolCalls, ct), ct))
             {
-                await context.AppendAsync(evt, ct);
-                if (evt is MessageDelta { Content: { } innerEvt })
-                    yield return innerEvt;
-                else if (evt is IContentEvent directEvt)
-                    yield return directEvt;
-                else if (evt is MessageEvent me)
-                {
-                    for (int cIdx = 0; cIdx < me.Message.Contents.Count; cIdx++)
-                        yield return new ContentEvent(cIdx, me.Message.Contents[cIdx]);
-                }
+                if (evt is MessageDelta { Content: { } c }) yield return c;
+                else if (evt is IContentEvent direct) yield return direct;
             }
         }
 
@@ -113,6 +91,7 @@ public static class AgentExtensions
         await foreach (var evt in agent.InvokeStreamingAsync(input, schema, ct))
         {
             if (evt is TextDelta td) sb.Append(td.Text);
+            else if (evt is Text t) sb.Append(t.Value);
         }
 
         var text = sb.ToString();

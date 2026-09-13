@@ -14,7 +14,7 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
     public string? Id { get; private set; } = id;
     public IReadOnlyList<IMetadata> Metadata => _metadata;
 
-    public void Push(IMessageEvent evt)
+    public IContent? Push(IMessageEvent evt)
     {
         switch (evt)
         {
@@ -22,40 +22,41 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
                 Role = s.Role;
                 Id = s.MessageId;
                 _metadata.Clear();
-                break;
+                return null;
 
             case MessageDelta d:
                 if (d.Metadata != null) _metadata.Add(d.Metadata);
-                if (d.Content != null) Push(d.Content);
-                break;
+                return d.Content != null ? Push(d.Content) : null;
 
-            case ContentEvent cb:
-                _contents.Add(cb.Content);
-                break;
+            case IContent c:
+                _contents.Add(c);
+                return c;
 
             case IContentStart s:
                 _blocks[s.Index] = (s, new StringBuilder(), []);
-                break;
+                return null;
 
             case TextDelta d when _blocks.TryGetValue(d.Index, out var b):
                 b.Buffer.Append(d.Text);
-                break;
+                return null;
 
             case ReasoningDelta d when _blocks.TryGetValue(d.Index, out var b):
                 b.Buffer.Append(d.Thought);
-                break;
+                return null;
 
             case ToolCallDelta d when _blocks.TryGetValue(d.Index, out var b):
                 b.Buffer.Append(d.Arguments);
-                break;
+                return null;
 
             case IContentEnd end:
-                CompleteBlock(end.Index);
-                break;
+                return CompleteBlock(end.Index);
 
             case MessageEnd:
                 CompleteAllBlocks();
-                break;
+                return null;
+
+            default:
+                return null;
         }
     }
 
@@ -89,10 +90,12 @@ internal sealed class MessageAssembler(Role role, string? id = null, IReadOnlyLi
         }
     }
 
-    private void CompleteBlock(int index)
+    private IContent? CompleteBlock(int index)
     {
-        if (!_blocks.Remove(index, out var b)) return;
-        _contents.Add(CreateContent(b.Start, b.Buffer.ToString(), b.Chunks));
+        if (!_blocks.Remove(index, out var b)) return null;
+        var content = CreateContent(b.Start, b.Buffer.ToString(), b.Chunks);
+        _contents.Add(content);
+        return content;
     }
 
     private static IContent CreateContent(IContentStart start, string text, List<IContent> chunks) => start switch

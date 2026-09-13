@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AgentCore.Context;
 using AgentCore.LLM.Chat;
 
@@ -13,21 +14,18 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         return await base.GetAsync(ct).ConfigureAwait(false);
     }
 
-    public override async Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
+    public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+        IAsyncEnumerable<IMessageEvent> events,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
-        await base.AppendAsync(evt, ct).ConfigureAwait(false);
-        if (evt is MessageEvent me)
+        await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
         {
-            await store.AppendAsync(sessionId, [me.Message], ct).ConfigureAwait(false);
-        }
-        else if (evt is MessageEnd)
-        {
-            var history = await base.GetAsync(ct).ConfigureAwait(false);
-            if (history.Count > 0)
+            if (evt is Message m)
             {
-                await store.AppendAsync(sessionId, [history[^1]], ct).ConfigureAwait(false);
+                await store.AppendAsync(sessionId, [m], ct).ConfigureAwait(false);
             }
+            yield return evt;
         }
     }
 
@@ -39,7 +37,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         {
             foreach (var msg in ExtractWorkingContext(history))
             {
-                await Inner.AppendAsync(new MessageEvent(msg), ct).ConfigureAwait(false);
+                await Inner.AppendAsync(msg, ct).ConfigureAwait(false);
             }
         }
     }

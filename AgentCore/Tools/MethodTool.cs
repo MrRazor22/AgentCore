@@ -65,7 +65,7 @@ public sealed class MethodTool : ITool
 
         var contents = ToContentList(result);
         for (int i = 0; i < contents.Count; i++)
-            yield return new ContentEvent(i, contents[i]);
+            yield return contents[i];
     }
 
     private static object? GetParameterValue(JsonObject obj, ParameterInfo p)

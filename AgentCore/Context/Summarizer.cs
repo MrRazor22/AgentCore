@@ -34,7 +34,7 @@ public class Summarizer(
         request.AddRange(messages);
         request.Add(new Message(Role.User, [new Text(_prompt)]));
 
-        var eventStream = _llm.StreamAsync(request, responseSchema: null, tools: null, ct: ct);
+        var eventStream = _llm.GenerateAsync(request, responseSchema: null, tools: null, ct: ct);
         var assembler = new MessageAssembler(Role.Assistant);
         await foreach (var evt in eventStream.WithCancellation(ct).ConfigureAwait(false))
         {

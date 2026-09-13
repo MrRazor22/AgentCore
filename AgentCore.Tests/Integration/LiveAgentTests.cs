@@ -97,7 +97,7 @@ public class LiveAgentTests
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         var tornadoLlm = new TornadoLLM(api, model);
         var directMessage = new StreamingMessage(Role.Assistant);
-        await foreach (var evt in tornadoLlm.StreamAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
+        await foreach (var evt in tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
         {
             directMessage.Push(evt);
         }

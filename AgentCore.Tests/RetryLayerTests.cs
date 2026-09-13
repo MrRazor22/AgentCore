@@ -20,7 +20,7 @@ public class RetryLayerTests
             _streamFactory = streamFactory;
         }
 
-        public IAsyncEnumerable<IMessageEvent> StreamAsync(
+        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
             IReadOnlyList<ToolDefinition>? tools = null,
@@ -39,7 +39,7 @@ public class RetryLayerTests
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
-        await foreach (var evt in layer.StreamAsync([]))
+        await foreach (var evt in layer.GenerateAsync([]))
         {
             events.Add(evt);
         }
@@ -69,7 +69,7 @@ public class RetryLayerTests
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
-        await foreach (var evt in layer.StreamAsync([]))
+        await foreach (var evt in layer.GenerateAsync([]))
         {
             events.Add(evt);
         }
@@ -93,7 +93,7 @@ public class RetryLayerTests
 
         var ex = await Assert.ThrowsAsync<HttpRequestException>(async () =>
         {
-            await foreach (var _ in layer.StreamAsync([])) { }
+            await foreach (var _ in layer.GenerateAsync([])) { }
         });
 
         Assert.Equal("Rate limit", ex.Message);
@@ -111,7 +111,7 @@ public class RetryLayerTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await foreach (var _ in layer.StreamAsync([])) { }
+            await foreach (var _ in layer.GenerateAsync([])) { }
         });
 
         Assert.Equal(1, mockLLM.CallCount);
@@ -130,7 +130,7 @@ public class RetryLayerTests
 
         await Assert.ThrowsAsync<HttpRequestException>(async () =>
         {
-            await foreach (var evt in layer.StreamAsync([]))
+            await foreach (var evt in layer.GenerateAsync([]))
             {
                 eventsReceived.Add(evt);
             }
@@ -160,7 +160,7 @@ public class RetryLayerTests
         layer.Attach(mockLLM);
 
         var events = new List<IMessageEvent>();
-        await foreach (var evt in layer.StreamAsync([]))
+        await foreach (var evt in layer.GenerateAsync([]))
         {
             events.Add(evt);
         }

@@ -52,7 +52,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TestTool").Definition }
         ).ToContentsAsync();
@@ -80,7 +80,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
         ).ToContentsAsync();
@@ -108,7 +108,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
         ).ToContentsAsync();
@@ -138,7 +138,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -168,7 +168,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -195,7 +195,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -223,7 +223,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -250,7 +250,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -276,7 +276,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -311,7 +311,7 @@ public class ToolCallDetectionLayerTests
             AttachMockInner(layer, mockLlm);
 
             // Act
-            var results = await layer.StreamAsync(
+            var results = await layer.GenerateAsync(
                 Array.Empty<Message>(),
                 tools: new[] { dummyTool.Definition }
             ).ToContentsAsync();
@@ -338,7 +338,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("ToolA").Definition }
         ).ToContentsAsync();
@@ -365,7 +365,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
         ).ToContentsAsync();
@@ -392,7 +392,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("EditFile").Definition }
         ).ToContentsAsync();
@@ -422,7 +422,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
         ).ToContentsAsync();
@@ -450,7 +450,7 @@ public class ToolCallDetectionLayerTests
         AttachMockInner(layer, mockLlm);
 
         // Act
-        var results = await layer.StreamAsync(
+        var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
             tools: new[] { new DummyTool("TodoList").Definition }
         ).ToContentsAsync();

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
@@ -11,7 +12,7 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
-    Task AppendAsync(IMessageEvent evt, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
 public class ChatContext(
@@ -33,43 +34,75 @@ public class ChatContext(
     private string? _activeId;
     private int _tokens;
 
-    public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
+    public async IAsyncEnumerable<IMessageEvent> IngestAsync(
+        IAsyncEnumerable<IMessageEvent> events,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(evt);
-        lock (_lock)
+        ArgumentNullException.ThrowIfNull(events);
+        await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
         {
-            if (evt is MessageEvent me)
+            IContent? completedContent = null;
+            lock (_lock)
             {
-                if (me.Message.Role == Role.User) StripReasoning();
-                Commit(me.Message, me.Message.Metadata.Get<TokenUsage>()?.TotalTokens);
-                return Task.CompletedTask;
+                completedContent = AppendLocked(evt);
             }
 
-            var id = evt.MessageId;
+            yield return evt;
 
-            if (evt is MessageStart ms)
+            if (completedContent is not null)
             {
-                id ??= Guid.NewGuid().ToString("N");
-                if (ms.Role != Role.Tool) _activeId = id;
-                if (ms.Role == Role.User) StripReasoning();
-                _open[id] = new(ms.Role, ms.MessageId);
+                yield return completedContent;
             }
-            else
+
+            if (evt is MessageEnd)
             {
-                id ??= _activeId ??= Guid.NewGuid().ToString("N");
-                if (_open.TryGetValue(id, out var asm))
+                Message? completedMsg = null;
+                lock (_lock)
                 {
-                    asm.Push(evt);
-                    if (evt is MessageEnd)
-                    {
-                        _open.Remove(id);
-                        if (id == _activeId) _activeId = null;
-                        Commit(asm.ToMessage(), asm.Metadata.Get<TokenUsage>()?.TotalTokens);
-                    }
+                    if (_chat.Count > 0) completedMsg = _chat[^1];
+                }
+                if (completedMsg is not null)
+                {
+                    yield return completedMsg;
                 }
             }
         }
-        return Task.CompletedTask;
+    }
+
+    private IContent? AppendLocked(IMessageEvent evt)
+    {
+        if (evt is Message m)
+        {
+            if (m.Role == Role.User) StripReasoning();
+            Commit(m, m.Metadata.Get<TokenUsage>()?.TotalTokens);
+            return null;
+        }
+
+        var id = evt.MessageId;
+
+        if (evt is MessageStart ms)
+        {
+            id ??= Guid.NewGuid().ToString("N");
+            if (ms.Role != Role.Tool) _activeId = id;
+            if (ms.Role == Role.User) StripReasoning();
+            _open[id] = new(ms.Role, ms.MessageId);
+            return null;
+        }
+
+        id ??= _activeId ??= Guid.NewGuid().ToString("N");
+        if (_open.TryGetValue(id, out var asm))
+        {
+            var content = asm.Push(evt);
+            if (evt is MessageEnd)
+            {
+                _open.Remove(id);
+                if (id == _activeId) _activeId = null;
+                Commit(asm.ToMessage(), asm.Metadata.Get<TokenUsage>()?.TotalTokens);
+            }
+            return content;
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
@@ -95,11 +128,12 @@ public class ChatContext(
         return snapshot;
     }
 
-    private void Commit(Message m, int? tokens = null)
+    private Message Commit(Message m, int? tokens = null)
     {
         var truncated = m.Role == Role.System ? m : new Message(m.Role, m.Contents.Select(c => _truncator.Truncate(c, _maxTokens)).ToList(), m.Id, m.Metadata);
         _chat.Add(truncated);
         _tokens = tokens ?? (_tokens + Estimate(truncated));
+        return truncated;
     }
 
     private void StripReasoning()
@@ -113,4 +147,26 @@ public class ChatContext(
     }
 
     private int Estimate(Message m) => (int)((1 + m.Contents.Sum(_counter.Estimate)) * 1.15);
+}
+
+public static class ContextExtensions
+{
+    public static async Task AppendAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(evt);
+        await foreach (var _ in context.IngestAsync(evt, ct).ConfigureAwait(false)) { }
+    }
+
+    public static IAsyncEnumerable<IMessageEvent> IngestAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(evt);
+        return context.IngestAsync(ToAsyncEnumerable(evt), ct);
+    }
+
+    private static async IAsyncEnumerable<IMessageEvent> ToAsyncEnumerable(IMessageEvent evt)
+    {
+        yield return evt;
+    }
 }

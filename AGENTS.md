@@ -54,3 +54,9 @@
 ## 11. NO TOKEN-WASTING MECHANICAL RENAMES — ASK USER
 - Never waste tokens performing mechanical symbol, type, or file renames across multiple files or updating cascading call sites.
 - Always ask the user to perform widespread renaming changes directly in their IDE—even mid-task or mid-refactor—as it is trivial for the user and saves tokens and context.
+
+## 12. STREAMING CONTEXT & WRITE-AHEAD DURABILITY
+- Context is the single centralized assembly point for real-time streaming events from both LLM and tooling.
+- Streams must be ingested chunk-by-chunk into Context as they arrive to ensure Write-Ahead Log (WAL) durability and crash resilience; waiting for stream completion risks catastrophic data loss mid-turn.
+- Context owns assembling in-flight event streams into complete semantic message history; callers must never bypass Context to maintain parallel streaming state.
+

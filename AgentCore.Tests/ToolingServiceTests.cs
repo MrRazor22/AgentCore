@@ -15,14 +15,15 @@ public class ToolingServiceTests
         public Func<JsonObject, CancellationToken, Task<IReadOnlyList<IContent>>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("Result")]);
 
-        public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
-            string callId,
+        public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
             JsonObject arguments,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ToolStart(callId, Definition.Name);
             var contents = await Invoker(arguments, ct);
-            yield return new ToolResult(callId, contents);
+            foreach (var c in contents)
+            {
+                yield return c;
+            }
         }
     }
 
