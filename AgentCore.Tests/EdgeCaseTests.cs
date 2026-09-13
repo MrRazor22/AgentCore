@@ -44,9 +44,9 @@ namespace AgentCore.Tests
                     new IMessageEvent[]
                     {
                         new MessageStart(Role.Assistant),
-                        new TextStart(0),
-                        new TextDelta(0, text),
-                        new TextEnd(0),
+                        new MessageDelta(Content: new TextStart(0)),
+                        new MessageDelta(Content: new TextDelta(0, text)),
+                        new MessageDelta(Content: new TextEnd(0)),
                         new MessageEnd()
                     }.ToAsyncEnumerable()
                 ));
@@ -128,7 +128,7 @@ namespace AgentCore.Tests
             var system = new Message(Role.System, [new Text("Instructions")]);
             var user = new Message(Role.User, [new Text(new string('A', 300))]);
             var assistant = new Message(Role.Assistant, [new Text(new string('B', 300))], metadata: [new TokenUsage(105, 0, 105)]);
-            await context.AppendAsync(new[] { system, user, assistant });
+            await context.PrepareAsync(new[] { system, user, assistant });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)
@@ -161,7 +161,7 @@ namespace AgentCore.Tests
             );
 
             var system = new Message(Role.System, [new Text("Instructions")]);
-            await context.AppendAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], metadata: [new TokenUsage(10, 0, 10)]) });
+            await context.PrepareAsync(new[] { system, new Message(Role.User, [new Text("First")]), new Message(Role.Assistant, [new Text("Second")], metadata: [new TokenUsage(10, 0, 10)]) });
 
             var agent = Agent.Create()
                 .WithLLM(lf => mockLlm)
@@ -191,12 +191,12 @@ namespace AgentCore.Tests
                 new IMessageEvent[]
                 {
                     new MessageStart(Role.Assistant),
-                    new ToolCallStart(0, "call-1", "Tool1"),
-                    new ToolCallDelta(0, "{}"),
-                    new ToolCallEnd(0),
-                    new ToolCallStart(1, "call-2", "Tool2"),
-                    new ToolCallDelta(1, "{}"),
-                    new ToolCallEnd(1),
+                    new MessageDelta(Content: new ToolCallStart(0, "call-1", "Tool1")),
+                    new MessageDelta(Content: new ToolCallDelta(0, "{}")),
+                    new MessageDelta(Content: new ToolCallEnd(0)),
+                    new MessageDelta(Content: new ToolCallStart(1, "call-2", "Tool2")),
+                    new MessageDelta(Content: new ToolCallDelta(1, "{}")),
+                    new MessageDelta(Content: new ToolCallEnd(1)),
                     new MessageEnd()
                 }.ToAsyncEnumerable()
             ));

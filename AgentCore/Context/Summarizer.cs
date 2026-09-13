@@ -34,13 +34,7 @@ public class Summarizer(
         request.AddRange(messages);
         request.Add(new Message(Role.User, [new Text(_prompt)]));
 
-        var eventStream = _llm.GenerateAsync(request, responseSchema: null, tools: null, ct: ct);
-        var assembler = new MessageAssembler(Role.Assistant);
-        await foreach (var evt in eventStream.WithCancellation(ct).ConfigureAwait(false))
-        {
-            assembler.Push(evt);
-        }
-        var summaryMsg = assembler.ToMessage();
+        var summaryMsg = await _llm.GenerateAsync(request, ct: ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
         var summaryText = summaryMsg.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
 
         return BuildCompactedHistory(messages, summaryText);

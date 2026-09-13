@@ -17,8 +17,7 @@ public class MemoryTests
         var assistant = new Message(Role.Assistant, [new Text("Hi, how are you?")]);
 
         // Act
-        await context.AppendAsync(new[] { system, user, assistant });
-        var prepared = await context.GetAsync();
+        var prepared = await context.PrepareAsync(new[] { system, user, assistant });
 
         // Assert
         Assert.Equal(3, prepared.Count);
@@ -41,14 +40,11 @@ public class MemoryTests
         );
 
         var system = new Message(Role.System, [new Text("System instructions")]);
-        await context.AppendAsync(new[] { system });
-        var prompt = await context.GetAsync();
+        var prompt = await context.PrepareAsync(new[] { system });
         
         // Add a message with high token usage (95 tokens, exceeding limit of 90) via Message Metadata
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(95, 0, 95)])]);
-
-        // Act - GetMessages again, which should trigger compaction immediately due to high TokenUsage
-        var finalPrompt = await context.GetAsync();
+        // Act - Prepare again, which should trigger compaction immediately due to high TokenUsage
+        var finalPrompt = await context.PrepareAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(95, 0, 95)])]);
 
         // Assert
         Assert.Contains(finalPrompt, m => m.Contents.Any(c => c.ToString()?.Contains("Compacted summary") == true));
@@ -69,15 +65,13 @@ public class MemoryTests
 
         var system = new Message(Role.System, [new Text("Be helpful.")]);
         var firstUser = new Message(Role.User, [new Text("Hello")]);
-        await context.AppendAsync(new[] { system, firstUser });
-        var prompt1 = await context.GetAsync();
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
+        var prompt1 = await context.PrepareAsync(new[] { system, firstUser });
+        await context.PrepareAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
 
-        // Act - Add and GetMessages triggering compaction
-        await context.AppendAsync(new[] { secondUser });
-        var prepared = await context.GetAsync();
+        // Act - Prepare triggering compaction
+        var prepared = await context.PrepareAsync(new[] { secondUser });
 
         // Assert
         // Should have System instructions + 1 summary message + secondUser
@@ -102,8 +96,7 @@ public class MemoryTests
         var msg1 = new Message(Role.User, [new Text("First message")]);
         var msg2 = new Message(Role.User, [new Text("Second message")]);
 
-        await context.AppendAsync(new[] { system, msg1, msg2 });
-        var prepared = await context.GetAsync();
+        var prepared = await context.PrepareAsync(new[] { system, msg1, msg2 });
 
         // Assert
         Assert.Equal(3, prepared.Count);
@@ -127,15 +120,13 @@ public class MemoryTests
         var firstUser = new Message(Role.User, [new Text("Hello")]);
         var assistant = new Message(Role.Assistant, [new Text("Hi")]);
         
-        await context.AppendAsync(new[] { system, firstUser, assistant });
-        var prompt1 = await context.GetAsync();
-        await context.AppendAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
+        var prompt1 = await context.PrepareAsync(new[] { system, firstUser, assistant });
+        await context.PrepareAsync([new Message(Role.Assistant, [new Text("Reply")], metadata: [new TokenUsage(10, 0, 10)])]);
 
         var secondUser = new Message(Role.User, [new Text(new string('B', 300))]);
-        await context.AppendAsync(new[] { secondUser });
 
         // Act
-        var prepared = await context.GetAsync();
+        var prepared = await context.PrepareAsync(new[] { secondUser });
 
         // Assert
         Assert.Equal(3, prepared.Count);
@@ -158,8 +149,7 @@ public class MemoryTests
         var toolResult = new Message(Role.Tool, [new Text(giantOutput)], metadata: [new ToolCallId("call_1")]);
 
         // Act
-        await context.AppendAsync([toolResult]);
-        var messages = await context.GetAsync();
+        var messages = await context.PrepareAsync([toolResult]);
 
         // Assert
         Assert.Single(messages);
@@ -253,10 +243,8 @@ public class MemoryTests
         var user2 = new Message(Role.User, [new Text("Question 2")]);
         var assistant2 = new Message(Role.Assistant, [new Reasoning("Thought for Q2"), new Text("Answer 2")]);
 
-        await context.AppendAsync([user1, assistant1, user2, assistant2]);
-
         // Act
-        var messages = await context.GetAsync();
+        var messages = await context.PrepareAsync([user1, assistant1, user2, assistant2]);
 
         // Assert: Turn 1 assistant message should have Reasoning pruned, Turn 2 assistant reasoning should be preserved
         Assert.Equal(4, messages.Count);
@@ -278,10 +266,8 @@ public class MemoryTests
         var system = new Message(Role.System, [new Text("System")]);
         var userOverflow = new Message(Role.User, [new Text(new string('X', 300))]);
 
-        await context.AppendAsync([system, userOverflow]);
-
         // Act
-        var messages = await context.GetAsync();
+        var messages = await context.PrepareAsync([system, userOverflow]);
 
         // Assert
         Assert.True(customCompactor.WasInvoked);

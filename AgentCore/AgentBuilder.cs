@@ -11,7 +11,7 @@ public class AgentBuilder
 {
     private ILogger<AgentBuilder> _logger = NullLogger<AgentBuilder>.Instance;
     private int _maxIterations = 20;
-    private readonly List<IContent> _instructions = [];
+    private IReadOnlyList<IContent>? _instructions;
     private readonly LLMBuilder _llm = new();
     private readonly ToolingBuilder _tooling = new();
     private readonly ContextBuilder _context = new();
@@ -28,10 +28,7 @@ public class AgentBuilder
     public AgentBuilder WithInstructions(IEnumerable<IContent> contents)
     {
         ArgumentNullException.ThrowIfNull(contents);
-        foreach (var content in contents)
-        {
-            if (content != null) _instructions.Add(content);
-        }
+        _instructions = contents.Where(c => c != null).ToArray();
         return this;
     }
 
@@ -82,17 +79,15 @@ public class AgentBuilder
         var tooling = _tooling.Build(lf);
         var context = _context.Build(lf, baseProvider);
 
-        var frozenInstructions = _instructions.Count > 0 ? _instructions.ToArray() : null;
-
         _logger.LogInformation("Agent built: Tools={ToolCount} Instructions={InstructionCount} Provider={ProviderType} Context={ContextType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
             _tooling.Tools.Count,
-            frozenInstructions?.Length ?? 0,
+            _instructions?.Count ?? 0,
             provider.GetType().Name,
             context.GetType().Name,
             _llm.Layers.Count,
             _tooling.Layers.Count,
             _context.Layers.Count);
 
-        return new Agent(context, provider, tooling, frozenInstructions, _maxIterations);
+        return new Agent(context, provider, tooling, _instructions, _maxIterations);
     }
 }

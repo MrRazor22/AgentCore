@@ -207,11 +207,12 @@ public class RetryLayerTests
         public CustomBusinessException(string message) : base(message) { }
     }
 
-    private static async IAsyncEnumerable<IMessageEvent> CreateAsyncEnumerable(params IMessageEvent[] events)
+    private static async IAsyncEnumerable<IMessageEvent> CreateAsyncEnumerable(params object[] events)
     {
         foreach (var evt in events)
         {
-            yield return evt;
+            if (evt is IContentEvent ce) yield return new MessageDelta(Content: ce);
+            else if (evt is IMessageEvent me) yield return me;
             await Task.Yield();
         }
     }
@@ -225,9 +226,10 @@ public class RetryLayerTests
 #pragma warning restore CS0162
     }
 
-    private static async IAsyncEnumerable<IMessageEvent> ThrowAfterYield(IMessageEvent firstEvent, Exception ex)
+    private static async IAsyncEnumerable<IMessageEvent> ThrowAfterYield(object firstEvent, Exception ex)
     {
-        yield return firstEvent;
+        if (firstEvent is IContentEvent ce) yield return new MessageDelta(Content: ce);
+        else if (firstEvent is IMessageEvent me) yield return me;
         await Task.Yield();
         throw ex;
     }

@@ -21,9 +21,10 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual Task<IReadOnlyList<Message>> GetAsync(
+    public virtual Task<IReadOnlyList<Message>> PrepareAsync(
+        IEnumerable<Message>? messages = null,
         CancellationToken ct = default)
-        => Inner.GetAsync(ct);
+        => Inner.PrepareAsync(messages, ct);
 
     public virtual IAsyncEnumerable<IMessageEvent> IngestAsync(
         IAsyncEnumerable<IMessageEvent> events,

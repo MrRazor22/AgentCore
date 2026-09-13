@@ -96,13 +96,7 @@ public class LiveAgentTests
         // Also call the underlying LLM direct stream to verify Metadata / token capturing
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         var tornadoLlm = new TornadoLLM(api, model);
-        var directAssembler = new MessageAssembler(Role.Assistant);
-        await foreach (var evt in tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }))
-        {
-            directAssembler.Push(evt);
-        }
-
-        var directMessage = directAssembler.ToMessage();
+        var directMessage = await tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }).ToMessageAsync();
         var metadataItem = directMessage.Get<TokenUsage>();
         if (metadataItem != null)
         {
@@ -137,7 +131,7 @@ public class LiveAgentTests
         // If result is null, try to extract and deserialize from Reasoning content in context messages
         if (result == null)
         {
-            var assistantMsg = (await context.GetAsync()).LastOrDefault(m => m.Role == Role.Assistant);
+            var assistantMsg = (await context.PrepareAsync()).LastOrDefault(m => m.Role == Role.Assistant);
             if (assistantMsg != null)
             {
                 var thoughts = new List<string>();
@@ -219,7 +213,7 @@ public class LiveAgentTests
         var result = await agent.InvokeAsync<string>(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
 
         _output.WriteLine("=== Conversation Messages ===");
-        foreach (var msg in await context.GetAsync())
+        foreach (var msg in await context.PrepareAsync())
         {
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
@@ -257,7 +251,7 @@ public class LiveAgentTests
         var result = await agent.InvokeAsync<string>(new Text("Execute the tool FailTool with input 'test'. Do not explain; execute the tool directly."));
 
         _output.WriteLine("=== Conversation Messages (Test 5) ===");
-        foreach (var msg in await context.GetAsync())
+        foreach (var msg in await context.PrepareAsync())
         {
             _output.WriteLine($"Role: {msg.Role}");
             foreach (var content in msg.Contents)
@@ -270,7 +264,7 @@ public class LiveAgentTests
         // Assert
         Assert.Contains("FailTool", tools.InvokedTools);
         // Verify that the error was captured in context messages
-        var toolResultMessages = (await context.GetAsync())
+        var toolResultMessages = (await context.PrepareAsync())
             .Where(m => m.Role == Role.Tool)
             .SelectMany(m => m.Contents)
             .OfType<Text>()

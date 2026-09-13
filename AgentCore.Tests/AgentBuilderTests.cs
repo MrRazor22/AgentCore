@@ -86,11 +86,12 @@ public class AgentBuilderTests
     {
         public List<string> CallLog { get; } = new();
 
-        public override Task<IReadOnlyList<Message>> GetAsync(
+        public override Task<IReadOnlyList<Message>> PrepareAsync(
+            IEnumerable<Message>? messages = null,
             CancellationToken ct = default)
         {
             CallLog.Add("GetMessages");
-            return base.GetAsync(ct);
+            return base.PrepareAsync(messages, ct);
         }
 
         public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
@@ -159,11 +160,12 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override Task<IReadOnlyList<Message>> GetAsync(
+        public override Task<IReadOnlyList<Message>> PrepareAsync(
+            IEnumerable<Message>? messages = null,
             CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.GetAsync(ct);
+            return base.PrepareAsync(messages, ct);
         }
 
         public override async IAsyncEnumerable<IMessageEvent> IngestAsync(

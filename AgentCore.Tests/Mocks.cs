@@ -31,31 +31,34 @@ public class MockLLMProvider : ILLM
         {
             case Text t:
             {
-                yield return new TextStart(blockIndex);
-                yield return new TextDelta(blockIndex, t.Value);
-                yield return new TextEnd(blockIndex);
+                yield return new MessageDelta(Content: new TextStart(blockIndex));
+                yield return new MessageDelta(Content: new TextDelta(blockIndex, t.Value));
+                yield return new MessageDelta(Content: new TextEnd(blockIndex));
                 break;
             }
             case Reasoning r:
             {
-                yield return new ReasoningStart(blockIndex);
-                yield return new ReasoningDelta(blockIndex, r.Thought);
-                yield return new ReasoningEnd(blockIndex);
+                yield return new MessageDelta(Content: new ReasoningStart(blockIndex));
+                yield return new MessageDelta(Content: new ReasoningDelta(blockIndex, r.Thought));
+                yield return new MessageDelta(Content: new ReasoningEnd(blockIndex));
                 break;
             }
             case ToolCall tc:
             {
                 int idx = blockIndex;
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
-                yield return new ToolCallStart(idx, id, tc.Name);
+                yield return new MessageDelta(Content: new ToolCallStart(idx, id, tc.Name));
                 var args = tc.Arguments?.ToJsonString() ?? "{}";
                 if (!string.IsNullOrEmpty(args))
                 {
-                    yield return new ToolCallDelta(idx, args);
+                    yield return new MessageDelta(Content: new ToolCallDelta(idx, args));
                 }
-                yield return new ToolCallEnd(idx);
+                yield return new MessageDelta(Content: new ToolCallEnd(idx));
                 break;
             }
+            case IContentEvent ce:
+                yield return new MessageDelta(Content: ce);
+                break;
             case IMessageEvent output:
                 yield return output;
                 break;
@@ -136,16 +139,18 @@ public class MockMemoryProvider : IContext
 
     public string RecallResult { get; set; } = "";
 
-    public IReadOnlyList<Message> Messages => GetAsync().GetAwaiter().GetResult();
+    public IReadOnlyList<Message> Messages => PrepareAsync().GetAwaiter().GetResult();
 
-    public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<Message>> PrepareAsync(
+        IEnumerable<Message>? messages = null,
+        CancellationToken ct = default)
     {
         var list = new List<Message>();
         if (!string.IsNullOrEmpty(RecallResult))
         {
             list.Add(new Message(Role.System, [new Text(RecallResult)]));
         }
-        list.AddRange(await _inner.GetAsync(ct));
+        list.AddRange(await _inner.PrepareAsync(messages, ct));
         return list;
     }
 

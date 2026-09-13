@@ -56,21 +56,21 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
         {
             switch (evt)
             {
-                case TextStart s:
+                case MessageDelta { Content: TextStart s }:
                     buffers[s.Index] = new();
                     eventIndex = Math.Max(eventIndex, s.Index + 1);
                     break;
 
-                case TextDelta d:
+                case MessageDelta { Content: TextDelta d }:
                     if (!buffers.TryGetValue(d.Index, out var tb)) buffers[d.Index] = tb = new();
                     tb.Append(d.Text);
                     break;
 
-                case TextEnd te when buffers.Remove(te.Index, out var sb):
+                case MessageDelta { Content: TextEnd te } when buffers.Remove(te.Index, out var sb):
                     foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                     {
                         yield return parsedEvt;
-                        if (parsedEvt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
+                        if (parsedEvt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
                     }
                     break;
 
@@ -80,7 +80,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                         foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                         {
                             yield return parsedEvt;
-                            if (parsedEvt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
+                            if (parsedEvt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
                         }
                     }
                     buffers.Clear();
@@ -89,7 +89,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
 
                 default:
                     yield return evt;
-                    if (evt is ToolCallEnd && _options.StopAfterFirstToolCall) yield break;
+                    if (evt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
                     break;
             }
         }
@@ -106,9 +106,9 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                     if (!string.IsNullOrEmpty(remaining))
                     {
                         int idx = eventIndex++;
-                        yield return new TextStart(idx);
-                        yield return new TextDelta(idx, remaining);
-                        yield return new TextEnd(idx);
+                        yield return new MessageDelta(Content: new TextStart(idx));
+                        yield return new MessageDelta(Content: new TextDelta(idx, remaining));
+                        yield return new MessageDelta(Content: new TextEnd(idx));
                     }
                     break;
                 }
@@ -119,16 +119,16 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                     if (!string.IsNullOrEmpty(leading))
                     {
                         int idx = eventIndex++;
-                        yield return new TextStart(idx);
-                        yield return new TextDelta(idx, leading);
-                        yield return new TextEnd(idx);
+                        yield return new MessageDelta(Content: new TextStart(idx));
+                        yield return new MessageDelta(Content: new TextDelta(idx, leading));
+                        yield return new MessageDelta(Content: new TextEnd(idx));
                     }
                 }
 
                 int tcIdx = eventIndex++;
-                yield return new ToolCallStart(tcIdx, match.Call.Id, match.Call.Name);
-                yield return new ToolCallDelta(tcIdx, match.Call.Arguments?.ToJsonString() ?? "{}");
-                yield return new ToolCallEnd(tcIdx);
+                yield return new MessageDelta(Content: new ToolCallStart(tcIdx, match.Call.Id, match.Call.Name));
+                yield return new MessageDelta(Content: new ToolCallDelta(tcIdx, match.Call.Arguments?.ToJsonString() ?? "{}"));
+                yield return new MessageDelta(Content: new ToolCallEnd(tcIdx));
 
                 lastIndex = match.Index + match.Length;
             }

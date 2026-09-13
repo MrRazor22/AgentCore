@@ -63,16 +63,19 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                     }
                 }
 
+                ValueTask WriteContent(IContentEvent content) =>
+                    channel.Writer.WriteAsync(new MessageDelta(Content: content), ct);
+
                 async ValueTask CloseActiveBlocks(bool closeReasoning = true, bool closeText = true)
                 {
                     if (closeText && textBlockId != null)
                     {
-                        await channel.Writer.WriteAsync(new TextEnd(textBlockId.Value), ct);
+                        await WriteContent(new TextEnd(textBlockId.Value));
                         textBlockId = null;
                     }
                     if (closeReasoning && reasoningBlockId != null)
                     {
-                        await channel.Writer.WriteAsync(new ReasoningEnd(reasoningBlockId.Value), ct);
+                        await WriteContent(new ReasoningEnd(reasoningBlockId.Value));
                         reasoningBlockId = null;
                     }
                 }
@@ -88,11 +91,11 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                         if (reasoningBlockId == null)
                         {
                             reasoningBlockId = nextId++;
-                            await channel.Writer.WriteAsync(new ReasoningStart(reasoningBlockId.Value), ct);
+                            await WriteContent(new ReasoningStart(reasoningBlockId.Value));
                         }
                         if (!string.IsNullOrEmpty(data.Content))
                         {
-                            await channel.Writer.WriteAsync(new ReasoningDelta(reasoningBlockId.Value, data.Content), ct);
+                            await WriteContent(new ReasoningDelta(reasoningBlockId.Value, data.Content));
                         }
                     },
                     MessageTokenExHandler = async (tokenData) =>
@@ -103,11 +106,11 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                         if (textBlockId == null)
                         {
                             textBlockId = nextId++;
-                            await channel.Writer.WriteAsync(new TextStart(textBlockId.Value), ct);
+                            await WriteContent(new TextStart(textBlockId.Value));
                         }
                         if (!string.IsNullOrEmpty(tokenData.Content))
                         {
-                            await channel.Writer.WriteAsync(new TextDelta(textBlockId.Value, tokenData.Content), ct);
+                            await WriteContent(new TextDelta(textBlockId.Value, tokenData.Content));
                         }
                     },
                     FunctionCallDeltaHandler = async (delta) =>
@@ -122,17 +125,17 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                             toolBlocks[toolIndex] = blockId;
                             
                             var callId = delta.CallId ?? $"call_{blockId}";
-                            await channel.Writer.WriteAsync(new ToolCallStart(blockId, callId, delta.Name ?? ""), ct);
+                            await WriteContent(new ToolCallStart(blockId, callId, delta.Name ?? ""));
                         }
 
                         if (!string.IsNullOrEmpty(delta.ArgumentsDelta))
                         {
-                            await channel.Writer.WriteAsync(new ToolCallDelta(blockId, delta.ArgumentsDelta), ct);
+                            await WriteContent(new ToolCallDelta(blockId, delta.ArgumentsDelta));
                         }
 
                         if (delta.IsComplete)
                         {
-                            await channel.Writer.WriteAsync(new ToolCallEnd(blockId), ct);
+                            await WriteContent(new ToolCallEnd(blockId));
                             toolBlocks.Remove(toolIndex);
                         }
                     },
@@ -143,7 +146,7 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 
                         foreach (var kvp in toolBlocks.OrderBy(x => x.Value))
                         {
-                            await channel.Writer.WriteAsync(new ToolCallEnd(kvp.Value), ct);
+                            await WriteContent(new ToolCallEnd(kvp.Value));
                         }
                         toolBlocks.Clear();
 

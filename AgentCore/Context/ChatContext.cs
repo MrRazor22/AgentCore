@@ -11,7 +11,7 @@ namespace AgentCore.Context;
 
 public interface IContext
 {
-    Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default); 
+    Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default);
     IAsyncEnumerable<IMessageEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
@@ -22,12 +22,12 @@ public class ChatContext(
     ICompactor? compactor = null,
     ITokenizer? counter = null,
     ITruncator? truncator = null,
-    Func<Role, string?, IMessageAssembler>? assemblerFactory = null,
+    IAssembler? assembler = null,
     ILogger<ChatContext>? logger = null) : IContext
 {
     private readonly List<Message> _chat = [];
-    private readonly Dictionary<string, IMessageAssembler> _open = new(StringComparer.Ordinal);
-    private readonly Func<Role, string?, IMessageAssembler> _assemblerFactory = assemblerFactory ?? ((r, id) => new MessageAssembler(r, id));
+    private readonly Dictionary<string, IAssembler> _open = new(StringComparer.Ordinal);
+    private readonly IAssembler _assembler = assembler ?? new Assembler();
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
     private readonly ITruncator _truncator = truncator ?? new Truncator(counter ?? new Tokenizer());
     private readonly int _limit = Math.Max(1, contextWindow - (reserveTokens ?? Math.Min(4_000, contextWindow / 10)));
@@ -51,22 +51,9 @@ public class ChatContext(
 
             yield return evt;
 
-            if (completedContent is ToolCall tc)
+            if (completedContent is not null)
             {
-                yield return tc;
-            }
-
-            if (evt is MessageEnd)
-            {
-                Message? completedMsg = null;
-                lock (_lock)
-                {
-                    if (_chat.Count > 0) completedMsg = _chat[^1];
-                }
-                if (completedMsg is not null)
-                {
-                    yield return completedMsg;
-                }
+                yield return new MessageDelta(evt.Id, Content: completedContent);
             }
         }
     }
@@ -87,31 +74,48 @@ public class ChatContext(
             id ??= Guid.NewGuid().ToString("N");
             if (ms.Role != Role.Tool) _activeId = id;
             if (ms.Role == Role.User) StripReasoning();
-            _open[id] = _assemblerFactory(ms.Role, ms.Id);
+            _open[id] = _assembler.Create(ms);
             return null;
         }
 
         id ??= _activeId ??= Guid.NewGuid().ToString("N");
         if (!_open.TryGetValue(id, out var asm))
         {
-            asm = _open[id] = _assemblerFactory(Role.Assistant, id);
+            asm = _open[id] = _assembler.Create();
         }
 
-        var content = asm.Push(evt);
-        if (evt is MessageEnd)
+        if (evt is MessageEnd me)
         {
             _open.Remove(id);
             if (id == _activeId) _activeId = null;
-            var msg = asm.ToMessage();
+            var msg = asm.ToMessage(me);
             Commit(msg, msg.Metadata.Get<TokenUsage>()?.TotalTokens);
+            return null;
         }
-        return content;
+
+        if (evt is MessageDelta md)
+        {
+            return asm.Push(md);
+        }
+
+        return null;
     }
 
-    public async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default)
     {
+        if (messages is not null)
+        {
+            lock (_lock)
+            {
+                foreach (var message in messages)
+                {
+                    AppendLocked(message);
+                }
+            }
+        }
+
         List<Message> snapshot;
-        lock (_lock) snapshot = [.. _chat, .. _open.Values.Select(a => a.ToMessage())];
+        lock (_lock) snapshot = [.. _chat, .. _open.Values.Select(a => a.ToMessage(null))];
 
         if (_tokens > _limit && compactor != null)
         {
@@ -150,38 +154,4 @@ public class ChatContext(
     }
 
     private int Estimate(Message m) => (int)((1 + m.Contents.Sum(_counter.Estimate)) * 1.15);
-}
-
-public static class ContextExtensions
-{
-    public static async Task AppendAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(evt);
-        await foreach (var _ in context.IngestAsync(ToAsync(evt), ct).ConfigureAwait(false)) { }
-    }
-
-    public static async Task AppendAsync(this IContext context, IEnumerable<IMessageEvent> events, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(events);
-        await foreach (var _ in context.IngestAsync(ToAsync(events), ct).ConfigureAwait(false)) { }
-    }
-
-    public static IAsyncEnumerable<IMessageEvent> IngestAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(evt);
-        return context.IngestAsync(ToAsync(evt), ct);
-    }
-
-    private static async IAsyncEnumerable<IMessageEvent> ToAsync(IMessageEvent evt)
-    {
-        yield return evt;
-    }
-
-    private static async IAsyncEnumerable<IMessageEvent> ToAsync(IEnumerable<IMessageEvent> events)
-    {
-        foreach (var evt in events) yield return evt;
-    }
 }

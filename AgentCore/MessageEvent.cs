@@ -7,7 +7,7 @@ public sealed record MessageStart(Role Role = Role.Assistant, string? Id = null)
 public sealed record MessageDelta(string? Id = null, IContentEvent? Content = null, IMetadata? Metadata = null) : IMessageEvent;
 public sealed record MessageEnd(string? Id = null) : IMessageEvent;
  
-public interface IContentEvent : IMessageEvent { int Index => 0; }
+public interface IContentEvent { int Index => 0; }
 public interface IContentStart : IContentEvent;
 public interface IContentDelta : IContentEvent;
 public interface IContentEnd : IContentEvent; 

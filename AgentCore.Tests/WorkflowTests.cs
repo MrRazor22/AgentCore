@@ -251,9 +251,9 @@ public class WorkflowTests
             async IAsyncEnumerable<IMessageEvent> StreamGenerator([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken token)
             {
                 yield return new MessageStart();
-                yield return new TextStart(0);
-                yield return new TextDelta(0, "Partial text");
-                yield return new TextEnd(0);
+                yield return new MessageDelta(Content: new TextStart(0));
+                yield return new MessageDelta(Content: new TextDelta(0, "Partial text"));
+                yield return new MessageDelta(Content: new TextEnd(0));
 
                 cts.Cancel();
                 token.ThrowIfCancellationRequested();
@@ -309,7 +309,7 @@ public class WorkflowTests
 
         // Also test recovery scenario: pre-existing ToolResult in context prevents execution
         var recoveryContext = new MockMemoryProvider();
-        await recoveryContext.AppendAsync([
+        await recoveryContext.PrepareAsync([
             new Message(Role.Tool, [new Text("previously executed")], metadata: [new ToolCallId("call_dup")])
         ]);
 

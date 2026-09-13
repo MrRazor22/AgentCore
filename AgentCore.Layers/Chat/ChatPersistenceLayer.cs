@@ -8,10 +8,20 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
 {
     private bool _restored;
 
-    public override async Task<IReadOnlyList<Message>> GetAsync(CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> PrepareAsync(
+        IEnumerable<Message>? messages = null,
+        CancellationToken ct = default)
     {
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
-        return await base.GetAsync(ct).ConfigureAwait(false);
+        if (messages is not null)
+        {
+            var list = messages as IReadOnlyList<Message> ?? messages.ToList();
+            if (list.Count > 0)
+            {
+                await store.AppendAsync(sessionId, list, ct).ConfigureAwait(false);
+            }
+        }
+        return await base.PrepareAsync(messages, ct).ConfigureAwait(false);
     }
 
     public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
@@ -21,11 +31,16 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         await EnsureRestoredAsync(ct).ConfigureAwait(false);
         await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
         {
-            if (evt is Message m)
-            {
-                await store.AppendAsync(sessionId, [m], ct).ConfigureAwait(false);
-            }
             yield return evt;
+
+            if (evt is MessageEnd or Message)
+            {
+                var history = await base.PrepareAsync(ct: ct).ConfigureAwait(false);
+                if (history.Count > 0)
+                {
+                    await store.AppendAsync(sessionId, [history[^1]], ct).ConfigureAwait(false);
+                }
+            }
         }
     }
 
@@ -35,10 +50,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         _restored = true;
         if (await store.LoadAsync(sessionId, ct).ConfigureAwait(false) is { Count: > 0 } history)
         {
-            foreach (var msg in ExtractWorkingContext(history))
-            {
-                await Inner.AppendAsync(msg, ct).ConfigureAwait(false);
-            }
+            await Inner.PrepareAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
         }
     }
 

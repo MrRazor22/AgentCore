@@ -30,7 +30,7 @@ public sealed class ContextBuilder
         ICompactor? compactor = null,
         ITokenizer? counter = null,
         ITruncator? truncator = null,
-        Func<Role, string?, IMessageAssembler>? assemblerFactory = null)
+        IAssembler? assembler = null)
     {
         return Use(lf => new ChatContext(
             contextWindow: contextWindow,
@@ -39,7 +39,7 @@ public sealed class ContextBuilder
             compactor: compactor,
             counter: counter,
             truncator: truncator,
-            assemblerFactory: assemblerFactory,
+            assembler: assembler,
             logger: lf.CreateLogger<ChatContext>()
         ));
     }

@@ -35,7 +35,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
                 {
                     var item = denial[i];
                     var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
-                    yield return content;
+                    yield return new MessageDelta(call.Id, Content: content);
                 }
                 yield return new MessageEnd(Id: call.Id);
             }

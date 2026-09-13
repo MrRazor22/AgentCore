@@ -1,3 +1,4 @@
+using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tools;
@@ -15,12 +16,7 @@ internal static class ToolingTestExtensions
 {
     public static async Task<ToolExecutionResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
     {
-        var assembler = new Context.MessageAssembler(Role.Tool, call.Id);
-        await foreach (var evt in tooling.ExecuteAsync([call], ct))
-        {
-            assembler.Push(evt);
-        }
-        var msg = assembler.ToMessage();
+        var msg = await tooling.ExecuteAsync([call], ct).ToMessageAsync(ct: ct);
         return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
     }
 }

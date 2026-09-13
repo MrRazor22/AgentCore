@@ -4,33 +4,34 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Context;
 
-public interface IMessageAssembler
+public interface IAssembler
 {
-    IContent? Push(IMessageEvent evt);
-    Message ToMessage();
+    IAssembler Create(MessageStart? start = null);
+    IContent? Push(MessageDelta delta);
+    Message ToMessage(MessageEnd? end = null);
 }
 
-public sealed class MessageAssembler(Role role = Role.Assistant, string? id = null) : IMessageAssembler
+public sealed class Assembler : IAssembler
 {
     private readonly SortedDictionary<int, (IContentStart Start, StringBuilder Buffer)> _blocks = [];
     private readonly List<IContent> _contents = [];
     private readonly List<IMetadata> _metadata = [];
-    private Role _role = role;
-    private string? _id = id;
+    private Role _role = Role.Assistant;
+    private string? _id;
 
-    public IContent? Push(IMessageEvent evt)
+    public IAssembler Create(MessageStart? start = null) => new Assembler
     {
-        switch (evt)
+        _role = start?.Role ?? Role.Assistant,
+        _id = start?.Id
+    };
+
+    public IContent? Push(MessageDelta delta)
+    {
+        if (delta.Metadata != null) _metadata.Add(delta.Metadata);
+        if (delta.Content is null) return null;
+
+        switch (delta.Content)
         {
-            case MessageStart s:
-                _role = s.Role;
-                _id = s.Id;
-                return null;
-
-            case MessageDelta d:
-                if (d.Metadata != null) _metadata.Add(d.Metadata);
-                return d.Content != null ? Push(d.Content) : null;
-
             case IContent c:
                 _contents.Add(c);
                 return c;
@@ -54,23 +55,27 @@ public sealed class MessageAssembler(Role role = Role.Assistant, string? id = nu
             case IContentEnd end:
                 return CompleteBlock(end.Index);
 
-            case MessageEnd:
-                CompleteAllBlocks();
-                return null;
-
             default:
                 return null;
         }
     }
 
-    public Message ToMessage()
+    public Message ToMessage(MessageEnd? end = null)
     {
-        var contents = new List<IContent>(_contents);
+        if (end != null)
+        {
+            if (end.Id != null) _id ??= end.Id;
+            CompleteAllBlocks();
+            var finalContents = _contents.Count > 0 ? _contents : [new Text(string.Empty)];
+            return new Message(_role, finalContents, _id, _metadata);
+        }
+
+        var snapshotContents = new List<IContent>(_contents);
         foreach (var b in _blocks.Values)
         {
-            contents.Add(CreateContent(b.Start, b.Buffer.ToString()));
+            snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
         }
-        var msgContents = contents.Count > 0 ? contents : [new Text(string.Empty)];
+        var msgContents = snapshotContents.Count > 0 ? snapshotContents : [new Text(string.Empty)];
         return new Message(_role, msgContents, _id, _metadata);
     }
 
@@ -105,3 +110,18 @@ public sealed class MessageAssembler(Role role = Role.Assistant, string? id = nu
         catch { return new JsonObject(); }
     }
 }
+
+public static class AssemblerExtensions
+{
+    public static async Task<Message> ToMessageAsync(this IAsyncEnumerable<IMessageEvent> stream, IAssembler? assembler = null, CancellationToken ct = default)
+    {
+        var asm = assembler ?? new Assembler();
+        MessageEnd? end = null;
+        await foreach (var e in stream.WithCancellation(ct).ConfigureAwait(false))
+            if (e is MessageDelta md) asm.Push(md);
+            else if (e is MessageStart ms) asm = asm.Create(ms);
+            else if (e is MessageEnd me) end = me;
+        return asm.ToMessage(end ?? new MessageEnd());
+    }
+}
+

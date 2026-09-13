@@ -27,6 +27,8 @@ public sealed class Agent(
     public IReadOnlyList<IContent>? Instructions => instructions;
     public int MaxIterations => maxIterations;
 
+    private bool _initialized;
+
     public static AgentBuilder Create() => new();
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
@@ -34,24 +36,25 @@ public sealed class Agent(
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var existing = await context.GetAsync(ct);
-        if (instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System))
-        {
-            await context.AppendAsync(new Message(Role.System, instructions), ct);
-        }
-        await context.AppendAsync(new Message(Role.User, [input]), ct);
+        IEnumerable<Message>? staged = !_initialized && instructions is { Count: > 0 }
+            ? [new Message(Role.System, instructions), new Message(Role.User, [input])]
+            : [new Message(Role.User, [input])];
+        _initialized = true;
 
         for (int i = 0; i < maxIterations; i++)
         {
             ct.ThrowIfCancellationRequested();
-            var messages = await context.GetAsync(ct);
+            var messages = await context.PrepareAsync(staged, ct);
+            staged = null;
 
             List<ToolCall>? toolCalls = null;
             await foreach (var evt in context.IngestAsync(llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
             {
-                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
-                else if (evt is MessageDelta { Content: { } c }) yield return c;
-                else if (evt is IContentEvent direct) yield return direct;
+                if (evt is MessageDelta { Content: { } c })
+                {
+                    if (c is ToolCall tc) (toolCalls ??= []).Add(tc);
+                    yield return c;
+                }
             }
 
             if (toolCalls is not { Count: > 0 }) yield break;
@@ -59,7 +62,6 @@ public sealed class Agent(
             await foreach (var evt in context.IngestAsync(tooling.ExecuteAsync(toolCalls, ct), ct))
             {
                 if (evt is MessageDelta { Content: { } c }) yield return c;
-                else if (evt is IContentEvent direct) yield return direct;
             }
         }
 
@@ -86,11 +88,12 @@ public static class AgentExtensions
     {
         var sb = new StringBuilder();
         var schema = typeof(T) == typeof(string) ? null : typeof(T).GetSchemaForType();
+        bool hasDeltas = false;
 
         await foreach (var evt in agent.InvokeStreamingAsync(input, schema, ct))
         {
-            if (evt is TextDelta td) sb.Append(td.Text);
-            else if (evt is Text t) sb.Append(t.Value);
+            if (evt is TextDelta td) { sb.Append(td.Text); hasDeltas = true; }
+            else if (evt is Text t && !hasDeltas) sb.Append(t.Value);
         }
 
         var text = sb.ToString();

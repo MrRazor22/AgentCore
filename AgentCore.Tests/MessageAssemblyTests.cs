@@ -11,16 +11,17 @@ namespace AgentCore.Tests;
 
 public class MessageAssemblyTests
 {
+    private static MessageDelta D(IContentEvent content) => new(Content: content);
+
     [Fact]
     public void MessageAssembler_SequentialToolCalls_MergesCorrectly()
     {
-        var assembler = new MessageAssembler(Role.Assistant);
-        assembler.Push(new ToolCallStart(0, "ABC", "RunCommand"));
-        assembler.Push(new ToolCallDelta(0, "{\"commandLine\":\"ls\"}"));
-        assembler.Push(new ToolCallEnd(0));
-        assembler.Push(new MessageEnd());
+        var assembler = new Assembler();
+        assembler.Push(D(new ToolCallStart(0, "ABC", "RunCommand")));
+        assembler.Push(D(new ToolCallDelta(0, "{\"commandLine\":\"ls\"}")));
+        assembler.Push(D(new ToolCallEnd(0)));
 
-        var message = assembler.ToMessage();
+        var message = assembler.ToMessage(new MessageEnd());
         var calls = message.Contents.OfType<ToolCall>().ToList();
         Assert.Single(calls);
         Assert.Equal("ABC", calls[0].Id);
@@ -31,18 +32,17 @@ public class MessageAssemblyTests
     [Fact]
     public void MessageAssembler_MultipleSimultaneousInterleavedCalls_ResolvesCorrectly()
     {
-        var assembler = new MessageAssembler(Role.Assistant);
-        assembler.Push(new ToolCallStart(0, "A", "RunCommand"));
-        assembler.Push(new ToolCallStart(1, "B", "SearchWeb"));
-        assembler.Push(new ToolCallDelta(0, "{\"commandLine\":"));
-        assembler.Push(new ToolCallDelta(1, "{\"query\":"));
-        assembler.Push(new ToolCallDelta(0, "\"ls\"}"));
-        assembler.Push(new ToolCallDelta(1, "\"test\"}"));
-        assembler.Push(new ToolCallEnd(0));
-        assembler.Push(new ToolCallEnd(1));
-        assembler.Push(new MessageEnd());
+        var assembler = new Assembler();
+        assembler.Push(D(new ToolCallStart(0, "A", "RunCommand")));
+        assembler.Push(D(new ToolCallStart(1, "B", "SearchWeb")));
+        assembler.Push(D(new ToolCallDelta(0, "{\"commandLine\":")));
+        assembler.Push(D(new ToolCallDelta(1, "{\"query\":")));
+        assembler.Push(D(new ToolCallDelta(0, "\"ls\"}")));
+        assembler.Push(D(new ToolCallDelta(1, "\"test\"}")));
+        assembler.Push(D(new ToolCallEnd(0)));
+        assembler.Push(D(new ToolCallEnd(1)));
 
-        var message = assembler.ToMessage();
+        var message = assembler.ToMessage(new MessageEnd());
         var calls = message.Contents.OfType<ToolCall>().ToList();
         Assert.Equal(2, calls.Count);
 
@@ -58,19 +58,17 @@ public class MessageAssemblyTests
     [Fact]
     public void MessageAssembler_FluidAndStructuralStreaming_BehavesCorrectly()
     {
-        var assembler = new MessageAssembler();
-        assembler.Push(new MessageStart(Role.Assistant, Id: "msg_123"));
+        var assembler = (Assembler)new Assembler().Create(new MessageStart(Role.Assistant, Id: "msg_123"));
         assembler.Push(new MessageDelta(Metadata: new ToolCallId("call_abc")));
-        assembler.Push(new ReasoningStart(0));
-        assembler.Push(new ReasoningDelta(0, "Thinking deeply..."));
-        assembler.Push(new ReasoningEnd(0));
-        assembler.Push(new TextStart(1));
-        assembler.Push(new TextDelta(1, "Here is the answer."));
-        assembler.Push(new TextEnd(1));
+        assembler.Push(D(new ReasoningStart(0)));
+        assembler.Push(D(new ReasoningDelta(0, "Thinking deeply...")));
+        assembler.Push(D(new ReasoningEnd(0)));
+        assembler.Push(D(new TextStart(1)));
+        assembler.Push(D(new TextDelta(1, "Here is the answer.")));
+        assembler.Push(D(new TextEnd(1)));
         assembler.Push(new MessageDelta(Metadata: new TokenUsage(10, 20, 30)));
-        assembler.Push(new MessageEnd());
 
-        var message = assembler.ToMessage();
+        var message = assembler.ToMessage(new MessageEnd());
         Assert.Equal(2, message.Contents.Count);
         Assert.Equal(Role.Assistant, message.Role);
         Assert.Equal("Thinking deeply...", Assert.IsType<Reasoning>(message.Contents[0]).Thought);
@@ -88,16 +86,15 @@ public class MessageAssemblyTests
     [Fact]
     public void MessageAssembler_PreservesInterleavedOrder()
     {
-        var assembler = new MessageAssembler(Role.Assistant);
-        assembler.Push(new TextStart(0));
-        assembler.Push(new TextDelta(0, "First text. "));
-        assembler.Push(new ToolCallStart(1, "call_1", "Search"));
-        assembler.Push(new ToolCallDelta(1, "{\"q\": \"c#\"}"));
-        assembler.Push(new TextStart(2));
-        assembler.Push(new TextDelta(2, "Second text."));
-        assembler.Push(new MessageEnd());
+        var assembler = new Assembler();
+        assembler.Push(D(new TextStart(0)));
+        assembler.Push(D(new TextDelta(0, "First text. ")));
+        assembler.Push(D(new ToolCallStart(1, "call_1", "Search")));
+        assembler.Push(D(new ToolCallDelta(1, "{\"q\": \"c#\"}")));
+        assembler.Push(D(new TextStart(2)));
+        assembler.Push(D(new TextDelta(2, "Second text.")));
 
-        var message = assembler.ToMessage();
+        var message = assembler.ToMessage(new MessageEnd());
         Assert.Equal(3, message.Contents.Count);
         Assert.Equal("First text. ", Assert.IsType<Text>(message.Contents[0]).Value);
         Assert.Equal("call_1", Assert.IsType<ToolCall>(message.Contents[1]).Id);
