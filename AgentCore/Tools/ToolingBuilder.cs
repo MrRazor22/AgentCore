@@ -25,35 +25,17 @@ public sealed class ToolingBuilder
     public ToolingBuilder WithTools(object instance)
     {
         ArgumentNullException.ThrowIfNull(instance);
-        if (instance is Type type) return WithTools(type);
+        var type = instance as Type ?? instance.GetType();
+        var target = instance is Type ? null : instance;
+        var flags = BindingFlags.Public | BindingFlags.Static | (target != null ? BindingFlags.Instance : 0);
 
-        var methods = instance.GetType()
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
-            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
-
-        foreach (var method in methods)
-        {
-            WithTools(new MethodTool(method, method.IsStatic ? null : instance));
-        }
+        foreach (var m in type.GetMethods(flags).Where(m => m.GetCustomAttribute<ToolAttribute>() != null))
+            WithTools(new MethodTool(m, m.IsStatic ? null : target));
 
         return this;
     }
 
-    public ToolingBuilder WithTools(Type type)
-    {
-        ArgumentNullException.ThrowIfNull(type);
-
-        var methods = type
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null);
-
-        foreach (var method in methods)
-        {
-            WithTools(new MethodTool(method));
-        }
-
-        return this;
-    }
+    public ToolingBuilder WithTools(Type type) => WithTools((object)type);
 
     public ToolingBuilder Use(Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling> factory)
     {
