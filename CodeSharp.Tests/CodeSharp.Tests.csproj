@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -25,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CodeSharp\CodeSharp.csproj" />
+    <ProjectReference Include="..\AgentCore.Host\AgentCore.Host.csproj" />
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
     <ProjectReference Include="..\AgentCore.Layers\AgentCore.Layers.csproj" />
   </ItemGroup>

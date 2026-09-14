@@ -66,4 +66,8 @@
 - Never make types, methods, or properties `public` unless there is an explicit, verified need and the design is architecturally sound. Zero speculative APIs.
 - `internal` accessibility is usually a code smell used to hide quick patches or leak implementation details between classes/assemblies. Design with clean ownership and explicit boundaries instead of exposing internals.
 
-
+## 14. LEAN & ZERO-CONVENIENCE-BLOAT PHILOSOPHY
+- Correct, well-architected code is naturally minimal and concise.
+- Never write convenience wrappers, lazy helper overloads, or over-engineered boilerplate just to avoid refactoring existing code.
+- Minimal does NOT mean code golf; it means razor-sharp design where every line earns its existence.
+- When new requirements emerge, do NOT lazily tack on convenience bloat—refactor and adapt existing abstractions so everything fits cleanly and cohesively.

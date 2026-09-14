@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.4.11513.90
@@ -12,7 +12,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Tests", "AgentCore.Tests\AgentCore.Tests.csproj", "{A374013F-9DDD-490B-8A20-0BEFAC7E83A9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp", "CodeSharp\CodeSharp.csproj", "{F3145E45-EB5B-6852-8D08-94047D8BA459}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Host", "AgentCore.Host\AgentCore.Host.csproj", "{F3145E45-EB5B-6852-8D08-94047D8BA459}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp.Tests", "CodeSharp.Tests\CodeSharp.Tests.csproj", "{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}"
 EndProject

@@ -725,15 +725,19 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
   </footer>
 
   <script>
-    function toggleCard(cardId) {
-      const el = document.getElementById(cardId);
-      if (el) {
-        el.classList.toggle('collapsed');
-      }
-    }
-
     const timeline = document.getElementById('timeline');
     const promptInput = document.getElementById('promptInput');
+    let isConnected = false;
+    let activeTurnId = 0;
+    let thinkingCard = null;
+    let thinkingBody = null;
+    let agentCard = null;
+    let agentContent = null;
+
+    function toggleCard(cardId) {
+      const el = document.getElementById(cardId);
+      if (el) el.classList.toggle('collapsed');
+    }
 
     promptInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -746,11 +750,124 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
       timeline.scrollTop = timeline.scrollHeight;
     }
 
+    function updateStatus(connected, modelName) {
+      isConnected = connected;
+      const badge = document.querySelector('.status-badge');
+      const modelBadge = document.querySelector('.pill-badge');
+      if (badge) {
+        if (connected) {
+          badge.innerHTML = `<span class="status-dot"></span> CONNECTED (IPC)`;
+          badge.style.color = "var(--accent-green)";
+          badge.style.borderColor = "rgba(63, 185, 80, 0.3)";
+        } else {
+          badge.innerHTML = `<span class="status-dot" style="background:var(--accent-amber);box-shadow:none;"></span> CONNECTING...`;
+          badge.style.color = "var(--accent-amber)";
+          badge.style.borderColor = "rgba(210, 153, 34, 0.3)";
+        }
+      }
+      if (modelBadge && modelName) {
+        modelBadge.textContent = `⚡ ${modelName}`;
+      }
+    }
+
+    // Set up Named Pipe WebView2 Message Listener
+    if (window.chrome && window.chrome.webview) {
+      window.chrome.webview.addEventListener('message', event => {
+        try {
+          const raw = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          handlePipeMessage(raw);
+        } catch (err) {
+          console.warn("Message parsing error:", err, event.data);
+        }
+      });
+      // Initial state
+      updateStatus(true, "AgentCore");
+    } else {
+      // Standalone browser preview
+      updateStatus(false);
+    }
+
+    function handlePipeMessage(msg) {
+      if (!msg) return;
+
+      if (msg.event === 'ready') {
+        updateStatus(true, msg.model || "AgentCore");
+        return;
+      }
+
+      const event = msg.event;
+      const data = msg.data || {};
+
+      if (event === 'thought') {
+        if (!thinkingCard) {
+          const blockId = `thinking_${activeTurnId}`;
+          thinkingCard = document.createElement('div');
+          thinkingCard.className = 'card thinking-card';
+          thinkingCard.id = blockId;
+          thinkingCard.innerHTML = `
+            <div class="thinking-header" onclick="toggleCard('${blockId}')">
+              <div class="thinking-title"><span>🧠</span> Thinking</div>
+              <span class="chevron">▼</span>
+            </div>
+            <div class="thinking-body"></div>
+          `;
+          timeline.appendChild(thinkingCard);
+          thinkingBody = thinkingCard.querySelector('.thinking-body');
+        }
+        thinkingBody.textContent += (data.thought || '');
+        scrollToBottom();
+      } else if (event === 'content') {
+        if (!agentCard) {
+          agentCard = document.createElement('div');
+          agentCard.className = 'card card-agent';
+          agentCard.innerHTML = `
+            <div class="agent-header">
+              <div class="agent-avatar">D</div>
+              <span class="agent-name">Devin</span>
+            </div>
+            <div class="agent-body"></div>
+          `;
+          timeline.appendChild(agentCard);
+          agentContent = agentCard.querySelector('.agent-body');
+        }
+        agentContent.textContent += (data.delta || '');
+        scrollToBottom();
+      } else if (event === 'tool_call' || event === 'tool_start') {
+        const toolCard = document.createElement('div');
+        toolCard.className = 'card terminal-card';
+        const argsStr = typeof data.arguments === 'object' ? JSON.stringify(data.arguments, null, 2) : String(data.arguments || '');
+        toolCard.innerHTML = `
+          <div class="terminal-header">
+            <div class="terminal-command">
+              <span class="cmd-prompt">⚙</span> ${escapeHtml(data.name || "Tool")}
+            </div>
+            <span class="terminal-status">RUNNING</span>
+          </div>
+          <div class="terminal-body">${escapeHtml(argsStr)}</div>
+        `;
+        timeline.appendChild(toolCard);
+        scrollToBottom();
+      } else if (event === 'error') {
+        const errCard = document.createElement('div');
+        errCard.className = 'card';
+        errCard.style.borderLeft = '3px solid var(--accent-red)';
+        errCard.style.padding = '10px 14px';
+        errCard.innerHTML = `<span style="color:var(--accent-red);font-weight:600;">Error:</span> ${escapeHtml(msg.message || "Unknown error")}`;
+        timeline.appendChild(errCard);
+        scrollToBottom();
+      } else if (event === 'done') {
+        thinkingCard = null;
+        thinkingBody = null;
+        agentCard = null;
+        agentContent = null;
+      }
+    }
+
     function sendMessage() {
       const text = promptInput.value.trim();
       if (!text) return;
 
-      // Append User Card
+      // 1. Append User Card
       const userCard = document.createElement('div');
       userCard.className = 'card card-user';
       userCard.innerHTML = `
@@ -764,10 +881,23 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
       promptInput.value = '';
       scrollToBottom();
 
-      // Simulate Agent Typing & Response
-      setTimeout(() => {
-        simulateAgentResponse("Received: \"" + text + "\". Processing the request against workspace context...");
-      }, 600);
+      activeTurnId++;
+      thinkingCard = null;
+      thinkingBody = null;
+      agentCard = null;
+      agentContent = null;
+
+      // 2. Forward to C# via WebView2 IPC
+      if (window.chrome && window.chrome.webview) {
+        window.chrome.webview.postMessage(JSON.stringify({
+          type: "prompt",
+          text: text
+        }));
+      } else {
+        setTimeout(() => {
+          simulateAgentResponse(`[Demo Mode] Received: "${text}". Connect via Visual Studio extension to execute.`);
+        }, 500);
+      }
     }
 
     function simulateAgentResponse(customText) {
@@ -779,7 +909,7 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
           <div class="agent-avatar">D</div>
           <span class="agent-name">Devin</span>
         </div>
-        <div>${msg}</div>
+        <div>${escapeHtml(msg)}</div>
       `;
       timeline.appendChild(agentCard);
       scrollToBottom();
@@ -791,7 +921,7 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
     }
 
     function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
   </script>
 </body>

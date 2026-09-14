@@ -16,13 +16,11 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="8.0.0-nblumhardt-02322" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
-    <PackageReference Include="Spectre.Console" Version="0.57.3-alpha.0.14" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
     <ProjectReference Include="..\AgentCore.LLM.Tornado\AgentCore.LLM.Tornado.csproj" />
-    <ProjectReference Include="..\AgentCore.LLM.TensorSharp\AgentCore.LLM.TensorSharp.csproj" />
     <ProjectReference Include="..\AgentCore.Layers\AgentCore.Layers.csproj" />
   </ItemGroup>
 
