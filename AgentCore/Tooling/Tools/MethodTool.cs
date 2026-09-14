@@ -2,6 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using System.ComponentModel;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -26,9 +27,10 @@ public sealed class MethodTool : ITool
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 
-    private readonly MethodInfo _method;
+    private readonly MethodInvoker _invoker;
     private readonly object? _target;
     private readonly ParameterInfo[] _parameters;
+    private readonly Func<Task, object?>? _taskResultGetter;
 
     public ToolDefinition Info { get; }
 
@@ -38,29 +40,40 @@ public sealed class MethodTool : ITool
         if (!method.IsStatic && target == null)
             throw new ArgumentException("Instance methods require a target instance.", nameof(target));
 
-        _method = method;
+        _invoker = MethodInvoker.Create(method);
         _target = target;
         _parameters = method.GetParameters();
         Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
+
+        if (typeof(Task).IsAssignableFrom(method.ReturnType) && method.ReturnType.IsGenericType)
+        {
+            var taskParam = Expression.Parameter(typeof(Task), "task");
+            var castTask = Expression.Convert(taskParam, method.ReturnType);
+            var propAccess = Expression.Property(castTask, "Result");
+            var castResult = Expression.Convert(propAccess, typeof(object));
+            _taskResultGetter = Expression.Lambda<Func<Task, object?>>(castResult, taskParam).Compile();
+        }
     }
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var args = new object?[_parameters.Length];
+        var args = _parameters.Length == 0 ? [] : new object?[_parameters.Length];
         for (int i = 0; i < _parameters.Length; i++)
         {
             var p = _parameters[i];
             args[i] = p.ParameterType == typeof(CancellationToken) ? ct : GetParameterValue(arguments, p);
         }
 
-        var result = _method.Invoke(_target, args);
+        var result = _invoker.Invoke(_target, args);
 
         if (result is Task task)
         {
             await task.ConfigureAwait(false);
-            result = task.GetType().GetProperty("Result")?.GetValue(task);
+            result = _taskResultGetter != null
+                ? _taskResultGetter(task)
+                : (task.GetType().IsGenericType ? task.GetType().GetProperty("Result")?.GetValue(task) : null);
         }
 
         var contents = ToContentList(result);
