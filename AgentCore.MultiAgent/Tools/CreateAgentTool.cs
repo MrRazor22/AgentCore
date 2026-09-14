@@ -6,8 +6,14 @@ using AgentCore.Tooling;
 
 namespace AgentCore.MultiAgent.Tools;
 
-public sealed class CreateAgentTool(IAgentNetwork network, string sender) : ITool
+public sealed class CreateAgentTool(
+    IAgentRouter router,
+    IAgentNetwork network,
+    string sender,
+    Action<AgentBuilder> configureDefaults) : ITool
 {
+    private readonly Action<AgentBuilder> _configureDefaults = configureDefaults ?? throw new ArgumentNullException(nameof(configureDefaults));
+
     private static readonly JsonSchema Schema = new JsonSchemaBuilder()
         .Type<object>()
         .AddProperty("name", new JsonSchemaBuilder().Type<string>().Description("A unique, concise name for the new agent (e.g. 'coder', 'researcher').").Build(), required: true)
@@ -24,13 +30,29 @@ public sealed class CreateAgentTool(IAgentNetwork network, string sender) : IToo
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var name = (string?)arguments?["name"] ?? string.Empty;
-        var role = (string?)arguments?["role"] ?? string.Empty;
-        var collaborators = arguments?["collaborators"] is JsonArray cArr
+        await Task.CompletedTask;
+        var name = (string)arguments["name"]!;
+        var role = (string)arguments["role"]!;
+        var collaborators = arguments["collaborators"] is JsonArray cArr
             ? cArr.Select(n => (string?)n).OfType<string>()
             : null;
 
-        var result = network.CreateAgent(sender, name, role, collaborators);
-        yield return new Text(result);
+        var builder = new AgentBuilder();
+        _configureDefaults(builder);
+        builder.WithInstructions(role);
+        builder.UseToolbox(t => t.WithTools(new SendAgentTool(network, router, name)));
+
+        var childCollaborators = collaborators != null
+            ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
+
+        router.Register(name, builder.Build(), childCollaborators, description: role);
+
+        if (router.Agents.TryGetValue(sender, out var creatorEntry) && creatorEntry.Collaborators != null)
+        {
+            creatorEntry.Collaborators.Add(name);
+        }
+
+        yield return new Text($"Agent '{name}' created successfully and joined the network.");
     }
 }

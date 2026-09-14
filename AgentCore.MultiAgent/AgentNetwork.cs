@@ -1,38 +1,29 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using AgentCore.LLM.Chat;
-using AgentCore.MultiAgent.Tools;
-using AgentCore.Tooling;
 
 namespace AgentCore.MultiAgent;
 
-using System.Runtime.CompilerServices;
+public sealed record NetworkMessage(string Sender, string Recipient, IEnumerable<IContent> Contents)
+{
+    public NetworkMessage(string sender, string recipient, params IContent[] contents)
+        : this(sender, recipient, (IEnumerable<IContent>)contents) { }
+}
 
-public sealed record NetworkMessage(string Sender, string Recipient, IEnumerable<IContent> Contents);
 public sealed record NetworkEvent(string Sender, string Recipient, IContentEvent Event);
 
 public interface IAgentNetwork
 {
-    void Send(NetworkMessage message);
-    IAsyncEnumerable<NetworkEvent> RunAsync(CancellationToken ct = default);
-    string CreateAgent(string creator, string name, string role, IEnumerable<string>? collaborators = null);
+    Task SendAsync(NetworkMessage message, CancellationToken ct = default);
+    IAsyncEnumerable<NetworkEvent> ReceiveAsync(CancellationToken ct = default);
 }
 
-public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? configureDefaults = null) : IAgentNetwork
+public sealed class AgentNetwork(IAgentRouter router) : IAgentNetwork
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<NetworkMessage>> _mailboxes = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _signal = new(0);
-    private Action<AgentBuilder>? _configureDefaults = configureDefaults;
 
-    public AgentNetwork(Action<AgentBuilder>? configureDefaults = null)
-        : this(new AgentRouter(), configureDefaults) { }
-
-    public AgentNetwork WithDefaults(Action<AgentBuilder> configureDefaults)
-    {
-        _configureDefaults = configureDefaults ?? throw new ArgumentNullException(nameof(configureDefaults));
-        return this;
-    }
-
-    public void Send(NetworkMessage message)
+    public Task SendAsync(NetworkMessage message, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(message.Recipient);
@@ -53,29 +44,16 @@ public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? conf
         var mailbox = _mailboxes.GetOrAdd(message.Recipient, _ => new ConcurrentQueue<NetworkMessage>());
         mailbox.Enqueue(message);
         _signal.Release();
+
+        return Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<NetworkEvent> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<NetworkEvent> ReceiveAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
         while (!ct.IsCancellationRequested)
         {
-            // Find an agent with a pending message
-            string? targetAgent = null;
-            NetworkMessage? message = null;
-
-            foreach (var (agentName, mailbox) in _mailboxes)
+            if (!TryGetNextPending(out var targetAgent, out var currentMsg))
             {
-                if (mailbox.TryDequeue(out var msg))
-                {
-                    targetAgent = agentName;
-                    message = msg;
-                    break;
-                }
-            }
-
-            if (targetAgent == null || message == null)
-            {
-                // Wait for a new message to arrive
                 try
                 {
                     await _signal.WaitAsync(ct).ConfigureAwait(false);
@@ -90,9 +68,9 @@ public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? conf
             if (!router.Agents.TryGetValue(targetAgent, out var entry))
                 continue;
 
-            var prompt = string.Equals(message.Sender, "User", StringComparison.OrdinalIgnoreCase)
-                ? message.Contents
-                : PrependSender(message.Sender, message.Contents);
+            var prompt = string.Equals(currentMsg.Sender, "User", StringComparison.OrdinalIgnoreCase)
+                ? currentMsg.Contents
+                : PrependSender(currentMsg.Sender, currentMsg.Contents);
 
             List<IContent> reply = [];
 
@@ -101,17 +79,32 @@ public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? conf
                 if (evt is IContent c)
                     reply.Add(c);
 
-                yield return new NetworkEvent(Sender: targetAgent, Recipient: message.Sender, Event: evt);
+                yield return new NetworkEvent(Sender: targetAgent, Recipient: currentMsg.Sender, Event: evt);
             }
 
-            // If agent generated output and sender is a registered agent, route output back to sender's mailbox
             if (reply.Count > 0 &&
-                !string.Equals(message.Sender, "User", StringComparison.OrdinalIgnoreCase) &&
-                router.Agents.ContainsKey(message.Sender))
+                !string.Equals(currentMsg.Sender, "User", StringComparison.OrdinalIgnoreCase) &&
+                router.Agents.ContainsKey(currentMsg.Sender))
             {
-                Send(new NetworkMessage(Sender: targetAgent, Recipient: message.Sender, Contents: reply));
+                await SendAsync(new NetworkMessage(Sender: targetAgent, Recipient: currentMsg.Sender, Contents: reply), ct).ConfigureAwait(false);
             }
         }
+    }
+
+    private bool TryGetNextPending(out string targetAgent, out NetworkMessage message)
+    {
+        foreach (var (agentName, mailbox) in _mailboxes)
+        {
+            if (mailbox.TryDequeue(out var msg))
+            {
+                targetAgent = agentName;
+                message = msg;
+                return true;
+            }
+        }
+        targetAgent = string.Empty;
+        message = null!;
+        return false;
     }
 
     private static IEnumerable<IContent> PrependSender(string sender, IEnumerable<IContent> contents)
@@ -119,37 +112,5 @@ public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? conf
         yield return new Text($"[Message from {sender}]:\n");
         foreach (var item in contents)
             yield return item;
-    }
-
-    public string CreateAgent(
-        string creator,
-        string name,
-        string role,
-        IEnumerable<string>? collaborators = null)
-    {
-        if (_configureDefaults == null)
-            return "Error: Dynamic agent creation is not enabled on this network. Configure defaults first using WithDefaults(...).";
-        if (string.IsNullOrWhiteSpace(name))
-            return "Error: Agent name cannot be empty.";
-        if (router.Agents.ContainsKey(name))
-            return $"Error: Agent '{name}' already exists.";
-
-        var builder = new AgentBuilder();
-        _configureDefaults(builder);
-        builder.WithInstructions(role);
-        builder.UseToolbox(t => t.WithTools(new SendAgentTool(this, router, name), new CreateAgentTool(this, name)));
-
-        var childCollaborators = collaborators != null
-            ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { creator }
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { creator };
-
-        router.Register(name, builder.Build(), childCollaborators, description: role);
-
-        if (router.Agents.TryGetValue(creator, out var creatorEntry) && creatorEntry.Collaborators != null)
-        {
-            creatorEntry.Collaborators.Add(name);
-        }
-
-        return $"Agent '{name}' created successfully and joined the network.";
     }
 }
