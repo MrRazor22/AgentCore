@@ -5,9 +5,9 @@ using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
 
-namespace AgentCore.MultiAgent;
+namespace AgentCore.MultiAgent.Tools;
 
-public sealed class SendAgentTool(IAgentNetwork network, string sender) : ITool
+public sealed class SendAgentTool(IAgentNetwork network, IAgentRouter router, string sender) : ITool
 {
     private static readonly JsonSchema Schema = new JsonSchemaBuilder()
         .Type<object>()
@@ -33,13 +33,23 @@ public sealed class SendAgentTool(IAgentNetwork network, string sender) : ITool
 
     private string FormatDescription()
     {
-        var agents = network.GetAgents(sender);
-        if (agents.Count == 0)
+        router.Agents.TryGetValue(sender, out var senderEntry);
+        var allowed = senderEntry?.Collaborators;
+
+        var available = router.Agents
+            .Where(kv => !string.Equals(kv.Key, sender, StringComparison.OrdinalIgnoreCase))
+            .Where(kv => allowed == null || allowed.Contains(kv.Key))
+            .ToArray();
+
+        if (available.Length == 0)
             return "Send a task or question to another agent. (No other agents currently available.)";
 
         var sb = new StringBuilder("Send a task or question to another agent.\nAvailable agents:\n");
-        foreach (var a in agents)
-            sb.Append($"- {a.Name}: {a.Description}\n");
+        foreach (var (name, entry) in available)
+        {
+            var desc = !string.IsNullOrWhiteSpace(entry.Description) ? entry.Description : "Collaborator";
+            sb.Append($"- {name}: {desc}\n");
+        }
         return sb.ToString().TrimEnd();
     }
 }

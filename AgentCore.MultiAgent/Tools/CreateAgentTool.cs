@@ -4,9 +4,9 @@ using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
 
-namespace AgentCore.MultiAgent;
+namespace AgentCore.MultiAgent.Tools;
 
-public sealed class CreateAgentTool(AgentNetwork network, string sender) : ITool
+public sealed class CreateAgentTool(IAgentNetwork network, string sender) : ITool
 {
     private static readonly JsonSchema Schema = new JsonSchemaBuilder()
         .Type<object>()
@@ -26,8 +26,8 @@ public sealed class CreateAgentTool(AgentNetwork network, string sender) : ITool
     {
         var name = (string?)arguments?["name"] ?? string.Empty;
         var role = (string?)arguments?["role"] ?? string.Empty;
-        var collaborators = arguments?["collaborators"] is JsonArray arr
-            ? arr.Select(n => (string?)n).OfType<string>()
+        var collaborators = arguments?["collaborators"] is JsonArray cArr
+            ? cArr.Select(n => (string?)n).OfType<string>()
             : null;
 
         var result = network.CreateAgent(sender, name, role, collaborators);
