@@ -7,7 +7,7 @@ using System.Text.Json.Nodes;
 
 namespace AgentCore.Tooling.Tools;
 
-public sealed class AgentTool(Agent agent, string name, string description) : ITool
+public sealed class AgentTool(IAgent agent, string name, string description) : ITool
 {
     private static readonly JsonSchema PromptSchema = new JsonSchemaBuilder()
         .Type<object>()
@@ -24,7 +24,7 @@ public sealed class AgentTool(Agent agent, string name, string description) : IT
 
         yield return new TextStart(0);
 
-        await foreach (var evt in agent.InvokeStreamingAsync(new Text(prompt), ct).ConfigureAwait(false))
+        await foreach (var evt in agent.InvokeStreamingAsync([new Text(prompt)], ct).ConfigureAwait(false))
         {
             if (evt is TextDelta td)
             {

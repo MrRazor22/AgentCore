@@ -168,7 +168,7 @@ internal class App
                     .WithRetry()
                     .WithToolCallDetection()
                     .WithMessageCoalescing())
-                .UseTooling(tools => tools
+                .UseToolbox(tools => tools
                     .WithTools(shellTool, skillTool)
                     .AddLayer(approvalLayer))
                 .WithInstructions(
