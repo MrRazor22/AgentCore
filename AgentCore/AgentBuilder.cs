@@ -39,9 +39,6 @@ public class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithLLM(Func<ILoggerFactory, ILLM> factory) => UseLLM(l => l.Use(factory));
-    public AgentBuilder AddLLMLayer(LLMLayer layer) => UseLLM(l => l.AddLayer(layer));
-
     public AgentBuilder UseTooling(Action<ToolingBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -49,20 +46,12 @@ public class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithTools(params ITool[] tools) => UseTooling(t => t.WithTools(tools));
-    public AgentBuilder WithTools<T>() => UseTooling(t => t.WithTools<T>());
-    public AgentBuilder WithTools(object instance) => UseTooling(t => t.WithTools(instance));
-    public AgentBuilder AddToolingLayer(ToolingLayer layer) => UseTooling(t => t.AddLayer(layer));
-
     public AgentBuilder UseContext(Action<ContextBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
         configure(_context);
         return this;
     }
-
-    public AgentBuilder WithContext(Func<ILoggerFactory, IContext> factory) => UseContext(c => c.Use(factory));
-    public AgentBuilder AddContextLayer(ContextLayer layer) => UseContext(c => c.AddLayer(layer));
 
     public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
     {
