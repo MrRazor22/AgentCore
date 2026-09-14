@@ -1,25 +1,30 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using AgentCore.Context;
 using AgentCore.LLM.Chat;
 
 namespace AgentCore.Layers.Chat;
 
-public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, bool autoRestore = true) : ContextLayer
+public sealed class ChatPersistenceLayer(
+    IChatStore store,
+    string sessionId,
+    IWalStore? walStore = null) : ContextLayer
 {
+    private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly string _sessionId = string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session ID cannot be empty or whitespace.", nameof(sessionId)) : sessionId;
     private bool _restored;
 
-    public override async Task<IReadOnlyList<Message>> PrepareAsync(
-        IEnumerable<Message>? messages = null,
-        CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default)
     {
-        await EnsureRestoredAsync(ct).ConfigureAwait(false);
+        await RestoreAsync(ct).ConfigureAwait(false);
         if (messages is not null)
         {
             var list = messages as IReadOnlyList<Message> ?? messages.ToList();
-            if (list.Count > 0)
-            {
-                await store.AppendAsync(sessionId, list, ct).ConfigureAwait(false);
-            }
+            if (list.Count > 0) await _store.AppendAsync(_sessionId, list, ct).ConfigureAwait(false);
         }
         return await base.PrepareAsync(messages, ct).ConfigureAwait(false);
     }
@@ -28,37 +33,63 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await EnsureRestoredAsync(ct).ConfigureAwait(false);
-        await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
+        await RestoreAsync(ct).ConfigureAwait(false);
+        int initial = (await Inner.PrepareAsync(ct: CancellationToken.None).ConfigureAwait(false)).Count;
+        try
         {
-            yield return evt;
-
-            if (evt is IContent)
+            var source = walStore == null ? events : LogAsync();
+            async IAsyncEnumerable<IMessageEvent> LogAsync()
             {
-                var history = await base.PrepareAsync(ct: ct).ConfigureAwait(false);
-                if (history.Count > 0)
+                await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
                 {
-                    await store.AppendAsync(sessionId, [history[^1]], ct).ConfigureAwait(false);
+                    await walStore.AppendAsync(_sessionId, evt, ct).ConfigureAwait(false);
+                    yield return evt;
                 }
+            }
+
+            await foreach (var evt in base.IngestAsync(source, ct).WithCancellation(ct).ConfigureAwait(false))
+                yield return evt;
+        }
+        finally
+        {
+            try
+            {
+                var history = await Inner.PrepareAsync(ct: CancellationToken.None).ConfigureAwait(false);
+                var newMessages = history.Skip(initial).Where(m => m.Contents.Count > 0).ToList();
+                if (newMessages.Count > 0)
+                    await _store.AppendAsync(_sessionId, newMessages, CancellationToken.None).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (walStore != null) await walStore.ClearAsync(_sessionId, CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
 
-    private async Task EnsureRestoredAsync(CancellationToken ct)
+    private async Task RestoreAsync(CancellationToken ct)
     {
-        if (_restored || !autoRestore) return;
+        if (_restored) return;
         _restored = true;
-        if (await store.LoadAsync(sessionId, ct).ConfigureAwait(false) is { Count: > 0 } history)
+
+        if (walStore != null)
         {
-            await Inner.PrepareAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
+            var recovered = await walStore.RecoverAsync(_sessionId, ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
+            if (recovered.Contents.Count > 0) await _store.AppendAsync(_sessionId, [recovered], ct).ConfigureAwait(false);
+            await walStore.ClearAsync(_sessionId, ct).ConfigureAwait(false);
         }
+
+        if (await _store.LoadAsync(_sessionId, ct).ConfigureAwait(false) is { Count: > 0 } history)
+            await Inner.PrepareAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
     }
 
-    internal static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)
+    private static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)
     {
-        int lastSummary = history.ToList().FindLastIndex(m => m.Get<Summary>() is not null);
-        if (lastSummary < 0) return history;
-        var system = history.FirstOrDefault(m => m.Role == Role.System);
-        return system != null ? [system, .. history.Skip(lastSummary)] : [.. history.Skip(lastSummary)];
+        for (int i = history.Count - 1; i >= 0; i--)
+            if (history[i].Get<Summary>() != null)
+            {
+                var sys = history.FirstOrDefault(m => m.Role == Role.System);
+                return sys != null ? [sys, .. history.Skip(i)] : [.. history.Skip(i)];
+            }
+        return history;
     }
 }

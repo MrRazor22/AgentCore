@@ -66,17 +66,18 @@ public sealed class Assembler : IAssembler
         {
             if (end.Id != null) _id ??= end.Id;
             CompleteAllBlocks();
-            var finalContents = _contents.Count > 0 ? _contents : [new Text(string.Empty)];
-            return new Message(_role, finalContents, _id, _metadata);
+            return new Message(_role, _contents, _id, _metadata);
         }
 
         var snapshotContents = new List<IContent>(_contents);
         foreach (var b in _blocks.Values)
         {
-            snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
+            if (b.Start is not ToolCallStart && b.Buffer.Length > 0)
+            {
+                snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
+            }
         }
-        var msgContents = snapshotContents.Count > 0 ? snapshotContents : [new Text(string.Empty)];
-        return new Message(_role, msgContents, _id, _metadata);
+        return new Message(_role, snapshotContents, _id, _metadata);
     }
 
     private void CompleteAllBlocks()
@@ -121,7 +122,7 @@ public static class AssemblerExtensions
             if (e is MessageDelta md) asm.Push(md);
             else if (e is MessageStart ms) asm = asm.Create(ms);
             else if (e is MessageEnd me) end = me;
-        return asm.ToMessage(end ?? new MessageEnd());
+        return asm.ToMessage(end);
     }
 }
 
