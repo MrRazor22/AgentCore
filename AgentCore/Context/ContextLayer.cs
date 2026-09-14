@@ -26,7 +26,7 @@ public abstract class ContextLayer : IContext
         CancellationToken ct = default)
         => Inner.PrepareAsync(messages, ct);
 
-    public virtual IAsyncEnumerable<IMessageEvent> IngestAsync(
+    public virtual IAsyncEnumerable<IContentEvent> IngestAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
         => Inner.IngestAsync(events, ct);

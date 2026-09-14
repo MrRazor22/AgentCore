@@ -94,7 +94,7 @@ public class AgentBuilderTests
             return base.PrepareAsync(messages, ct);
         }
 
-        public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+        public override async IAsyncEnumerable<IContentEvent> IngestAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -168,7 +168,7 @@ public class AgentBuilderTests
             return base.PrepareAsync(messages, ct);
         }
 
-        public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+        public override async IAsyncEnumerable<IContentEvent> IngestAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {

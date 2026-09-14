@@ -24,7 +24,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         return await base.PrepareAsync(messages, ct).ConfigureAwait(false);
     }
 
-    public override async IAsyncEnumerable<IMessageEvent> IngestAsync(
+    public override async IAsyncEnumerable<IContentEvent> IngestAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -33,7 +33,7 @@ public sealed class ChatPersistenceLayer(IChatStore store, string sessionId, boo
         {
             yield return evt;
 
-            if (evt is MessageEnd or Message)
+            if (evt is IContent)
             {
                 var history = await base.PrepareAsync(ct: ct).ConfigureAwait(false);
                 if (history.Count > 0)

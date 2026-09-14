@@ -48,20 +48,19 @@ public sealed class Agent(
             staged = null;
 
             List<ToolCall>? toolCalls = null;
-            await foreach (var evt in context.IngestAsync(llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
+            await foreach (var evt in context.IngestAsync(
+                llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
             {
-                if (evt is MessageDelta { Content: { } c })
-                {
-                    if (c is ToolCall tc) (toolCalls ??= []).Add(tc);
-                    yield return c;
-                }
+                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
+                yield return evt;
             }
 
             if (toolCalls is not { Count: > 0 }) yield break;
 
-            await foreach (var evt in context.IngestAsync(tooling.ExecuteAsync(toolCalls, ct), ct))
+            await foreach (var evt in context.IngestAsync(
+                tooling.ExecuteAsync(toolCalls, ct), ct))
             {
-                if (evt is MessageDelta { Content: { } c }) yield return c;
+                yield return evt;
             }
         }
 

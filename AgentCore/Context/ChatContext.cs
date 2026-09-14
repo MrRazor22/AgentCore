@@ -12,7 +12,7 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default);
-    IAsyncEnumerable<IMessageEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
+    IAsyncEnumerable<IContentEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
 public class ChatContext(
@@ -36,7 +36,7 @@ public class ChatContext(
     private string? _activeId;
     private int _tokens;
 
-    public async IAsyncEnumerable<IMessageEvent> IngestAsync(
+    public async IAsyncEnumerable<IContentEvent> IngestAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -49,11 +49,14 @@ public class ChatContext(
                 completedContent = AppendLocked(evt);
             }
 
-            yield return evt;
+            if (evt is MessageDelta { Content: { } ce })
+            {
+                yield return ce;
+            }
 
             if (completedContent is not null)
             {
-                yield return new MessageDelta(evt.Id, Content: completedContent);
+                yield return completedContent;
             }
         }
     }
