@@ -9,63 +9,43 @@ public class ChatPersistenceLayerTests
 {
     private class InMemoryChatStore : IChatStore
     {
-        public Dictionary<string, List<Message>> Storage { get; } = new();
+        public List<Message> Storage { get; set; } = [];
 
-        public Task<IReadOnlyList<Message>?> LoadAsync(string sessionId, CancellationToken ct = default)
-        {
-            if (Storage.TryGetValue(sessionId, out var messages))
-            {
-                return Task.FromResult<IReadOnlyList<Message>?>(messages.ToList());
-            }
-            return Task.FromResult<IReadOnlyList<Message>?>(null);
-        }
+        public Task<IReadOnlyList<Message>?> LoadAsync(CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Message>?>(Storage.Count > 0 ? Storage.ToList() : null);
 
-        public Task AppendAsync(string sessionId, IReadOnlyList<Message> messages, CancellationToken ct = default)
+        public Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default)
         {
-            if (!Storage.TryGetValue(sessionId, out var list))
-            {
-                list = new List<Message>();
-                Storage[sessionId] = list;
-            }
-            list.AddRange(messages);
+            Storage.AddRange(messages);
             return Task.CompletedTask;
         }
     }
 
     private class InMemoryWalStore : IWalStore
     {
-        public Dictionary<string, List<IMessageEvent>> Storage { get; } = new();
+        public List<IMessageEvent> Storage { get; set; } = [];
         public bool Cleared { get; private set; }
 
-        public Task AppendAsync(string sessionId, IMessageEvent evt, CancellationToken ct = default)
+        public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
         {
-            if (!Storage.TryGetValue(sessionId, out var list))
-            {
-                list = [];
-                Storage[sessionId] = list;
-            }
-            list.Add(evt);
+            Storage.Add(evt);
             Cleared = false;
             return Task.CompletedTask;
         }
 
-        public Task ClearAsync(string sessionId, CancellationToken ct = default)
+        public Task ClearAsync(CancellationToken ct = default)
         {
             Cleared = true;
-            Storage.Remove(sessionId);
+            Storage.Clear();
             return Task.CompletedTask;
         }
 
         public async IAsyncEnumerable<IMessageEvent> RecoverAsync(
-            string sessionId,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            if (Storage.TryGetValue(sessionId, out var list))
+            foreach (var evt in Storage)
             {
-                foreach (var evt in list)
-                {
-                    yield return evt;
-                }
+                yield return evt;
             }
         }
     }
@@ -74,14 +54,14 @@ public class ChatPersistenceLayerTests
     public async Task GetMessagesAsync_RestoresExistingMessagesFromStore()
     {
         var store = new InMemoryChatStore();
-        store.Storage["session-1"] =
+        store.Storage =
         [
             new(Role.User, [new Text("Hello from previous session")]),
             new(Role.Assistant, [new Text("Welcome back!")])
         ];
 
         var innerContext = new MockMemoryProvider();
-        var layer = new ChatPersistenceLayer(store, "session-1");
+        var layer = new ChatPersistenceLayer(store);
         layer.Attach(innerContext);
 
         var messages = await layer.PrepareAsync();
@@ -96,15 +76,14 @@ public class ChatPersistenceLayerTests
     {
         var store = new InMemoryChatStore();
         var innerContext = new MockMemoryProvider();
-        var layer = new ChatPersistenceLayer(store, "session-2");
+        var layer = new ChatPersistenceLayer(store);
         layer.Attach(innerContext);
 
         var userMessage = new Message(Role.User, [new Text("New question")]);
         await layer.PrepareAsync([userMessage]);
 
-        Assert.True(store.Storage.ContainsKey("session-2"));
-        Assert.Single(store.Storage["session-2"]);
-        Assert.Equal("New question", store.Storage["session-2"][0].Contents[0].ToString());
+        Assert.Single(store.Storage);
+        Assert.Equal("New question", store.Storage[0].Contents[0].ToString());
     }
 
     [Fact]
@@ -112,7 +91,7 @@ public class ChatPersistenceLayerTests
     {
         var store = new InMemoryChatStore();
         // Session history with multiple compactions
-        store.Storage["session-compacted"] =
+        store.Storage =
         [
             new(Role.System, [new Text("System instruction")]),
             new(Role.User, [new Text("First message")]),
@@ -126,7 +105,7 @@ public class ChatPersistenceLayerTests
         ];
 
         var innerContext = new MockMemoryProvider();
-        var layer = new ChatPersistenceLayer(store, "session-compacted");
+        var layer = new ChatPersistenceLayer(store);
         layer.Attach(innerContext);
 
         var workingContext = await layer.PrepareAsync();
@@ -143,11 +122,7 @@ public class ChatPersistenceLayerTests
     [Fact]
     public void Constructor_InvalidArguments_ThrowsException()
     {
-        var store = new InMemoryChatStore();
-
-        Assert.Throws<ArgumentNullException>(() => new ChatPersistenceLayer(null!, "session"));
-        Assert.Throws<ArgumentException>(() => new ChatPersistenceLayer(store, ""));
-        Assert.Throws<ArgumentException>(() => new ChatPersistenceLayer(store, "   "));
+        Assert.Throws<ArgumentNullException>(() => new ChatPersistenceLayer(null!));
     }
 
     [Fact]
@@ -158,7 +133,7 @@ public class ChatPersistenceLayerTests
 
         var agent = Agent.Create()
             .WithLLM(_ => mockLLM)
-            .AddChatPersistence(store, "session-builder-test")
+            .AddChatPersistence(store)
             .Build();
 
         Assert.NotNull(agent);
@@ -169,7 +144,7 @@ public class ChatPersistenceLayerTests
     {
         var store = new InMemoryChatStore();
         var innerContext = new ChatContext();
-        var layer = new ChatPersistenceLayer(store, "session-cancel", walStore: null);
+        var layer = new ChatPersistenceLayer(store, walStore: null);
         layer.Attach(innerContext);
 
         await layer.PrepareAsync([new Message(Role.User, [new Text("Tell me a story")])]);
@@ -195,9 +170,8 @@ public class ChatPersistenceLayerTests
             }
         });
 
-        Assert.True(store.Storage.ContainsKey("session-cancel"));
-        var stored = store.Storage["session-cancel"];
-        Assert.Equal(2, stored.Count);
+        Assert.Equal(2, store.Storage.Count);
+        var stored = store.Storage;
         Assert.Equal(Role.User, stored[0].Role);
         Assert.Equal(Role.Assistant, stored[1].Role);
         Assert.Single(stored[1].Contents);
@@ -211,7 +185,7 @@ public class ChatPersistenceLayerTests
         var store = new InMemoryChatStore();
         var walStore = new InMemoryWalStore();
         var innerContext = new ChatContext();
-        var layer = new ChatPersistenceLayer(store, "session-normal", walStore: walStore);
+        var layer = new ChatPersistenceLayer(store, walStore: walStore);
         layer.Attach(innerContext);
 
         await layer.PrepareAsync([new Message(Role.User, [new Text("Hi")])]);
@@ -232,9 +206,8 @@ public class ChatPersistenceLayerTests
         {
         }
 
-        Assert.True(store.Storage.ContainsKey("session-normal"));
-        var stored = store.Storage["session-normal"];
-        Assert.Equal(2, stored.Count);
+        Assert.Equal(2, store.Storage.Count);
+        var stored = store.Storage;
         Assert.Equal(Role.User, stored[0].Role);
         Assert.Equal(Role.Assistant, stored[1].Role);
         Assert.Equal(2, stored[1].Contents.Count);
@@ -245,10 +218,10 @@ public class ChatPersistenceLayerTests
     public async Task CrashRecovery_ReplaysUncommittedWal_OnRestore()
     {
         var store = new InMemoryChatStore();
-        store.Storage["session-crash"] = [new Message(Role.User, [new Text("Initial question")])];
+        store.Storage = [new Message(Role.User, [new Text("Initial question")])];
 
         var walStore = new InMemoryWalStore();
-        walStore.Storage["session-crash"] =
+        walStore.Storage =
         [
             new MessageStart(Role.Assistant, "msg-crash"),
             new MessageDelta("msg-crash", Content: new TextStart(0)),
@@ -259,7 +232,7 @@ public class ChatPersistenceLayerTests
         ];
 
         var innerContext = new ChatContext();
-        var layer = new ChatPersistenceLayer(store, "session-crash", walStore: walStore);
+        var layer = new ChatPersistenceLayer(store, walStore: walStore);
         layer.Attach(innerContext);
 
         var restored = await layer.PrepareAsync();
@@ -280,17 +253,17 @@ public class ChatPersistenceLayerTests
         var tempDir = Path.Combine(Path.GetTempPath(), "agentcore_tests_" + Guid.NewGuid().ToString("N"));
         try
         {
-            var store = new FileChatStore(tempDir);
-            var wal = new FileWalStore(tempDir);
-            var layer = new ChatPersistenceLayer(store, "session-file-test", walStore: wal);
+            var store = new FileChatStore(tempDir, "session-file-test");
+            var wal = new FileWalStore(tempDir, "session-file-test");
+            var layer = new ChatPersistenceLayer(store, walStore: wal);
             layer.Attach(new ChatContext());
 
             await layer.PrepareAsync([new Message(Role.User, [new Text("Saved to disk")])]);
 
             // Create new layer pointing to same directory
-            var newStore = new FileChatStore(tempDir);
-            var newWal = new FileWalStore(tempDir);
-            var newLayer = new ChatPersistenceLayer(newStore, "session-file-test", walStore: newWal);
+            var newStore = new FileChatStore(tempDir, "session-file-test");
+            var newWal = new FileWalStore(tempDir, "session-file-test");
+            var newLayer = new ChatPersistenceLayer(newStore, walStore: newWal);
             newLayer.Attach(new ChatContext());
 
             var loaded = await newLayer.PrepareAsync();

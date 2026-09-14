@@ -11,11 +11,9 @@ namespace AgentCore.Layers.Chat;
 
 public sealed class ChatPersistenceLayer(
     IChatStore store,
-    string sessionId,
     IWalStore? walStore = null) : ContextLayer
 {
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
-    private readonly string _sessionId = string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session ID cannot be empty or whitespace.", nameof(sessionId)) : sessionId;
     private bool _restored;
 
     public override async Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default)
@@ -24,7 +22,7 @@ public sealed class ChatPersistenceLayer(
         if (messages is not null)
         {
             var list = messages as IReadOnlyList<Message> ?? messages.ToList();
-            if (list.Count > 0) await _store.AppendAsync(_sessionId, list, ct).ConfigureAwait(false);
+            if (list.Count > 0) await _store.AppendAsync(list, ct).ConfigureAwait(false);
         }
         return await base.PrepareAsync(messages, ct).ConfigureAwait(false);
     }
@@ -42,7 +40,7 @@ public sealed class ChatPersistenceLayer(
             {
                 await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
                 {
-                    await walStore.AppendAsync(_sessionId, evt, ct).ConfigureAwait(false);
+                    await walStore.AppendAsync(evt, ct).ConfigureAwait(false);
                     yield return evt;
                 }
             }
@@ -57,11 +55,11 @@ public sealed class ChatPersistenceLayer(
                 var history = await Inner.PrepareAsync(ct: CancellationToken.None).ConfigureAwait(false);
                 var newMessages = history.Skip(initial).Where(m => m.Contents.Count > 0).ToList();
                 if (newMessages.Count > 0)
-                    await _store.AppendAsync(_sessionId, newMessages, CancellationToken.None).ConfigureAwait(false);
+                    await _store.AppendAsync(newMessages, CancellationToken.None).ConfigureAwait(false);
             }
             finally
             {
-                if (walStore != null) await walStore.ClearAsync(_sessionId, CancellationToken.None).ConfigureAwait(false);
+                if (walStore != null) await walStore.ClearAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
@@ -73,12 +71,12 @@ public sealed class ChatPersistenceLayer(
 
         if (walStore != null)
         {
-            var recovered = await walStore.RecoverAsync(_sessionId, ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
-            if (recovered.Contents.Count > 0) await _store.AppendAsync(_sessionId, [recovered], ct).ConfigureAwait(false);
-            await walStore.ClearAsync(_sessionId, ct).ConfigureAwait(false);
+            var recovered = await walStore.RecoverAsync(ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
+            if (recovered.Contents.Count > 0) await _store.AppendAsync([recovered], ct).ConfigureAwait(false);
+            await walStore.ClearAsync(ct).ConfigureAwait(false);
         }
 
-        if (await _store.LoadAsync(_sessionId, ct).ConfigureAwait(false) is { Count: > 0 } history)
+        if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
             await Inner.PrepareAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
     }
 

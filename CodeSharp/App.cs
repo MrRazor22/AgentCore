@@ -120,8 +120,6 @@ internal class App
             }
 
             var sessionsDir = Path.Combine(workspacePath, ".codesharp", "sessions");
-            var sessionStore = new CodeSharp.Storage.JsonLinesChatStore(sessionsDir);
-            var walStore = new AgentCore.Layers.Chat.FileWalStore(sessionsDir);
             var spilloverDir = Path.Combine(workspacePath, ".codesharp", "spillover");
 
             // Universal PowerShell execution tool with workspace boundary enforcement and spillover
@@ -165,7 +163,7 @@ internal class App
             Agent agent = agentBuilder
                 .UseContext(ctx => ctx
                     .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                    .AddChatPersistence(sessionStore, Guid.NewGuid().ToString(), walStore: walStore))
+                    .AddChatPersistence(sessionsDir, Guid.NewGuid().ToString(), enableWal: true))
                 .UseLLM(llm => llm
                     .WithRetry()
                     .WithToolCallDetection()

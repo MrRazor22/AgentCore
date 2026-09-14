@@ -60,3 +60,8 @@
 - Streams must be ingested chunk-by-chunk into Context as they arrive to ensure Write-Ahead Log (WAL) durability and crash resilience; waiting for stream completion risks catastrophic data loss mid-turn.
 - Context owns assembling in-flight event streams into complete semantic message history; callers must never bypass Context to maintain parallel streaming state.
 
+## 13. ZERO SPECULATIVE VISIBILITY & NO INTERNAL PATCH SMELLS
+- Never make types, methods, or properties `public` unless there is an explicit, verified need and the design is architecturally sound. Zero speculative APIs.
+- `internal` accessibility is usually a code smell used to hide quick patches or leak implementation details between classes/assemblies. Design with clean ownership and explicit boundaries instead of exposing internals.
+
+

@@ -27,8 +27,6 @@ public sealed class Agent(
     public IReadOnlyList<IContent>? Instructions => instructions;
     public int MaxIterations => maxIterations;
 
-    private bool _initialized;
-
     public static AgentBuilder Create() => new();
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
@@ -36,10 +34,10 @@ public sealed class Agent(
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        IEnumerable<Message>? staged = !_initialized && instructions is { Count: > 0 }
+        var existing = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+        IEnumerable<Message>? staged = instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System)
             ? [new Message(Role.System, instructions), new Message(Role.User, [input])]
             : [new Message(Role.User, [input])];
-        _initialized = true;
 
         for (int i = 0; i < maxIterations; i++)
         {
@@ -70,6 +68,27 @@ public sealed class Agent(
 
 public static class AgentExtensions
 {
+    public static T? FindLayer<T>(this IContext context) where T : class
+    {
+        for (var c = context; c != null; c = (c as ContextLayer)?.Inner)
+            if (c is T match) return match;
+        return null;
+    }
+
+    public static T? FindLayer<T>(this ILLM llm) where T : class
+    {
+        for (var l = llm; l != null; l = (l as LLMLayer)?.Inner)
+            if (l is T match) return match;
+        return null;
+    }
+
+    public static T? FindLayer<T>(this ITooling tooling) where T : class
+    {
+        for (var t = tooling; t != null; t = (t as ToolingLayer)?.Inner)
+            if (t is T match) return match;
+        return null;
+    }
+
     public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         this Agent agent,
         IContent input,
