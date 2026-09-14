@@ -37,24 +37,9 @@ public sealed class Agent(
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+        await foreach (var evt in ResumePendingAsync(ct)) yield return evt; 
+        var messages = await StageInputAsync(input, ct).ConfigureAwait(false);
 
-        // 1. Resume pending tool calls if recovering from crash or approval
-        if (messages.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
-        {
-            var pending = messages[^1].Contents.OfType<ToolCall>().ToArray();
-            await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct)) yield return evt;
-            messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
-        }
-
-        // 2. Stage instructions & user input
-        List<Message> staged = [];
-        if (instructions is { Count: > 0 } && !messages.Any(m => m.Role == Role.System)) staged.Add(new(Role.System, instructions));
-        if (input?.ToArray() is { Length: > 0 } user) staged.Add(new(Role.User, user));
-
-        if (staged.Count > 0) messages = await context.PrepareAsync(staged, ct).ConfigureAwait(false);
-
-        // 3. Execution loop
         int iterations = 0;
         List<ToolCall>? toolCalls;
         do
@@ -82,6 +67,31 @@ public sealed class Agent(
                 messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
             }
         } while (toolCalls is not null);
+    }
+
+    private async IAsyncEnumerable<IContentEvent> ResumePendingAsync([EnumeratorCancellation] CancellationToken ct)
+    {
+        var messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+        if (messages.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
+        {
+            var pending = messages[^1].Contents.OfType<ToolCall>().ToArray();
+            await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct))
+                yield return evt;
+        }
+    }
+
+    private async Task<IReadOnlyList<Message>> StageInputAsync(IEnumerable<IContent>? input, CancellationToken ct)
+    {
+        var messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+        List<Message> staged = [];
+        if (instructions is { Count: > 0 } && !messages.Any(m => m.Role == Role.System))
+            staged.Add(new(Role.System, instructions));
+        if (input?.ToArray() is { Length: > 0 } user)
+            staged.Add(new(Role.User, user));
+
+        return staged.Count > 0
+            ? await context.PrepareAsync(staged, ct).ConfigureAwait(false)
+            : messages;
     }
 }
 
