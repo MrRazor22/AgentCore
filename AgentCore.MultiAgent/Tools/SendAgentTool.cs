@@ -28,7 +28,7 @@ public sealed class SendAgentTool(IAgentNetwork network, IAgentRouter router, st
         var recipient = (string)arguments["agent"]!;
         var task = (string)arguments["task"]!;
 
-        network.Send(sender, recipient, [new Text(task)]);
+        network.Send(new NetworkMessage(sender, recipient, [new Text(task)]));
         yield return new Text($"Message delivered to {recipient}.");
     }
 
