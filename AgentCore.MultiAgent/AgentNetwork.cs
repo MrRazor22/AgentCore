@@ -5,18 +5,22 @@ using AgentCore.Tooling;
 
 namespace AgentCore.MultiAgent;
 
+using System.Runtime.CompilerServices;
+
 public sealed record NetworkMessage(string Sender, string Recipient, IEnumerable<IContent> Contents);
+public sealed record NetworkEvent(string Sender, string Recipient, IContentEvent Event);
 
 public interface IAgentNetwork
 {
-    void Send(NetworkMessage message); 
+    void Send(NetworkMessage message);
+    IAsyncEnumerable<NetworkEvent> RunAsync(CancellationToken ct = default);
     string CreateAgent(string creator, string name, string role, IEnumerable<string>? collaborators = null);
 }
 
 public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? configureDefaults = null) : IAgentNetwork
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<NetworkMessage>> _mailboxes = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, int> _processing = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _signal = new(0);
     private Action<AgentBuilder>? _configureDefaults = configureDefaults;
 
     public AgentNetwork(Action<AgentBuilder>? configureDefaults = null)
@@ -48,54 +52,65 @@ public sealed class AgentNetwork(IAgentRouter router, Action<AgentBuilder>? conf
 
         var mailbox = _mailboxes.GetOrAdd(message.Recipient, _ => new ConcurrentQueue<NetworkMessage>());
         mailbox.Enqueue(message);
-
-        _ = ProcessMailboxAsync(message.Recipient, mailbox);
+        _signal.Release();
     }
 
-    private async Task ProcessMailboxAsync(string agentName, ConcurrentQueue<NetworkMessage> mailbox)
+    public async IAsyncEnumerable<NetworkEvent> RunAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
-        if (_processing.AddOrUpdate(agentName, 1, (_, current) => current == 0 ? 1 : current) != 1)
-            return;
-
-        try
+        while (!ct.IsCancellationRequested)
         {
-            while (mailbox.TryDequeue(out var msg))
+            // Find an agent with a pending message
+            string? targetAgent = null;
+            NetworkMessage? message = null;
+
+            foreach (var (agentName, mailbox) in _mailboxes)
             {
-                if (!router.Agents.TryGetValue(agentName, out var entry))
-                    continue;
-
-                var prompt = string.Equals(msg.Sender, "User", StringComparison.OrdinalIgnoreCase)
-                    ? msg.Contents
-                    : PrependSender(msg.Sender, msg.Contents);
-
-                List<IContent> reply = [];
-                try
+                if (mailbox.TryDequeue(out var msg))
                 {
-                    await foreach (var evt in entry.Agent.InvokeStreamingAsync(prompt).ConfigureAwait(false))
-                    {
-                        if (evt is IContent c)
-                            reply.Add(c);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    reply.Add(new Text($"[Error during execution: {ex.Message}]"));
-                }
-
-                // If agent generated output and sender is a registered agent, route output back
-                if (reply.Count > 0 &&
-                    !string.Equals(msg.Sender, "User", StringComparison.OrdinalIgnoreCase) &&
-                    router.Agents.ContainsKey(msg.Sender))
-                {
-                    Send(new NetworkMessage(Sender: agentName, Recipient: msg.Sender, Contents: reply));
+                    targetAgent = agentName;
+                    message = msg;
+                    break;
                 }
             }
-        }
-        finally
-        {
-            _processing[agentName] = 0;
-            if (!mailbox.IsEmpty)
-                _ = ProcessMailboxAsync(agentName, mailbox);
+
+            if (targetAgent == null || message == null)
+            {
+                // Wait for a new message to arrive
+                try
+                {
+                    await _signal.WaitAsync(ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    yield break;
+                }
+                continue;
+            }
+
+            if (!router.Agents.TryGetValue(targetAgent, out var entry))
+                continue;
+
+            var prompt = string.Equals(message.Sender, "User", StringComparison.OrdinalIgnoreCase)
+                ? message.Contents
+                : PrependSender(message.Sender, message.Contents);
+
+            List<IContent> reply = [];
+
+            await foreach (var evt in entry.Agent.InvokeStreamingAsync(prompt, ct: ct).ConfigureAwait(false))
+            {
+                if (evt is IContent c)
+                    reply.Add(c);
+
+                yield return new NetworkEvent(Sender: targetAgent, Recipient: message.Sender, Event: evt);
+            }
+
+            // If agent generated output and sender is a registered agent, route output back to sender's mailbox
+            if (reply.Count > 0 &&
+                !string.Equals(message.Sender, "User", StringComparison.OrdinalIgnoreCase) &&
+                router.Agents.ContainsKey(message.Sender))
+            {
+                Send(new NetworkMessage(Sender: targetAgent, Recipient: message.Sender, Contents: reply));
+            }
         }
     }
 
