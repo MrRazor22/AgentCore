@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AssemblyName>AgentCore.MultiAgent</AssemblyName>
+    <RootNamespace>AgentCore.MultiAgent</RootNamespace>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentCore\AgentCore.csproj" />
+  </ItemGroup>
+
+</Project>
