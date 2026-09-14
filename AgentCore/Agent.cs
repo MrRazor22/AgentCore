@@ -74,9 +74,22 @@ public sealed class Agent(
         var messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
         if (messages.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
         {
-            var pending = messages[^1].Contents.OfType<ToolCall>().ToArray();
-            await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct))
-                yield return evt;
+            var completedIds = messages
+                .Where(m => m.Role == Role.Tool)
+                .Select(m => m.Get<ToolCallId>()?.Value ?? m.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet();
+
+            var pending = messages[^1].Contents
+                .OfType<ToolCall>()
+                .Where(c => !completedIds.Contains(c.Id))
+                .ToArray();
+
+            if (pending.Length > 0)
+            {
+                await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct))
+                    yield return evt;
+            }
         }
     }
 

@@ -50,6 +50,32 @@ public sealed class AgentNetwork : IAgentNetwork
         }
 
         _queue.Enqueue((sender, recipient, task));
+        _ = ProcessQueueAsync();
+    }
+
+    private int _isProcessing;
+
+    private async Task ProcessQueueAsync()
+    {
+        if (Interlocked.CompareExchange(ref _isProcessing, 1, 0) != 0)
+            return;
+
+        try
+        {
+            while (_queue.TryDequeue(out var msg))
+            {
+                if (_router.Agents.TryGetValue(msg.Recipient, out var entry))
+                {
+                    await foreach (var _ in entry.Agent.InvokeStreamingAsync(msg.Task).ConfigureAwait(false)) { }
+                }
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _isProcessing, 0);
+            if (!_queue.IsEmpty)
+                _ = ProcessQueueAsync();
+        }
     }
 
     public string CreateAgent(
