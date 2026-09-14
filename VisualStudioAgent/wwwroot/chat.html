@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devin Agent Chat</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-card: #161b22;
+      --border-color: #30363d;
+      --border-accent: #388bfd;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-blue: #58a6ff;
+      --accent-green: #3fb950;
+      --accent-purple: #bc8cff;
+      --accent-amber: #d29922;
+      --accent-red: #f85149;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Top Navigation / Status Header */
+    header {
+      background-color: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #1f6feb 0%, #a371f7 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .brand-title {
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pill-badge {
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Main Timeline Container */
+    #timeline {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      user-select: text;
+    }
+
+    /* Timeline Cards */
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: #484f58;
+    }
+
+    /* User Message Card */
+    .card-user {
+      border-left: 3px solid var(--accent-blue);
+      padding: 12px 14px;
+      background: rgba(56, 139, 253, 0.05);
+    }
+
+    .user-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .user-tag {
+      font-weight: 600;
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+
+    .user-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Thinking Accordion (Devin Signature) */
+    .thinking-card {
+      border-left: 3px solid var(--accent-purple);
+      background: rgba(188, 140, 255, 0.04);
+    }
+
+    .thinking-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .thinking-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-purple);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chevron {
+      color: var(--text-muted);
+      font-size: 10px;
+      transition: transform 0.2s ease;
+    }
+
+    .collapsed .chevron {
+      transform: rotate(-90deg);
+    }
+
+    .thinking-body {
+      padding: 10px 14px 12px;
+      border-top: 1px solid rgba(48, 54, 61, 0.6);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: #090d13;
+      line-height: 1.6;
+    }
+
+    .collapsed .thinking-body {
+      display: none;
+    }
+
+    /* Plan Checklist */
+    .plan-card {
+      padding: 12px 14px;
+    }
+
+    .plan-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .plan-count {
+      font-size: 11px;
+      color: var(--accent-green);
+      font-family: var(--font-mono);
+    }
+
+    .plan-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .plan-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .plan-item.done {
+      color: var(--text-primary);
+    }
+
+    .plan-item.running {
+      color: var(--accent-blue);
+      font-weight: 500;
+    }
+
+    .plan-icon {
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+
+    .plan-icon.done { color: var(--accent-green); }
+    .plan-icon.running { color: var(--accent-blue); animation: spin 1.5s linear infinite; }
+    .plan-icon.pending { color: var(--text-muted); }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Terminal Execution Card */
+    .terminal-card {
+      background: #090d13;
+      border: 1px solid var(--border-color);
+    }
+
+    .terminal-header {
+      background: var(--bg-tertiary);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+    }
+
+    .terminal-command {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cmd-prompt { color: var(--accent-green); font-weight: 600; }
+
+    .terminal-status {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+    }
+
+    .terminal-body {
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #9cdcfe;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    .collapsed .terminal-body {
+      display: none;
+    }
+
+    /* Code Diff Card */
+    .diff-card {
+      background: #090d13;
+    }
+
+    .diff-header {
+      background: var(--bg-tertiary);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+    }
+
+    .diff-filename {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .diff-stats {
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .stat-add { color: var(--accent-green); margin-right: 4px; }
+    .stat-del { color: var(--accent-red); }
+
+    .diff-content {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .diff-line {
+      display: flex;
+      padding: 1px 8px;
+    }
+
+    .diff-line.add {
+      background: rgba(63, 185, 80, 0.15);
+      color: #7ee787;
+    }
+
+    .diff-line.del {
+      background: rgba(248, 81, 73, 0.15);
+      color: #ffa198;
+    }
+
+    .diff-line.normal {
+      color: var(--text-muted);
+    }
+
+    .diff-gutter {
+      width: 25px;
+      user-select: none;
+      color: var(--text-muted);
+    }
+
+    .collapsed .diff-content {
+      display: none;
+    }
+
+    /* Agent Message */
+    .card-agent {
+      padding: 14px;
+      line-height: 1.6;
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .agent-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: var(--accent-purple);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .agent-name {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: var(--accent-blue);
+    }
+
+    /* Bottom Prompt Dock */
+    footer {
+      background-color: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      padding: 12px 16px;
+      flex-shrink: 0;
+    }
+
+    .context-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .chip {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    .chip:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+    }
+
+    .input-container {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.2s;
+    }
+
+    .input-container:focus-within {
+      border-color: var(--accent-blue);
+    }
+
+    textarea {
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.4;
+      height: 48px;
+    }
+
+    textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .action-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px;
+      border-radius: 4px;
+    }
+
+    .btn-icon:hover {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+
+    .btn-send {
+      background: #238636;
+      border: 1px solid rgba(240, 246, 252, 0.1);
+      color: white;
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background-color 0.15s;
+    }
+
+    .btn-send:hover {
+      background: #2ea043;
+    }
+
+    .kbd-hint {
+      font-size: 10px;
+      opacity: 0.8;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <div class="brand-icon">D</div>
+      <div class="brand-title">
+        Devin Agent
+        <span class="status-badge">
+          <span class="status-dot"></span>
+          WORKING
+        </span>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="pill-badge">⚡ Gemini 2.5 Flash</span>
+      <span class="pill-badge">1,420 tokens</span>
+      <span class="pill-badge">⏱ 1m 18s</span>
+    </div>
+  </header>
+
+  <!-- Activity Timeline -->
+  <main id="timeline">
+
+    <!-- 1. Initial User Objective -->
+    <div class="card card-user">
+      <div class="user-header">
+        <div class="user-tag">
+          <span>👤</span> User Objective
+        </div>
+        <div class="user-time">2m ago</div>
+      </div>
+      <div>Fix the <code>NullReferenceException</code> in <code>OrderService.cs</code> when processing guest checkouts and ensure unit tests pass.</div>
+    </div>
+
+    <!-- 2. Devin Thinking Accordion -->
+    <div class="card thinking-card" id="thinkingBlock">
+      <div class="thinking-header" onclick="toggleCard('thinkingBlock')">
+        <div class="thinking-title">
+          <span>🧠</span> Thinking (3.2s)
+        </div>
+        <span class="chevron">▼</span>
+      </div>
+      <div class="thinking-body">
+        &gt; Analyzing workspace solution AgentCore.sln<br>
+        &gt; Found OrderService.cs in src/OrderService.cs<br>
+        &gt; Unhandled null access observed at line 42 where paymentGateway instance is invoked without null-check guard.<br>
+        &gt; Formulating execution plan: inspect line 42, inject null check, run unit tests.
+      </div>
+    </div>
+
+    <!-- 3. Plan Checklist -->
+    <div class="card plan-card">
+      <div class="plan-title">
+        <span>📋 Execution Plan</span>
+        <span class="plan-count">2/3 COMPLETED</span>
+      </div>
+      <ul class="plan-list">
+        <li class="plan-item done">
+          <span class="plan-icon done">✓</span>
+          <span>Locate and inspect <code>OrderService.cs</code></span>
+        </li>
+        <li class="plan-item done">
+          <span class="plan-icon done">✓</span>
+          <span>Implement null guard clause and dependency fallback</span>
+        </li>
+        <li class="plan-item running">
+          <span class="plan-icon running">↻</span>
+          <span>Run test suite: <code>dotnet test --filter OrderServiceTests</code></span>
+        </li>
+        <li class="plan-item">
+          <span class="plan-icon pending">○</span>
+          <span>Verify build output and commit changes</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- 4. Terminal Command Card -->
+    <div class="card terminal-card" id="terminalBlock">
+      <div class="terminal-header" onclick="toggleCard('terminalBlock')">
+        <div class="terminal-command">
+          <span class="cmd-prompt">$</span> dotnet test --filter OrderServiceTests
+        </div>
+        <span class="terminal-status">SUCCESS (0.8s)</span>
+      </div>
+      <div class="terminal-body">
+Determining projects to restore...
+  Restored OrderService.csproj (in 42 ms).
+OrderService -> bin/Debug/net8.0/OrderService.dll
+Test run for bin/Debug/net8.0/OrderService.Tests.dll (.NETCoreApp,Version=v8.0)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderService.Tests.dll
+      </div>
+    </div>
+
+    <!-- 5. Code Diff Card -->
+    <div class="card diff-card" id="diffBlock">
+      <div class="diff-header" onclick="toggleCard('diffBlock')">
+        <div class="diff-filename">
+          <span>📄</span> OrderService.cs
+        </div>
+        <div class="diff-stats">
+          <span class="stat-add">+3</span>
+          <span class="stat-del">-1</span>
+          <span class="chevron" style="margin-left: 8px;">▼</span>
+        </div>
+      </div>
+      <div class="diff-content">
+        <div class="diff-line normal"><span class="diff-gutter">40</span><span> public async Task&lt;OrderResult&gt; ProcessOrder(OrderRequest request)</span></div>
+        <div class="diff-line normal"><span class="diff-gutter">41</span><span> {</span></div>
+        <div class="diff-line del"><span class="diff-gutter">42</span><span>-    var result = await _paymentGateway.ChargeAsync(request.Total);</span></div>
+        <div class="diff-line add"><span class="diff-gutter">42</span><span>+    ArgumentNullException.ThrowIfNull(_paymentGateway, nameof(_paymentGateway));</span></div>
+        <div class="diff-line add"><span class="diff-gutter">43</span><span>+    _logger.LogInformation("Processing order {OrderId} for {Customer}", request.Id, request.Customer);</span></div>
+        <div class="diff-line add"><span class="diff-gutter">44</span><span>+    var result = await _paymentGateway.ChargeAsync(request.Total);</span></div>
+        <div class="diff-line normal"><span class="diff-gutter">45</span><span>     return result;</span></div>
+      </div>
+    </div>
+
+    <!-- 6. Agent Response Message -->
+    <div class="card card-agent">
+      <div class="agent-header">
+        <div class="agent-avatar">D</div>
+        <span class="agent-name">Devin</span>
+      </div>
+      <div>
+        I have identified and fixed the <code>NullReferenceException</code> in <code>OrderService.cs</code>. Added guard validation using <code>ArgumentNullException.ThrowIfNull</code> and verified that all 4 unit tests are passing.<br><br>
+        Would you like me to commit these changes or run additional integration tests?
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Prompt Dock -->
+  <footer>
+    <div class="context-bar">
+      <span class="chip">📍 OrderService.cs</span>
+      <span class="chip">📎 + Add Context</span>
+      <span class="chip" onclick="simulateAgentResponse()">✨ Run Demo Turn</span>
+    </div>
+    <div class="input-container">
+      <textarea id="promptInput" placeholder="Ask Devin anything or assign next step... (Enter to send, Shift+Enter for newline)"></textarea>
+      <div class="action-row">
+        <div class="action-left">
+          <button class="btn-icon" title="Clear Chat" onclick="clearChat()">🗑</button>
+          <button class="btn-icon" title="Attach Code">@</button>
+        </div>
+        <button class="btn-send" onclick="sendMessage()">
+          Send <span class="kbd-hint">↵</span>
+        </button>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function toggleCard(cardId) {
+      const el = document.getElementById(cardId);
+      if (el) {
+        el.classList.toggle('collapsed');
+      }
+    }
+
+    const timeline = document.getElementById('timeline');
+    const promptInput = document.getElementById('promptInput');
+
+    promptInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    function scrollToBottom() {
+      timeline.scrollTop = timeline.scrollHeight;
+    }
+
+    function sendMessage() {
+      const text = promptInput.value.trim();
+      if (!text) return;
+
+      // Append User Card
+      const userCard = document.createElement('div');
+      userCard.className = 'card card-user';
+      userCard.innerHTML = `
+        <div class="user-header">
+          <div class="user-tag"><span>👤</span> You</div>
+          <div class="user-time">Just now</div>
+        </div>
+        <div>${escapeHtml(text)}</div>
+      `;
+      timeline.appendChild(userCard);
+      promptInput.value = '';
+      scrollToBottom();
+
+      // Simulate Agent Typing & Response
+      setTimeout(() => {
+        simulateAgentResponse("Received: \"" + text + "\". Processing the request against workspace context...");
+      }, 600);
+    }
+
+    function simulateAgentResponse(customText) {
+      const msg = customText || "I am analyzing the repository context and preparing the next set of tool calls.";
+      const agentCard = document.createElement('div');
+      agentCard.className = 'card card-agent';
+      agentCard.innerHTML = `
+        <div class="agent-header">
+          <div class="agent-avatar">D</div>
+          <span class="agent-name">Devin</span>
+        </div>
+        <div>${msg}</div>
+      `;
+      timeline.appendChild(agentCard);
+      scrollToBottom();
+    }
+
+    function clearChat() {
+      timeline.innerHTML = '';
+      simulateAgentResponse("Chat cleared. Ready for your next objective!");
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>
