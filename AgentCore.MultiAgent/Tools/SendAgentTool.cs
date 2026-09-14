@@ -24,11 +24,12 @@ public sealed class SendAgentTool(IAgentNetwork network, IAgentRouter router, st
         JsonObject arguments,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var recipient = (string?)arguments?["agent"] ?? string.Empty;
-        var task = (string?)arguments?["task"] ?? string.Empty;
+        await Task.CompletedTask;
+        var recipient = (string)arguments["agent"]!;
+        var task = (string)arguments["task"]!;
 
-        await foreach (var evt in network.SendStreamingAsync(sender, recipient, [new Text(task)], ct).ConfigureAwait(false))
-            yield return evt;
+        network.Send(sender, recipient, [new Text(task)]);
+        yield return new Text($"Message delivered to {recipient}.");
     }
 
     private string FormatDescription()

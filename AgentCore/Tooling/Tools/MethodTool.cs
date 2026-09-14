@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 
 namespace AgentCore.Tooling.Tools;
 
@@ -24,7 +25,9 @@ public sealed class MethodTool : ITool
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: true) }
     };
 
     private readonly MethodInvoker _invoker;

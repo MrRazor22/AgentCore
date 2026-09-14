@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
 using AgentCore.LLM.Chat;
 using AgentCore.MultiAgent.Tools;
 using AgentCore.Tooling;
@@ -7,13 +7,14 @@ namespace AgentCore.MultiAgent;
 
 public interface IAgentNetwork
 {
-    IAsyncEnumerable<IContentEvent> SendStreamingAsync(string sender, string recipient, IEnumerable<IContent> task, CancellationToken ct = default);
+    void Send(string sender, string recipient, IEnumerable<IContent> task);
     string CreateAgent(string creator, string name, string role, IEnumerable<string>? collaborators = null);
 }
 
 public sealed class AgentNetwork : IAgentNetwork
 {
     private readonly IAgentRouter _router;
+    private readonly ConcurrentQueue<(string Sender, string Recipient, IEnumerable<IContent> Task)> _queue = new();
     private Action<AgentBuilder>? _configureDefaults;
 
     public AgentNetwork(Action<AgentBuilder>? configureDefaults = null)
@@ -23,15 +24,23 @@ public sealed class AgentNetwork : IAgentNetwork
     {
         _router = router ?? throw new ArgumentNullException(nameof(router));
         _configureDefaults = configureDefaults;
-    } 
+    }
 
-    public async IAsyncEnumerable<IContentEvent> SendStreamingAsync(
-        string sender,
-        string recipient,
-        IEnumerable<IContent> task,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public AgentNetwork WithDefaults(Action<AgentBuilder> configureDefaults)
     {
-        if (!_router.Agents.TryGetValue(recipient, out var entry))
+        _configureDefaults = configureDefaults ?? throw new ArgumentNullException(nameof(configureDefaults));
+        return this;
+    }
+
+    public void Send(string sender, string recipient, IEnumerable<IContent> task)
+    {
+        ArgumentNullException.ThrowIfNull(recipient);
+        ArgumentNullException.ThrowIfNull(task);
+
+        if (string.Equals(sender, recipient, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("An agent cannot send a message to itself.");
+
+        if (!_router.Agents.TryGetValue(recipient, out _))
             throw new KeyNotFoundException($"Agent '{recipient}' is not registered in the network.");
 
         if (_router.Agents.TryGetValue(sender, out var senderEntry) && senderEntry.Collaborators != null)
@@ -40,8 +49,7 @@ public sealed class AgentNetwork : IAgentNetwork
                 throw new InvalidOperationException($"Agent '{sender}' is not permitted to communicate with '{recipient}'.");
         }
 
-        await foreach (var evt in entry.Agent.InvokeStreamingAsync(task, ct: ct).ConfigureAwait(false))
-            yield return evt;
+        _queue.Enqueue((sender, recipient, task));
     }
 
     public string CreateAgent(
