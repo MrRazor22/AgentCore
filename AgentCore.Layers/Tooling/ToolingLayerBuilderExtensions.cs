@@ -31,6 +31,6 @@ public static class ToolingLayerBuilderExtensions
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(layer);
-        return builder.UseTooling(tools => tools.AddApprovalLayer(layer));
+        return builder.UseToolbox(tools => tools.AddApprovalLayer(layer));
     }
 }

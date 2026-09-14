@@ -39,7 +39,7 @@ public class AgentBuilder
         return this;
     }
 
-    public AgentBuilder UseTooling(Action<ToolingBuilder> configure)
+    public AgentBuilder UseToolbox(Action<ToolingBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
         configure(_tooling);
