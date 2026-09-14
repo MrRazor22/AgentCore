@@ -12,7 +12,7 @@ namespace AgentCore;
 public interface IAgent
 {
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        IEnumerable<IContent> input,
+        IEnumerable<IContent>? input = null,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default);
 }
@@ -33,36 +33,37 @@ public sealed class Agent(
     public static AgentBuilder Create() => new();
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        IEnumerable<IContent> input,
+        IEnumerable<IContent>? input = null,
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        var userContents = input as IReadOnlyList<IContent> ?? input.ToArray();
-        var existing = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
-        IEnumerable<Message>? staged = instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System)
-            ? [new Message(Role.System, instructions), ..(userContents.Count > 0 ? [new Message(Role.User, userContents)] : Array.Empty<Message>())]
-            : (userContents.Count > 0 ? [new Message(Role.User, userContents)] : null);
+        var messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
 
-        for (int i = 0; i < maxIterations; i++)
+        // 1. Resume pending tool calls if recovering from crash or approval
+        if (messages.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
+        {
+            var pending = messages[^1].Contents.OfType<ToolCall>().ToArray();
+            await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct)) yield return evt;
+            messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+        }
+
+        // 2. Stage instructions & user input
+        List<Message> staged = [];
+        if (instructions is { Count: > 0 } && !messages.Any(m => m.Role == Role.System)) staged.Add(new(Role.System, instructions));
+        if (input?.ToArray() is { Length: > 0 } user) staged.Add(new(Role.User, user));
+
+        if (staged.Count > 0) messages = await context.PrepareAsync(staged, ct).ConfigureAwait(false);
+
+        // 3. Execution loop
+        int iterations = 0;
+        List<ToolCall>? toolCalls;
+        do
         {
             ct.ThrowIfCancellationRequested();
-            var messages = await context.PrepareAsync(staged, ct);
-            staged = null;
+            if (++iterations > maxIterations)
+                throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
 
-            var pending = messages.LastOrDefault(m => m.Role == Role.Assistant)
-                ?.Contents.OfType<ToolCall>()
-                .Where(t => !messages.Any(m => m.Role == Role.Tool && (m.Metadata.Get<ToolCallId>()?.Value ?? m.Id) == t.Id))
-                .ToList();
-
-            if (pending is { Count: > 0 })
-            {
-                await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct))
-                    yield return evt;
-                continue;
-            }
-
-            List<ToolCall>? toolCalls = null;
+            toolCalls = null;
             await foreach (var evt in context.IngestAsync(
                 llm.GenerateAsync(messages, responseSchema, toolbox.GetDefinitions(), ct), ct))
             {
@@ -70,16 +71,17 @@ public sealed class Agent(
                 yield return evt;
             }
 
-            if (toolCalls is not { Count: > 0 }) yield break;
-
-            await foreach (var evt in context.IngestAsync(
-                toolbox.ExecuteAsync(toolCalls, ct), ct))
+            if (toolCalls is not null)
             {
-                yield return evt;
-            }
-        }
+                await foreach (var evt in context.IngestAsync(
+                    toolbox.ExecuteAsync(toolCalls, ct), ct))
+                {
+                    yield return evt;
+                }
 
-        throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
+                messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+            }
+        } while (toolCalls is not null);
     }
 }
 
@@ -114,17 +116,17 @@ public static class AgentExtensions
 
     public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         this IAgent agent,
-        IEnumerable<IContent> input,
-        CancellationToken ct) => agent.InvokeStreamingAsync(input, null, ct);
+        IEnumerable<IContent>? input = null,
+        CancellationToken ct = default) => agent.InvokeStreamingAsync(input, null, ct);
 
     public static Task<string?> InvokeAsync(
         this IAgent agent,
-        IEnumerable<IContent> input,
+        IEnumerable<IContent>? input = null,
         CancellationToken ct = default) => agent.InvokeAsync<string>(input, ct);
 
     public static async Task<T?> InvokeAsync<T>(
         this IAgent agent,
-        IEnumerable<IContent> input,
+        IEnumerable<IContent>? input = null,
         CancellationToken ct = default)
     {
         var sb = new StringBuilder();
