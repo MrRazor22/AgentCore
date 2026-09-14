@@ -1,5 +1,5 @@
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Server;
 

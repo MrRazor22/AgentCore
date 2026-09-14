@@ -1,5 +1,5 @@
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using Spectre.Console;
 using System.Threading;
 using System.Threading.Tasks;

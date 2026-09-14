@@ -1,23 +1,17 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
+using AgentCore.Tool.Tools;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace AgentCore.Layers.LLM;
-
-public class ToolCallDetectionOptions
-{
-    public bool StopAfterFirstToolCall { get; set; } = false;
-}
-
-public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : LLMLayer
-{
-    private readonly ToolCallDetectionOptions _options = options ?? new();
-
+ 
+public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false) : LLMLayer
+{ 
     private static readonly Regex TagPattern = new(
         @"[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<content>[\s\S]*?)\s*[\[\(<]/\k<tag>[\]\)>]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
@@ -70,7 +64,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                     foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                     {
                         yield return parsedEvt;
-                        if (parsedEvt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
+                        if (parsedEvt is MessageDelta { Content: ToolCallEnd } && stopAfterFirstToolCall) yield break;
                     }
                     break;
 
@@ -80,7 +74,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
                         foreach (var parsedEvt in EmitParsedText(sb.ToString()))
                         {
                             yield return parsedEvt;
-                            if (parsedEvt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
+                            if (parsedEvt is MessageDelta { Content: ToolCallEnd } && stopAfterFirstToolCall) yield break;
                         }
                     }
                     buffers.Clear();
@@ -89,7 +83,7 @@ public class ToolCallDetectionLayer(ToolCallDetectionOptions? options = null) : 
 
                 default:
                     yield return evt;
-                    if (evt is MessageDelta { Content: ToolCallEnd } && _options.StopAfterFirstToolCall) yield break;
+                    if (evt is MessageDelta { Content: ToolCallEnd } && stopAfterFirstToolCall) yield break;
                     break;
             }
         }

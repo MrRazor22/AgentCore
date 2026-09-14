@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Context;
+namespace AgentCore.Context.Components;
 
 public interface ITokenizer
 {

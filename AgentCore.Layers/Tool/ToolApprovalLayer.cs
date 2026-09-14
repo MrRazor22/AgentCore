@@ -2,7 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool;
 
 public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, CancellationToken ct);
 

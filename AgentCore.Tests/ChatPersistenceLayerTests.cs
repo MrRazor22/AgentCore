@@ -1,5 +1,6 @@
 using AgentCore.Context;
 using AgentCore.Layers.Chat;
+using AgentCore.Layers.Chat.Store;
 using AgentCore.LLM.Chat;
 using Xunit;
 

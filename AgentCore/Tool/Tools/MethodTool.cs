@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool.Tools;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class ToolAttribute(string? name = null, string? description = null) : Attribute

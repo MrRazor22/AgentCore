@@ -1,6 +1,6 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using Spectre.Console;
 using System;
 using System.Collections.Generic;

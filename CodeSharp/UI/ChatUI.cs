@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using AgentCore;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using Spectre.Console;
 using AgentText = AgentCore.LLM.Chat.Text;
 

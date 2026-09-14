@@ -7,7 +7,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;

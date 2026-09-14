@@ -1,11 +1,12 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.Tool.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool;
 
 public interface ITooling
 {

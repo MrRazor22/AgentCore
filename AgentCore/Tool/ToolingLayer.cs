@@ -2,7 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool;
 
 public abstract class ToolingLayer : ITooling
 {

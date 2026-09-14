@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using Xunit;
 
 namespace CodeSharp.Tests;

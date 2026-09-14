@@ -1,7 +1,7 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool;
 
 public sealed class ToolingBuilder
 {

@@ -1,7 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using LlmTornado;
 using LlmTornado.Chat;
 using LlmTornado.Chat.Models;

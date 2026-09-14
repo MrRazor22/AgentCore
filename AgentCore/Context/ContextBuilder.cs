@@ -1,3 +1,4 @@
+using AgentCore.Context.Components;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;

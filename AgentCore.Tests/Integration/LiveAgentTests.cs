@@ -1,9 +1,9 @@
 using AgentCore;
-using AgentCore.Context;
+using AgentCore.Context.Components;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;

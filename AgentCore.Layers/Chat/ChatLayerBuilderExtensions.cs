@@ -1,9 +1,10 @@
 using AgentCore;
 using AgentCore.Context;
+using AgentCore.Layers.Chat.Store;
 
 namespace AgentCore.Layers.Chat;
 
-public static class ChatPersistenceBuilderExtensions
+public static class ChatLayerBuilderExtensions
 {
     public static ContextBuilder AddChatPersistence(
         this ContextBuilder builder,

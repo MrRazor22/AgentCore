@@ -1,7 +1,7 @@
-using AgentCore.Context;
+using AgentCore.Context.Components;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 

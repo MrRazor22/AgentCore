@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools;
+namespace AgentCore.Tool.Tools;
 
 public sealed class AgentTool(Agent agent, string name, string description) : ITool
 {

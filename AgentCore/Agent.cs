@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;

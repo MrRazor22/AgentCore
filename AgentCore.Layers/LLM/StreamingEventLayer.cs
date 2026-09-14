@@ -6,7 +6,7 @@ using System.Threading.Channels;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
 
 namespace AgentCore.LLM;
 

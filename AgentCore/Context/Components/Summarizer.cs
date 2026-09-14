@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Context;
+namespace AgentCore.Context.Components;
 
 public interface ICompactor
 {

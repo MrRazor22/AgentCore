@@ -2,7 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Schema;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tools; 
+namespace AgentCore.Tool.Tools; 
 
 public sealed record ToolDefinition(string Name, string Description, JsonSchema ParametersSchema);
 

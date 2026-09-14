@@ -1,5 +1,5 @@
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;

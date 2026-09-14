@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tools;
+using AgentCore.Tool;
 using Xunit;
 
 namespace CodeSharp.Tests;

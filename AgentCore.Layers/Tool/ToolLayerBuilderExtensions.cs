@@ -1,10 +1,10 @@
 using AgentCore;
 using AgentCore.LLM.Chat;
-using AgentCore.Tools;
+using AgentCore.Tool;
 
 namespace AgentCore.Layers.Tools;
 
-public static class ToolApprovalBuilderExtensions
+public static class ToolLayerBuilderExtensions
 {
     public static ToolingBuilder WithApproval(this ToolingBuilder builder, ToolApprover approver)
     {
