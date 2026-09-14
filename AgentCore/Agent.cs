@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -11,33 +11,38 @@ namespace AgentCore;
 
 public interface IAgent
 {
-    IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(IContent input, JsonSchema? responseSchema = null, CancellationToken ct = default);
+    IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        IEnumerable<IContent> input,
+        JsonSchema? responseSchema = null,
+        CancellationToken ct = default);
 }
 
 public sealed class Agent(
     IContext context,
     ILLM llm,
-    ITooling tooling,
+    IToolbox toolbox,
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
     public IContext Context => context;
     public ILLM LLM => llm;
-    public ITooling Tooling => tooling;
+    public IToolbox Toolbox => toolbox;
     public IReadOnlyList<IContent>? Instructions => instructions;
     public int MaxIterations => maxIterations;
 
     public static AgentBuilder Create() => new();
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        IContent input,
+        IEnumerable<IContent> input,
         JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(input);
+        var userContents = input as IReadOnlyList<IContent> ?? input.ToArray();
         var existing = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
         IEnumerable<Message>? staged = instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System)
-            ? [new Message(Role.System, instructions), new Message(Role.User, [input])]
-            : [new Message(Role.User, [input])];
+            ? [new Message(Role.System, instructions), new Message(Role.User, userContents)]
+            : [new Message(Role.User, userContents)];
 
         for (int i = 0; i < maxIterations; i++)
         {
@@ -47,7 +52,7 @@ public sealed class Agent(
 
             List<ToolCall>? toolCalls = null;
             await foreach (var evt in context.IngestAsync(
-                llm.GenerateAsync(messages, responseSchema, tooling.GetDefinitions(), ct), ct))
+                llm.GenerateAsync(messages, responseSchema, toolbox.GetDefinitions(), ct), ct))
             {
                 if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 yield return evt;
@@ -56,7 +61,7 @@ public sealed class Agent(
             if (toolCalls is not { Count: > 0 }) yield break;
 
             await foreach (var evt in context.IngestAsync(
-                tooling.ExecuteAsync(toolCalls, ct), ct))
+                toolbox.ExecuteAsync(toolCalls, ct), ct))
             {
                 yield return evt;
             }
@@ -82,26 +87,26 @@ public static class AgentExtensions
         return null;
     }
 
-    public static T? FindLayer<T>(this ITooling tooling) where T : class
+    public static T? FindLayer<T>(this IToolbox toolbox) where T : class
     {
-        for (var t = tooling; t != null; t = (t as ToolingLayer)?.Inner)
+        for (var t = toolbox; t != null; t = (t as ToolingLayer)?.Inner)
             if (t is T match) return match;
         return null;
     }
 
     public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        this Agent agent,
-        IContent input,
+        this IAgent agent,
+        IEnumerable<IContent> input,
         CancellationToken ct) => agent.InvokeStreamingAsync(input, null, ct);
 
     public static Task<string?> InvokeAsync(
-        this Agent agent,
-        IContent input,
+        this IAgent agent,
+        IEnumerable<IContent> input,
         CancellationToken ct = default) => agent.InvokeAsync<string>(input, ct);
 
     public static async Task<T?> InvokeAsync<T>(
-        this Agent agent,
-        IContent input,
+        this IAgent agent,
+        IEnumerable<IContent> input,
         CancellationToken ct = default)
     {
         var sb = new StringBuilder();

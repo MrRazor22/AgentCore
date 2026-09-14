@@ -1,8 +1,8 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
-using AgentCore.Tool.Tools;
+using AgentCore.Tooling;
+using AgentCore.Tooling.Tools;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;

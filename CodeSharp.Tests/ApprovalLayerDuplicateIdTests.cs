@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using Xunit;
 
 namespace CodeSharp.Tests;
@@ -11,20 +11,20 @@ public class ApprovalLayerDuplicateIdTests
 {
     private class DummyTool(string name) : ITool
     {
-        public ToolDefinition Definition { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
+        public ToolDefinition Info { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
 
         public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
             string callId,
             JsonObject arguments,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ToolResult(callId, [new Text($"Output for {Definition.Name}")]);
+            yield return new ToolResult(callId, [new Text($"Output for {Info.Name}")]);
         }
     }
 
-    private class MockTooling(ITool tool) : ITooling
+    private class MockTooling(ITool tool) : IToolbox
     {
-        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Definition };
+        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Info };
 
         public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
             IReadOnlyList<ToolCall> calls,

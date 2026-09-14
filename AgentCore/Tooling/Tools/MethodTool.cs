@@ -7,7 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tool.Tools;
+namespace AgentCore.Tooling.Tools;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class ToolAttribute(string? name = null, string? description = null) : Attribute
@@ -30,7 +30,7 @@ public sealed class MethodTool : ITool
     private readonly object? _target;
     private readonly ParameterInfo[] _parameters;
 
-    public ToolDefinition Definition { get; }
+    public ToolDefinition Info { get; }
 
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null)
     {
@@ -41,7 +41,7 @@ public sealed class MethodTool : ITool
         _method = method;
         _target = target;
         _parameters = method.GetParameters();
-        Definition = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
+        Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
     }
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(

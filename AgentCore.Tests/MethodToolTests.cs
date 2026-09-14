@@ -1,6 +1,6 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;

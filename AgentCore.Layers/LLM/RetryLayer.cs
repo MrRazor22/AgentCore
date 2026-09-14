@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 
 namespace AgentCore.Layers.LLM;
 

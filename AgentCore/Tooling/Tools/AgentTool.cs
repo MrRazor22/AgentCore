@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tool.Tools;
+namespace AgentCore.Tooling.Tools;
 
 public sealed class AgentTool(Agent agent, string name, string description) : ITool
 {
@@ -14,7 +14,7 @@ public sealed class AgentTool(Agent agent, string name, string description) : IT
         .AddProperty("prompt", new JsonSchemaBuilder().Type<string>().Build(), required: true)
         .Build();
 
-    public ToolDefinition Definition { get; } = new(name, description, PromptSchema);
+    public ToolDefinition Info { get; } = new(name, description, PromptSchema);
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,

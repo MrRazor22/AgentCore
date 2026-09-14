@@ -2,15 +2,15 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore.Tool;
+namespace AgentCore.Tooling;
 
-public abstract class ToolingLayer : ITooling
+public abstract class ToolingLayer : IToolbox
 {
     private bool _attached;
 
-    public ITooling Inner { get; private set; } = null!;
+    public IToolbox Inner { get; private set; } = null!;
 
-    internal void Attach(ITooling inner)
+    internal void Attach(IToolbox inner)
     {
         if (_attached)
             throw new InvalidOperationException("This tool service decorator has already been attached to a pipeline.");

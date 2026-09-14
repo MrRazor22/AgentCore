@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 
 namespace AgentCore.Tests;
 
@@ -10,28 +10,28 @@ public class AgentBuilderTests
 {
     private class StaticTestTools
     {
-        [Tool]
+        [Tooling]
         public static string StaticTool1() => "static1";
 
-        [Tool]
+        [Tooling]
         public static string StaticTool2() => "static2";
     }
 
     private class InstanceTestTools
     {
-        [Tool]
+        [Tooling]
         public string InstanceTool1() => "instance1";
 
-        [Tool]
+        [Tooling]
         public string InstanceTool2() => "instance2";
     }
 
     private class MixedTestTools
     {
-        [Tool]
+        [Tooling]
         public static string StaticTool() => "static";
 
-        [Tool]
+        [Tooling]
         public string InstanceTool() => "instance";
     }
 
@@ -232,6 +232,6 @@ public class AgentBuilderTests
 
         Assert.NotNull(agent.LLM);
         Assert.NotNull(agent.Context);
-        Assert.NotNull(agent.Tooling);
+        Assert.NotNull(agent.Toolbox);
     }
 }

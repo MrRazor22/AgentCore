@@ -34,6 +34,8 @@
 - Correct code is naturally lean. Never write repetitive flows or verbose boilerplate.
 - Leverage modern language constructs (e.g. primary constructors, concise guard clauses) to minimize lines while preserving clarity and zero-allocation performance.
 - Zero bloat, zero speculative layers, zero redundant checks.
+- AGGRESSIVELY PRUNE DEAD CODE & REDUNDANT OVERLOADS: Remove dead, obsolete, or duplicate methods, wrappers, and overloads when making new changes.
+- DISTINGUISH PUBLIC EXTENSION UTILITIES FROM DEAD CODE: Never delete intentional public library API extension methods (such as pipeline inspection utilities like `FindLayer`) simply because they lack internal callers within the library repository itself. Dead code refers to superseded internal logic and redundant wrapper overloads, NOT intentional public framework APIs.
 
 ## 8. DESIGN FIRST — DO NOT RUN TESTS UNTIL USER EXPLICITLY COMMANDS
 - Focus on sound architecture and clean design first.

@@ -1,7 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using AgentCore.Layers.LLM;
 using System.Text.Json.Nodes;
 using Xunit;
@@ -26,7 +26,7 @@ public class ToolCallDetectionLayerTests
 
     private class DummyTool(string name) : ITool
     {
-        public ToolDefinition Definition { get; } = new(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject()));
+        public ToolDefinition Info { get; } = new(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject()));
         public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<IContent>>([new Text("result")]);
     }
@@ -54,7 +54,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TestTool").Definition }
+            tools: new[] { new DummyTool("TestTool").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -82,7 +82,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
+            tools: new[] { new DummyTool("ToolA").Info, new DummyTool("ToolB").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -110,7 +110,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
+            tools: new[] { new DummyTool("ToolA").Info, new DummyTool("ToolB").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -140,7 +140,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -170,7 +170,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -197,7 +197,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -225,7 +225,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -252,7 +252,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -278,7 +278,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -313,7 +313,7 @@ public class ToolCallDetectionLayerTests
             // Act
             var results = await layer.GenerateAsync(
                 Array.Empty<Message>(),
-                tools: new[] { dummyTool.Definition }
+                tools: new[] { dummyTool.Info }
             ).ToContentsAsync();
 
             // Assert
@@ -340,7 +340,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("ToolA").Definition }
+            tools: new[] { new DummyTool("ToolA").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -367,7 +367,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList").Definition }
+            tools: new[] { new DummyTool("TodoList").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -394,7 +394,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("EditFile").Definition }
+            tools: new[] { new DummyTool("EditFile").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -424,7 +424,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList").Definition }
+            tools: new[] { new DummyTool("TodoList").Info }
         ).ToContentsAsync();
 
         // Assert
@@ -452,7 +452,7 @@ public class ToolCallDetectionLayerTests
         // Act
         var results = await layer.GenerateAsync(
             Array.Empty<Message>(),
-            tools: new[] { new DummyTool("TodoList").Definition }
+            tools: new[] { new DummyTool("TodoList").Info }
         ).ToContentsAsync();
 
         // Assert

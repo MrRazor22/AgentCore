@@ -5,6 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.Context;
+using AgentCore.Context.Primitives;
+using AgentCore.Layers.Chat.Store;
 using AgentCore.LLM.Chat;
 
 namespace AgentCore.Layers.Chat;

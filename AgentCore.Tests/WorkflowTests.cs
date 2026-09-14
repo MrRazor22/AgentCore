@@ -1,13 +1,13 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 
 namespace AgentCore.Tests;
 
 public class WorkflowTests
 {
-    private (ILLM, ITooling) CreateServices(MockLLMProvider provider, ITooling tooling)
+    private (ILLM, IToolbox) CreateServices(MockLLMProvider provider, IToolbox tooling)
     {
         return (provider, tooling);
     }

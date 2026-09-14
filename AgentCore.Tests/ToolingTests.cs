@@ -1,7 +1,7 @@
-using AgentCore.Context.Components;
+using AgentCore.Context.Primitives;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 
@@ -14,7 +14,7 @@ internal record ToolExecutionResult(string CallId, IReadOnlyList<IContent> Conte
 
 internal static class ToolingTestExtensions
 {
-    public static async Task<ToolExecutionResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
+    public static async Task<ToolExecutionResult> ExecuteAsync(this IToolbox tooling, ToolCall call, CancellationToken ct = default)
     {
         var msg = await tooling.ExecuteAsync([call], ct).ToMessageAsync(ct: ct);
         return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
@@ -92,7 +92,7 @@ public class ToolingTests
 
     private class NullNameTool(string name) : ITool
     {
-        public ToolDefinition Definition { get; } = !string.IsNullOrWhiteSpace(name)
+        public ToolDefinition Info { get; } = !string.IsNullOrWhiteSpace(name)
             ? new(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())
             : throw new ArgumentException("Name cannot be null or whitespace", nameof(name));
 
@@ -115,7 +115,7 @@ public class ToolingTests
 
     public class SampleAddTool
     {
-        [Tool]
+        [Tooling]
         public int Add(int a, int b) => a + b;
     }
 }

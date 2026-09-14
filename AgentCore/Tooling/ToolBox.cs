@@ -1,29 +1,38 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tool.Tools;
+using AgentCore.LLM.Schema;
+using AgentCore.Tooling.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
-namespace AgentCore.Tool;
+namespace AgentCore.Tooling;
 
-public interface ITooling
+public sealed record ToolDefinition(string Name, string Description, JsonSchema ParametersSchema);
+
+public interface ITool
+{
+    ToolDefinition Info { get; }
+    IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
+}
+public interface IToolbox
 {
     IReadOnlyList<ToolDefinition> GetDefinitions();
     IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
-internal sealed class Tooling(
+internal sealed class Toolbox(
     IEnumerable<ITool>? tools,
-    ILogger<Tooling>? logger = null,
+    ILogger<Toolbox>? logger = null,
     bool parallel = true,
     int? maxConcurrency = null,
-    TimeSpan? timeout = null) : ITooling
+    TimeSpan? timeout = null) : IToolbox
 {
-    private readonly Dictionary<string, ITool> _tools = tools?.ToDictionary(t => t.Definition.Name, StringComparer.OrdinalIgnoreCase) ?? [];
-    private readonly ToolDefinition[] _definitions = tools?.Select(t => t.Definition).ToArray() ?? [];
-    private readonly ILogger _logger = logger ?? NullLogger<Tooling>.Instance;
+    private readonly Dictionary<string, ITool> _tools = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
+    private readonly ToolDefinition[] _definitions = tools?.Select(t => t.Info).ToArray() ?? [];
+    private readonly ILogger _logger = logger ?? NullLogger<Toolbox>.Instance;
 
     public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
 
@@ -56,7 +65,7 @@ internal sealed class Tooling(
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
         else if (!_tools.TryGetValue(call.Name, out var tool))
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
-        else if (tool.Definition.ParametersSchema.Validate(call.Arguments) is { Count: > 0 } errors)
+        else if (tool.Info.ParametersSchema.Validate(call.Arguments) is { Count: > 0 } errors)
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, string.Join("; ", errors))), ct).ConfigureAwait(false);
         else
         {

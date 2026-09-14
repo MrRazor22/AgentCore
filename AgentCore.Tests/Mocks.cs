@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tests;
@@ -160,7 +160,7 @@ public class MockMemoryProvider : IContext
         => _inner.IngestAsync(events, ct);
 }
 
-public class MockTooling : ITooling
+public class MockTooling : IToolbox
 {
     public IReadOnlyList<ToolDefinition> Definitions { get; set; } = Array.Empty<ToolDefinition>();
 

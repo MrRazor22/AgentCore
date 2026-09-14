@@ -1,7 +1,7 @@
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
-using AgentCore.Tool.Tools;
+using AgentCore.Tooling;
+using AgentCore.Tooling.Tools;
 
 namespace AgentCore.LLM;
 

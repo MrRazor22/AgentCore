@@ -1,9 +1,9 @@
 using AgentCore;
-using AgentCore.Context.Components;
+using AgentCore.Context.Primitives;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -34,7 +34,7 @@ public class LiveAgentTests
     {
         public List<string> InvokedTools { get; } = new();
 
-        [Tool]
+        [Tooling]
         [Description("Get the item ID from a product name.")]
         public string GetItemId(string productName)
         {
@@ -44,7 +44,7 @@ public class LiveAgentTests
             return "item-unknown";
         }
 
-        [Tool]
+        [Tooling]
         [Description("Get the inventory count for a given item ID.")]
         public int GetInventoryCount(string itemId)
         {
@@ -54,7 +54,7 @@ public class LiveAgentTests
             return 0;
         }
 
-        [Tool]
+        [Tooling]
         [Description("A tool that throws an error.")]
         public string FailTool(string input)
         {

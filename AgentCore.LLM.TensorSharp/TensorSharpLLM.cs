@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using TensorSharp.Models;
 using TensorSharp.Runtime;
 using TensorSharp.Runtime.Scheduling;

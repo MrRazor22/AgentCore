@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Context.Components;
+namespace AgentCore.Context.Primitives;
 
 public interface ITruncator
 {

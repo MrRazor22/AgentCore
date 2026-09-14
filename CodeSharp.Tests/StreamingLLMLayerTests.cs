@@ -26,7 +26,7 @@ public class StreamingLLMLayerTests
         public IAsyncEnumerable<IMessageEvent> StreamAsync(
             IReadOnlyList<Message> messages,
             JsonSchema? responseSchema = null,
-            IReadOnlyList<AgentCore.Tool.ToolDefinition>? tools = null,
+            IReadOnlyList<AgentCore.Tooling.ToolDefinition>? tools = null,
             CancellationToken ct = default)
         {
             return StreamCoreAsync(ct);

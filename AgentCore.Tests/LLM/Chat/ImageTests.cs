@@ -1,6 +1,6 @@
 using System;
 using System.Text.Json;
-using AgentCore.Context.Components;
+using AgentCore.Context.Primitives;
 using AgentCore.LLM.Chat;
 using Xunit;
 

@@ -2,7 +2,7 @@ using AgentCore.LLM.Chat;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Context.Components;
+namespace AgentCore.Context.Primitives;
 
 public interface IAssembler
 {

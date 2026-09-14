@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using Xunit;
 
 namespace CodeSharp.Tests;
@@ -28,7 +28,7 @@ public class ApprovalLayerTests
 {
     private class TestTool(string name) : ITool
     {
-        public ToolDefinition Definition { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
+        public ToolDefinition Info { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
         public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
             string callId,
             JsonObject arguments,
@@ -38,7 +38,7 @@ public class ApprovalLayerTests
         }
     }
 
-    private class MockTooling : ITooling
+    private class MockTooling : IToolbox
     {
         public bool ExecuteCalled { get; private set; }
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
@@ -55,7 +55,7 @@ public class ApprovalLayerTests
         }
     }
 
-    private static void AttachInner(ToolApprovalLayer layer, ITooling inner)
+    private static void AttachInner(ToolApprovalLayer layer, IToolbox inner)
     {
         var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         method!.Invoke(layer, new object[] { inner });
@@ -188,7 +188,7 @@ public class ApprovalLayerTests
         Assert.False(mockInner.ExecuteCalled);
     }
 
-    private class TimedMockTooling : ITooling
+    private class TimedMockTooling : IToolbox
     {
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 

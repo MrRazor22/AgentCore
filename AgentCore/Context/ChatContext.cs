@@ -4,7 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using AgentCore.Context.Components;
+using AgentCore.Context.Primitives;
 using AgentCore.LLM.Chat;
 using Microsoft.Extensions.Logging;
 

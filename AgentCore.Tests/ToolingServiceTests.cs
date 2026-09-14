@@ -1,7 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tool;
+using AgentCore.Tooling;
 using System.Text.Json.Nodes;
 
 namespace AgentCore.Tests;
@@ -10,7 +10,7 @@ public class ToolingServiceTests
 {
     private class FakeTool(string name, JsonSchema schema) : ITool
     {
-        public ToolDefinition Definition { get; } = new(name, "Fake Description", schema);
+        public ToolDefinition Info { get; } = new(name, "Fake Description", schema);
 
         public Func<JsonObject, CancellationToken, Task<IReadOnlyList<IContent>>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("Result")]);
@@ -30,7 +30,7 @@ public class ToolingServiceTests
     [Fact]
     public async Task ExecuteAsync_UnregisteredToolName_ReturnsErrorMessage()
     {
-        var tooling = new Tooling(Array.Empty<ITool>());
+        var tooling = new Toolbox(Array.Empty<ITool>());
         var call = new ToolCall("call_1", "missing_tool", new JsonObject());
 
         var result = await tooling.ExecuteAsync(call);
@@ -42,7 +42,7 @@ public class ToolingServiceTests
     [Fact]
     public async Task ExecuteAsync_EmptyToolName_ReturnsErrorMessage()
     {
-        var tooling = new Tooling(Array.Empty<ITool>());
+        var tooling = new Toolbox(Array.Empty<ITool>());
         var call = new ToolCall("call_1", "", new JsonObject());
 
         var result = await tooling.ExecuteAsync(call);
@@ -59,7 +59,7 @@ public class ToolingServiceTests
         {
             Invoker = (args, ct) => throw new InvalidOperationException("Tool implementation crashed")
         };
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Toolbox(new[] { tool });
 
         var call = new ToolCall("call_1", "crash_tool", new JsonObject());
 
@@ -75,7 +75,7 @@ public class ToolingServiceTests
     {
         var schema = new LLM.Schema.JsonSchemaBuilder().Type<object>().Build();
         var tool = new FakeTool("null_tool", schema) { Invoker = (args, ct) => Task.FromResult<IReadOnlyList<IContent>>(Array.Empty<IContent>()) };
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Toolbox(new[] { tool });
 
         var call = new ToolCall("call_1", "null_tool", new JsonObject());
         var result = await tooling.ExecuteAsync(call);
@@ -92,7 +92,7 @@ public class ToolingServiceTests
         {
             Invoker = (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("Explicit IContent")])
         };
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Toolbox(new[] { tool });
 
         var call = new ToolCall("call_1", "content_tool", new JsonObject());
         var result = await tooling.ExecuteAsync(call);
@@ -109,7 +109,7 @@ public class ToolingServiceTests
         {
             Invoker = (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("{\"Key\":\"Val\"}")])
         };
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Toolbox(new[] { tool });
 
         var call = new ToolCall("call_1", "object_tool", new JsonObject());
         var result = await tooling.ExecuteAsync(call);
@@ -126,7 +126,7 @@ public class ToolingServiceTests
         {
             Invoker = async (args, ct) => { await Task.Delay(5000, ct); return [new Text("Done")]; }
         };
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Toolbox(new[] { tool });
 
         var call = new ToolCall("call_1", "slow_tool", new JsonObject());
         using var cts = new CancellationTokenSource();

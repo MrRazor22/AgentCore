@@ -1,12 +1,13 @@
 using System.Reflection;
+using AgentCore.Tooling.Tools;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Tool;
+namespace AgentCore.Tooling;
 
 public sealed class ToolingBuilder
 {
     internal List<ITool> Tools { get; } = [];
-    internal Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling>? Factory { get; private set; }
+    internal Func<IReadOnlyList<ITool>, ILoggerFactory, IToolbox>? Factory { get; private set; }
     internal List<ToolingLayer> Layers { get; } = [];
 
     public ToolingBuilder WithTools(params ITool[] tools)
@@ -37,14 +38,14 @@ public sealed class ToolingBuilder
 
     public ToolingBuilder WithTools(Type type) => WithTools((object)type);
 
-    public ToolingBuilder Use(Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling> factory)
+    public ToolingBuilder Use(Func<IReadOnlyList<ITool>, ILoggerFactory, IToolbox> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         Factory = factory;
         return this;
     }
 
-    public ToolingBuilder Use(Func<ILoggerFactory, ITooling> factory)
+    public ToolingBuilder Use(Func<ILoggerFactory, IToolbox> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         Factory = (_, lf) => factory(lf);
@@ -56,9 +57,9 @@ public sealed class ToolingBuilder
         int? maxConcurrency = null,
         TimeSpan? timeout = null)
     {
-        return Use((tools, lf) => new Tooling(
+        return Use((tools, lf) => new Toolbox(
             tools: tools,
-            logger: lf.CreateLogger<Tooling>(),
+            logger: lf.CreateLogger<Toolbox>(),
             parallel: parallel,
             maxConcurrency: maxConcurrency,
             timeout: timeout
@@ -72,12 +73,12 @@ public sealed class ToolingBuilder
         return this;
     }
 
-    internal ITooling Build(ILoggerFactory lf)
+    internal IToolbox Build(ILoggerFactory lf)
     {
         var frozenTools = Tools.ToArray();
-        ITooling tooling = Factory != null
+        IToolbox tooling = Factory != null
             ? Factory(frozenTools, lf)
-            : new Tooling(frozenTools, lf.CreateLogger<Tooling>());
+            : new Toolbox(frozenTools, lf.CreateLogger<Toolbox>());
 
         foreach (var layer in Layers)
         {
