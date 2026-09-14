@@ -325,4 +325,61 @@ public class WorkflowTests
         // Count should still be 1 (did not execute again)
         Assert.Equal(1, executionCount);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_ResumesPendingToolCallsAfterCrash_WithoutReexecutingCompleted()
+    {
+        var executedCalls = new List<string>();
+        var tooling = new MockTooling
+        {
+            Handler = (calls, ct) =>
+            {
+                foreach (var c in calls) executedCalls.Add(c.Name);
+                return Task.FromResult<IReadOnlyList<IContent>>(
+                    calls.Select(c => (IContent)new Text($"{c.Name}_done")).ToList()
+                );
+            }
+        };
+
+        var provider = new MockLLMProvider();
+        provider.Enqueue(
+            new TextStart(0),
+            new TextDelta(0, "Deployment finished."),
+            new TextEnd(0),
+            new MessageEnd()
+        );
+
+        var context = new ChatContext();
+        await context.PrepareAsync([
+            new Message(Role.User, [new Text("Deploy system")]),
+            new Message(Role.Assistant, [
+                new ToolCall("c1", "ChargeCard"),
+                new ToolCall("c2", "ProvisionServer")
+            ]),
+            new Message(Role.Tool, [new Text("Card charged")], id: "c1", metadata: [new ToolCallId("c1")])
+        ]);
+
+        var agent = new Agent(context, provider, tooling);
+
+        var events = new List<IContentEvent>();
+        await foreach (var evt in agent.InvokeStreamingAsync([]))
+        {
+            events.Add(evt);
+        }
+
+        // ChargeCard should NOT be re-executed; only ProvisionServer should execute
+        var singleExecuted = Assert.Single(executedCalls);
+        Assert.Equal("ProvisionServer", singleExecuted);
+
+        // Verification of final completion
+        var textDelta = Assert.Single(events.OfType<TextDelta>());
+        Assert.Equal("Deployment finished.", textDelta.Text);
+
+        // Context now has completed tool results for both c1 and c2
+        var history = await context.PrepareAsync();
+        var toolMessages = history.Where(m => m.Role == Role.Tool).ToList();
+        Assert.Equal(2, toolMessages.Count);
+        Assert.Equal("c1", toolMessages[0].Metadata.Get<ToolCallId>()?.Value);
+        Assert.Equal("c2", toolMessages[1].Metadata.Get<ToolCallId>()?.Value);
+    }
 }

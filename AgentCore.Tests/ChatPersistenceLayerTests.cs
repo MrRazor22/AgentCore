@@ -249,6 +249,48 @@ public class ChatPersistenceLayerTests
     }
 
     [Fact]
+    public async Task CrashRecovery_MultiMessageWal_RestoresAllMessages()
+    {
+        var store = new InMemoryChatStore();
+        store.Storage = [new Message(Role.User, [new Text("Deploy server")])];
+
+        var walStore = new InMemoryWalStore();
+        walStore.Storage =
+        [
+            // Assistant message calling two tools
+            new MessageStart(Role.Assistant, "msg-ast"),
+            new MessageDelta("msg-ast", Content: new ToolCallStart(0, "call-1", "ChargeCard")),
+            new MessageDelta("msg-ast", Content: new ToolCallDelta(0, "{}")),
+            new MessageDelta("msg-ast", Content: new ToolCallEnd(0)),
+            new MessageDelta("msg-ast", Content: new ToolCallStart(1, "call-2", "ProvisionServer")),
+            new MessageDelta("msg-ast", Content: new ToolCallDelta(1, "{}")),
+            new MessageDelta("msg-ast", Content: new ToolCallEnd(1)),
+            new MessageEnd("msg-ast"),
+
+            // Completed tool result for call-1
+            new MessageStart(Role.Tool, "call-1"),
+            new MessageDelta("call-1", Content: new Text("Charged successfully"), Metadata: new ToolCallId("call-1")),
+            new MessageEnd("call-1")
+        ];
+
+        var innerContext = new ChatContext();
+        var layer = new ChatPersistenceLayer(store, walStore: walStore);
+        layer.Attach(innerContext);
+
+        var restored = await layer.PrepareAsync();
+
+        // Must have: User, Assistant (with 2 tools), Tool 1 result
+        Assert.Equal(3, restored.Count);
+        Assert.Equal(Role.User, restored[0].Role);
+        Assert.Equal(Role.Assistant, restored[1].Role);
+        Assert.Equal(2, restored[1].Contents.Count);
+        Assert.Equal(Role.Tool, restored[2].Role);
+        Assert.Equal("call-1", restored[2].Metadata.Get<ToolCallId>()?.Value);
+        Assert.Equal("Charged successfully", restored[2].Contents[0].ToString());
+        Assert.True(walStore.Cleared);
+    }
+
+    [Fact]
     public async Task AddChatPersistence_DirectoryPath_PersistsAndRestoresFromFileStore()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "agentcore_tests_" + Guid.NewGuid().ToString("N"));

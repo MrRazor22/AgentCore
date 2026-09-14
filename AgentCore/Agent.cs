@@ -41,14 +41,26 @@ public sealed class Agent(
         var userContents = input as IReadOnlyList<IContent> ?? input.ToArray();
         var existing = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
         IEnumerable<Message>? staged = instructions is { Count: > 0 } && !existing.Any(m => m.Role == Role.System)
-            ? [new Message(Role.System, instructions), new Message(Role.User, userContents)]
-            : [new Message(Role.User, userContents)];
+            ? [new Message(Role.System, instructions), ..(userContents.Count > 0 ? [new Message(Role.User, userContents)] : Array.Empty<Message>())]
+            : (userContents.Count > 0 ? [new Message(Role.User, userContents)] : null);
 
         for (int i = 0; i < maxIterations; i++)
         {
             ct.ThrowIfCancellationRequested();
             var messages = await context.PrepareAsync(staged, ct);
             staged = null;
+
+            var pending = messages.LastOrDefault(m => m.Role == Role.Assistant)
+                ?.Contents.OfType<ToolCall>()
+                .Where(t => !messages.Any(m => m.Role == Role.Tool && (m.Metadata.Get<ToolCallId>()?.Value ?? m.Id) == t.Id))
+                .ToList();
+
+            if (pending is { Count: > 0 })
+            {
+                await foreach (var evt in context.IngestAsync(toolbox.ExecuteAsync(pending, ct), ct))
+                    yield return evt;
+                continue;
+            }
 
             List<ToolCall>? toolCalls = null;
             await foreach (var evt in context.IngestAsync(
@@ -93,6 +105,12 @@ public static class AgentExtensions
             if (t is T match) return match;
         return null;
     }
+
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        IContent input,
+        JsonSchema? responseSchema = null,
+        CancellationToken ct = default) => agent.InvokeStreamingAsync([input], responseSchema, ct);
 
     public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         this IAgent agent,

@@ -4,6 +4,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
 using AgentCore.Tooling;
+using AgentCore.Tooling.Tools;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -34,7 +35,7 @@ public class LiveAgentTests
     {
         public List<string> InvokedTools { get; } = new();
 
-        [Tooling]
+        [Tool]
         [Description("Get the item ID from a product name.")]
         public string GetItemId(string productName)
         {
@@ -44,7 +45,7 @@ public class LiveAgentTests
             return "item-unknown";
         }
 
-        [Tooling]
+        [Tool]
         [Description("Get the inventory count for a given item ID.")]
         public int GetInventoryCount(string itemId)
         {
@@ -54,7 +55,7 @@ public class LiveAgentTests
             return 0;
         }
 
-        [Tooling]
+        [Tool]
         [Description("A tool that throws an error.")]
         public string FailTool(string input)
         {
@@ -96,7 +97,8 @@ public class LiveAgentTests
         // Also call the underlying LLM direct stream to verify Metadata / token capturing
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
         var tornadoLlm = new TornadoLLM(api, model);
-        var directMessage = await tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }).ToMessageAsync();
+        var directMessages = await tornadoLlm.GenerateAsync(new[] { new Message(Role.User, [new Text("Say ok")]) }).ToMessagesAsync();
+        var directMessage = directMessages[0];
         var metadataItem = directMessage.Get<TokenUsage>();
         if (metadataItem != null)
         {

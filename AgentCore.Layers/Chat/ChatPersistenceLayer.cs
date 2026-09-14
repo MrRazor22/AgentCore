@@ -73,8 +73,8 @@ public sealed class ChatPersistenceLayer(
 
         if (walStore != null)
         {
-            var recovered = await walStore.RecoverAsync(ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
-            if (recovered.Contents.Count > 0) await _store.AppendAsync([recovered], ct).ConfigureAwait(false);
+            var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
+            if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
             await walStore.ClearAsync(ct).ConfigureAwait(false);
         }
 

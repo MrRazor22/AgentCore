@@ -2,6 +2,7 @@ using AgentCore.Context.Primitives;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tooling;
+using AgentCore.Tooling.Tools;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 
@@ -16,7 +17,8 @@ internal static class ToolingTestExtensions
 {
     public static async Task<ToolExecutionResult> ExecuteAsync(this IToolbox tooling, ToolCall call, CancellationToken ct = default)
     {
-        var msg = await tooling.ExecuteAsync([call], ct).ToMessageAsync(ct: ct);
+        var msgs = await tooling.ExecuteAsync([call], ct).ToMessagesAsync(ct: ct);
+        var msg = msgs[0];
         return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
     }
 }
@@ -115,7 +117,7 @@ public class ToolingTests
 
     public class SampleAddTool
     {
-        [Tooling]
+        [Tool]
         public int Add(int a, int b) => a + b;
     }
 }

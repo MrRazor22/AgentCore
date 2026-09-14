@@ -3,6 +3,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
+using AgentCore.Tooling.Tools;
 
 namespace AgentCore.Tests;
 
@@ -10,28 +11,28 @@ public class AgentBuilderTests
 {
     private class StaticTestTools
     {
-        [Tooling]
+        [Tool]
         public static string StaticTool1() => "static1";
 
-        [Tooling]
+        [Tool]
         public static string StaticTool2() => "static2";
     }
 
     private class InstanceTestTools
     {
-        [Tooling]
+        [Tool]
         public string InstanceTool1() => "instance1";
 
-        [Tooling]
+        [Tool]
         public string InstanceTool2() => "instance2";
     }
 
     private class MixedTestTools
     {
-        [Tooling]
+        [Tool]
         public static string StaticTool() => "static";
 
-        [Tooling]
+        [Tool]
         public string InstanceTool() => "instance";
     }
 

@@ -72,10 +72,8 @@ public sealed class Assembler : IAssembler
         var snapshotContents = new List<IContent>(_contents);
         foreach (var b in _blocks.Values)
         {
-            if (b.Start is not ToolCallStart && b.Buffer.Length > 0)
-            {
+            if (b.Start is not ToolCallStart ? b.Buffer.Length > 0 : IsValidJson(b.Buffer.ToString()))
                 snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
-            }
         }
         return new Message(_role, snapshotContents, _id, _metadata);
     }
@@ -104,6 +102,13 @@ public sealed class Assembler : IAssembler
         _ => new Text(text)
     };
 
+    private static bool IsValidJson(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+        try { return JsonNode.Parse(raw) is JsonObject; }
+        catch { return false; }
+    }
+
     private static JsonObject ParseArgs(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return new JsonObject();
@@ -114,15 +119,28 @@ public sealed class Assembler : IAssembler
 
 public static class AssemblerExtensions
 {
-    public static async Task<Message> ToMessageAsync(this IAsyncEnumerable<IMessageEvent> stream, IAssembler? assembler = null, CancellationToken ct = default)
+    public static async Task<IReadOnlyList<Message>> ToMessagesAsync(
+        this IAsyncEnumerable<IMessageEvent> stream,
+        IAssembler? assembler = null,
+        CancellationToken ct = default)
     {
-        var asm = assembler ?? new Assembler();
-        MessageEnd? end = null;
+        var factory = assembler ?? new Assembler();
+        var open = new Dictionary<string, IAssembler>(StringComparer.Ordinal);
+        var messages = new List<Message>();
+
         await foreach (var e in stream.WithCancellation(ct).ConfigureAwait(false))
-            if (e is MessageDelta md) asm.Push(md);
-            else if (e is MessageStart ms) asm = asm.Create(ms);
-            else if (e is MessageEnd me) end = me;
-        return asm.ToMessage(end);
+        {
+            if (e is Message m) { messages.Add(m); continue; }
+            var key = e.Id ?? string.Empty;
+            if (e is MessageStart ms) open[key] = factory.Create(ms);
+            else if (e is MessageDelta md && open.TryGetValue(key, out var asm)) asm.Push(md);
+            else if (e is MessageEnd me && open.Remove(key, out var endAsm)) messages.Add(endAsm.ToMessage(me));
+        }
+
+        foreach (var remaining in open.Values)
+            if (remaining.ToMessage() is { Contents.Count: > 0 } partial) messages.Add(partial);
+
+        return messages;
     }
 }
 

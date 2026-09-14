@@ -34,8 +34,8 @@ public class Summarizer(
         request.AddRange(messages);
         request.Add(new Message(Role.User, [new Text(_prompt)]));
 
-        var summaryMsg = await _llm.GenerateAsync(request, ct: ct).ToMessageAsync(ct: ct).ConfigureAwait(false);
-        var summaryText = summaryMsg.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
+        var summaryMsgs = await _llm.GenerateAsync(request, ct: ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
+        var summaryText = summaryMsgs.FirstOrDefault()?.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;
 
         return BuildCompactedHistory(messages, summaryText);
     }
