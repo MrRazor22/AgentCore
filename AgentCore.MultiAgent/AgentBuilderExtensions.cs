@@ -5,22 +5,21 @@ namespace AgentCore.MultiAgent;
 
 public static class AgentBuilderExtensions
 {
-    public static Agent AddToNetwork(
+    public static Agent AddToTeam(
         this AgentBuilder builder,
-        IAgentNetwork network,
-        IAgentRouter router,
+        IAgentTeam team,
         string name,
         IEnumerable<string>? collaborators = null,
         string? description = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(network);
-        ArgumentNullException.ThrowIfNull(router);
+        ArgumentNullException.ThrowIfNull(team);
         ArgumentNullException.ThrowIfNull(name);
 
-        builder.UseToolbox(t => t.WithTools(new SendAgentTool(network, router, name)));
+        builder.UseToolbox(t => t.WithTools(new SendAgentTool(team, name)));
         var agent = builder.Build();
-        router.Register(name, agent, collaborators, description);
+        var collabs = collaborators != null ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) : null;
+        team.Add(new TeamMember(name, agent, collabs, description));
         return agent;
     }
 }

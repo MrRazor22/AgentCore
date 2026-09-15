@@ -7,12 +7,13 @@ using AgentCore.Tooling;
 
 namespace AgentCore.MultiAgent.Tools;
 
-public sealed class SendAgentTool(IAgentNetwork network, IAgentRouter router, string sender) : ITool
+public sealed class SendAgentTool(IAgentTeam team, string sender) : ITool
 {
     private static readonly JsonSchema Schema = new JsonSchemaBuilder()
         .Type<object>()
         .AddProperty("agent", new JsonSchemaBuilder().Type<string>().Description("The name of the agent to send the task or question to.").Build(), required: true)
         .AddProperty("task", new JsonSchemaBuilder().Type<string>().Description("The specific task, instruction, or question for the agent.").Build(), required: true)
+        .AddProperty("notify_interval_seconds", new JsonSchemaBuilder().Type<int>().Description("Optional interval in seconds to receive progress status updates while the agent executes.").Build(), required: false)
         .Build();
 
     public ToolDefinition Info => new(
@@ -26,17 +27,20 @@ public sealed class SendAgentTool(IAgentNetwork network, IAgentRouter router, st
     {
         var recipient = (string)arguments["agent"]!;
         var task = (string)arguments["task"]!;
+        TimeSpan? interval = arguments["notify_interval_seconds"] is JsonValue jv && jv.TryGetValue<int>(out var s) && s > 0
+            ? TimeSpan.FromSeconds(s)
+            : null;
 
-        await network.SendAsync(new NetworkMessage(sender, recipient, [new Text(task)]), ct).ConfigureAwait(false);
+        await team.SendAsync(new TeamMessage(sender, recipient, [new Text(task)], interval), ct).ConfigureAwait(false);
         yield return new Text($"Message delivered to {recipient}.");
     }
 
     private string FormatDescription()
     {
-        router.Agents.TryGetValue(sender, out var senderEntry);
-        var allowed = senderEntry?.Collaborators;
+        team.Members.TryGetValue(sender, out var senderMember);
+        var allowed = senderMember?.Collaborators;
 
-        var available = router.Agents
+        var available = team.Members
             .Where(kv => !string.Equals(kv.Key, sender, StringComparison.OrdinalIgnoreCase))
             .Where(kv => allowed == null || allowed.Contains(kv.Key))
             .ToArray();

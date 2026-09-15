@@ -7,8 +7,7 @@ using AgentCore.Tooling;
 namespace AgentCore.MultiAgent.Tools;
 
 public sealed class CreateAgentTool(
-    IAgentRouter router,
-    IAgentNetwork network,
+    IAgentTeam team,
     string sender,
     Action<AgentBuilder> configureDefaults) : ITool
 {
@@ -23,7 +22,7 @@ public sealed class CreateAgentTool(
 
     public ToolDefinition Info { get; } = new(
         "create_agent",
-        "Dynamically create a new specialized agent to collaborate in the network.",
+        "Dynamically create a new specialized agent to collaborate in the team.",
         Schema);
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
@@ -40,19 +39,19 @@ public sealed class CreateAgentTool(
         var builder = new AgentBuilder();
         _configureDefaults(builder);
         builder.WithInstructions(role);
-        builder.UseToolbox(t => t.WithTools(new SendAgentTool(network, router, name)));
+        builder.UseToolbox(t => t.WithTools(new SendAgentTool(team, name)));
 
         var childCollaborators = collaborators != null
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
 
-        router.Register(name, builder.Build(), childCollaborators, description: role);
+        team.Add(new TeamMember(name, builder.Build(), childCollaborators, description: role));
 
-        if (router.Agents.TryGetValue(sender, out var creatorEntry) && creatorEntry.Collaborators != null)
+        if (team.Members.TryGetValue(sender, out var creatorMember) && creatorMember.Collaborators != null)
         {
-            creatorEntry.Collaborators.Add(name);
+            creatorMember.Collaborators.Add(name);
         }
 
-        yield return new Text($"Agent '{name}' created successfully and joined the network.");
+        yield return new Text($"Agent '{name}' created successfully and joined the team.");
     }
 }
