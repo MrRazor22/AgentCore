@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AgentCore.Layers.Chat.Store;
+namespace AgentCore.Layers.Context.Store;
 public interface IWalStore
 {
     Task AppendAsync(IMessageEvent evt, CancellationToken ct = default);

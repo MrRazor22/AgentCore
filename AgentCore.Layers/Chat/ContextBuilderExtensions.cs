@@ -1,10 +1,9 @@
-using AgentCore;
 using AgentCore.Context;
-using AgentCore.Layers.Chat.Store;
+using AgentCore.Layers.Context.Store;
 
-namespace AgentCore.Layers.Chat;
+namespace AgentCore.Layers.Context;
 
-public static class ChatLayerBuilderExtensions
+public static class ContextBuilderExtensions
 {
     public static ContextBuilder AddChatPersistence(
         this ContextBuilder builder,
@@ -24,21 +23,18 @@ public static class ChatLayerBuilderExtensions
             new FileChatStore(storageDirectory, sessionId),
             enableWal ? new FileWalStore(storageDirectory, sessionId) : null);
 
-    public static AgentBuilder AddChatPersistence(
-        this AgentBuilder builder,
-        IChatStore store,
-        IWalStore? walStore = null)
+    public static ContextBuilder AddChatGrammar(
+        this ContextBuilder builder,
+        bool coalesceAdjacentRoles = true,
+        bool ensureToolPairing = true,
+        bool pinSystemInstructions = true,
+        bool stripPastReasoning = true)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        return builder.UseContext(ctx => ctx.AddChatPersistence(store, walStore));
+        return builder.AddLayer(new ChatGrammarLayer(
+            coalesceAdjacentRoles,
+            ensureToolPairing,
+            pinSystemInstructions,
+            stripPastReasoning));
     }
-
-    public static AgentBuilder AddChatPersistence(
-        this AgentBuilder builder,
-        string storageDirectory,
-        string sessionId,
-        bool enableWal = true)
-        => builder.AddChatPersistence(
-            new FileChatStore(storageDirectory, sessionId),
-            enableWal ? new FileWalStore(storageDirectory, sessionId) : null);
 }

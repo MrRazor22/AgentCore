@@ -1,10 +1,9 @@
-using AgentCore;
 using AgentCore.LLM.Chat;
 using AgentCore.Tooling;
 
 namespace AgentCore.Layers.Tools;
 
-public static class ToolingLayerBuilderExtensions
+public static class ToolingBuilderExtensions
 {
     public static ToolingBuilder WithApproval(this ToolingBuilder builder, ToolApprover approver)
     {
@@ -25,12 +24,5 @@ public static class ToolingLayerBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(layer);
         return builder.AddLayer(layer);
-    }
-
-    public static AgentBuilder AddApprovalLayer(this AgentBuilder builder, ToolApprovalLayer layer)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(layer);
-        return builder.UseToolbox(tools => tools.AddApprovalLayer(layer));
     }
 }

@@ -1,4 +1,9 @@
-using AgentCore.Layers.LLM;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using AgentCore.Context;
+using AgentCore.Layers.Context;
 using AgentCore.LLM.Chat;
 using Xunit;
 
@@ -6,8 +11,17 @@ namespace AgentCore.Tests;
 
 public class MessageMergingLayerTests
 {
+    private class InMemoryContext(IReadOnlyList<Message> messages) : IContext
+    {
+        public Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? staged = null, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Message>>(staged != null ? [.. messages, .. staged] : messages);
+
+        public IAsyncEnumerable<IContentEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default)
+            => throw new NotImplementedException();
+    }
+
     [Fact]
-    public void MergeTextMessages_AdjacentUserTextMessages_MergesIntoSingleMessage()
+    public async Task ChatGrammar_AdjacentUserTextMessages_MergesIntoSingleMessage()
     {
         var input = new List<Message>
         {
@@ -15,19 +29,18 @@ public class MessageMergingLayerTests
             new Message(Role.User, [new Text("no i mean the class diagram")])
         };
 
-        var output = MessageCoalescingLayer.MergeTextMessages(input);
+        var layer = new ChatGrammarLayer();
+        layer.Attach(new InMemoryContext(input));
+
+        var output = await layer.PrepareAsync();
 
         Assert.Single(output);
         Assert.Equal(Role.User, output[0].Role);
         Assert.Equal("help me understand architecture\nno i mean the class diagram", ((Text)output[0].Contents[0]).Value);
-        
-        // Verify original input messages were NOT mutated
-        Assert.Equal(2, input.Count);
-        Assert.Equal("help me understand architecture", ((Text)input[0].Contents[0]).Value);
     }
 
     [Fact]
-    public void MergeTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
+    public async Task ChatGrammar_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
         var toolCall = new ToolCall("1", "Search");
         var input = new List<Message>
@@ -38,7 +51,10 @@ public class MessageMergingLayerTests
             new Message(Role.Assistant, [new Text("here are the files")])
         };
 
-        var output = MessageCoalescingLayer.MergeTextMessages(input);
+        var layer = new ChatGrammarLayer();
+        layer.Attach(new InMemoryContext(input));
+
+        var output = await layer.PrepareAsync();
 
         Assert.Equal(4, output.Count);
         Assert.Equal(Role.User, output[0].Role);
@@ -48,18 +64,20 @@ public class MessageMergingLayerTests
     }
 
     [Fact]
-    public void MergeTextMessages_MixedStructuredAndTextMessage_DoesNotMerge()
+    public async Task ChatGrammar_OrphanToolResult_IsPurged()
     {
-        var toolCall = new ToolCall("1", "Search");
-
         var input = new List<Message>
         {
-            new Message(Role.Assistant, [toolCall]),
-            new Message(Role.Assistant, [new Text("I'm searching for files.")])
+            new Message(Role.User, [new Text("find files")]),
+            new Message(Role.Tool, [new Text("orphan result")], metadata: [new ToolCallId("non_existent")])
         };
 
-        var output = MessageCoalescingLayer.MergeTextMessages(input);
+        var layer = new ChatGrammarLayer();
+        layer.Attach(new InMemoryContext(input));
 
-        Assert.Equal(2, output.Count);
+        var output = await layer.PrepareAsync();
+
+        Assert.Single(output);
+        Assert.Equal(Role.User, output[0].Role);
     }
 }

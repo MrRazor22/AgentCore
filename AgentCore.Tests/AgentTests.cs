@@ -1,4 +1,5 @@
 using AgentCore.Context;
+using AgentCore.Layers.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tooling;
@@ -14,7 +15,7 @@ public class AgentTests
     }
 
     [Fact]
-    public async Task InvokeAsync_RecallsMemoryBeforeExecution()
+    public async Task InvokeAsync_MergesRecalledHistoryWithCurrentInput()
     {
         // Arrange
         var mockProvider = new MockLLMProvider();
@@ -26,9 +27,8 @@ public class AgentTests
         await memory.PrepareAsync(new[] { new Message(Role.User, [new Text("Old message")]) });
 
         var agent = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .WithContext(lf => memory)
-            .AddLLMLayer(new AgentCore.Layers.LLM.MessageCoalescingLayer())
+            .UseLLM(llm => llm.Use(lf => mockProvider))
+            .UseContext(ctx => ctx.Use(lf => memory).AddChatGrammar())
             .Build();
 
         // Act

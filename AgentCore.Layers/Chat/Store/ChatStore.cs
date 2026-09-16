@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Layers.Chat.Store;
+namespace AgentCore.Layers.Context.Store;
 public interface IChatStore
 {
     Task<IReadOnlyList<Message>?> LoadAsync(CancellationToken ct = default);

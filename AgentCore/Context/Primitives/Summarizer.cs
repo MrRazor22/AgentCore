@@ -42,20 +42,31 @@ public class Summarizer(
 
     private static IReadOnlyList<Message> BuildCompactedHistory(IReadOnlyList<Message> original, string summary)
     {
-        var result = new List<Message>(3);
+        var result = new List<Message>();
         var systemMessage = original.FirstOrDefault(m => m.Role == Role.System);
-        var lastMessage = original.Count > (systemMessage != null ? 2 : 1) ? original[^1] : null;
-
         if (systemMessage != null) result.Add(systemMessage);
+
         result.Add(new Message(
             Role.User, 
             [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")],
             [new Summary(original.Count)]));
 
-        if (lastMessage != null && lastMessage.Role != Role.System)
-        {
-            result.Add(lastMessage);
-        }
+        foreach (var msg in GetTrailingTurn(original))
+            if (msg.Role != Role.System)
+                result.Add(msg);
+
         return result;
+    }
+
+    private static IReadOnlyList<Message> GetTrailingTurn(IReadOnlyList<Message> original)
+    {
+        if (original.Count == 0) return [];
+        int i = original.Count - 1;
+        if (original[i].Role == Role.Tool)
+        {
+            while (i > 0 && original[i].Role == Role.Tool) i--;
+            return original.Skip(i).ToList();
+        }
+        return [original[^1]];
     }
 }

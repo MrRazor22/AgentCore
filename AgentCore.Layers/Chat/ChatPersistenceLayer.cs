@@ -6,10 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using AgentCore.Context;
 using AgentCore.Context.Primitives;
-using AgentCore.Layers.Chat.Store;
+using AgentCore.Layers.Context.Store;
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Layers.Chat;
+namespace AgentCore.Layers.Context;
 
 public sealed class ChatPersistenceLayer(
     IChatStore store,

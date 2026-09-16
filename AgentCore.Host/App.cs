@@ -8,7 +8,7 @@ using AgentCore.Host.Abstractions;
 using AgentCore.Host.Ipc;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
-using AgentCore.Layers.Chat;
+using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using AgentCore.Layers.Tools;
 using CodeSharp.Skills;
@@ -49,8 +49,9 @@ internal class App
             .WithTornado(config.ApiKey, config.Model, baseUrl)
             .UseContext(ctx => ctx
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true))
-            .UseLLM(llm => llm.WithRetry().WithToolCallDetection().WithMessageCoalescing())
+                .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true)
+                .AddChatGrammar())
+            .UseLLM(llm => llm.WithRetry().WithToolCallDetection())
             .UseToolbox(tools => tools.WithTools(vsTools).WithTools(skillTool))
             .WithInstructions("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")
             .Build();
