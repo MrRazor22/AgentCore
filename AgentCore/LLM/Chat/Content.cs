@@ -3,23 +3,22 @@ namespace AgentCore.LLM.Chat;
 
 public class Text(string value) : IContent
 {
-    public virtual string Value { get; } = value ?? "";
+    public string Value { get; } = value ?? "";
     public static implicit operator Text(string text) => new(text);
     public override string ToString() => Value;
 }
 
-public class Reasoning(string value) : IContent
+public class Reasoning(string thought) : IContent
 {
-    public virtual string Value { get; } = value ?? "";
-    public string Thought => Value;
-    public override string ToString() => Value;
+    public string Thought { get; } = thought ?? "";
+    public override string ToString() => Thought;
 }
 
 public class ToolCall(string id, string name, string? arguments = null) : IContent
 {
     public string Id { get; } = id;
     public string Name { get; } = name;
-    public virtual string Arguments { get; } = arguments ?? string.Empty;
+    public string Arguments { get; } = arguments ?? string.Empty;
 
     public override string ToString() =>
         string.IsNullOrWhiteSpace(Arguments) ? Name : $"{Name}({Arguments})";

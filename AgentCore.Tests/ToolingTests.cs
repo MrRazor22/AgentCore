@@ -83,6 +83,20 @@ public class ToolingTests
     }
 
     [Fact]
+    public void ParseArguments_ExtensionMethod_WorksForValidAndMalformedJson()
+    {
+        var validCall = new ToolCall("1", "test", "{\"key\":\"val\"}");
+        var (validArgs, validErr) = validCall.ParseArguments();
+        Assert.Null(validErr);
+        Assert.Equal("val", validArgs?["key"]?.ToString());
+
+        var badCall = new ToolCall("2", "test", "{\"bad\": ,}");
+        var (badArgs, badErr) = badCall.ParseArguments();
+        Assert.Null(badArgs);
+        Assert.Contains("Invalid JSON", badErr);
+    }
+
+    [Fact]
     public void Builder_ThrowsOnDuplicateName()
     {
         var builder = Agent.Create()

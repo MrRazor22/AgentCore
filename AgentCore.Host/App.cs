@@ -84,7 +84,7 @@ internal class App
                     TextDelta td => new("content", Text: td.Text),
                     Text t => new("content", Text: t.Value),
                     ReasoningDelta rd => new("thought", Text: rd.Thought),
-                    Reasoning r => new("thought", Text: r.Value),
+                    Reasoning r => new("thought", Text: r.Thought),
                     ToolCallStart tcs => new("tool_start", Id: tcs.Id, Name: tcs.Name),
                     ToolCall tc => new("tool_call_ui", Id: tc.Id, Name: tc.Name, Text: tc.Arguments),
                     _ => null

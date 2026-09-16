@@ -21,7 +21,7 @@ public class Tokenizer(
     public int Estimate(IContent content) => content switch
     {
         Text t => (int)Math.Ceiling(t.Value.Length / (double)CharsPerToken),
-        Reasoning r => (int)Math.Ceiling(r.Value.Length / (double)CharsPerToken),
+        Reasoning r => (int)Math.Ceiling(r.Thought.Length / (double)CharsPerToken),
         ToolCall tc => (int)Math.Ceiling((tc.Name.Length + (tc.Arguments?.Length ?? 0)) / (double)CharsPerToken),
         Image img => EstimateImage(img),
         _ => 0

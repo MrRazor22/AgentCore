@@ -4,9 +4,7 @@ using AgentCore.LLM.Schema;
 using AgentCore.Tooling.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
@@ -63,13 +61,15 @@ internal sealed class Toolbox(
         await writer.WriteAsync(new MessageStart(Role.Tool, Id: call.Id), ct).ConfigureAwait(false);
         await writer.WriteAsync(new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id)), ct).ConfigureAwait(false);
 
+        var (args, parseError) = call.ParseArguments();
+
         if (string.IsNullOrWhiteSpace(call.Name))
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
         else if (!_tools.TryGetValue(call.Name, out var tool))
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
-        else if (!TryParseArgs(call.Arguments, out var args, out var parseError))
+        else if (parseError != null)
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, parseError)), ct).ConfigureAwait(false);
-        else if (tool.Info.ParametersSchema.Validate(args) is { Count: > 0 } errors)
+        else if (tool.Info.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, string.Join("; ", errors))), ct).ConfigureAwait(false);
         else
         {
@@ -79,7 +79,7 @@ internal sealed class Toolbox(
             bool hasResult = false;
             try
             {
-                await foreach (var evt in tool.InvokeStreamingAsync(args, cts?.Token ?? ct).ConfigureAwait(false))
+                await foreach (var evt in tool.InvokeStreamingAsync(args!, cts?.Token ?? ct).ConfigureAwait(false))
                 {
                     hasResult = true;
                     await writer.WriteAsync(new MessageDelta(call.Id, Content: evt), ct).ConfigureAwait(false);
@@ -100,36 +100,6 @@ internal sealed class Toolbox(
         }
 
         await writer.WriteAsync(new MessageEnd(Id: call.Id), ct).ConfigureAwait(false);
-    }
-
-    private static bool TryParseArgs(string raw, [NotNullWhen(true)] out JsonObject? args, [NotNullWhen(false)] out string? error)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            args = [];
-            error = null;
-            return true;
-        }
-
-        try
-        {
-            if (JsonNode.Parse(raw) is JsonObject obj)
-            {
-                args = obj;
-                error = null;
-                return true;
-            }
-
-            args = null;
-            error = $"Tool arguments must be a JSON object, got non-object payload: '{raw}'.";
-            return false;
-        }
-        catch (JsonException ex)
-        {
-            args = null;
-            error = $"Invalid JSON ({ex.Message}). Raw payload: '{raw}'.";
-            return false;
-        }
     }
 
     private Text Fail(string name, string message)
