@@ -25,4 +25,15 @@ public static class ToolingBuilderExtensions
         ArgumentNullException.ThrowIfNull(layer);
         return builder.AddLayer(layer);
     }
+
+    public static ToolingBuilder WithDiscovery(
+        this ToolingBuilder builder,
+        IEnumerable<string>? coreTools = null,
+        IToolSearcher? searcher = null,
+        string discoveryToolName = "search_tools",
+        string discoveryToolDescription = "Search available tools in the catalog and activate them for the session.")
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.AddLayer(new ToolDiscoveryLayer(coreTools, searcher, discoveryToolName, discoveryToolDescription));
+    }
 }
