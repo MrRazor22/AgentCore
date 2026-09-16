@@ -26,14 +26,11 @@ public static class ToolingBuilderExtensions
         return builder.AddLayer(layer);
     }
 
-    public static ToolingBuilder WithDiscovery(
-        this ToolingBuilder builder,
-        IEnumerable<string>? coreTools = null,
-        IToolSearcher? searcher = null,
-        string discoveryToolName = "search_tools",
-        string discoveryToolDescription = "Search available tools in the catalog and activate them for the session.")
+    public static ToolingBuilder WithToolDiscovery(this ToolingBuilder builder, ToolDiscoveryTool? tool = null)
     {
         ArgumentNullException.ThrowIfNull(builder);
-        return builder.AddLayer(new ToolDiscoveryLayer(coreTools, searcher, discoveryToolName, discoveryToolDescription));
+        var discovery = tool ?? new ToolDiscoveryTool();
+        builder.WithTools(discovery);
+        return builder.AddLayer(new ToolDiscoveryLayer(discovery));
     }
 }

@@ -9,8 +9,11 @@ using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
 namespace AgentCore.Tooling;
-
-public sealed record ToolDefinition(string Name, string Description, JsonSchema ParametersSchema);
+public sealed record ToolDefinition(
+    string Name,
+    string Description,
+    JsonSchema ParametersSchema,
+    IReadOnlyList<IMetadata>? Metadata = null);
 
 public interface ITool
 {

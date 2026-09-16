@@ -1,103 +1,72 @@
-using AgentCore.LLM;
+using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using System.Runtime.CompilerServices;
-using System.Text;
+using AgentCore.Tooling;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Layers.Tools;
 
-public sealed class ToolDiscoveryLayer : ToolingLayer
+public sealed record DeferLoading(bool Value = true) : IMetadata;
+
+public sealed record ToolDomain(string Name) : IMetadata;
+
+public sealed class ToolDiscoveryTool : ITool
 {
-    private readonly HashSet<string> _coreTools;
-    private readonly HashSet<string> _activeTools = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IToolSearcher _searcher;
-    private readonly ToolDefinition _discoveryTool;
+    private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
 
-    public ToolDiscoveryLayer(
-        IEnumerable<string>? coreTools = null,
-        IToolSearcher? searcher = null,
-        string discoveryToolName = "search_tools",
-        string discoveryToolDescription = "Search available tools in the catalog and activate them for the session.")
+    public Func<IReadOnlyList<ToolDefinition>>? CatalogProvider { get; set; }
+
+    public ToolDefinition Info { get; } = new(
+        "search_tools",
+        "Searches available tools in catalog by keyword or domain to activate them into context.",
+        new JsonSchemaBuilder()
+            .Type<object>()
+            .AddProperty("query", new JsonSchemaBuilder().Type<string>().Description("Search keyword or domain").Build(), required: true)
+            .Build());
+
+    public bool IsActive(ToolDefinition tool) =>
+        tool.Metadata.Get<DeferLoading>()?.Value != true || _active.Contains(tool.Name);
+
+    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        JsonObject arguments,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        _coreTools = new(coreTools ?? [], StringComparer.OrdinalIgnoreCase);
-        _searcher = searcher ?? new KeywordToolSearcher();
-        _discoveryTool = new(
-            discoveryToolName,
-            discoveryToolDescription,
-            new JsonSchemaBuilder()
-                .Type("object")
-                .AddProperty("query", new JsonSchemaBuilder()
-                    .Type("string")
-                    .Description("Keywords or intent to search for available tools.")
-                    .Build())
-                .Build());
+        await Task.CompletedTask;
+        var query = arguments["query"]?.ToString();
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            yield return new Text("Please provide a search query.");
+            yield break;
+        }
+
+        var catalog = CatalogProvider?.Invoke() ?? [];
+        var matches = catalog
+            .Where(t => !IsActive(t) && (
+                t.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                t.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                t.Metadata.Get<ToolDomain>()?.Name.Contains(query, StringComparison.OrdinalIgnoreCase) == true))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            yield return new Text($"No tools found matching '{query}'.");
+            yield break;
+        }
+
+        foreach (var m in matches) _active.Add(m.Name);
+
+        yield return new Text($"Activated {matches.Count} tool(s):\n" +
+            string.Join("\n", matches.Select(m => $"- {m.Name}: {m.Description}")));
     }
+}
+
+public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool) : ToolingLayer
+{
+    public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
     public override IReadOnlyList<ToolDefinition> GetDefinitions()
     {
-        var catalog = base.GetDefinitions();
-        var definitions = new List<ToolDefinition> { _discoveryTool };
-
-        foreach (var def in catalog)
-        {
-            if (_coreTools.Contains(def.Name) || _activeTools.Contains(def.Name))
-                definitions.Add(def);
-        }
-
-        return definitions;
-    }
-
-    public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
-        IReadOnlyList<ToolCall> calls,
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        var passthrough = new List<ToolCall>();
-
-        foreach (var call in calls)
-        {
-            if (string.Equals(call.Name, _discoveryTool.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                yield return new MessageStart(Role.Tool, Id: call.Id);
-                yield return new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id));
-                yield return new MessageDelta(call.Id, Content: new Text(ExecuteDiscovery(call)));
-                yield return new MessageEnd(Id: call.Id);
-            }
-            else
-            {
-                passthrough.Add(call);
-            }
-        }
-
-        if (passthrough.Count > 0)
-        {
-            await foreach (var evt in base.ExecuteAsync(passthrough, ct).ConfigureAwait(false))
-                yield return evt;
-        }
-    }
-
-    private string ExecuteDiscovery(ToolCall call)
-    {
-        var (args, parseError) = call.ParseArguments();
-        if (parseError != null) return parseError;
-
-        var query = args?["query"]?.ToString();
-        if (string.IsNullOrWhiteSpace(query))
-            return "No search query provided. Please provide keywords to search for tools.";
-
-        var catalog = base.GetDefinitions();
-        var matches = _searcher.Search(query, catalog);
-
-        if (matches.Count == 0)
-            return $"No tools found matching '{query}'.";
-
-        var sb = new StringBuilder();
-        sb.AppendLine($"Found and activated {matches.Count} tool(s):");
-        foreach (var tool in matches)
-        {
-            _activeTools.Add(tool.Name);
-            sb.AppendLine($"- {tool.Name}: {tool.Description}");
-        }
-        sb.Append("You may now invoke these tools directly.");
-        return sb.ToString();
+        Tool.CatalogProvider ??= () => Inner.GetDefinitions();
+        return base.GetDefinitions().Where(t => t.Name == Tool.Info.Name || Tool.IsActive(t)).ToList();
     }
 }
