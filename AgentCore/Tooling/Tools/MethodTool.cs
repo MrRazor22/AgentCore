@@ -37,7 +37,7 @@ public sealed class MethodTool : ITool
 
     public ToolDefinition Info { get; }
 
-    public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null)
+    public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null, IEnumerable<IMetadata>? extraMetadata = null)
     {
         ArgumentNullException.ThrowIfNull(method);
         if (!method.IsStatic && target == null)
@@ -46,7 +46,9 @@ public sealed class MethodTool : ITool
         _invoker = MethodInvoker.Create(method);
         _target = target;
         _parameters = method.GetParameters();
-        Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method));
+
+        var metadata = method.GetCustomAttributes().OfType<IMetadata>().Concat(extraMetadata ?? []).ToList();
+        Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method), metadata.Count > 0 ? metadata : null);
 
         if (typeof(Task).IsAssignableFrom(method.ReturnType) && method.ReturnType.IsGenericType)
         {

@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using AgentCore.Context.Primitives;
 using AgentCore.LLM.Chat;
 using Xunit;
@@ -62,26 +61,5 @@ public class ImageTests
 
         var textContent = Assert.IsType<Text>(truncated);
         Assert.Contains("[Image (image/jpeg) omitted: exceeds context budget]", textContent.Value);
-    }
-
-    [Fact]
-    public void PolymorphicSerialization_RoundtripsSuccessfully()
-    {
-        IContent original = new Image(
-            Uri: new Uri("https://example.com/cat.jpg"),
-            MediaType: "image/jpeg",
-            Width: 1024,
-            Height: 768);
-
-        string json = JsonSerializer.Serialize(original);
-        Assert.Contains("\"type\":\"image\"", json);
-        Assert.Contains("\"media_type\":\"image/jpeg\"", json);
-
-        var deserialized = JsonSerializer.Deserialize<IContent>(json);
-        var image = Assert.IsType<Image>(deserialized);
-        Assert.Equal(1024, image.Width);
-        Assert.Equal(768, image.Height);
-        Assert.Equal("image/jpeg", image.MediaType);
-        Assert.Equal(new Uri("https://example.com/cat.jpg"), image.Uri);
     }
 }

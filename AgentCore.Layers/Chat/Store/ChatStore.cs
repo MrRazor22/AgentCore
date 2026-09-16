@@ -13,8 +13,9 @@ public interface IChatStore
     Task<IReadOnlyList<Message>?> LoadAsync(CancellationToken ct = default);
     Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
 }
-public class FileChatStore(string storageDirectory, string sessionId) : IChatStore
+public class FileChatStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IChatStore
 {
+    private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(
         !string.IsNullOrWhiteSpace(storageDirectory) ? storageDirectory : throw new ArgumentException("Storage directory cannot be null or whitespace.", nameof(storageDirectory)),
         $"{string.Join("_", (string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session ID cannot be null or whitespace.", nameof(sessionId)) : sessionId).Split(Path.GetInvalidFileNameChars()))}.jsonl");
@@ -28,7 +29,7 @@ public class FileChatStore(string storageDirectory, string sessionId) : IChatSto
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            if (JsonSerializer.Deserialize<Message>(line) is { } m)
+            if (JsonSerializer.Deserialize<Message>(line, _options) is { } m)
                 messages.Add(m);
         }
         return messages;
@@ -38,7 +39,7 @@ public class FileChatStore(string storageDirectory, string sessionId) : IChatSto
     {
         if (messages.Count == 0) return Task.CompletedTask;
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var lines = messages.Select(m => JsonSerializer.Serialize(m));
+        var lines = messages.Select(m => JsonSerializer.Serialize(m, _options));
         return File.AppendAllLinesAsync(_path, lines, ct);
     }
 }

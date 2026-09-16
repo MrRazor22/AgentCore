@@ -13,8 +13,9 @@ public interface IWalStore
     Task ClearAsync(CancellationToken ct = default);
     IAsyncEnumerable<IMessageEvent> RecoverAsync(CancellationToken ct = default);
 }
-public class FileWalStore(string storageDirectory, string sessionId) : IWalStore
+public class FileWalStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IWalStore
 {
+    private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(
         !string.IsNullOrWhiteSpace(storageDirectory) ? storageDirectory : throw new ArgumentException("Storage directory cannot be null or whitespace.", nameof(storageDirectory)),
         $"{string.Join("_", (string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session ID cannot be null or whitespace.", nameof(sessionId)) : sessionId).Split(Path.GetInvalidFileNameChars()))}.wal");
@@ -22,7 +23,7 @@ public class FileWalStore(string storageDirectory, string sessionId) : IWalStore
     public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var line = JsonSerializer.Serialize(evt);
+        var line = JsonSerializer.Serialize(evt, _options);
         return File.AppendAllLinesAsync(_path, [line], ct);
     }
 
@@ -41,7 +42,7 @@ public class FileWalStore(string storageDirectory, string sessionId) : IWalStore
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
-            if (JsonSerializer.Deserialize<IMessageEvent>(line) is { } evt)
+            if (JsonSerializer.Deserialize<IMessageEvent>(line, _options) is { } evt)
                 yield return evt;
         }
     }

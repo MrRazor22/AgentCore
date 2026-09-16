@@ -5,17 +5,8 @@ namespace AgentCore.LLM.Chat;
 
 public enum Role { System, Assistant, User, Tool }
 
-[JsonPolymorphic]
-[JsonDerivedType(typeof(Text), "text")]
-[JsonDerivedType(typeof(Reasoning), "reasoning")]
-[JsonDerivedType(typeof(ToolCall), "tool")]
-[JsonDerivedType(typeof(Image), "image")]
 public interface IContent : IContentEvent;
 
-[JsonPolymorphic]
-[JsonDerivedType(typeof(ToolCallId), "tool_id")]
-[JsonDerivedType(typeof(TokenUsage), "tokens")]
-[JsonDerivedType(typeof(Summary), "summary")]
 public interface IMetadata;
 
 public sealed record ToolCallId(string Value) : IMetadata;

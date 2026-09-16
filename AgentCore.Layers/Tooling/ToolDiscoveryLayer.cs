@@ -6,9 +6,11 @@ using AgentCore.Tooling;
 
 namespace AgentCore.Layers.Tools;
 
-public sealed record DeferLoading(bool Value = true) : IMetadata;
-
-public sealed record ToolDomain(string Name) : IMetadata;
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+public sealed class Discoverable(string? domain = null) : Attribute, IMetadata
+{
+    public string? Domain { get; } = domain;
+}
 
 public sealed class ToolDiscoveryTool : ITool
 {
@@ -25,7 +27,7 @@ public sealed class ToolDiscoveryTool : ITool
             .Build());
 
     public bool IsActive(ToolDefinition tool) =>
-        tool.Metadata.Get<DeferLoading>()?.Value != true || _active.Contains(tool.Name);
+        tool.Metadata.Get<Discoverable>() == null || _active.Contains(tool.Name);
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
@@ -44,7 +46,8 @@ public sealed class ToolDiscoveryTool : ITool
             .Where(t => !IsActive(t) && (
                 t.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                 t.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                t.Metadata.Get<ToolDomain>()?.Name.Contains(query, StringComparison.OrdinalIgnoreCase) == true))
+                (t.Metadata.Get<Discoverable>()?.Domain is { Length: > 0 } d &&
+                 d.Contains(query, StringComparison.OrdinalIgnoreCase))))
             .ToList();
 
         if (matches.Count == 0)

@@ -12,6 +12,7 @@ using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using AgentCore.Layers.Tools;
 using CodeSharp.Skills;
+using CodeSharp.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
@@ -42,6 +43,8 @@ internal class App
         IVsToolDispatcher dispatcher = new VsToolDispatcher(channel);
         var vsTools = new VsStudioTools(dispatcher);
         var skillTool = new SkillTool(new SkillManager(root));
+        var webTools = new WebTools();
+        var scheduleTool = new ScheduleTool();
 
         var baseUrl = config.BaseUrl.EndsWith('/') ? config.BaseUrl : config.BaseUrl + "/";
         var agent = Agent.Create()
@@ -52,7 +55,12 @@ internal class App
                 .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true)
                 .AddChatGrammar())
             .UseLLM(llm => llm.WithRetry().WithToolCallDetection())
-            .UseToolbox(tools => tools.WithTools(vsTools).WithTools(skillTool))
+            .UseToolbox(tools => tools
+                .WithTools(vsTools)
+                .WithTools(skillTool)
+                .WithToolDiscovery()
+                .WithTools(webTools, new Discoverable("web"))
+                .WithTools(scheduleTool, new Discoverable("schedule")))
             .WithInstructions("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")
             .Build();
 

@@ -1,4 +1,5 @@
 using System.Reflection;
+using AgentCore.LLM.Chat;
 using AgentCore.Tooling.Tools;
 using Microsoft.Extensions.Logging;
 
@@ -23,7 +24,7 @@ public sealed class ToolingBuilder
 
     public ToolingBuilder WithTools<T>() => WithTools(typeof(T));
 
-    public ToolingBuilder WithTools(object instance)
+    public ToolingBuilder WithTools(object instance, params IMetadata[] metadata)
     {
         ArgumentNullException.ThrowIfNull(instance);
         var type = instance as Type ?? instance.GetType();
@@ -31,7 +32,7 @@ public sealed class ToolingBuilder
         var flags = BindingFlags.Public | BindingFlags.Static | (target != null ? BindingFlags.Instance : 0);
 
         foreach (var m in type.GetMethods(flags).Where(m => m.GetCustomAttribute<ToolAttribute>() != null))
-            WithTools(new MethodTool(m, m.IsStatic ? null : target));
+            WithTools(new MethodTool(m, m.IsStatic ? null : target, extraMetadata: metadata));
 
         return this;
     }
