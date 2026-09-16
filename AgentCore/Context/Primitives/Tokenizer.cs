@@ -22,7 +22,7 @@ public class Tokenizer(
     {
         Text t => (int)Math.Ceiling(t.Value.Length / (double)CharsPerToken),
         Reasoning r => (int)Math.Ceiling(r.Value.Length / (double)CharsPerToken),
-        ToolCall tc => (int)Math.Ceiling((tc.Name.Length + (tc.Arguments?.ToJsonString().Length ?? 0)) / (double)CharsPerToken),
+        ToolCall tc => (int)Math.Ceiling((tc.Name.Length + (tc.Arguments?.Length ?? 0)) / (double)CharsPerToken),
         Image img => EstimateImage(img),
         _ => 0
     };

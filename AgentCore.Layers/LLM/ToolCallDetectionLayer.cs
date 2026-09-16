@@ -121,7 +121,7 @@ public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false) : LLMLa
 
                 int tcIdx = eventIndex++;
                 yield return new MessageDelta(Content: new ToolCallStart(tcIdx, match.Call.Id, match.Call.Name));
-                yield return new MessageDelta(Content: new ToolCallDelta(tcIdx, match.Call.Arguments?.ToJsonString() ?? "{}"));
+                yield return new MessageDelta(Content: new ToolCallDelta(tcIdx, string.IsNullOrWhiteSpace(match.Call.Arguments) ? "{}" : match.Call.Arguments));
                 yield return new MessageDelta(Content: new ToolCallEnd(tcIdx));
 
                 lastIndex = match.Index + match.Length;
@@ -178,7 +178,7 @@ public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false) : LLMLa
         try
         {
             if (JsonNode.Parse(jsonStr) is JsonObject obj && (obj["name"] ?? obj["tool"])?.ToString() is { } name && names.Contains(name))
-                return new ToolCall(Guid.NewGuid().ToString("N"), name, (obj["arguments"] ?? obj["parameters"]) as JsonObject ?? new());
+                return new ToolCall(Guid.NewGuid().ToString("N"), name, (obj["arguments"] ?? obj["parameters"])?.ToJsonString() ?? "{}");
         }
         catch { }
         return null;
@@ -195,6 +195,6 @@ public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false) : LLMLa
             try { args[p.Groups["name"].Value] = JsonNode.Parse(val)?.DeepClone(); }
             catch { args[p.Groups["name"].Value] = val; }
         }
-        return new ToolCall(Guid.NewGuid().ToString("N"), m.Groups["name"].Value, args);
+        return new ToolCall(Guid.NewGuid().ToString("N"), m.Groups["name"].Value, args.ToJsonString());
     }
 }

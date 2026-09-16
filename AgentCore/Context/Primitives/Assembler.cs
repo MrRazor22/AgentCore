@@ -1,6 +1,5 @@
 using AgentCore.LLM.Chat;
 using System.Text;
-using System.Text.Json.Nodes;
 
 namespace AgentCore.Context.Primitives;
 
@@ -72,7 +71,7 @@ public sealed class Assembler : IAssembler
         var snapshotContents = new List<IContent>(_contents);
         foreach (var b in _blocks.Values)
         {
-            if (b.Start is not ToolCallStart ? b.Buffer.Length > 0 : IsValidJson(b.Buffer.ToString()))
+            if (b.Buffer.Length > 0)
                 snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
         }
         return new Message(_role, snapshotContents, _id, _metadata);
@@ -98,23 +97,9 @@ public sealed class Assembler : IAssembler
     {
         TextStart => new Text(text),
         ReasoningStart => new Reasoning(text),
-        ToolCallStart tc => new ToolCall(tc.Id, tc.Name, ParseArgs(text)),
+        ToolCallStart tc => new ToolCall(tc.Id, tc.Name, text),
         _ => new Text(text)
     };
-
-    private static bool IsValidJson(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return true;
-        try { return JsonNode.Parse(raw) is JsonObject; }
-        catch { return false; }
-    }
-
-    private static JsonObject ParseArgs(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return new JsonObject();
-        try { return JsonNode.Parse(raw)?.AsObject() ?? new JsonObject(); }
-        catch { return new JsonObject(); }
-    }
 }
 
 public static class AssemblerExtensions

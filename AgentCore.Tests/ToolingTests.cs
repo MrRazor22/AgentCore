@@ -41,7 +41,7 @@ public class ToolingTests
         var tooling = new Tooling(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
-        var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
 
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
@@ -59,12 +59,27 @@ public class ToolingTests
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
-        var toolCall = new ToolCall("call_1", tool.Definition.Name, args);
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
 
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
         var resultText = toolResult.ToString();
         Assert.Contains("Error calling tool", resultText);
+    }
+
+    [Fact]
+    public async Task ToolingService_ExecuteAsync_MalformedJson_ReturnsSyntaxErrorWithRawPayload()
+    {
+        var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
+        var tool = new MethodTool(method, new SampleTools());
+        var tooling = new Tooling(new[] { tool });
+
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, "{\"a\": 10, malformed}");
+        var toolResult = await tooling.ExecuteAsync(toolCall);
+
+        var resultText = toolResult.ToString();
+        Assert.Contains("Invalid JSON", resultText);
+        Assert.Contains("{\"a\": 10, malformed}", resultText);
     }
 
     [Fact]
@@ -86,7 +101,7 @@ public class ToolingTests
         var tooling = new Tooling(new[] { tool });
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
-        var toolCall = new ToolCall("call_1", "Weather_Lookup", args);
+        var toolCall = new ToolCall("call_1", "Weather_Lookup", args.ToJsonString());
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
         Assert.Equal("25", toolResult.ToString());

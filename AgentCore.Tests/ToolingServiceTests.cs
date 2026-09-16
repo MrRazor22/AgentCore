@@ -31,7 +31,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_UnregisteredToolName_ReturnsErrorMessage()
     {
         var tooling = new Toolbox(Array.Empty<ITool>());
-        var call = new ToolCall("call_1", "missing_tool", new JsonObject());
+        var call = new ToolCall("call_1", "missing_tool");
 
         var result = await tooling.ExecuteAsync(call);
 
@@ -43,7 +43,7 @@ public class ToolingServiceTests
     public async Task ExecuteAsync_EmptyToolName_ReturnsErrorMessage()
     {
         var tooling = new Toolbox(Array.Empty<ITool>());
-        var call = new ToolCall("call_1", "", new JsonObject());
+        var call = new ToolCall("call_1", "");
 
         var result = await tooling.ExecuteAsync(call);
 
@@ -61,7 +61,7 @@ public class ToolingServiceTests
         };
         var tooling = new Toolbox(new[] { tool });
 
-        var call = new ToolCall("call_1", "crash_tool", new JsonObject());
+        var call = new ToolCall("call_1", "crash_tool");
 
         var result = await tooling.ExecuteAsync(call);
 
@@ -77,7 +77,7 @@ public class ToolingServiceTests
         var tool = new FakeTool("null_tool", schema) { Invoker = (args, ct) => Task.FromResult<IReadOnlyList<IContent>>(Array.Empty<IContent>()) };
         var tooling = new Toolbox(new[] { tool });
 
-        var call = new ToolCall("call_1", "null_tool", new JsonObject());
+        var call = new ToolCall("call_1", "null_tool");
         var result = await tooling.ExecuteAsync(call);
 
         var resultText = result.ToString();
@@ -94,7 +94,7 @@ public class ToolingServiceTests
         };
         var tooling = new Toolbox(new[] { tool });
 
-        var call = new ToolCall("call_1", "content_tool", new JsonObject());
+        var call = new ToolCall("call_1", "content_tool");
         var result = await tooling.ExecuteAsync(call);
 
         var resultText = result.ToString();
@@ -111,7 +111,7 @@ public class ToolingServiceTests
         };
         var tooling = new Toolbox(new[] { tool });
 
-        var call = new ToolCall("call_1", "object_tool", new JsonObject());
+        var call = new ToolCall("call_1", "object_tool");
         var result = await tooling.ExecuteAsync(call);
 
         var resultText = result.ToString();
@@ -128,7 +128,7 @@ public class ToolingServiceTests
         };
         var tooling = new Toolbox(new[] { tool });
 
-        var call = new ToolCall("call_1", "slow_tool", new JsonObject());
+        var call = new ToolCall("call_1", "slow_tool");
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 

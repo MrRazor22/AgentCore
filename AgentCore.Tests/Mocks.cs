@@ -48,7 +48,7 @@ public class MockLLMProvider : ILLM
                 int idx = blockIndex;
                 var id = !string.IsNullOrEmpty(tc.Id) ? tc.Id : Guid.NewGuid().ToString("N");
                 yield return new MessageDelta(Content: new ToolCallStart(idx, id, tc.Name));
-                var args = tc.Arguments?.ToJsonString() ?? "{}";
+                var args = string.IsNullOrWhiteSpace(tc.Arguments) ? "{}" : tc.Arguments;
                 if (!string.IsNullOrEmpty(args))
                 {
                     yield return new MessageDelta(Content: new ToolCallDelta(idx, args));

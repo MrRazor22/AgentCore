@@ -47,7 +47,7 @@ public static class TornadoAdapterExtensions
 
                 case ToolCall tc:
                     toolCalls ??= [];
-                    var argsStr = tc.Arguments?.ToJsonString() ?? "{}";
+                    var argsStr = string.IsNullOrWhiteSpace(tc.Arguments) ? "{}" : tc.Arguments;
                     toolCalls.Add(new LlmTornado.ChatFunctions.ToolCall
                     {
                         Id = tc.Id,

@@ -1,6 +1,4 @@
 using AgentCore.LLM;
-using System.Text.Json.Nodes;
-
 namespace AgentCore.LLM.Chat;
 
 public class Text(string value) : IContent
@@ -17,14 +15,14 @@ public class Reasoning(string value) : IContent
     public override string ToString() => Value;
 }
 
-public class ToolCall(string id, string name, JsonObject? arguments = null) : IContent
+public class ToolCall(string id, string name, string? arguments = null) : IContent
 {
     public string Id { get; } = id;
     public string Name { get; } = name;
-    public virtual JsonObject Arguments { get; } = arguments ?? new JsonObject();
+    public virtual string Arguments { get; } = arguments ?? string.Empty;
 
     public override string ToString() =>
-        Arguments.Count == 0 ? Name : $"{Name}({string.Join(", ", Arguments.Select(p => $"{p.Key}: {p.Value}"))})";
+        string.IsNullOrWhiteSpace(Arguments) ? Name : $"{Name}({Arguments})";
 }
 
 public record Image(

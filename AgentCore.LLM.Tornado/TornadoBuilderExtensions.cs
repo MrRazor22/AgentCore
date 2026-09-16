@@ -41,9 +41,19 @@ public static class TornadoBuilderExtensions
         ArgumentNullException.ThrowIfNull(apiKey);
         ArgumentNullException.ThrowIfNull(model);
 
-        TornadoApi api = !string.IsNullOrWhiteSpace(baseUrl)
-            ? new TornadoApi(new Uri(baseUrl), apiKey, provider)
-            : new TornadoApi(provider, apiKey);
+        TornadoApi api;
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            var cleanUrl = baseUrl.TrimEnd('/');
+            if (cleanUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+                cleanUrl = cleanUrl[..^3];
+            cleanUrl += "/";
+            api = new TornadoApi(new Uri(cleanUrl), apiKey, provider);
+        }
+        else
+        {
+            api = new TornadoApi(provider, apiKey);
+        }
 
         var chatModel = new ChatModel(model, provider);
         return builder.WithTornado(api, chatModel);

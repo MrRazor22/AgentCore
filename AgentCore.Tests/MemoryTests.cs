@@ -179,7 +179,7 @@ public class MemoryTests
         Assert.Contains("Image omitted", truncatedImage.ToString());
 
         // 3. ToolCall returns itself unchanged
-        IContent toolCall = new ToolCall("call_1", "my_tool", new System.Text.Json.Nodes.JsonObject());
+        IContent toolCall = new ToolCall("call_1", "my_tool");
         Assert.Same(toolCall, truncator.Truncate(toolCall, 10));
 
         // 4. Reasoning truncates thought string when over budget

@@ -41,7 +41,7 @@ public class TornadoTests
     public void ToTornadoMessage_ConvertsToolCallAndResult()
     {
         var tcMsg = new Message(Role.Assistant, [
-            new ToolCall("call_1", "calc", new System.Text.Json.Nodes.JsonObject { ["a"] = 5 })
+            new ToolCall("call_1", "calc", "{\"a\":5}")
         ]);
 
         var tornadoTc = tcMsg.ToTornadoMessage();

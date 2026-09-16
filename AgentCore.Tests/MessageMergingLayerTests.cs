@@ -29,7 +29,7 @@ public class MessageMergingLayerTests
     [Fact]
     public void MergeTextMessages_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
-        var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
+        var toolCall = new ToolCall("1", "Search");
         var input = new List<Message>
         {
             new Message(Role.User, [new Text("find files")]),
@@ -50,7 +50,7 @@ public class MessageMergingLayerTests
     [Fact]
     public void MergeTextMessages_MixedStructuredAndTextMessage_DoesNotMerge()
     {
-        var toolCall = new ToolCall("1", "Search", new System.Text.Json.Nodes.JsonObject());
+        var toolCall = new ToolCall("1", "Search");
 
         var input = new List<Message>
         {
