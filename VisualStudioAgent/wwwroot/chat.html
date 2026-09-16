@@ -790,13 +790,14 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
     function handlePipeMessage(msg) {
       if (!msg) return;
 
-      if (msg.event === 'ready') {
-        updateStatus(true, msg.model || "AgentCore");
+      const event = msg.type || msg.event;
+      if (event === 'ready') {
+        updateStatus(true, msg.name || msg.model || "AgentCore");
         return;
       }
 
-      const event = msg.event;
       const data = msg.data || {};
+      const text = msg.text || data.delta || data.thought || '';
 
       if (event === 'thought') {
         if (!thinkingCard) {
@@ -814,7 +815,7 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
           timeline.appendChild(thinkingCard);
           thinkingBody = thinkingCard.querySelector('.thinking-body');
         }
-        thinkingBody.textContent += (data.thought || '');
+        thinkingBody.textContent += text;
         scrollToBottom();
       } else if (event === 'content') {
         if (!agentCard) {
@@ -830,16 +831,47 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
           timeline.appendChild(agentCard);
           agentContent = agentCard.querySelector('.agent-body');
         }
-        agentContent.textContent += (data.delta || '');
+        agentContent.textContent += text;
         scrollToBottom();
-      } else if (event === 'tool_call' || event === 'tool_start') {
+      } else if (event === 'plan') {
+        const todos = msg.todos || data.todos || [];
+        if (todos.length > 0) {
+          let planCard = document.getElementById(`plan_${activeTurnId}`);
+          if (!planCard) {
+            planCard = document.createElement('div');
+            planCard.className = 'card plan-card';
+            planCard.id = `plan_${activeTurnId}`;
+            timeline.appendChild(planCard);
+          }
+          let itemsHtml = '';
+          todos.forEach(t => {
+            const isDone = t.startsWith('[x]') || t.startsWith('[X]');
+            const cleanText = t.replace(/^\[[ xX]\]\s*/, '');
+            itemsHtml += `
+              <li class="plan-item ${isDone ? 'done' : ''}">
+                <span class="plan-icon ${isDone ? 'done' : 'pending'}">${isDone ? '✓' : '○'}</span>
+                <span>${escapeHtml(cleanText)}</span>
+              </li>`;
+          });
+          const doneCount = todos.filter(t => t.startsWith('[x]') || t.startsWith('[X]')).length;
+          planCard.innerHTML = `
+            <div class="plan-title">
+              <span>📋 Execution Plan</span>
+              <span class="plan-count">${doneCount}/${todos.length}</span>
+            </div>
+            <ul class="plan-list">${itemsHtml}</ul>
+          `;
+          scrollToBottom();
+        }
+      } else if (event === 'tool_call' || event === 'tool_start' || event === 'tool_call_ui') {
         const toolCard = document.createElement('div');
         toolCard.className = 'card terminal-card';
-        const argsStr = typeof data.arguments === 'object' ? JSON.stringify(data.arguments, null, 2) : String(data.arguments || '');
+        const name = msg.name || data.name || "Tool";
+        const argsStr = msg.text || (msg.args ? JSON.stringify(msg.args, null, 2) : (typeof data.arguments === 'object' ? JSON.stringify(data.arguments, null, 2) : String(data.arguments || '')));
         toolCard.innerHTML = `
           <div class="terminal-header">
             <div class="terminal-command">
-              <span class="cmd-prompt">⚙</span> ${escapeHtml(data.name || "Tool")}
+              <span class="cmd-prompt">⚙</span> ${escapeHtml(name)}
             </div>
             <span class="terminal-status">RUNNING</span>
           </div>
@@ -852,7 +884,7 @@ Passed! - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 142 ms - OrderSe
         errCard.className = 'card';
         errCard.style.borderLeft = '3px solid var(--accent-red)';
         errCard.style.padding = '10px 14px';
-        errCard.innerHTML = `<span style="color:var(--accent-red);font-weight:600;">Error:</span> ${escapeHtml(msg.message || "Unknown error")}`;
+        errCard.innerHTML = `<span style="color:var(--accent-red);font-weight:600;">Error:</span> ${escapeHtml(msg.text || msg.message || "Unknown error")}`;
         timeline.appendChild(errCard);
         scrollToBottom();
       } else if (event === 'done') {

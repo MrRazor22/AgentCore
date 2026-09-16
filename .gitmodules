@@ -1,3 +1,0 @@
-[submodule "extern/TensorSharp"]
-	path = extern/TensorSharp
-	url = https://github.com/zhongkaifu/TensorSharp.git

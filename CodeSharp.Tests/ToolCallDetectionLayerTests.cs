@@ -231,7 +231,7 @@ public class ToolCallDetectionLayerTests
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
         Assert.Equal("ToolA", call.Name);
-        Assert.Contains("hello", call.Arguments?["text"]?.ToString());
+        Assert.Contains("hello", call.Arguments);
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public class ToolCallDetectionLayerTests
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
         Assert.Equal("TodoList", call.Name);
-        Assert.Contains("ReadFile", call.Arguments?["todos"]?.ToString());
+        Assert.Contains("ReadFile", call.Arguments);
     }
 
     [Fact]
@@ -400,8 +400,8 @@ public class ToolCallDetectionLayerTests
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
         Assert.Equal("EditFile", call.Name);
-        Assert.Equal("test.txt", call.Arguments?["filePath"]?.ToString());
-        Assert.Equal("hello world", call.Arguments?["replacementContent"]?.ToString());
+        Assert.Contains("test.txt", call.Arguments);
+        Assert.Contains("hello world", call.Arguments);
     }
 
     [Fact]
@@ -430,7 +430,7 @@ public class ToolCallDetectionLayerTests
         // Assert
         var call = Assert.Single(results.OfType<ToolCall>());
         Assert.Equal("TodoList", call.Name);
-        Assert.Contains("Search", call.Arguments?["todos"]?.ToString());
+        Assert.Contains("Search", call.Arguments);
     }
 
     [Fact]

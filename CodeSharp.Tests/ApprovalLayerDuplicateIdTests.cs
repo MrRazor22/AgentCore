@@ -51,10 +51,10 @@ public class ApprovalLayerDuplicateIdTests
         // Tool calls with duplicate and empty IDs ["", "", "1", "1"]
         var calls = new[]
         {
-            new ToolCall("", "test_tool", new JsonObject()),
-            new ToolCall("", "test_tool", new JsonObject()),
-            new ToolCall("1", "test_tool", new JsonObject()),
-            new ToolCall("1", "test_tool", new JsonObject())
+            new ToolCall("", "test_tool"),
+            new ToolCall("", "test_tool"),
+            new ToolCall("1", "test_tool"),
+            new ToolCall("1", "test_tool")
         };
 
         var results = new List<ToolResult>();

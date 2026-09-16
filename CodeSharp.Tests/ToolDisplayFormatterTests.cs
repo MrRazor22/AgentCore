@@ -18,7 +18,7 @@ public class ToolDisplayFormatterTests
         {
             ["commandLine"] = cmd,
             ["cwd"] = "src"
-        });
+        }.ToJsonString());
 
         Assert.True(formatter.CanFormat("RunCommand"));
         var summary = formatter.FormatCall(call);
@@ -36,7 +36,7 @@ public class ToolDisplayFormatterTests
         var call = new ToolCall("1", "CustomTool", new JsonObject
         {
             ["param1"] = "val1"
-        });
+        }.ToJsonString());
 
         var summary = formatter.FormatCall(call);
 

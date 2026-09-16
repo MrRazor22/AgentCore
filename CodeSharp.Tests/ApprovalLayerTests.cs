@@ -68,7 +68,7 @@ public class ApprovalLayerTests
         var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IContent?>(null));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         var result = await layer.ExecuteAsync(call);
 
         Assert.True(mockInner.ExecuteCalled);
@@ -82,7 +82,7 @@ public class ApprovalLayerTests
         var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IContent?>(new Text("[DENIED] User rejected execution.")));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
@@ -103,7 +103,7 @@ public class ApprovalLayerTests
         var layer = new ToolApprovalLayer((call, ct) => Task.FromResult<IReadOnlyList<IContent>?>(denialItems));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
@@ -120,7 +120,7 @@ public class ApprovalLayerTests
         var layer = new ToolApprovalLayer((call, ct) => Task.FromResult(true));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         var result = await layer.ExecuteAsync(call);
 
         Assert.True(mockInner.ExecuteCalled);
@@ -134,7 +134,7 @@ public class ApprovalLayerTests
         var layer = new ToolApprovalLayer((call, ct) => Task.FromResult(false));
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
@@ -147,9 +147,7 @@ public class ApprovalLayerTests
         var mockInner = new MockTooling();
         var layer = new ToolApprovalLayer((call, ct) =>
         {
-            if (call.Name == "RunCommand" &&
-                call.Arguments.TryGetPropertyValue("CommandLine", out var cmd) &&
-                cmd?.GetValue<string>()?.Contains("format c:") == true)
+            if (call.Name == "RunCommand" && call.Arguments.Contains("format c:"))
             {
                 return Task.FromResult<IContent?>(new Text("[DENIED] Blocked by guardrail."));
             }
@@ -157,7 +155,7 @@ public class ApprovalLayerTests
         });
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "RunCommand", new JsonObject { ["CommandLine"] = "format c: /q" });
+        var call = new ToolCall("1", "RunCommand", "{\"CommandLine\":\"format c: /q\"}");
         var result = await layer.ExecuteAsync(call);
 
         Assert.False(mockInner.ExecuteCalled);
@@ -175,7 +173,7 @@ public class ApprovalLayerTests
         });
         AttachInner(layer, mockInner);
 
-        var call = new ToolCall("1", "test_tool", new JsonObject());
+        var call = new ToolCall("1", "test_tool");
         
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Pre-cancel
@@ -241,9 +239,9 @@ public class ApprovalLayerTests
         });
         AttachInner(layer, mockInner);
 
-        var callA = new ToolCall("call_A", "tool_a", new JsonObject());
-        var callB = new ToolCall("call_B", "tool_b", new JsonObject());
-        var callC = new ToolCall("call_C", "tool_c", new JsonObject());
+        var callA = new ToolCall("call_A", "tool_a");
+        var callB = new ToolCall("call_B", "tool_b");
+        var callC = new ToolCall("call_C", "tool_c");
 
         var tasks = new List<Task<ToolResult>>
         {

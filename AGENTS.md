@@ -10,11 +10,10 @@
 - Provide the full, essential answer without essay-length filler, verbose intros/outros, or token-wasting lectures.
 - Only provide deep dives or long explanations when explicitly asked.
 
-## 3. MINIMAL & DIRECT ABSTRACTIONS
-- Keep types razor-sharp.
-- NEVER create generic interfaces or intermediate wrapper layers unless there are at least two distinct concrete implementations/consumers.
-- NEVER mirror single concrete classes with 1-to-1 interfaces.
-- Zero speculative abstractions.
+## 3. INTERFACE-FIRST ARCHITECTURE FOR BEHAVIORS
+- Always define an interface for any class or object that exhibits behavior.
+- Always depend on and consume interfaces rather than concrete classes.
+- Keep interfaces small, focused, and razor-sharp.
 
 ## 4. CALM, DISCIPLINED EXECUTION
 - Verify all assumptions first.
@@ -37,10 +36,10 @@
 - AGGRESSIVELY PRUNE DEAD CODE & REDUNDANT OVERLOADS: Remove dead, obsolete, or duplicate methods, wrappers, and overloads when making new changes.
 - DISTINGUISH PUBLIC EXTENSION UTILITIES FROM DEAD CODE: Never delete intentional public library API extension methods (such as pipeline inspection utilities like `FindLayer`) simply because they lack internal callers within the library repository itself. Dead code refers to superseded internal logic and redundant wrapper overloads, NOT intentional public framework APIs.
 
-## 8. DESIGN FIRST — DO NOT RUN TESTS UNTIL USER EXPLICITLY COMMANDS
-- Focus on sound architecture and clean design first.
-- DO NOT run tests automatically or prematurely.
-- Only run and check tests when the user explicitly commands: "run and check tests" or "run tests".
+## 8. DESIGN FIRST — NO BUILDS OR TESTS WITHOUT EXPLICIT COMMAND
+- Focus on sound architecture and minimal design first.
+- DO NOT run tests or build commands (`dotnet build`, `msbuild`, etc.) automatically or prematurely.
+- Only run builds or tests when the user explicitly commands: "build", "run tests", or "run and check tests".
 
 ## 9. STRICT GROUNDING & MANDATORY EXHAUSTIVE VERIFICATION
 - ABSOLUTE PROHIBITION ON SPECULATION: Never state assumptions, guesses, or extrapolations as facts. If code was not directly inspected in the turn, you must not make claims about how it works.
@@ -71,3 +70,22 @@
 - Never write convenience wrappers, lazy helper overloads, or over-engineered boilerplate just to avoid refactoring existing code.
 - Minimal does NOT mean code golf; it means razor-sharp design where every line earns its existence.
 - When new requirements emerge, do NOT lazily tack on convenience bloat—refactor and adapt existing abstractions so everything fits cleanly and cohesively.
+
+## 15. SELF-DOCUMENTING CODE & NO EXPLANATORY COMMENTS
+- If code requires comments to explain what it does, it is a design smell.
+- Code must be self-documenting and readable through clear naming and clean structure.
+- Do not write comments explaining logic or intent; make the code itself immediately obvious.
+
+## 16. STRICT SIZE & COMPLEXITY LIMITS (SMELL DETECTORS)
+- Max 150 lines per file: If a file exceeds 150 lines, it is doing too much and has a design smell.
+- Max 4–5 methods per class: If a class has more than 4–5 methods, it violates Single Responsibility and must be decomposed into focused units.
+
+## 17. ZERO HARDCODING & CONFIGURABLE BY DESIGN
+- Never hardcode environment paths, URLs, timeouts, magic numbers, or operational toggles in application logic.
+- Always prefer clean configuration injection so behaviors and environments are easily configurable.
+
+## 18. FIRST-PRINCIPLES OOP MODELING & CONTINUOUS SIMPLIFICATION
+- Continuously challenge designs: "Can we do this better and more minimally?"
+- Identify the primitive, fundamental concept and model it using real-world object-oriented metaphors.
+- Readability is the primary goal; minimal code is the natural side-effect of accurate, real-world modeling.
+- In ambiguous situations, anchor and clarify the design with concrete real-world metaphors and examples.
