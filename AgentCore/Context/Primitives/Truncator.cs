@@ -28,7 +28,7 @@ public class Truncator(
         return content switch
         {
             Text t => new Text(SliceString(t.Value, maxTokens)),
-            Reasoning r => new Reasoning(SliceString(r.Value, maxTokens)),
+            Reasoning r => new Reasoning(SliceString(r.Thought, maxTokens)),
             _ => new Text($"[{content.GetType().Name} omitted: exceeds context budget]")
         };
     }

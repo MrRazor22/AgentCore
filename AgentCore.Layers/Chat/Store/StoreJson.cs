@@ -61,27 +61,29 @@ public static class StoreJson
             options.DerivedTypes.Add(new JsonDerivedType(type, name));
         return options;
     }
+
+    private sealed class MetadataConverter : JsonConverter<IMetadata>
+    {
+        private static readonly ConcurrentDictionary<string, Type?> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+        public override IMetadata? Read(ref Utf8JsonReader r, Type _, JsonSerializerOptions o)
+        {
+            using var doc = JsonDocument.ParseValue(ref r);
+            var tag = doc.RootElement.TryGetProperty("$type", out var p) ? p.GetString() : null;
+            var type = tag != null ? Cache.GetOrAdd(tag, t => Type.GetType(t) is { } found && typeof(IMetadata).IsAssignableFrom(found) ? found : null) : null;
+            return type != null ? (IMetadata?)doc.RootElement.Deserialize(type, o) : null;
+        }
+
+        public override void Write(Utf8JsonWriter w, IMetadata v, JsonSerializerOptions o)
+        {
+            using var doc = JsonSerializer.SerializeToDocument(v, v.GetType(), o);
+            w.WriteStartObject();
+            w.WriteString("$type", $"{v.GetType().FullName}, {v.GetType().Assembly.GetName().Name}");
+            foreach (var p in doc.RootElement.EnumerateObject())
+                if (!p.NameEquals("$type")) p.WriteTo(w);
+            w.WriteEndObject();
+        }
+    }
 }
 
-internal sealed class MetadataConverter : JsonConverter<IMetadata>
-{
-    private static readonly ConcurrentDictionary<string, Type?> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public override IMetadata? Read(ref Utf8JsonReader r, Type _, JsonSerializerOptions o)
-    {
-        using var doc = JsonDocument.ParseValue(ref r);
-        var tag = doc.RootElement.TryGetProperty("$type", out var p) ? p.GetString() : null;
-        var type = tag != null ? Cache.GetOrAdd(tag, t => Type.GetType(t) is { } found && typeof(IMetadata).IsAssignableFrom(found) ? found : null) : null;
-        return type != null ? (IMetadata?)doc.RootElement.Deserialize(type, o) : null;
-    }
-
-    public override void Write(Utf8JsonWriter w, IMetadata v, JsonSerializerOptions o)
-    {
-        using var doc = JsonSerializer.SerializeToDocument(v, v.GetType(), o);
-        w.WriteStartObject();
-        w.WriteString("$type", $"{v.GetType().FullName}, {v.GetType().Assembly.GetName().Name}");
-        foreach (var p in doc.RootElement.EnumerateObject())
-            if (!p.NameEquals("$type")) p.WriteTo(w);
-        w.WriteEndObject();
-    }
-}
