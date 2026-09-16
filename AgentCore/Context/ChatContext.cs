@@ -21,7 +21,7 @@ public class ChatContext(
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
     IAssembler? assembler = null, ILogger<ChatContext>? logger = null) : IContext
 {
-    private readonly List<Message> _chat = [];
+    private Message[] _chat = [];
     private readonly Dictionary<string, IAssembler> _open = new(StringComparer.Ordinal);
     private readonly IAssembler _assembler = assembler ?? new Assembler();
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
@@ -106,8 +106,8 @@ public class ChatContext(
             }
         }
 
-        List<Message> snapshot;
-        lock (_lock) snapshot = [.. _chat];
+        Message[] snapshot;
+        lock (_lock) snapshot = _chat;
 
         if (_tokens > _limit && compactor != null)
         {
@@ -115,22 +115,21 @@ public class ChatContext(
             var compacted = await compactor.CompactAsync(snapshot, _limit, ct).ConfigureAwait(false);
             lock (_lock)
             {
-                _chat.Clear();
-                _chat.AddRange(compacted);
+                _chat = [.. compacted, .. _chat.Skip(snapshot.Length)];
                 _tokens = _chat.Sum(Estimate);
-                snapshot = [.. _chat];
+                snapshot = _chat;
             }
-            logger?.LogInformation("Compacted: {Count} messages ({Tokens} tokens).", snapshot.Count, _tokens);
+            logger?.LogInformation("Compacted: {Count} messages ({Tokens} tokens).", snapshot.Length, _tokens);
         }
 
-        logger?.LogDebug("Context staged: {Count} messages ({Tokens}/{Limit} tokens).", snapshot.Count, _tokens, _limit);
+        logger?.LogDebug("Context staged: {Count} messages ({Tokens}/{Limit} tokens).", snapshot.Length, _tokens, _limit);
         return snapshot;
     }
 
     private Message Commit(Message m, int? tokens = null)
     {
         var truncated = m.Role == Role.System ? m : new Message(m.Role, m.Contents.Select(c => _truncator.Truncate(c, _maxTokens)).ToList(), m.Id, m.Metadata);
-        _chat.Add(truncated);
+        _chat = [.. _chat, truncated];
         _tokens = tokens ?? (_tokens + Estimate(truncated));
         return truncated;
     }
