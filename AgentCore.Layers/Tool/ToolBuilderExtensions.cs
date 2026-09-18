@@ -20,24 +20,33 @@ public static class ToolingExtensions
         return new ToolApprovalLayer(tooling, prompt);
     }
 
-    public static Agent WithApproval(this Agent agent, ToolApprover approver)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        return agent.WithTooling(agent.Tooling.WithApproval(approver));
-    }
+    public static Agent UseApproval(this Agent agent, ToolApprover approver)
+        => agent.AddLayer(new ToolApprovalLayer(agent.Tooling, approver));
 
-    public static Agent WithApproval(this Agent agent, Func<ToolCall, CancellationToken, Task<bool>> prompt)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        return agent.WithTooling(agent.Tooling.WithApproval(prompt));
-    }
+    public static Agent UseApproval(this Agent agent, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+        => agent.AddLayer(new ToolApprovalLayer(agent.Tooling, prompt));
 
-    public static Agent WithToolDiscovery(this Agent agent, ToolDiscoveryTool? tool = null)
+    public static Agent RemoveApproval(this Agent agent)
+        => agent.RemoveLayer<ToolApprovalLayer>();
+
+    public static Agent UseToolDiscovery(this Agent agent, ToolDiscoveryTool? tool = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
         var discovery = tool ?? new ToolDiscoveryTool();
         return agent
-            .WithTools([.. agent.Tools, discovery])
-            .WithTooling(new ToolDiscoveryLayer(discovery, agent.Tooling));
+            .AddTools(discovery)
+            .AddLayer(new ToolDiscoveryLayer(discovery, agent.Tooling));
     }
+
+    public static Agent WithApproval(this Agent agent, ToolApprover approver)
+        => agent.UseApproval(approver);
+
+    public static Agent WithApproval(this Agent agent, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+        => agent.UseApproval(prompt);
+
+    public static Agent WithoutApproval(this Agent agent)
+        => agent.RemoveApproval();
+
+    public static Agent WithToolDiscovery(this Agent agent, ToolDiscoveryTool? tool = null)
+        => agent.UseToolDiscovery(tool);
 }

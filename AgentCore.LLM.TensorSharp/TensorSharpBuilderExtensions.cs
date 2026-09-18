@@ -66,23 +66,29 @@ public static class TensorSharpExtensions
         return new TensorSharpLLM(engine, model, samplingConfig);
     }
 
-    public static Agent WithTensorSharp(
+    public static Agent UseTensorSharp(
         this Agent agent,
         InferenceEngine engine,
         IModelArchitecture model,
         SamplingConfig? samplingConfig = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
-        return agent.WithLLM(CreateTensorSharpLLM(engine, model, samplingConfig));
+        return agent.UseLLM(CreateTensorSharpLLM(engine, model, samplingConfig));
     }
 
-    public static Agent WithTensorSharpModel(
+    public static Agent UseTensorSharp(
         this Agent agent,
         string ggufPath,
         BackendType? backend = null,
         SamplingConfig? samplingConfig = null)
     {
         ArgumentNullException.ThrowIfNull(agent);
-        return agent.WithLLM(CreateTensorSharpLLM(ggufPath, backend, samplingConfig));
+        return agent.UseLLM(CreateTensorSharpLLM(ggufPath, backend, samplingConfig));
     }
+
+    public static Agent WithTensorSharp(this Agent agent, InferenceEngine engine, IModelArchitecture model, SamplingConfig? samplingConfig = null)
+        => agent.UseTensorSharp(engine, model, samplingConfig);
+
+    public static Agent WithTensorSharpModel(this Agent agent, string ggufPath, BackendType? backend = null, SamplingConfig? samplingConfig = null)
+        => agent.UseTensorSharp(ggufPath, backend, samplingConfig);
 }

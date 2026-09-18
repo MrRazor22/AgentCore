@@ -48,22 +48,19 @@ internal class App
         var scheduleTool = new ScheduleTool();
 
         var baseUrl = config.BaseUrl.EndsWith('/') ? config.BaseUrl : config.BaseUrl + "/";
-        var tornado = new TornadoLLM(config.ApiKey, config.Model, baseUrl)
-            .WithRetry()
-            .WithToolCallDetection();
-
-        var context = new ChatContext(contextWindow: 50000, reserveTokens: 2500)
-            .WithPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true);
+        string sessionsDir = Path.Combine(root, ".codesharp", "sessions");
 
         IAgent agent = new Agent(
-            llm: tornado,
-            context: context,
+            llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl),
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
-            .WithTools(vsTools)
-            .WithTools(skillTool)
-            .WithToolDiscovery()
-            .WithTools(webTools, new Discoverable("web"))
-            .WithTools(scheduleTool, new Discoverable("schedule"));
+            .AddTools(vsTools)
+            .AddTools(skillTool)
+            .AddTools(webTools, new Discoverable("web"))
+            .AddTools(scheduleTool, new Discoverable("schedule"))
+            .UseToolDiscovery()
+            .UseRetry()
+            .UseToolCallDetection()
+            .UseSession(sessionsDir, Guid.NewGuid().ToString());
 
         await channel.SendAsync(new("ready", Name: config.Model));
 
@@ -73,6 +70,22 @@ internal class App
             {
                 dispatcher.TryHandleResult(msg.Id, msg.Result, msg.Error);
                 continue;
+            }
+
+            if (agent is Agent live)
+            {
+                agent = msg.Type switch
+                {
+                    "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => live.UseSession(sessionsDir, msg.Text),
+                    "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => live.UseTornado(config.ApiKey, msg.Text, baseUrl),
+                    "enable_approval" => live.UseApproval(async (call, ct) =>
+                    {
+                        await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
+                        return true;
+                    }),
+                    "disable_approval" => live.RemoveApproval(),
+                    _ => agent
+                };
             }
 
             if (msg.Type == "prompt" && !string.IsNullOrWhiteSpace(msg.Text))

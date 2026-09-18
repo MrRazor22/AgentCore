@@ -44,32 +44,6 @@ public sealed class RetryLayer : LLMLayer
         _onRetry = onRetry;
     }
 
-    public RetryLayer(
-        int maxRetries = 3,
-        TimeSpan? initialDelay = null,
-        TimeSpan? maxDelay = null,
-        double backoffMultiplier = 2.0,
-        bool useJitter = true,
-        Func<Exception, int, bool>? shouldRetry = null,
-        Action<Exception, int, TimeSpan>? onRetry = null)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(maxRetries);
-        ArgumentOutOfRangeException.ThrowIfLessThan(backoffMultiplier, 1.0);
-        if (double.IsNaN(backoffMultiplier) || double.IsInfinity(backoffMultiplier))
-            throw new ArgumentOutOfRangeException(nameof(backoffMultiplier));
-
-        _maxRetries = maxRetries;
-        _initialDelay = initialDelay ?? TimeSpan.FromSeconds(1);
-        _maxDelay = maxDelay ?? TimeSpan.FromSeconds(30);
-
-        if (_initialDelay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(initialDelay));
-        if (_maxDelay < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(maxDelay));
-
-        _backoffMultiplier = backoffMultiplier;
-        _useJitter = useJitter;
-        _shouldRetry = shouldRetry;
-        _onRetry = onRetry;
-    }
 
     public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,

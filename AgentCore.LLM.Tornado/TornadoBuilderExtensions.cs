@@ -9,7 +9,7 @@ namespace AgentCore.LLM.Tornado;
 
 public static class TornadoExtensions
 {
-    public static Agent WithTornado(
+    public static Agent UseTornado(
         this Agent agent,
         TornadoApi api,
         ChatModel model)
@@ -17,10 +17,10 @@ public static class TornadoExtensions
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(model);
-        return agent.WithLLM(new TornadoLLM(api, model));
+        return agent.UseLLM(new TornadoLLM(api, model));
     }
 
-    public static Agent WithTornado(
+    public static Agent UseTornado(
         this Agent agent,
         string apiKey,
         string model,
@@ -46,6 +46,12 @@ public static class TornadoExtensions
         }
 
         var chatModel = new ChatModel(model, provider);
-        return agent.WithLLM(new TornadoLLM(api, chatModel));
+        return agent.UseLLM(new TornadoLLM(api, chatModel));
     }
+
+    public static Agent WithTornado(this Agent agent, TornadoApi api, ChatModel model)
+        => agent.UseTornado(api, model);
+
+    public static Agent WithTornado(this Agent agent, string apiKey, string model, string? baseUrl = null, LLmProviders provider = LLmProviders.Custom)
+        => agent.UseTornado(apiKey, model, baseUrl, provider);
 }

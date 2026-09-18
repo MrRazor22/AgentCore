@@ -149,7 +149,13 @@ public class LiveAgentTests
                         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                         result = JsonSerializer.Deserialize<PersonInfo>(reasoningText, jsonOptions);
                         _output.WriteLine($"[Test 2] Successfully extracted JSON from Reasoning content: {reasoningText}");
-            throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _output.WriteLine($"[Test 2] Failed to deserialize Reasoning content JSON: {ex}");
+                    }
+                }
+            }
         }
 
         // Assert

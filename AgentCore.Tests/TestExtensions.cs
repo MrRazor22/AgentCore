@@ -4,10 +4,6 @@ namespace AgentCore.Tests;
 
 internal static class TestExtensions
 {
-    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        this IAgent agent,
-        IContent input,
-        CancellationToken ct = default) => agent.InvokeStreamingAsync([input], ct: ct);
 
     public static async Task<T?> WithResponse<T>(
         this IAgent agent,

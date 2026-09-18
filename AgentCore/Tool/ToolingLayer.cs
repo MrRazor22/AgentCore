@@ -8,30 +8,17 @@ public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
     ITooling next,
     CancellationToken ct);
 
-public class ToolingLayer : ITooling
+public class ToolingLayer(ITooling? inner = null, ToolingDelegate? handler = null) : ITooling
 {
-    private readonly ToolingDelegate? _handler;
+    public ITooling Inner { get; private set; } = inner!;
 
-    public ToolingLayer(ToolingDelegate? handler = null) => _handler = handler;
-
-    public ToolingLayer(ITooling inner, ToolingDelegate? handler = null)
-    {
-        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _handler = handler;
-    }
-
-    public ITooling Inner { get; private set; } = null!;
-
-    public void Attach(ITooling inner)
-    {
-        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
-    }
+    public void Attach(ITooling inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         IReadOnlyList<ITool> tools,
         CancellationToken ct = default)
-        => _handler != null
-            ? _handler(calls, tools, Inner, ct)
+        => handler != null
+            ? handler(calls, tools, Inner, ct)
             : Inner.ExecuteAsync(calls, tools, ct);
 }
