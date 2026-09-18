@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tests;
@@ -160,12 +160,8 @@ public class MockMemoryProvider : IContext
         => _inner.IngestAsync(events, ct);
 }
 
-public class MockTooling : IToolbox
+public class MockTooling : ITooling
 {
-    public IReadOnlyList<ToolDefinition> Definitions { get; set; } = Array.Empty<ToolDefinition>();
-
-    public IReadOnlyList<ToolDefinition> GetDefinitions() => Definitions;
-
     public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<IContent>>> Handler { get; set; } =
         (calls, ct) => Task.FromResult<IReadOnlyList<IContent>>(
             calls.Select(_ => (IContent)new Text("Success")).ToList()
@@ -173,6 +169,7 @@ public class MockTooling : IToolbox
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
+        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var results = await Handler(calls, ct).ConfigureAwait(false);
@@ -181,7 +178,7 @@ public class MockTooling : IToolbox
             var call = calls[i];
             yield return new MessageStart(Role.Tool, Id: call.Id);
             yield return new MessageDelta(call.Id, Content: results[i], Metadata: new ToolCallId(call.Id));
-            yield return new MessageEnd(call.Id);
+            yield return new MessageEnd(Id: call.Id);
         }
     }
 }

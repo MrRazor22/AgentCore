@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using Xunit;
 
 namespace CodeSharp.Tests;
@@ -22,17 +22,18 @@ public class ApprovalLayerDuplicateIdTests
         }
     }
 
-    private class MockTooling(ITool tool) : IToolbox
+    private class MockTooling(ITool tool) : ITooling
     {
-        public IReadOnlyList<ToolDefinition> GetDefinitions() => new[] { tool.Info };
-
-        public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
+        public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
             IReadOnlyList<ToolCall> calls,
+            IReadOnlyList<ITool> tools,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             foreach (var call in calls)
             {
-                yield return new ToolResult(call.Id, [new Text($"Output for {call.Name}")]);
+                yield return new MessageStart(Role.Tool, Id: call.Id);
+                yield return new MessageDelta(call.Id, Content: new Text($"Output for {call.Name}"), Metadata: new ToolCallId(call.Id));
+                yield return new MessageEnd(Id: call.Id);
             }
         }
     }

@@ -1,7 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 
 namespace AgentCore.Tests;
 
@@ -9,7 +9,7 @@ public class WorkflowTests
 {
     private static readonly IReadOnlyList<IContent> Instructions = [new Text("You are a helpful AI assistant.")];
 
-    private (ILLM, IToolbox) CreateServices(MockLLMProvider provider, IToolbox tooling)
+    private (ILLM, ITooling) CreateServices(MockLLMProvider provider, ITooling tooling)
     {
         return (provider, tooling);
     }

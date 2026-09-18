@@ -1,2 +1,2 @@
-global using AgentCore.Tooling;
-global using AgentCore.Tooling.Tools;
+global using AgentCore.Tool;
+global using AgentCore.Tool.Tools;

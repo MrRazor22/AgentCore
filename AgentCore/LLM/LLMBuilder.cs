@@ -1,6 +1,6 @@
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.LLM;

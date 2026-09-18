@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace AgentCore.Tooling.Tools;
+namespace AgentCore.Tool.Tools;
 
 [AttributeUsage(AttributeTargets.Method)]
 public sealed class ToolAttribute(string? name = null, string? description = null) : Attribute

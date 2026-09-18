@@ -2,7 +2,7 @@ using AgentCore.LLM.Chat;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tool;
 
 public static class ToolCallExtensions
 {

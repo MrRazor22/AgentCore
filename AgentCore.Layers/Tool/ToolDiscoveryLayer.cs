@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 
 namespace AgentCore.Layers.Tools;
 
@@ -67,9 +67,15 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool) : ToolingLayer
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
-    public override IReadOnlyList<ToolDefinition> GetDefinitions()
+    public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
+        IReadOnlyList<ToolCall> calls,
+        IReadOnlyList<ITool> tools,
+        [EnumeratorCancellation] CancellationToken ct = default)
     {
-        Tool.CatalogProvider ??= () => Inner.GetDefinitions();
-        return base.GetDefinitions().Where(t => t.Name == Tool.Info.Name || Tool.IsActive(t)).ToList();
+        Tool.CatalogProvider ??= () => tools.Select(t => t.Info).ToList();
+        await foreach (var evt in base.ExecuteAsync(calls, tools, ct).ConfigureAwait(false))
+        {
+            yield return evt;
+        }
     }
 }

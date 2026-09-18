@@ -1,7 +1,7 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using AgentCore.Layers.LLM;
 using System.Text.Json.Nodes;
 using Xunit;

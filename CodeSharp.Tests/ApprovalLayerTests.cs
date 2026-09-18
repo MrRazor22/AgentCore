@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using Xunit;
 
 namespace CodeSharp.Tests;
@@ -38,24 +38,26 @@ public class ApprovalLayerTests
         }
     }
 
-    private class MockTooling : IToolbox
+    private class MockTooling : ITooling
     {
         public bool ExecuteCalled { get; private set; }
-        public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 
-        public async IAsyncEnumerable<IAgentEvent> ExecuteStreamingAsync(
+        public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
             IReadOnlyList<ToolCall> calls,
+            IReadOnlyList<ITool> tools,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             ExecuteCalled = true;
             foreach (var call in calls)
             {
-                yield return new ToolResult(call.Id, [new Text("Execution Ok")]);
+                yield return new MessageStart(Role.Tool, Id: call.Id);
+                yield return new MessageDelta(call.Id, Content: new Text("Execution Ok"), Metadata: new ToolCallId(call.Id));
+                yield return new MessageEnd(Id: call.Id);
             }
         }
     }
 
-    private static void AttachInner(ToolApprovalLayer layer, IToolbox inner)
+    private static void AttachInner(ToolApprovalLayer layer, ITooling inner)
     {
         var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         method!.Invoke(layer, new object[] { inner });
@@ -186,7 +188,7 @@ public class ApprovalLayerTests
         Assert.False(mockInner.ExecuteCalled);
     }
 
-    private class TimedMockTooling : IToolbox
+    private class TimedMockTooling : ITooling
     {
         public IReadOnlyList<ToolDefinition> GetDefinitions() => Array.Empty<ToolDefinition>();
 

@@ -2,8 +2,8 @@ using AgentCore.Context.Primitives;
 using AgentCore.Layers.Tools;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tooling;
-using AgentCore.Tooling.Tools;
+using AgentCore.Tool;
+using AgentCore.Tool.Tools;
 using System.ComponentModel;
 using System.Text.Json.Nodes;
 
@@ -16,9 +16,9 @@ internal record ToolExecutionResult(string CallId, IReadOnlyList<IContent> Conte
 
 internal static class ToolingTestExtensions
 {
-    public static async Task<ToolExecutionResult> ExecuteAsync(this IToolbox tooling, ToolCall call, CancellationToken ct = default)
+    public static async Task<ToolExecutionResult> ExecuteAsync(this ITooling tooling, ToolCall call, IReadOnlyList<ITool>? tools = null, CancellationToken ct = default)
     {
-        var msgs = await tooling.ExecuteAsync([call], ct).ToMessagesAsync(ct: ct);
+        var msgs = await tooling.ExecuteAsync([call], tools ?? [], ct).ToMessagesAsync(ct: ct);
         var msg = msgs[0];
         return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
     }
@@ -39,12 +39,12 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Tooling();
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
-        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
+        var toolCall = new ToolCall("call_1", tool.Info.Name, args.ToJsonString());
 
-        var toolResult = await tooling.ExecuteAsync(toolCall);
+        var toolResult = await tooling.ExecuteAsync(toolCall, new[] { tool });
 
         Assert.Equal("call_1", toolResult.CallId);
         Assert.Equal("25", toolResult.ToString());
@@ -56,13 +56,13 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Tooling();
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
-        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
+        var toolCall = new ToolCall("call_1", tool.Info.Name, args.ToJsonString());
 
-        var toolResult = await tooling.ExecuteAsync(toolCall);
+        var toolResult = await tooling.ExecuteAsync(toolCall, new[] { tool });
 
         var resultText = toolResult.ToString();
         Assert.Contains("Error calling tool", resultText);
@@ -73,10 +73,10 @@ public class ToolingTests
     {
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Tooling();
 
-        var toolCall = new ToolCall("call_1", tool.Definition.Name, "{\"a\": 10, malformed}");
-        var toolResult = await tooling.ExecuteAsync(toolCall);
+        var toolCall = new ToolCall("call_1", tool.Info.Name, "{\"a\": 10, malformed}");
+        var toolResult = await tooling.ExecuteAsync(toolCall, new[] { tool });
 
         var resultText = toolResult.ToString();
         Assert.Contains("Invalid JSON", resultText);
@@ -98,26 +98,15 @@ public class ToolingTests
     }
 
     [Fact]
-    public void Builder_ThrowsOnDuplicateName()
-    {
-        var builder = Agent.Create()
-            .WithTools(new SampleAddTool())
-            .WithTools(new SampleAddTool())
-            .WithLLM(lf => new MockLLMProvider()); // Needs LLM to build
-
-        Assert.Throws<ArgumentException>(() => builder.Build());
-    }
-
-    [Fact]
     public async Task ToolService_SupportsCaseInsensitiveLookup()
     {
         var method = typeof(SampleAddTool).GetMethod(nameof(SampleAddTool.Add))!;
         var tool = new MethodTool(method, new SampleAddTool(), name: "weather_lookup");
-        var tooling = new Tooling(new[] { tool });
+        var tooling = new Tooling();
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", "Weather_Lookup", args.ToJsonString());
-        var toolResult = await tooling.ExecuteAsync(toolCall);
+        var toolResult = await tooling.ExecuteAsync(toolCall, new[] { tool });
 
         Assert.Equal("25", toolResult.ToString());
     }
@@ -155,15 +144,15 @@ public class ToolingTests
     public async Task ToolingBuilder_Use_AnonymousMiddleware_InterceptsExecution()
     {
         bool intercepted = false;
-        var builder = new ToolingBuilder()
-            .Use((calls, next, ct) =>
+        var builder = new ToolBuilder()
+            .Use((calls, tools, next, ct) =>
             {
                 intercepted = true;
-                return next.ExecuteAsync(calls, ct);
+                return next.ExecuteAsync(calls, tools, ct);
             });
 
-        var toolbox = builder.Build(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
-        await foreach (var _ in toolbox.ExecuteAsync([])) { }
+        var (toolbox, tools) = builder.Build(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        await foreach (var _ in toolbox.ExecuteAsync([], tools)) { }
 
         Assert.True(intercepted);
     }

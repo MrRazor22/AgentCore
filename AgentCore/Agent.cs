@@ -1,7 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using System.Runtime.CompilerServices;
 
 namespace AgentCore;
@@ -9,6 +9,7 @@ namespace AgentCore;
 public interface IAgent
 {
     IReadOnlyList<IContent> Instructions { get; }
+    IReadOnlyList<ToolDefinition> ToolDefinitions { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -18,15 +19,31 @@ public interface IAgent
 public sealed class Agent(
     IContext context,
     ILLM llm,
-    IToolbox toolbox,
+    ITooling toolbox,
+    IReadOnlyList<ITool> tools,
     IReadOnlyList<IContent> instructions,
     int maxIterations = 20) : IAgent
 {
     public IContext Context => context;
     public ILLM LLM => llm;
-    public IToolbox Toolbox => toolbox;
+    public ITooling Toolbox => toolbox;
+    public IReadOnlyList<ITool> Tools => tools;
     public IReadOnlyList<IContent> Instructions => instructions;
     public int MaxIterations => maxIterations;
+
+    public IReadOnlyList<ToolDefinition> ToolDefinitions
+    {
+        get
+        {
+            var discovery = tools.OfType<AgentCore.Layers.Tools.ToolDiscoveryTool>().FirstOrDefault();
+            if (discovery != null)
+            {
+                discovery.CatalogProvider ??= () => tools.Select(t => t.Info).ToList();
+                return tools.Where(t => t.Info.Name == discovery.Info.Name || discovery.IsActive(t.Info)).Select(t => t.Info).ToList();
+            }
+            return tools.Select(t => t.Info).ToList();
+        }
+    }
 
     public static AgentBuilder Create() => new();
 
@@ -70,7 +87,7 @@ public sealed class Agent(
 
             toolCalls = null;
             await foreach (var evt in context.IngestAsync(
-                llm.GenerateAsync(prompt, toolbox.GetDefinitions(), ct: ct), ct))
+                llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
             {
                 if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 yield return evt;
@@ -79,7 +96,7 @@ public sealed class Agent(
             if (toolCalls is not null)
             {
                 await foreach (var evt in context.IngestAsync(
-                    toolbox.ExecuteAsync(toolCalls, ct), ct))
+                    toolbox.ExecuteAsync(toolCalls, tools, ct), ct))
                 {
                     yield return evt;
                 }

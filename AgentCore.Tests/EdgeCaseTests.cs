@@ -2,7 +2,7 @@ using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using System;
 using System.Collections.Generic;
 using System.Linq;

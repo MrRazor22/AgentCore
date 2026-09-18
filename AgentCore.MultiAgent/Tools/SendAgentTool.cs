@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 
 namespace AgentCore.MultiAgent.Tools;
 

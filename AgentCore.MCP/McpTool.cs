@@ -6,7 +6,7 @@ using ModelContextProtocol.Protocol;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 using ProtocolTool = ModelContextProtocol.Protocol.Tool;
 
 namespace AgentCore.MCP;

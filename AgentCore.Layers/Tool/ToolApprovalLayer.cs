@@ -2,7 +2,7 @@ using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using System.Runtime.CompilerServices;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tool;
 
 public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, CancellationToken ct);
 
@@ -20,6 +20,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
+        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var allowedCalls = new List<ToolCall>();
@@ -47,7 +48,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
 
         if (allowedCalls.Count > 0)
         {
-            await foreach (var evt in base.ExecuteAsync(allowedCalls, ct).ConfigureAwait(false))
+            await foreach (var evt in base.ExecuteAsync(allowedCalls, tools, ct).ConfigureAwait(false))
             {
                 yield return evt;
             }

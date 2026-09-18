@@ -1,14 +1,14 @@
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
-using AgentCore.Tooling.Tools;
+using AgentCore.Tool.Tools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tool;
 public sealed record ToolDefinition(
     string Name,
     string Description,
@@ -20,31 +20,27 @@ public interface ITool
     ToolDefinition Info { get; }
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }
-public interface IToolbox
+public interface ITooling
 {
-    IReadOnlyList<ToolDefinition> GetDefinitions();
-    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, IReadOnlyList<ITool> tools, CancellationToken ct = default);
 }
 
-internal sealed class Toolbox(
-    IEnumerable<ITool>? tools,
-    ILogger<Toolbox>? logger = null,
+internal sealed class Tooling(
+    ILogger<Tooling>? logger = null,
     bool parallel = true,
     int? maxConcurrency = null,
-    TimeSpan? timeout = null) : IToolbox
+    TimeSpan? timeout = null) : ITooling
 {
-    private readonly Dictionary<string, ITool> _tools = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
-    private readonly ToolDefinition[] _definitions = tools?.Select(t => t.Info).ToArray() ?? [];
-    private readonly ILogger _logger = logger ?? NullLogger<Toolbox>.Instance;
-
-    public IReadOnlyList<ToolDefinition> GetDefinitions() => _definitions;
+    private readonly ILogger _logger = logger ?? NullLogger<Tooling>.Instance;
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
+        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (calls is not { Count: > 0 }) yield break;
 
+        var toolMap = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
         var channel = Channel.CreateUnbounded<IMessageEvent>();
         var options = new ParallelOptions
         {
@@ -52,14 +48,14 @@ internal sealed class Toolbox(
             CancellationToken = ct
         };
 
-        _ = Parallel.ForEachAsync(calls, options, (call, token) => new ValueTask(ExecuteCallAsync(call, channel.Writer, token)))
+        _ = Parallel.ForEachAsync(calls, options, (call, token) => new ValueTask(ExecuteCallAsync(call, toolMap, channel.Writer, token)))
             .ContinueWith(t => channel.Writer.TryComplete(t.Exception?.InnerException));
 
         await foreach (var evt in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return evt;
     }
 
-    private async Task ExecuteCallAsync(ToolCall call, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
+    private async Task ExecuteCallAsync(ToolCall call, Dictionary<string, ITool> toolMap, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
         await writer.WriteAsync(new MessageStart(Role.Tool, Id: call.Id), ct).ConfigureAwait(false);
         await writer.WriteAsync(new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id)), ct).ConfigureAwait(false);
@@ -68,7 +64,7 @@ internal sealed class Toolbox(
 
         if (string.IsNullOrWhiteSpace(call.Name))
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
-        else if (!_tools.TryGetValue(call.Name, out var tool))
+        else if (!toolMap.TryGetValue(call.Name, out var tool))
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
         else if (parseError != null)
             await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, parseError)), ct).ConfigureAwait(false);

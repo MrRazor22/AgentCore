@@ -1,7 +1,7 @@
 using AgentCore.Context.Primitives;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 
 namespace AgentCore.Tests;
 

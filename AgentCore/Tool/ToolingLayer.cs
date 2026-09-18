@@ -1,19 +1,20 @@
 using AgentCore.LLM.Chat;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tool;
 
 public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
     IReadOnlyList<ToolCall> calls,
-    IToolbox next,
+    IReadOnlyList<ITool> tools,
+    ITooling next,
     CancellationToken ct);
 
-public class ToolingLayer(ToolingDelegate? handler = null) : IToolbox
+public class ToolingLayer(ToolingDelegate? handler = null) : ITooling
 {
     private bool _attached;
 
-    public IToolbox Inner { get; private set; } = null!;
+    public ITooling Inner { get; private set; } = null!;
 
-    internal void Attach(IToolbox inner)
+    internal void Attach(ITooling inner)
     {
         if (_attached)
             throw new InvalidOperationException("This tool service decorator has already been attached to a pipeline.");
@@ -22,12 +23,11 @@ public class ToolingLayer(ToolingDelegate? handler = null) : IToolbox
         _attached = true;
     }
 
-    public virtual IReadOnlyList<ToolDefinition> GetDefinitions() => Inner.GetDefinitions();
-
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
+        IReadOnlyList<ITool> tools,
         CancellationToken ct = default)
         => handler != null
-            ? handler(calls, Inner, ct)
-            : Inner.ExecuteAsync(calls, ct);
+            ? handler(calls, tools, Inner, ct)
+            : Inner.ExecuteAsync(calls, tools, ct);
 }

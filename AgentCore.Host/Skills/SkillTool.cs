@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using AgentCore.Tooling;
+using AgentCore.Tool;
 
 namespace CodeSharp.Skills;
 

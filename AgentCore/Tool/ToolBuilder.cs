@@ -1,17 +1,17 @@
 using System.Reflection;
 using AgentCore.LLM.Chat;
-using AgentCore.Tooling.Tools;
+using AgentCore.Tool.Tools;
 using Microsoft.Extensions.Logging;
 
-namespace AgentCore.Tooling;
+namespace AgentCore.Tool;
 
-public sealed class ToolingBuilder
+public sealed class ToolBuilder
 {
     internal List<ITool> Tools { get; } = [];
-    internal Func<IReadOnlyList<ITool>, ILoggerFactory, IToolbox>? Factory { get; private set; }
+    internal Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling>? Factory { get; private set; }
     internal List<ToolingLayer> Layers { get; } = [];
 
-    public ToolingBuilder WithTools(params ITool[] tools)
+    public ToolBuilder WithTools(params ITool[] tools)
     {
         ArgumentNullException.ThrowIfNull(tools);
         foreach (var tool in tools)
@@ -22,9 +22,9 @@ public sealed class ToolingBuilder
         return this;
     }
 
-    public ToolingBuilder WithTools<T>() => WithTools(typeof(T));
+    public ToolBuilder WithTools<T>() => WithTools(typeof(T));
 
-    public ToolingBuilder WithTools(object instance, params IMetadata[] metadata)
+    public ToolBuilder WithTools(object instance, params IMetadata[] metadata)
     {
         ArgumentNullException.ThrowIfNull(instance);
         var type = instance as Type ?? instance.GetType();
@@ -37,55 +37,54 @@ public sealed class ToolingBuilder
         return this;
     }
 
-    public ToolingBuilder WithTools(Type type) => WithTools((object)type);
+    public ToolBuilder WithTools(Type type) => WithTools((object)type);
 
-    public ToolingBuilder Use(Func<IReadOnlyList<ITool>, ILoggerFactory, IToolbox> factory)
+    public ToolBuilder Use(Func<IReadOnlyList<ITool>, ILoggerFactory, ITooling> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         Factory = factory;
         return this;
     }
 
-    public ToolingBuilder Use(Func<ILoggerFactory, IToolbox> factory)
+    public ToolBuilder Use(Func<ILoggerFactory, ITooling> factory)
     {
         ArgumentNullException.ThrowIfNull(factory);
         Factory = (_, lf) => factory(lf);
         return this;
     }
 
-    public ToolingBuilder WithExecutionOptions(
+    public ToolBuilder WithExecutionOptions(
         bool parallel = true,
         int? maxConcurrency = null,
         TimeSpan? timeout = null)
     {
-        return Use((tools, lf) => new Toolbox(
-            tools: tools,
-            logger: lf.CreateLogger<Toolbox>(),
+        return Use((tools, lf) => new Tooling(
+            logger: lf.CreateLogger<Tooling>(),
             parallel: parallel,
             maxConcurrency: maxConcurrency,
             timeout: timeout
         ));
     }
 
-    public ToolingBuilder Use(ToolingDelegate middleware)
+    public ToolBuilder Use(ToolingDelegate middleware)
     {
         ArgumentNullException.ThrowIfNull(middleware);
         return AddLayer(new ToolingLayer(middleware));
     }
 
-    public ToolingBuilder AddLayer(ToolingLayer layer)
+    public ToolBuilder AddLayer(ToolingLayer layer)
     {
         ArgumentNullException.ThrowIfNull(layer);
         Layers.Add(layer);
         return this;
     }
 
-    internal IToolbox Build(ILoggerFactory lf)
+    internal (ITooling Toolbox, IReadOnlyList<ITool> Tools) Build(ILoggerFactory lf)
     {
         var frozenTools = Tools.ToArray();
-        IToolbox tooling = Factory != null
+        ITooling tooling = Factory != null
             ? Factory(frozenTools, lf)
-            : new Toolbox(frozenTools, lf.CreateLogger<Toolbox>());
+            : new Tooling(lf.CreateLogger<Tooling>());
 
         foreach (var layer in Layers)
         {
@@ -93,6 +92,6 @@ public sealed class ToolingBuilder
             tooling = layer;
         }
 
-        return tooling;
+        return (tooling, frozenTools);
     }
 }
