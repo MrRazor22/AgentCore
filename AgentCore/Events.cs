@@ -24,6 +24,3 @@ public sealed record ToolCallEnd(int Index = 0) : IContentEnd;
 public sealed record ToolResultStart(int Index, string ToolCallId) : IContentStart;
 public sealed record ToolResultDelta(int Index, IToolResultContentEvent Content) : IContentDelta;
 public sealed record ToolResultEnd(int Index = 0, bool IsError = false) : IContentEnd;
-
-
-

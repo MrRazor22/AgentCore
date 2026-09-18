@@ -12,8 +12,19 @@ namespace AgentCore.Context;
 
 public interface IContext
 {
-    Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default);
-    IAsyncEnumerable<IContentEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
+    Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default);
+    IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
+}
+
+public static class ContextExtensions
+{
+    public static async Task WriteAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(evt);
+        await foreach (var _ in context.WriteAsync(Stream(evt), ct).ConfigureAwait(false)) { }
+        static async IAsyncEnumerable<IMessageEvent> Stream(IMessageEvent e) { yield return e; }
+    }
 }
 
 public class ChatContext(
@@ -32,7 +43,7 @@ public class ChatContext(
     private string? _activeId;
     private int _tokens;
 
-    public async IAsyncEnumerable<IContentEvent> IngestAsync(
+    public async IAsyncEnumerable<IContentEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -95,17 +106,8 @@ public class ChatContext(
         return evt is MessageDelta md ? asm.Push(md) : null;
     }
 
-    public async Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
     {
-        if (messages is not null)
-        {
-            lock (_lock)
-            {
-                foreach (var message in messages)
-                    AppendLocked(message);
-            }
-        }
-
         Message[] snapshot;
         lock (_lock) snapshot = _chat;
 

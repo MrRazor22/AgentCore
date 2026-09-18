@@ -166,7 +166,7 @@ public class ChatPersistenceLayerTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var evt in layer.IngestAsync(GenerateStream(cts.Token), cts.Token))
+            await foreach (var evt in layer.WriteAsync(GenerateStream(cts.Token), cts.Token))
             {
             }
         });
@@ -203,7 +203,7 @@ public class ChatPersistenceLayerTests
             yield return new MessageEnd("msg-2");
         }
 
-        await foreach (var evt in layer.IngestAsync(GenerateStream()))
+        await foreach (var evt in layer.WriteAsync(GenerateStream()))
         {
         }
 

@@ -9,11 +9,9 @@ public class ChatGrammarLayer(
     bool pinSystemInstructions = true,
     bool stripPastReasoning = true) : ContextLayer
 {
-    public override async Task<IReadOnlyList<Message>> PrepareAsync(
-        IEnumerable<Message>? messages = null,
-        CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
     {
-        var raw = await base.PrepareAsync(messages, ct).ConfigureAwait(false);
+        var raw = await base.ReadAsync(ct).ConfigureAwait(false);
         return Normalize(raw);
     }
 

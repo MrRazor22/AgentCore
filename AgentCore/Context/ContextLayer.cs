@@ -21,13 +21,11 @@ public abstract class ContextLayer : IContext
         _attached = true;
     }
 
-    public virtual Task<IReadOnlyList<Message>> PrepareAsync(
-        IEnumerable<Message>? messages = null,
-        CancellationToken ct = default)
-        => Inner.PrepareAsync(messages, ct);
+    public virtual Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
+        => Inner.ReadAsync(ct);
 
-    public virtual IAsyncEnumerable<IContentEvent> IngestAsync(
+    public virtual IAsyncEnumerable<IContentEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
-        => Inner.IngestAsync(events, ct);
+        => Inner.WriteAsync(events, ct);
 }

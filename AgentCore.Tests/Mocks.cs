@@ -139,25 +139,23 @@ public class MockMemoryProvider : IContext
 
     public string RecallResult { get; set; } = "";
 
-    public IReadOnlyList<Message> Messages => PrepareAsync().GetAwaiter().GetResult();
+    public IReadOnlyList<Message> Messages => ReadAsync().GetAwaiter().GetResult();
 
-    public async Task<IReadOnlyList<Message>> PrepareAsync(
-        IEnumerable<Message>? messages = null,
-        CancellationToken ct = default)
+    public async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
     {
         var list = new List<Message>();
         if (!string.IsNullOrEmpty(RecallResult))
         {
             list.Add(new Message(Role.System, [new Text(RecallResult)]));
         }
-        list.AddRange(await _inner.PrepareAsync(messages, ct));
+        list.AddRange(await _inner.ReadAsync(ct));
         return list;
     }
 
-    public IAsyncEnumerable<IContentEvent> IngestAsync(
+    public IAsyncEnumerable<IContentEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
-        => _inner.IngestAsync(events, ct);
+        => _inner.WriteAsync(events, ct);
 }
 
 public class MockTooling : ITooling

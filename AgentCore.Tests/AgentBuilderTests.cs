@@ -95,12 +95,12 @@ public class AgentBuilderTests
             return base.PrepareAsync(messages, ct);
         }
 
-        public override async IAsyncEnumerable<IContentEvent> IngestAsync(
+        public override async IAsyncEnumerable<IContentEvent> WriteAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             CallLog.Add("Add");
-            await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
+            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
             {
                 yield return evt;
             }
@@ -169,12 +169,12 @@ public class AgentBuilderTests
             return base.PrepareAsync(messages, ct);
         }
 
-        public override async IAsyncEnumerable<IContentEvent> IngestAsync(
+        public override async IAsyncEnumerable<IContentEvent> WriteAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            await foreach (var evt in base.IngestAsync(events, ct).ConfigureAwait(false))
+            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
             {
                 yield return evt;
             }

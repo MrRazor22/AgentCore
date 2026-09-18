@@ -16,7 +16,7 @@ public class MessageMergingLayerTests
         public Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? staged = null, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<Message>>(staged != null ? [.. messages, .. staged] : messages);
 
-        public IAsyncEnumerable<IContentEvent> IngestAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default)
+        public IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default)
             => throw new NotImplementedException();
     }
 

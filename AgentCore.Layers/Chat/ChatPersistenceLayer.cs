@@ -18,23 +18,18 @@ public sealed class ChatPersistenceLayer(
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private bool _restored;
 
-    public override async Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? messages = null, CancellationToken ct = default)
+    public override async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
     {
         await RestoreAsync(ct).ConfigureAwait(false);
-        if (messages is not null)
-        {
-            var list = messages as IReadOnlyList<Message> ?? messages.ToList();
-            if (list.Count > 0) await _store.AppendAsync(list, ct).ConfigureAwait(false);
-        }
-        return await base.PrepareAsync(messages, ct).ConfigureAwait(false);
+        return await base.ReadAsync(ct).ConfigureAwait(false);
     }
 
-    public override async IAsyncEnumerable<IContentEvent> IngestAsync(
+    public override async IAsyncEnumerable<IContentEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await RestoreAsync(ct).ConfigureAwait(false);
-        int initial = (await Inner.PrepareAsync(ct: CancellationToken.None).ConfigureAwait(false)).Count;
+        int initial = (await Inner.ReadAsync(ct: CancellationToken.None).ConfigureAwait(false)).Count;
         try
         {
             var source = walStore == null ? events : LogAsync();
@@ -47,14 +42,14 @@ public sealed class ChatPersistenceLayer(
                 }
             }
 
-            await foreach (var evt in base.IngestAsync(source, ct).WithCancellation(ct).ConfigureAwait(false))
+            await foreach (var evt in base.WriteAsync(source, ct).WithCancellation(ct).ConfigureAwait(false))
                 yield return evt;
         }
         finally
         {
             try
             {
-                var history = await Inner.PrepareAsync(ct: CancellationToken.None).ConfigureAwait(false);
+                var history = await Inner.ReadAsync(ct: CancellationToken.None).ConfigureAwait(false);
                 var newMessages = history.Skip(initial).Where(m => m.Contents.Count > 0).ToList();
                 if (newMessages.Count > 0)
                     await _store.AppendAsync(newMessages, CancellationToken.None).ConfigureAwait(false);
@@ -79,7 +74,10 @@ public sealed class ChatPersistenceLayer(
         }
 
         if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
-            await Inner.PrepareAsync(ExtractWorkingContext(history), ct).ConfigureAwait(false);
+        {
+            foreach (var m in ExtractWorkingContext(history))
+                await Inner.WriteAsync(m, ct).ConfigureAwait(false);
+        }
     }
 
     private static IReadOnlyList<Message> ExtractWorkingContext(IReadOnlyList<Message> history)

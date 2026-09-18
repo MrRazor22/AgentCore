@@ -42,19 +42,19 @@ public sealed class Agent(
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var existing = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
-        var staged = new List<Message>();
+        var existing = await context.ReadAsync(ct).ConfigureAwait(false);
 
         if (existing.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
         {
             var done = existing.Where(m => m.Role == Role.Tool).SelectMany(m => m.Contents.OfType<ToolResult>().Select(r => r.ToolCallId)).ToHashSet();
             var interrupted = existing[^1].Contents.OfType<ToolCall>().Where(c => !done.Contains(c.Id))
                 .Select(c => new ToolResult(c.Id, [new Text(new Interrupted().Reason)], isError: true)).ToList();
-            if (interrupted.Count > 0) staged.Add(new Message(Role.Tool, interrupted));
+            if (interrupted.Count > 0)
+                await context.WriteAsync(new Message(Role.Tool, interrupted), ct).ConfigureAwait(false);
         }
 
-        staged.Add(new Message(Role.User, input));
-        var messages = await context.PrepareAsync(staged, ct).ConfigureAwait(false);
+        await context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
+        var messages = await context.ReadAsync(ct).ConfigureAwait(false);
 
         int iterations = 0;
         List<ToolCall>? toolCalls;
@@ -67,8 +67,7 @@ public sealed class Agent(
             List<Message> prompt = [new Message(Role.System, Instructions), .. messages];
 
             toolCalls = null;
-            await foreach (var evt in context.IngestAsync(
-                llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
+            await foreach (var evt in context.WriteAsync(llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
             {
                 if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 yield return evt;
@@ -76,13 +75,12 @@ public sealed class Agent(
 
             if (toolCalls is not null)
             {
-                await foreach (var evt in context.IngestAsync(
-                    tooling.ExecuteAsync(toolCalls, tools, ct), ct))
+                await foreach (var evt in context.WriteAsync(tooling.ExecuteAsync(toolCalls, tools, ct), ct))
                 {
                     yield return evt;
                 }
 
-                messages = await context.PrepareAsync(ct: ct).ConfigureAwait(false);
+                messages = await context.ReadAsync(ct).ConfigureAwait(false);
             }
         } while (toolCalls is not null);
     }
