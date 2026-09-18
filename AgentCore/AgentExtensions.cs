@@ -8,25 +8,19 @@ namespace AgentCore;
 
 public static class AgentExtensions
 {
-    public static T? FindLayer<T>(this IContext context) where T : class
+    public static T? FindLayer<T>(this object? root) where T : class
     {
-        for (var c = context; c != null; c = (c as ContextLayer)?.Inner)
+        for (var c = root; c != null; c = GetInner(c))
             if (c is T match) return match;
         return null;
-    }
 
-    public static T? FindLayer<T>(this ILLM llm) where T : class
-    {
-        for (var l = llm; l != null; l = (l as LLMLayer)?.Inner)
-            if (l is T match) return match;
-        return null;
-    }
-
-    public static T? FindLayer<T>(this IToolbox toolbox) where T : class
-    {
-        for (var t = toolbox; t != null; t = (t as ToolingLayer)?.Inner)
-            if (t is T match) return match;
-        return null;
+        static object? GetInner(object obj) => obj switch
+        {
+            ContextLayer contextLayer => contextLayer.Inner,
+            LLMLayer llmLayer => llmLayer.Inner,
+            ToolingLayer toolingLayer => toolingLayer.Inner,
+            _ => null
+        };
     }
 
     public static async Task<string?> GetFinalResponseAsync(
