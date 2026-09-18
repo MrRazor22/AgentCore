@@ -40,6 +40,9 @@ internal sealed class Tooling(
     {
         if (calls is not { Count: > 0 }) yield break;
 
+        var messageId = Guid.NewGuid().ToString("N");
+        yield return new MessageStart(Role.Tool, Id: messageId);
+
         var toolMap = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
         var channel = Channel.CreateUnbounded<IMessageEvent>();
         var options = new ParallelOptions
@@ -48,57 +51,56 @@ internal sealed class Tooling(
             CancellationToken = ct
         };
 
-        _ = Parallel.ForEachAsync(calls, options, (call, token) => new ValueTask(ExecuteCallAsync(call, toolMap, channel.Writer, token)))
+        _ = Parallel.ForEachAsync(calls.Select((call, index) => (call, index)), options, (item, token) => new ValueTask(ExecuteCallAsync(item.call, item.index, messageId, toolMap, channel.Writer, token)))
             .ContinueWith(t => channel.Writer.TryComplete(t.Exception?.InnerException));
 
         await foreach (var evt in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             yield return evt;
+
+        yield return new MessageEnd(Id: messageId);
     }
 
-    private async Task ExecuteCallAsync(ToolCall call, Dictionary<string, ITool> toolMap, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
+    private async Task ExecuteCallAsync(ToolCall call, int index, string messageId, Dictionary<string, ITool> toolMap, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
-        await writer.WriteAsync(new MessageStart(Role.Tool, Id: call.Id), ct).ConfigureAwait(false);
-        await writer.WriteAsync(new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id)), ct).ConfigureAwait(false);
-
         var (args, parseError) = call.ParseArguments();
-
-        if (string.IsNullOrWhiteSpace(call.Name))
-            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail("Unknown", "Tool name cannot be empty.")), ct).ConfigureAwait(false);
-        else if (!toolMap.TryGetValue(call.Name, out var tool))
-            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool '{call.Name}' not registered.")), ct).ConfigureAwait(false);
-        else if (parseError != null)
-            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, parseError)), ct).ConfigureAwait(false);
-        else if (tool.Info.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
-            await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, string.Join("; ", errors))), ct).ConfigureAwait(false);
-        else
+        if (parseError != null || string.IsNullOrWhiteSpace(call.Name) || !toolMap.TryGetValue(call.Name, out var tool))
         {
-            using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
-            cts?.CancelAfter(timeout!.Value);
-
-            bool hasResult = false;
-            try
-            {
-                await foreach (var evt in tool.InvokeStreamingAsync(args!, cts?.Token ?? ct).ConfigureAwait(false))
-                {
-                    hasResult = true;
-                    await writer.WriteAsync(new MessageDelta(call.Id, Content: evt), ct).ConfigureAwait(false);
-                }
-
-                if (!hasResult)
-                    await writer.WriteAsync(new MessageDelta(call.Id, Content: new Text(string.Empty)), ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
-            {
-                await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s.")), ct).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, ex.GetBaseException().Message);
-                await writer.WriteAsync(new MessageDelta(call.Id, Content: Fail(call.Name, ex.GetBaseException().Message)), ct).ConfigureAwait(false);
-            }
+            var err = parseError ?? (string.IsNullOrWhiteSpace(call.Name) ? "Tool name cannot be empty." : $"Tool '{call.Name}' not registered.");
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResult(call.Id, [Fail(call.Name, err)], isError: true)), ct).ConfigureAwait(false);
+            return;
         }
 
-        await writer.WriteAsync(new MessageEnd(Id: call.Id), ct).ConfigureAwait(false);
+        if (tool.Info.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
+        {
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResult(call.Id, [Fail(call.Name, string.Join("; ", errors))], isError: true)), ct).ConfigureAwait(false);
+            return;
+        }
+
+        using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+        cts?.CancelAfter(timeout!.Value);
+
+        bool isError = false;
+        await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultStart(index, call.Id)), ct).ConfigureAwait(false);
+        try
+        {
+            await foreach (var evt in tool.InvokeStreamingAsync(args!, cts?.Token ?? ct).ConfigureAwait(false))
+            {
+                if (evt is IToolResultContentEvent e)
+                    await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, e)), ct).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
+        {
+            isError = true;
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s."))), ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            isError = true;
+            _logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, ex.GetBaseException().Message);
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, ex.GetBaseException().Message))), ct).ConfigureAwait(false);
+        }
+        await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultEnd(index, IsError: isError)), ct).ConfigureAwait(false);
     }
 
     private Text Fail(string name, string message)

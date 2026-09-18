@@ -25,10 +25,8 @@ public static class TornadoAdapterExtensions
         var role = message.Role.ToTornadoRole();
         var tornadoMsg = new ChatMessage(role);
 
-        if (message.Role == Role.Tool && (message.Get<ToolCallId>()?.Value ?? message.Id) is { } callId)
-        {
-            tornadoMsg.ToolCallId = callId;
-        }
+        if (message.Role == Role.Tool)
+            tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Get<ToolCallId>()?.Value ?? message.Id;
 
         var textParts = new List<string>();
         List<LlmTornado.ChatFunctions.ToolCall>? toolCalls = null;
@@ -37,9 +35,8 @@ public static class TornadoAdapterExtensions
         {
             switch (content)
             {
-                case Text text:
-                    textParts.Add(text.Value);
-                    break;
+                case Text text: textParts.Add(text.Value); break;
+                case ToolResult tr: textParts.AddRange(tr.Contents.OfType<Text>().Select(t => t.Value)); break;
 
                 case Reasoning reasoning:
                     tornadoMsg.Reasoning = reasoning.Thought;

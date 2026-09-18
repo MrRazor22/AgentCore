@@ -13,6 +13,7 @@ public interface IAssembler
 public sealed class Assembler : IAssembler
 {
     private readonly SortedDictionary<int, (IContentStart Start, StringBuilder Buffer)> _blocks = [];
+    private readonly SortedDictionary<int, (ToolResultStart Start, List<IToolResultContent> Contents, StringBuilder TextBuffer)> _toolResultBlocks = [];
     private readonly List<IContent> _contents = [];
     private readonly List<IMetadata> _metadata = [];
     private Role _role = Role.Assistant;
@@ -31,6 +32,26 @@ public sealed class Assembler : IAssembler
 
         switch (delta.Content)
         {
+            case ToolResultStart trs:
+                _toolResultBlocks[trs.Index] = (trs, [], new StringBuilder());
+                return null;
+
+            case ToolResultDelta trd when _toolResultBlocks.TryGetValue(trd.Index, out var tr):
+                if (trd.Content is IToolResultContent c)
+                {
+                    if (tr.TextBuffer.Length > 0)
+                    {
+                        tr.Contents.Add(new Text(tr.TextBuffer.ToString()));
+                        tr.TextBuffer.Clear();
+                    }
+                    tr.Contents.Add(c);
+                }
+                else if (trd.Content is TextDelta td) tr.TextBuffer.Append(td.Text);
+                return null;
+
+            case ToolResultEnd tre:
+                return CompleteToolResultBlock(tre.Index, tre.IsError);
+
             case IContent c:
                 _contents.Add(c);
                 return c;
@@ -74,6 +95,12 @@ public sealed class Assembler : IAssembler
             if (b.Buffer.Length > 0)
                 snapshotContents.Add(CreateContent(b.Start, b.Buffer.ToString()));
         }
+        foreach (var tr in _toolResultBlocks.Values)
+        {
+            var contents = new List<IToolResultContent>(tr.Contents);
+            if (tr.TextBuffer.Length > 0) contents.Add(new Text(tr.TextBuffer.ToString()));
+            if (contents.Count > 0) snapshotContents.Add(new ToolResult(tr.Start.ToolCallId, contents));
+        }
         return new Message(_role, snapshotContents, _id, _metadata);
     }
 
@@ -83,6 +110,19 @@ public sealed class Assembler : IAssembler
         {
             CompleteBlock(index);
         }
+        foreach (var index in _toolResultBlocks.Keys.ToList())
+        {
+            CompleteToolResultBlock(index);
+        }
+    }
+
+    private IContent? CompleteToolResultBlock(int index, bool isError = false)
+    {
+        if (!_toolResultBlocks.Remove(index, out var tr)) return null;
+        if (tr.TextBuffer.Length > 0) tr.Contents.Add(new Text(tr.TextBuffer.ToString()));
+        var res = new ToolResult(tr.Start.ToolCallId, tr.Contents, isError);
+        _contents.Add(res);
+        return res;
     }
 
     private IContent? CompleteBlock(int index)

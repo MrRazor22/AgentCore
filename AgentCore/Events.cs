@@ -8,18 +8,22 @@ public sealed record MessageDelta(string? Id = null, IContentEvent? Content = nu
 public sealed record MessageEnd(string? Id = null) : IMessageEvent;
 
 public interface IContentEvent { int Index => 0; }
+public interface IToolResultContentEvent : IContentEvent;
 public interface IContentStart : IContentEvent;
 public interface IContentDelta : IContentEvent;
 public interface IContentEnd : IContentEvent; 
-public sealed record TextStart(int Index = 0) : IContentStart;
-public sealed record TextDelta(int Index, string Text) : IContentDelta;
-public sealed record TextEnd(int Index = 0) : IContentEnd;  
+public sealed record TextStart(int Index = 0) : IContentStart, IToolResultContentEvent;
+public sealed record TextDelta(int Index, string Text) : IContentDelta, IToolResultContentEvent;
+public sealed record TextEnd(int Index = 0) : IContentEnd, IToolResultContentEvent;  
 public sealed record ReasoningStart(int Index = 0) : IContentStart;
 public sealed record ReasoningDelta(int Index, string Thought) : IContentDelta;
 public sealed record ReasoningEnd(int Index = 0) : IContentEnd; 
 public sealed record ToolCallStart(int Index, string Id, string Name) : IContentStart;
 public sealed record ToolCallDelta(int Index, string Arguments) : IContentDelta;
 public sealed record ToolCallEnd(int Index = 0) : IContentEnd;
+public sealed record ToolResultStart(int Index, string ToolCallId) : IContentStart;
+public sealed record ToolResultDelta(int Index, IToolResultContentEvent Content) : IContentDelta;
+public sealed record ToolResultEnd(int Index = 0, bool IsError = false) : IContentEnd;
 
 
 

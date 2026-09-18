@@ -47,18 +47,10 @@ public sealed class Agent(
 
         if (existing.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
         {
-            var completedIds = existing
-                .Where(m => m.Role == Role.Tool)
-                .Select(m => m.Get<ToolCallId>()?.Value ?? m.Id)
-                .Where(id => !string.IsNullOrWhiteSpace(id))
-                .ToHashSet();
-
-            foreach (var call in existing[^1].Contents.OfType<ToolCall>().Where(c => !completedIds.Contains(c.Id)))
-            {
-                var interrupted = new Interrupted();
-                staged.Add(new Message(Role.Tool, [new Text(interrupted.Reason)],
-                    id: call.Id, metadata: [new ToolCallId(call.Id), interrupted]));
-            }
+            var done = existing.Where(m => m.Role == Role.Tool).SelectMany(m => m.Contents.OfType<ToolResult>().Select(r => r.ToolCallId)).ToHashSet();
+            var interrupted = existing[^1].Contents.OfType<ToolCall>().Where(c => !done.Contains(c.Id))
+                .Select(c => new ToolResult(c.Id, [new Text(new Interrupted().Reason)], isError: true)).ToList();
+            if (interrupted.Count > 0) staged.Add(new Message(Role.Tool, interrupted));
         }
 
         staged.Add(new Message(Role.User, input));
