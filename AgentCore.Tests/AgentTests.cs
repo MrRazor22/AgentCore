@@ -32,7 +32,7 @@ public class AgentTests
             .Build();
 
         // Act
-        var result = await agent.InvokeAsync<string>(new Text("New message"));
+        var result = await agent.WithResponse<string>(new Text("New message"));
 
         // Assert
         Assert.Equal("Acknowledged", result);
@@ -61,7 +61,7 @@ public class AgentTests
             .Build();
 
         // Act
-        await agent.InvokeAsync<string>(new Text("User input"));
+        await agent.WithResponse<string>(new Text("User input"));
 
         // Assert
         var messages = memory.Messages;
@@ -85,7 +85,7 @@ public class AgentTests
             .Build();
 
         // Act
-        var result = await agent.InvokeAsync<TestDto>(new Text("Get user details"));
+        var result = await agent.WithResponse<TestDto>(new Text("Get user details"));
 
         // Assert
         Assert.NotNull(result);

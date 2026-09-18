@@ -25,8 +25,8 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 {
     public async IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var conv = api.Chat.CreateConversation();

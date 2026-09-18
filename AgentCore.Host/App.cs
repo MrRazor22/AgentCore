@@ -61,7 +61,7 @@ internal class App
                 .WithToolDiscovery()
                 .WithTools(webTools, new Discoverable("web"))
                 .WithTools(scheduleTool, new Discoverable("schedule")))
-            .WithInstructions("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")
+            .WithInstructions([new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
             .Build();
 
         await channel.SendAsync(new("ready", Name: config.Model));

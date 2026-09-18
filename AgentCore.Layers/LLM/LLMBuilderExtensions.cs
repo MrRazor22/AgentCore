@@ -4,6 +4,7 @@ namespace AgentCore.Layers.LLM;
 
 public static class LLMBuilderExtensions
 {
+
     public static LLMBuilder WithToolCallDetection(this LLMBuilder builder, bool stopAfterFirstToolCall = false)
     {
         ArgumentNullException.ThrowIfNull(builder);

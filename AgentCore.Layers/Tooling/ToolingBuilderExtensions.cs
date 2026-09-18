@@ -5,6 +5,7 @@ namespace AgentCore.Layers.Tools;
 
 public static class ToolingBuilderExtensions
 {
+
     public static ToolingBuilder WithApproval(this ToolingBuilder builder, ToolApprover approver)
     {
         ArgumentNullException.ThrowIfNull(builder);

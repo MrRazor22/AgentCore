@@ -1,4 +1,5 @@
 using AgentCore.Context.Primitives;
+using AgentCore.Layers.Tools;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tooling;
@@ -148,5 +149,22 @@ public class ToolingTests
     {
         [Tool]
         public int Add(int a, int b) => a + b;
+    }
+
+    [Fact]
+    public async Task ToolingBuilder_Use_AnonymousMiddleware_InterceptsExecution()
+    {
+        bool intercepted = false;
+        var builder = new ToolingBuilder()
+            .Use((calls, next, ct) =>
+            {
+                intercepted = true;
+                return next.ExecuteAsync(calls, ct);
+            });
+
+        var toolbox = builder.Build(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        await foreach (var _ in toolbox.ExecuteAsync([])) { }
+
+        Assert.True(intercepted);
     }
 }

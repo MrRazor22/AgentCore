@@ -22,8 +22,8 @@ public class RetryLayerTests
 
         public IAsyncEnumerable<IMessageEvent> GenerateAsync(
             IReadOnlyList<Message> messages,
-            JsonSchema? responseSchema = null,
             IReadOnlyList<ToolDefinition>? tools = null,
+            JsonSchema? responseSchema = null,
             CancellationToken ct = default)
         {
             CallCount++;

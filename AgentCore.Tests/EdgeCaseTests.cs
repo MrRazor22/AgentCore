@@ -55,8 +55,8 @@ namespace AgentCore.Tests
 
             public IAsyncEnumerable<IMessageEvent> GenerateAsync(
                 IReadOnlyList<Message> messages,
-                JsonSchema? responseSchema = null,
                 IReadOnlyList<ToolDefinition>? tools = null,
+                JsonSchema? responseSchema = null,
                 CancellationToken ct = default)
             {
                 CapturedMessages.Add(messages.ToList());
@@ -102,7 +102,7 @@ namespace AgentCore.Tests
             // Act & Assert
             await Assert.ThrowsAsync<JsonException>(async () =>
             {
-                await agent.InvokeAsync<TestDto>(new Text("Requesting structured data"));
+                await agent.WithResponse<TestDto>(new Text("Requesting structured data"));
             });
         }
 
@@ -136,7 +136,7 @@ namespace AgentCore.Tests
                 .Build();
 
             // Act
-            var result = await agent.InvokeAsync<string>(new Text("Trigger conversation"));
+            var result = await agent.WithResponse<string>(new Text("Trigger conversation"));
 
             // Assert
             Assert.Equal("Assistant final reply", result);
@@ -169,7 +169,7 @@ namespace AgentCore.Tests
                 .Build();
 
             // Act
-            var result = await agent.InvokeAsync<string>(new Text("Third"));
+            var result = await agent.WithResponse<string>(new Text("Third"));
 
             // Assert
             Assert.Equal("Reply despite overflow", result);
@@ -211,7 +211,7 @@ namespace AgentCore.Tests
                 .Build();
 
             // Act
-            var result = await agent.InvokeAsync<string>(new Text("Execute tools"));
+            var result = await agent.WithResponse<string>(new Text("Execute tools"));
 
             // Assert
             Assert.Equal("Tools executed successfully.", result);

@@ -14,10 +14,10 @@ public class ToolCallDetectionLayerTests
     {
         public IAsyncEnumerable<IMessageEvent> EmittedOutputs { get; set; } = AsyncEnumerableExtensions.ToAsyncEnumerable(Array.Empty<IMessageEvent>());
 
-        public IAsyncEnumerable<IMessageEvent> StreamAsync(
+        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
             IReadOnlyList<Message> messages,
-            JsonSchema? responseSchema = null,
             IReadOnlyList<ToolDefinition>? tools = null,
+            JsonSchema? responseSchema = null,
             CancellationToken ct = default)
         {
             return EmittedOutputs;

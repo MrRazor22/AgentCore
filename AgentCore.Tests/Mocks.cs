@@ -120,8 +120,8 @@ public class MockLLMProvider : ILLM
 
     public IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
     {
         CapturedMessages.Add(messages.ToList());

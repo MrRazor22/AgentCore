@@ -16,11 +16,11 @@ public sealed class StreamingEventLayer<T>(Func<IMessageEvent, T>? mapper = null
 
     public override IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
     {
-        return InterceptEventsAsync(Inner.GenerateAsync(messages, responseSchema, tools, ct), ct);
+        return InterceptEventsAsync(Inner.GenerateAsync(messages, tools, responseSchema, ct), ct);
     }
 
     private async IAsyncEnumerable<IMessageEvent> InterceptEventsAsync(

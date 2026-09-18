@@ -1,7 +1,6 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,7 +12,6 @@ public class AgentBuilder
     private ILogger<AgentBuilder> _logger = NullLogger<AgentBuilder>.Instance;
     private int _maxIterations = 20;
     private IReadOnlyList<IContent> _instructions = [new Text("You are a helpful AI assistant.")];
-    private JsonSchema? _responseSchema;
     private readonly LLMBuilder _llm = new();
     private readonly ToolingBuilder _tooling = new();
     private readonly ContextBuilder _context = new();
@@ -23,20 +21,12 @@ public class AgentBuilder
     {
         _maxIterations = maxIterations;
         return this;
-    }
-
-    public AgentBuilder WithInstructions(string prompt) => WithInstructions([new Text(prompt)]);
+    } 
 
     public AgentBuilder WithInstructions(IEnumerable<IContent> contents)
     {
         ArgumentNullException.ThrowIfNull(contents);
         _instructions = contents.Where(c => c != null).ToArray();
-        return this;
-    }
-
-    public AgentBuilder WithResponseSchema(JsonSchema? schema)
-    {
-        _responseSchema = schema;
         return this;
     }
 
@@ -85,6 +75,6 @@ public class AgentBuilder
             _tooling.Layers.Count,
             _context.Layers.Count);
 
-        return new Agent(context, provider, tooling, _instructions, _responseSchema, _maxIterations);
+        return new Agent(context, provider, tooling, _instructions, _maxIterations);
     }
 }

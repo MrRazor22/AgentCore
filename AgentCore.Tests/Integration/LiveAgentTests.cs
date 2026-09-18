@@ -123,7 +123,7 @@ public class LiveAgentTests
         PersonInfo? result = null;
         try
         {
-            result = await agent.InvokeAsync<PersonInfo>(new Text("Generate details for John Doe, who is 30 years old and works as a Software Engineer and Tech Lead."));
+            result = await agent.WithResponse<PersonInfo>(new Text("Generate details for John Doe, who is 30 years old and works as a Software Engineer and Tech Lead."));
         }
         catch (Exception ex)
         {
@@ -180,11 +180,11 @@ public class LiveAgentTests
             .Build();
 
         // Act - Turn 1
-        var reply1 = await agent.InvokeAsync<string>(new Text("My secret code is 8849. Remember this."));
+        var reply1 = await agent.WithResponse<string>(new Text("My secret code is 8849. Remember this."));
         Assert.False(string.IsNullOrWhiteSpace(reply1));
 
         // Act - Turn 2
-        var reply2 = await agent.InvokeAsync<string>(new Text("What is my secret code?"));
+        var reply2 = await agent.WithResponse<string>(new Text("What is my secret code?"));
 
         // Assert
         Assert.Contains("8849", reply2);
@@ -206,13 +206,13 @@ public class LiveAgentTests
             contextWindow: 50000
         );
         var agent = CreateAgentBuilder()
-            .WithInstructions("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")
+            .WithInstructions([new Text("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")])
             .WithContext(lf => context)
             .WithTools(tools)
             .Build();
 
         // Act
-        var result = await agent.InvokeAsync<string>(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
+        var result = await agent.GetFinalResponseAsync(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
 
         _output.WriteLine("=== Conversation Messages ===");
         foreach (var msg in await context.PrepareAsync())
@@ -250,7 +250,7 @@ public class LiveAgentTests
 
         // Act
         // Invoke a tool designed to throw
-        var result = await agent.InvokeAsync<string>(new Text("Execute the tool FailTool with input 'test'. Do not explain; execute the tool directly."));
+        var result = await agent.WithResponse<string>(new Text("Execute the tool FailTool with input 'test'. Do not explain; execute the tool directly."));
 
         _output.WriteLine("=== Conversation Messages (Test 5) ===");
         foreach (var msg in await context.PrepareAsync())

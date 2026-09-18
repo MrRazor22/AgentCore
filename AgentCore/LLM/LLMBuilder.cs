@@ -1,3 +1,6 @@
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.LLM;
@@ -12,6 +15,12 @@ public sealed class LLMBuilder
         ArgumentNullException.ThrowIfNull(factory);
         Factory = factory;
         return this;
+    }
+
+    public LLMBuilder Use(LLMDelegate middleware)
+    {
+        ArgumentNullException.ThrowIfNull(middleware);
+        return AddLayer(new LLMLayer(middleware));
     }
 
     public LLMBuilder AddLayer(LLMLayer layer)

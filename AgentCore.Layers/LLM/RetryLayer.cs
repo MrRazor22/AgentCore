@@ -45,8 +45,8 @@ public sealed class RetryLayer : LLMLayer
 
     public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var attempt = 1;
@@ -57,7 +57,7 @@ public sealed class RetryLayer : LLMLayer
 
             try
             {
-                enumerator = Inner.GenerateAsync(messages, responseSchema, tools, ct)
+                enumerator = Inner.GenerateAsync(messages, tools, responseSchema, ct)
                                   .GetAsyncEnumerator(ct);
 
                 while (true)

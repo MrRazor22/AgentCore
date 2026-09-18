@@ -38,7 +38,7 @@ public sealed class CreateAgentTool(
 
         var builder = new AgentBuilder();
         _configureDefaults(builder);
-        builder.WithInstructions(role);
+        builder.WithInstructions([new Text(role)]);
         builder.UseToolbox(t => t.WithTools(new SendAgentTool(team, name)));
 
         var childCollaborators = collaborators != null

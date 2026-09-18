@@ -67,6 +67,12 @@ public sealed class ToolingBuilder
         ));
     }
 
+    public ToolingBuilder Use(ToolingDelegate middleware)
+    {
+        ArgumentNullException.ThrowIfNull(middleware);
+        return AddLayer(new ToolingLayer(middleware));
+    }
+
     public ToolingBuilder AddLayer(ToolingLayer layer)
     {
         ArgumentNullException.ThrowIfNull(layer);

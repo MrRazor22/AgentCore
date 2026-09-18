@@ -1,10 +1,13 @@
-using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using System.Runtime.CompilerServices;
 
 namespace AgentCore.Tooling;
 
-public abstract class ToolingLayer : IToolbox
+public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
+    IReadOnlyList<ToolCall> calls,
+    IToolbox next,
+    CancellationToken ct);
+
+public class ToolingLayer(ToolingDelegate? handler = null) : IToolbox
 {
     private bool _attached;
 
@@ -24,5 +27,7 @@ public abstract class ToolingLayer : IToolbox
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         CancellationToken ct = default)
-        => Inner.ExecuteAsync(calls, ct);
+        => handler != null
+            ? handler(calls, Inner, ct)
+            : Inner.ExecuteAsync(calls, ct);
 }

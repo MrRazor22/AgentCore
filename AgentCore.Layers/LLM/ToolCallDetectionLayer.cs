@@ -28,14 +28,14 @@ public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false) : LLMLa
 
     public override IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
     {
         var toolNames = tools?.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
         return toolNames.Count == 0
-            ? Inner.GenerateAsync(messages, responseSchema, tools, ct)
-            : ProcessStreamAsync(Inner.GenerateAsync(messages, responseSchema, tools, ct), toolNames, ct);
+            ? Inner.GenerateAsync(messages, tools, responseSchema, ct)
+            : ProcessStreamAsync(Inner.GenerateAsync(messages, tools, responseSchema, ct), toolNames, ct);
     }
 
     private async IAsyncEnumerable<IMessageEvent> ProcessStreamAsync(

@@ -1,7 +1,6 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
 using System.Runtime.CompilerServices;
 
@@ -10,7 +9,6 @@ namespace AgentCore;
 public interface IAgent
 {
     IReadOnlyList<IContent> Instructions { get; }
-    JsonSchema? ResponseSchema { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -22,14 +20,12 @@ public sealed class Agent(
     ILLM llm,
     IToolbox toolbox,
     IReadOnlyList<IContent> instructions,
-    JsonSchema? responseSchema = null,
     int maxIterations = 20) : IAgent
 {
     public IContext Context => context;
     public ILLM LLM => llm;
     public IToolbox Toolbox => toolbox;
     public IReadOnlyList<IContent> Instructions => instructions;
-    public JsonSchema? ResponseSchema => responseSchema;
     public int MaxIterations => maxIterations;
 
     public static AgentBuilder Create() => new();
@@ -74,7 +70,7 @@ public sealed class Agent(
 
             toolCalls = null;
             await foreach (var evt in context.IngestAsync(
-                llm.GenerateAsync(prompt, responseSchema, toolbox.GetDefinitions(), ct), ct))
+                llm.GenerateAsync(prompt, toolbox.GetDefinitions(), ct: ct), ct))
             {
                 if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 yield return evt;

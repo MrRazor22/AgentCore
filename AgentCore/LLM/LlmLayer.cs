@@ -1,11 +1,17 @@
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
-using AgentCore.Tooling.Tools;
 
 namespace AgentCore.LLM;
 
-public abstract class LLMLayer : ILLM
+public delegate IAsyncEnumerable<IMessageEvent> LLMDelegate(
+    IReadOnlyList<Message> messages,
+    IReadOnlyList<ToolDefinition>? tools,
+    JsonSchema? responseSchema,
+    ILLM next,
+    CancellationToken ct);
+
+public class LLMLayer(LLMDelegate? handler = null) : ILLM
 {
     private bool _attached;
 
@@ -22,8 +28,10 @@ public abstract class LLMLayer : ILLM
 
     public virtual IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
-        JsonSchema? responseSchema = null,
         IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
         CancellationToken ct = default)
-        => Inner.GenerateAsync(messages, responseSchema, tools, ct);
+        => handler != null
+            ? handler(messages, tools, responseSchema, Inner, ct)
+            : Inner.GenerateAsync(messages, tools, responseSchema, ct);
 }

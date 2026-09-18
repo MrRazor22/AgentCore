@@ -127,7 +127,7 @@ public class AgentBuilderTests
         var agent = builder.Build();
 
         Assert.NotNull(agent);
-        await agent.InvokeAsync<string>(new Text("Hello"));
+        await agent.WithResponse<string>(new Text("Hello"));
         Assert.Contains("Add", decoratorInstance.CallLog);
         Assert.Contains("GetMessages", decoratorInstance.CallLog);
     }
@@ -143,10 +143,10 @@ public class AgentBuilderTests
             _callOrder = callOrder;
         }
 
-        public override IAsyncEnumerable<IMessageEvent> GenerateAsync(IReadOnlyList<Message> messages, JsonSchema? responseSchema = null, IReadOnlyList<ToolDefinition>? tools = null, CancellationToken ct = default)
+        public override IAsyncEnumerable<IMessageEvent> GenerateAsync(IReadOnlyList<Message> messages, IReadOnlyList<ToolDefinition>? tools = null, JsonSchema? responseSchema = null, CancellationToken ct = default)
         {
             _callOrder.Add(_name);
-            return base.GenerateAsync(messages, responseSchema, tools, ct);
+            return base.GenerateAsync(messages, tools, responseSchema, ct);
         }
     }
 
@@ -198,7 +198,7 @@ public class AgentBuilderTests
         var agent = builder.Build();
 
         Assert.NotNull(agent);
-        await agent.InvokeAsync<string>(new Text("Hello"));
+        await agent.WithResponse<string>(new Text("Hello"));
 
         Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
     }
@@ -239,14 +239,16 @@ public class AgentBuilderTests
     private record SampleOutput(string Name, int Value);
 
     [Fact]
-    public void WithResponseSchema_ConfiguresAgentResponseSchema()
+    public async Task WithSchema_ConfiguresLLMSchema()
     {
+        var mockProvider = new MockLLMProvider();
         var schema = JsonSchema.For<SampleOutput>();
         var agent = Agent.Create()
-            .WithLLM(lf => new MockLLMProvider())
-            .WithResponseSchema(schema)
+            .UseLLM(llm => llm.Use(lf => mockProvider).WithSchema(schema))
             .Build();
 
-        Assert.Same(schema, agent.ResponseSchema);
+        await foreach (var _ in agent.InvokeStreamingAsync([new Text("Extract")])) { }
+
+        Assert.Same(schema, mockProvider.CapturedResponseSchemas.Single());
     }
 }
