@@ -13,7 +13,7 @@ public static class McpToolBuilderExtensions
         ArgumentNullException.ThrowIfNull(client);
 
         var tools = await client.ListToolsAsync(cancellationToken: ct).ConfigureAwait(false);
-        return builder.UseToolbox(tb =>
+        return builder.UseTool(tb =>
         {
             foreach (var tool in tools)
             {

@@ -39,7 +39,7 @@ public sealed class CreateAgentTool(
         var builder = new AgentBuilder();
         _configureDefaults(builder);
         builder.WithInstructions([new Text(role)]);
-        builder.UseToolbox(t => t.WithTools(new SendAgentTool(team, name)));
+        builder.UseTool(t => t.WithTools(new SendAgentTool(team, name)));
 
         var childCollaborators = collaborators != null
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }

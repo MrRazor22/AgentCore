@@ -55,7 +55,7 @@ internal class App
                 .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true)
                 .AddChatGrammar())
             .UseLLM(llm => llm.WithRetry().WithToolCallDetection())
-            .UseToolbox(tools => tools
+            .UseTool(tools => tools
                 .WithTools(vsTools)
                 .WithTools(skillTool)
                 .WithToolDiscovery()
