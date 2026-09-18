@@ -28,7 +28,7 @@ public class WorkflowTests
 
         // Act
         var events = new List<IContentEvent>();
-        await foreach (var item in agent.InvokeStreamingAsync(input))
+        await foreach (var item in agent.InvokeStreamingAsync([input]))
         {
             events.Add(item);
         }

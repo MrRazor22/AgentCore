@@ -16,17 +16,6 @@ public interface IContext
     IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
-public static class ContextExtensions
-{
-    public static async Task WriteAsync(this IContext context, IMessageEvent evt, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(evt);
-        await foreach (var _ in context.WriteAsync(Stream(evt), ct).ConfigureAwait(false)) { }
-        static async IAsyncEnumerable<IMessageEvent> Stream(IMessageEvent e) { yield return e; }
-    }
-}
-
 public class ChatContext(
     int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,

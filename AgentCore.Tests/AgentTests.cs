@@ -110,7 +110,7 @@ public class AgentTests
             .Build();
 
         var events = new List<IContentEvent>();
-        await foreach (var ev in agent.InvokeStreamingAsync(new Text("Hi")))
+        await foreach (var ev in agent.InvokeStreamingAsync([new Text("Hi")]))
         {
             events.Add(ev);
         }

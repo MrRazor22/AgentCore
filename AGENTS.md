@@ -68,6 +68,8 @@
 ## 14. LEAN & ZERO-CONVENIENCE-BLOAT PHILOSOPHY
 - Correct, well-architected code is naturally minimal and concise.
 - Never write convenience wrappers, lazy helper overloads, or over-engineered boilerplate just to avoid refactoring existing code.
+- ZERO CONVENIENCE ALIASES OR PARALLEL FLUENT SINKHOLES: Never create or keep duplicate convenience aliases (e.g. `With*` mirroring `Use*`, `Add*`, or `Remove*`). There must be exactly ONE canonical way to perform an operation.
+- NEVER RETAIN PARALLEL CONVENIENCE APIS: Never retain obsolete, duplicate, or secondary fluent aliases for "caller convenience" or "backwards compatibility"—aggressively delete them immediately without waiting to be prompted.
 - Minimal does NOT mean code golf; it means razor-sharp design where every line earns its existence.
 - When new requirements emerge, do NOT lazily tack on convenience bloat—refactor and adapt existing abstractions so everything fits cleanly and cohesively.
 

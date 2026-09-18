@@ -12,6 +12,7 @@ using AgentCore.LLM.Tornado;
 using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using AgentCore.Layers.Tools;
+using AgentCore.Tool;
 using CodeSharp.Skills;
 using CodeSharp.Tools;
 using Microsoft.Extensions.Logging;
@@ -99,7 +100,7 @@ internal class App
     {
         try
         {
-            await foreach (var evt in agent.InvokeStreamingAsync(prompt))
+            await foreach (var evt in agent.InvokeStreamingAsync([new Text(prompt)]))
             {
                 IpcMessage? payload = evt switch
                 {

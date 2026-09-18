@@ -37,6 +37,8 @@ public static class LLMExtensions
             useJitter,
             shouldRetry,
             onRetry);
+    }
+
     public static Agent UseRetry(
         this Agent agent,
         int maxRetries = 3,
