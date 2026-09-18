@@ -8,26 +8,30 @@ public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
     ITooling next,
     CancellationToken ct);
 
-public class ToolingLayer(ToolingDelegate? handler = null) : ITooling
+public class ToolingLayer : ITooling
 {
-    private bool _attached;
+    private readonly ToolingDelegate? _handler;
+
+    public ToolingLayer(ToolingDelegate? handler = null) => _handler = handler;
+
+    public ToolingLayer(ITooling inner, ToolingDelegate? handler = null)
+    {
+        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _handler = handler;
+    }
 
     public ITooling Inner { get; private set; } = null!;
 
-    internal void Attach(ITooling inner)
+    public void Attach(ITooling inner)
     {
-        if (_attached)
-            throw new InvalidOperationException("This tool service decorator has already been attached to a pipeline.");
-
         Inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _attached = true;
     }
 
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         IReadOnlyList<ITool> tools,
         CancellationToken ct = default)
-        => handler != null
-            ? handler(calls, tools, Inner, ct)
+        => _handler != null
+            ? _handler(calls, tools, Inner, ct)
             : Inner.ExecuteAsync(calls, tools, ct);
 }

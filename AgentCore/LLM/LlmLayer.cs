@@ -11,19 +11,23 @@ public delegate IAsyncEnumerable<IMessageEvent> LLMDelegate(
     ILLM next,
     CancellationToken ct);
 
-public class LLMLayer(LLMDelegate? handler = null) : ILLM
+public class LLMLayer : ILLM
 {
-    private bool _attached;
+    private readonly LLMDelegate? _handler;
+
+    public LLMLayer(LLMDelegate? handler = null) => _handler = handler;
+
+    public LLMLayer(ILLM inner, LLMDelegate? handler = null)
+    {
+        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _handler = handler;
+    }
 
     public ILLM Inner { get; private set; } = null!;
 
-    internal void Attach(ILLM inner)
+    public void Attach(ILLM inner)
     {
-        if (_attached)
-            throw new InvalidOperationException("This LLM decorator has already been attached to a pipeline.");
-
         Inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _attached = true;
     }
 
     public virtual IAsyncEnumerable<IMessageEvent> GenerateAsync(
@@ -31,7 +35,7 @@ public class LLMLayer(LLMDelegate? handler = null) : ILLM
         IReadOnlyList<ToolDefinition>? tools = null,
         JsonSchema? responseSchema = null,
         CancellationToken ct = default)
-        => handler != null
-            ? handler(messages, tools, responseSchema, Inner, ct)
+        => _handler != null
+            ? _handler(messages, tools, responseSchema, Inner, ct)
             : Inner.GenerateAsync(messages, tools, responseSchema, ct);
 }

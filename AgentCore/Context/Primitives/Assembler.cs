@@ -52,9 +52,9 @@ public sealed class Assembler : IAssembler
             case ToolResultEnd tre:
                 return CompleteToolResultBlock(tre.Index, tre.IsError);
 
-            case IContent c:
-                _contents.Add(c);
-                return c;
+            case IContent content:
+                _contents.Add(content);
+                return content;
 
             case IContentStart s:
                 _blocks[s.Index] = (s, new StringBuilder());

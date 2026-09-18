@@ -7,7 +7,7 @@ using AgentCore.Tool.Tools;
 
 namespace AgentCore.Tests;
 
-public class AgentBuilderTests
+public class AgentRuntimeTests
 {
     private class StaticTestTools
     {
@@ -39,67 +39,50 @@ public class AgentBuilderTests
     [Fact]
     public void WithTools_Generic_RegistersStaticTools()
     {
-        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
-        builder.WithTools<StaticTestTools>();
-
-        var agent = builder.Build();
+        var agent = new Agent(new MockLLMProvider()).WithTools<StaticTestTools>();
         Assert.NotNull(agent);
+        Assert.Equal(2, agent.Tools.Count);
     }
 
     [Fact]
     public void WithTools_Instance_RegistersInstanceTools()
     {
-        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         var instance = new InstanceTestTools();
-        builder.WithTools(instance);
-
-        var agent = builder.Build();
+        var agent = new Agent(new MockLLMProvider()).WithTools(instance);
         Assert.NotNull(agent);
-    }
-
-    [Fact]
-    public void WithTools_Generic_ThrowsForInstanceMethods()
-    {
-        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
-        var ex = Assert.Throws<ArgumentException>(() => { builder.WithTools<InstanceTestTools>(); });
-        Assert.Contains("instance method", ex.Message);
+        Assert.Equal(2, agent.Tools.Count);
     }
 
     [Fact]
     public void WithTools_Instance_RegistersMixedTools()
     {
-        var builder = Agent.Create().WithLLM(lf => new MockLLMProvider());
         var instance = new MixedTestTools();
-        builder.WithTools(instance);
-
-        var agent = builder.Build();
+        var agent = new Agent(new MockLLMProvider()).WithTools(instance);
         Assert.NotNull(agent);
+        Assert.Equal(2, agent.Tools.Count);
     }
 
     [Fact]
-    public void Build_WithoutProvider_ThrowsInvalidOperationException()
+    public void Constructor_WithoutProvider_ThrowsArgumentNullException()
     {
-        var builder = Agent.Create();
-        Assert.Throws<InvalidOperationException>(() => { builder.Build(); });
+        Assert.Throws<ArgumentNullException>(() => new Agent(null!));
     }
 
-    private class MemoryLoggerDecorator : ContextLayer
+    private class MemoryLoggerDecorator(IContext? inner = null) : ContextLayer(inner)
     {
         public List<string> CallLog { get; } = new();
 
-        public override Task<IReadOnlyList<Message>> PrepareAsync(
-            IEnumerable<Message>? messages = null,
-            CancellationToken ct = default)
+        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
         {
-            CallLog.Add("GetMessages");
-            return base.PrepareAsync(messages, ct);
+            CallLog.Add("ReadAsync");
+            return base.ReadAsync(ct);
         }
 
         public override async IAsyncEnumerable<IContentEvent> WriteAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            CallLog.Add("Add");
+            CallLog.Add("WriteAsync");
             await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
             {
                 yield return evt;
@@ -108,72 +91,44 @@ public class AgentBuilderTests
     }
 
     [Fact]
-    public async Task Build_InjectsAndSequencesDecoratorsCorrectly()
+    public async Task Agent_InjectsAndSequencesDecoratorsCorrectly()
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Acknowledged"));
 
-        var baseMemory = new Context.ChatContext(
-            contextWindow: 50000
-        );
+        var baseMemory = new Context.ChatContext(contextWindow: 50000);
+        var decoratorInstance = new MemoryLoggerDecorator(baseMemory);
 
-        var decoratorInstance = new MemoryLoggerDecorator();
-
-        var builder = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .WithContext(lf => baseMemory)
-            .AddContextLayer(decoratorInstance);
-
-        var agent = builder.Build();
+        var agent = new Agent(mockProvider, context: decoratorInstance);
 
         Assert.NotNull(agent);
         await agent.WithResponse<string>(new Text("Hello"));
-        Assert.Contains("Add", decoratorInstance.CallLog);
-        Assert.Contains("GetMessages", decoratorInstance.CallLog);
+        Assert.Contains("WriteAsync", decoratorInstance.CallLog);
+        Assert.Contains("ReadAsync", decoratorInstance.CallLog);
     }
 
-    private class TestLlmDecorator : LLMLayer
+    private class TestLlmDecorator(string name, List<string> callOrder, ILLM? inner = null) : LLMLayer(inner)
     {
-        private readonly string _name;
-        private readonly List<string> _callOrder;
-
-        public TestLlmDecorator(string name, List<string> callOrder)
-        {
-            _name = name;
-            _callOrder = callOrder;
-        }
-
         public override IAsyncEnumerable<IMessageEvent> GenerateAsync(IReadOnlyList<Message> messages, IReadOnlyList<ToolDefinition>? tools = null, JsonSchema? responseSchema = null, CancellationToken ct = default)
         {
-            _callOrder.Add(_name);
+            callOrder.Add(name);
             return base.GenerateAsync(messages, tools, responseSchema, ct);
         }
     }
 
-    private class TestMemoryDecorator : ContextLayer
+    private class TestMemoryDecorator(string name, List<string> callOrder, IContext? inner = null) : ContextLayer(inner)
     {
-        private readonly string _name;
-        private readonly List<string> _callOrder;
-
-        public TestMemoryDecorator(string name, List<string> callOrder)
+        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
         {
-            _name = name;
-            _callOrder = callOrder;
-        }
-
-        public override Task<IReadOnlyList<Message>> PrepareAsync(
-            IEnumerable<Message>? messages = null,
-            CancellationToken ct = default)
-        {
-            _callOrder.Add(_name);
-            return base.PrepareAsync(messages, ct);
+            callOrder.Add(name);
+            return base.ReadAsync(ct);
         }
 
         public override async IAsyncEnumerable<IContentEvent> WriteAsync(
             IAsyncEnumerable<IMessageEvent> events,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            _callOrder.Add(_name);
+            callOrder.Add(name);
             await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
             {
                 yield return evt;
@@ -182,73 +137,31 @@ public class AgentBuilderTests
     }
 
     [Fact]
-    public async Task Build_AppliesLlmAndMemoryLayersInPipelineOrder()
+    public async Task Agent_AppliesLlmAndMemoryLayersInPipelineOrder()
     {
         var mockProvider = new MockLLMProvider();
         mockProvider.Enqueue(new Text("Hi"));
         var callOrder = new List<string>();
 
-        var builder = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .AddLLMLayer(new TestLlmDecorator("LlmLayer1", callOrder))
-            .AddLLMLayer(new TestLlmDecorator("LlmLayer2", callOrder))
-            .AddContextLayer(new TestMemoryDecorator("MemoryLayer1", callOrder))
-            .AddContextLayer(new TestMemoryDecorator("MemoryLayer2", callOrder));
+        var llm = new TestLlmDecorator("LlmLayer2", callOrder, new TestLlmDecorator("LlmLayer1", callOrder, mockProvider));
+        var context = new TestMemoryDecorator("MemoryLayer2", callOrder, new TestMemoryDecorator("MemoryLayer1", callOrder, new Context.ChatContext()));
 
-        var agent = builder.Build();
+        var agent = new Agent(llm, context: context);
 
         Assert.NotNull(agent);
         await agent.WithResponse<string>(new Text("Hello"));
 
-        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1", "MemoryLayer2", "MemoryLayer1" }, callOrder);
+        Assert.Equal(new[] { "MemoryLayer2", "MemoryLayer1", "MemoryLayer2", "MemoryLayer1", "LlmLayer2", "LlmLayer1" }, callOrder);
     }
 
     [Fact]
-    public void Build_ThrowsOnDecoratorReuse()
+    public void Agent_ExposesRequiredServices()
     {
         var mockProvider = new MockLLMProvider();
-        var decorator = new TestMemoryDecorator("Shared", new List<string>());
-
-        var builder1 = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .AddContextLayer(decorator);
-
-        builder1.Build();
-
-        var builder2 = Agent.Create()
-            .WithLLM(lf => mockProvider)
-            .AddContextLayer(decorator);
-
-        Assert.Throws<InvalidOperationException>(() => builder2.Build());
-    }
-
-    [Fact]
-    public void Builder_ExposesRequiredServices()
-    {
-        var mockProvider = new MockLLMProvider();
-        var builder = Agent.Create()
-            .WithLLM(lf => mockProvider);
-
-        var agent = builder.Build();
+        var agent = new Agent(mockProvider);
 
         Assert.NotNull(agent.LLM);
         Assert.NotNull(agent.Context);
-        Assert.NotNull(agent.Toolbox);
-    }
-
-    private record SampleOutput(string Name, int Value);
-
-    [Fact]
-    public async Task WithSchema_ConfiguresLLMSchema()
-    {
-        var mockProvider = new MockLLMProvider();
-        var schema = JsonSchema.For<SampleOutput>();
-        var agent = Agent.Create()
-            .UseLLM(llm => llm.Use(lf => mockProvider).WithSchema(schema))
-            .Build();
-
-        await foreach (var _ in agent.InvokeStreamingAsync([new Text("Extract")])) { }
-
-        Assert.Same(schema, mockProvider.CapturedResponseSchemas.Single());
+        Assert.NotNull(agent.Tooling);
     }
 }

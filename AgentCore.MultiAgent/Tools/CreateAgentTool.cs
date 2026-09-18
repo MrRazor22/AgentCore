@@ -9,9 +9,9 @@ namespace AgentCore.MultiAgent.Tools;
 public sealed class CreateAgentTool(
     IAgentTeam team,
     string sender,
-    Action<AgentBuilder> configureDefaults) : ITool
+    Agent template) : ITool
 {
-    private readonly Action<AgentBuilder> _configureDefaults = configureDefaults ?? throw new ArgumentNullException(nameof(configureDefaults));
+    private readonly Agent _template = template ?? throw new ArgumentNullException(nameof(template));
 
     private static readonly JsonSchema Schema = new JsonSchemaBuilder()
         .Type<object>()
@@ -36,16 +36,15 @@ public sealed class CreateAgentTool(
             ? cArr.Select(n => (string?)n).OfType<string>()
             : null;
 
-        var builder = new AgentBuilder();
-        _configureDefaults(builder);
-        builder.WithInstructions([new Text(role)]);
-        builder.UseTool(t => t.WithTools(new SendAgentTool(team, name)));
-
         var childCollaborators = collaborators != null
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
 
-        team.Add(new TeamMember(name, builder.Build(), childCollaborators, description: role));
+        var newAgent = _template
+            .WithInstructions([new Text(role)])
+            .WithTools([.. _template.Tools, new SendAgentTool(team, name)]);
+
+        team.Add(new TeamMember(name, newAgent, childCollaborators, description: role));
 
         if (team.Members.TryGetValue(sender, out var creatorMember) && creatorMember.Collaborators != null)
         {

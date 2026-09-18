@@ -141,18 +141,16 @@ public class ToolingTests
     }
 
     [Fact]
-    public async Task ToolingBuilder_Use_AnonymousMiddleware_InterceptsExecution()
+    public async Task ToolingLayer_AnonymousMiddleware_InterceptsExecution()
     {
         bool intercepted = false;
-        var builder = new ToolBuilder()
-            .Use((calls, tools, next, ct) =>
-            {
-                intercepted = true;
-                return next.ExecuteAsync(calls, tools, ct);
-            });
+        var tooling = new ToolingLayer(new Tooling(), (calls, tools, next, ct) =>
+        {
+            intercepted = true;
+            return next.ExecuteAsync(calls, tools, ct);
+        });
 
-        var (toolbox, tools) = builder.Build(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
-        await foreach (var _ in toolbox.ExecuteAsync([], tools)) { }
+        await foreach (var _ in tooling.ExecuteAsync([], [])) { }
 
         Assert.True(intercepted);
     }

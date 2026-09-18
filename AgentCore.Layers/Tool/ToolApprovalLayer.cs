@@ -10,6 +10,14 @@ public sealed class ToolApprovalLayer : ToolingLayer
 {
     private readonly ToolApprover _approver;
 
+    public ToolApprovalLayer(ITooling inner, ToolApprover approver) : base(inner) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
+
+    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
+        : this(inner, async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
+
+    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+        : this(inner, async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
+
     public ToolApprovalLayer(ToolApprover approver) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
 
     public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)

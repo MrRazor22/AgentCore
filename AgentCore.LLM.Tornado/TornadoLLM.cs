@@ -23,6 +23,18 @@ namespace AgentCore.LLM.Tornado;
 /// </summary>
 public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 {
+    public TornadoLLM(string apiKey, string model, string? baseUrl = null, LLmProviders provider = LLmProviders.Custom)
+        : this(CreateApi(apiKey, baseUrl, provider), new ChatModel(model, provider))
+    {
+    }
+
+    private static TornadoApi CreateApi(string apiKey, string? baseUrl, LLmProviders provider)
+    {
+        if (string.IsNullOrWhiteSpace(baseUrl)) return new TornadoApi(provider, apiKey);
+        var cleanUrl = baseUrl.TrimEnd('/');
+        if (cleanUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase)) cleanUrl = cleanUrl[..^3];
+        return new TornadoApi(new Uri(cleanUrl + "/"), apiKey, provider);
+    }
     public async IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
         IReadOnlyList<ToolDefinition>? tools = null,

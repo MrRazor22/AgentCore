@@ -13,7 +13,8 @@ namespace AgentCore.Layers.Context;
 
 public sealed class ChatPersistenceLayer(
     IChatStore store,
-    IWalStore? walStore = null) : ContextLayer
+    IWalStore? walStore = null,
+    IContext? inner = null) : ContextLayer(inner)
 {
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private bool _restored;

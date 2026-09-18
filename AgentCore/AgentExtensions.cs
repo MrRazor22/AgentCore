@@ -35,4 +35,24 @@ public static class AgentExtensions
 
         return text;
     }
+
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        string prompt,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(prompt);
+        return agent.InvokeStreamingAsync([new Text(prompt)], ct);
+    }
+
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(input);
+        return agent.InvokeStreamingAsync([input], ct);
+    }
 }

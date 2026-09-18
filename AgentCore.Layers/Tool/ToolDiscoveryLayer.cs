@@ -63,7 +63,7 @@ public sealed class ToolDiscoveryTool : ITool
     }
 }
 
-public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool) : ToolingLayer
+public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, ITooling? inner = null) : ToolingLayer(inner)
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 

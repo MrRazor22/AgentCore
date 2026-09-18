@@ -87,7 +87,7 @@ public class SystemTools
 
 ## 📂 Codebase Map
 
-* **`Agent.cs` / `AgentBuilder.cs`**: The core execution runner (built on C# 8 `IAsyncEnumerable` streaming) and builder.
+* **`Agent.cs` / `AgentEngine.cs`**: The living agent runtime and ReAct execution engine.
 * **`Tooling/`**: The runtime compilation engine (`DelegateTool.cs`) and schema generator.
 * **`Memory/`**: sliding window token measurement and summarization engine.
 * **`Conversation/`**: Polymorphic message payloads (`Text`, `ToolCall`, `ToolResult`, `Reasoning`).

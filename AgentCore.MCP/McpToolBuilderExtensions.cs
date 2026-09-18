@@ -1,24 +1,18 @@
-using AgentCore.LLM.Chat;
+using AgentCore;
 using AgentCore.Tool;
 using ModelContextProtocol.Client;
-using ModelContextProtocol.Server;
 
 namespace AgentCore.MCP;
 
-public static class McpToolBuilderExtensions
+public static class McpToolExtensions
 { 
-    public static async Task<AgentBuilder> WithMcpToolsAsync(this AgentBuilder builder, McpClient client, CancellationToken ct = default)
+    public static async Task<Agent> WithMcpToolsAsync(this Agent agent, McpClient client, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(client);
 
         var tools = await client.ListToolsAsync(cancellationToken: ct).ConfigureAwait(false);
-        return builder.UseTool(tb =>
-        {
-            foreach (var tool in tools)
-            {
-                tb.WithTools(new McpTool(client, tool.ProtocolTool));
-            }
-        });
+        var mcpTools = tools.Select(t => (ITool)new McpTool(client, t.ProtocolTool)).ToArray();
+        return agent.WithTools([.. agent.Tools, .. mcpTools]);
     }
 } 

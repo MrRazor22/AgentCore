@@ -1,8 +1,9 @@
+using System.Reflection;
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
-using System.Runtime.CompilerServices;
+using AgentCore.Tool.Tools;
 
 namespace AgentCore;
 
@@ -11,66 +12,85 @@ public interface IAgent
     IReadOnlyList<IContent> Instructions { get; }
     IReadOnlyList<ToolDefinition> ToolDefinitions { get; }
     IContext Context { get; }
+    ILLM LLM { get; }
+    ITooling Tooling { get; }
+    IReadOnlyList<ITool> Tools { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
         CancellationToken ct = default);
 }
 
-public sealed class Agent(
-    IContext context,
-    ILLM llm,
-    ITooling tooling,
-    IReadOnlyList<ITool> tools,
-    IReadOnlyList<IContent> instructions,
-    int maxIterations) : IAgent
+public sealed class Agent : IAgent
 {
-    public IContext Context => context;
-    public ILLM LLM => llm;
-    public ITooling Tooling => tooling;
-    public IReadOnlyList<ITool> Tools => tools;
-    public IReadOnlyList<IContent> Instructions => instructions;
-    public int MaxIterations => maxIterations;
+    private static readonly IReadOnlyList<IContent> DefaultInstructions = [new Text("You are a helpful AI assistant.")];
+    private readonly IAgentEngine _engine;
 
-    public IReadOnlyList<ToolDefinition> ToolDefinitions => tools.Select(t => t.Info).ToArray();
+    public IContext Context { get; }
+    public ILLM LLM { get; }
+    public ITooling Tooling { get; }
+    public IReadOnlyList<ITool> Tools { get; }
+    public IReadOnlyList<IContent> Instructions { get; }
+    public int MaxIterations { get; }
+    public IReadOnlyList<ToolDefinition> ToolDefinitions => Tools.Select(t => t.Info).ToArray();
 
-    public static AgentBuilder Create() => new();
-
-    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        IReadOnlyList<IContent> input,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public Agent(
+        ILLM llm,
+        IReadOnlyList<ITool>? tools = null,
+        IContext? context = null,
+        ITooling? tooling = null,
+        IReadOnlyList<IContent>? instructions = null,
+        int maxIterations = 20,
+        IAgentEngine? engine = null)
     {
-        ArgumentNullException.ThrowIfNull(input);
-
-        await Context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
-        var messages = await Context.ReadAsync(ct).ConfigureAwait(false);
-
-        int iterations = 0;
-        List<ToolCall>? toolCalls;
-        do
-        {
-            ct.ThrowIfCancellationRequested();
-            if (++iterations > maxIterations)
-                throw new InvalidOperationException($"Execution exceeded maximum limit of {maxIterations} iterations.");
-
-            List<Message> prompt = [new Message(Role.System, Instructions), .. messages];
-
-            toolCalls = null;
-            await foreach (var evt in Context.WriteAsync(llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
-            {
-                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
-                yield return evt;
-            }
-
-            if (toolCalls is not null)
-            {
-                await foreach (var evt in Context.WriteAsync(tooling.ExecuteAsync(toolCalls, tools, ct), ct))
-                {
-                    yield return evt;
-                }
-
-                messages = await Context.ReadAsync(ct).ConfigureAwait(false);
-            }
-        } while (toolCalls is not null);
+        LLM = llm ?? throw new ArgumentNullException(nameof(llm));
+        Tools = tools ?? [];
+        Context = context ?? new ChatContext();
+        Tooling = tooling ?? new Tooling();
+        Instructions = instructions ?? DefaultInstructions;
+        MaxIterations = maxIterations;
+        _engine = engine ?? AgentEngine.Instance;
     }
+
+    public Agent WithLLM(ILLM newLlm)
+        => new(newLlm, Tools, Context, Tooling, Instructions, MaxIterations, _engine);
+
+    public Agent WithTools(params ITool[] newTools)
+        => new(LLM, newTools ?? throw new ArgumentNullException(nameof(newTools)), Context, Tooling, Instructions, MaxIterations, _engine);
+
+    public Agent WithTools(IEnumerable<ITool> newTools)
+        => new(LLM, (newTools ?? throw new ArgumentNullException(nameof(newTools))).ToArray(), Context, Tooling, Instructions, MaxIterations, _engine);
+
+    public Agent WithTools<T>() => WithTools(typeof(T));
+
+    public Agent WithTools(object instance, params IMetadata[] metadata)
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        var type = instance as Type ?? instance.GetType();
+        var target = instance is Type ? null : instance;
+        var flags = BindingFlags.Public | BindingFlags.Static | (target != null ? BindingFlags.Instance : 0);
+
+        var extracted = type.GetMethods(flags)
+            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null)
+            .Select(m => (ITool)new MethodTool(m, m.IsStatic ? null : target, extraMetadata: metadata));
+
+        return WithTools([.. Tools, .. extracted]);
+    }
+
+    public Agent WithContext(IContext newContext)
+        => new(LLM, Tools, newContext ?? throw new ArgumentNullException(nameof(newContext)), Tooling, Instructions, MaxIterations, _engine);
+
+    public Agent WithTooling(ITooling newTooling)
+        => new(LLM, Tools, Context, newTooling ?? throw new ArgumentNullException(nameof(newTooling)), Instructions, MaxIterations, _engine);
+
+    public Agent WithInstructions(IEnumerable<IContent> newInstructions)
+        => new(LLM, Tools, Context, Tooling, (newInstructions ?? throw new ArgumentNullException(nameof(newInstructions))).ToArray(), MaxIterations, _engine);
+
+    public Agent WithEngine(IAgentEngine newEngine)
+        => new(LLM, Tools, Context, Tooling, Instructions, MaxIterations, newEngine ?? throw new ArgumentNullException(nameof(newEngine)));
+
+    public IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        IReadOnlyList<IContent> input,
+        CancellationToken ct = default)
+        => _engine.RunAsync(Context, LLM, Tooling, Tools, Instructions, input, MaxIterations, ct);
 }

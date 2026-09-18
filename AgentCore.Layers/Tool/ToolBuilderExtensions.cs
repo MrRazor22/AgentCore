@@ -1,37 +1,43 @@
+using AgentCore;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
 
 namespace AgentCore.Layers.Tools;
 
-public static class ToolBuilderExtensions
+public static class ToolingExtensions
 {
-
-    public static ToolBuilder WithApproval(this ToolBuilder builder, ToolApprover approver)
+    public static ITooling WithApproval(this ITooling tooling, ToolApprover approver)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(approver);
-        return builder.AddLayer(new ToolApprovalLayer(approver));
+        return new ToolApprovalLayer(tooling, approver);
     }
 
-    public static ToolBuilder WithApproval(this ToolBuilder builder, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+    public static ITooling WithApproval(this ITooling tooling, Func<ToolCall, CancellationToken, Task<bool>> prompt)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(prompt);
-        return builder.AddLayer(new ToolApprovalLayer(prompt));
+        return new ToolApprovalLayer(tooling, prompt);
     }
 
-    public static ToolBuilder AddApprovalLayer(this ToolBuilder builder, ToolApprovalLayer layer)
+    public static Agent WithApproval(this Agent agent, ToolApprover approver)
     {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(layer);
-        return builder.AddLayer(layer);
+        ArgumentNullException.ThrowIfNull(agent);
+        return agent.WithTooling(agent.Tooling.WithApproval(approver));
     }
 
-    public static ToolBuilder WithToolDiscovery(this ToolBuilder builder, ToolDiscoveryTool? tool = null)
+    public static Agent WithApproval(this Agent agent, Func<ToolCall, CancellationToken, Task<bool>> prompt)
     {
-        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(agent);
+        return agent.WithTooling(agent.Tooling.WithApproval(prompt));
+    }
+
+    public static Agent WithToolDiscovery(this Agent agent, ToolDiscoveryTool? tool = null)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
         var discovery = tool ?? new ToolDiscoveryTool();
-        builder.WithTools(discovery);
-        return builder.AddLayer(new ToolDiscoveryLayer(discovery));
+        return agent
+            .WithTools([.. agent.Tools, discovery])
+            .WithTooling(new ToolDiscoveryLayer(discovery, agent.Tooling));
     }
 }

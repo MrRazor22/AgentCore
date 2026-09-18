@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AgentCore;
+using AgentCore.Context;
 using AgentCore.Host.Abstractions;
 using AgentCore.Host.Ipc;
 using AgentCore.LLM.Chat;
@@ -47,21 +48,22 @@ internal class App
         var scheduleTool = new ScheduleTool();
 
         var baseUrl = config.BaseUrl.EndsWith('/') ? config.BaseUrl : config.BaseUrl + "/";
-        var agent = Agent.Create()
-            .WithLoggerFactory(lf)
-            .WithTornado(config.ApiKey, config.Model, baseUrl)
-            .UseContext(ctx => ctx
-                .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true))
-            .UseLLM(llm => llm.WithRetry().WithToolCallDetection())
-            .UseTool(tools => tools
-                .WithTools(vsTools)
-                .WithTools(skillTool)
-                .WithToolDiscovery()
-                .WithTools(webTools, new Discoverable("web"))
-                .WithTools(scheduleTool, new Discoverable("schedule")))
-            .WithInstructions([new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
-            .Build();
+        var tornado = new TornadoLLM(config.ApiKey, config.Model, baseUrl)
+            .WithRetry()
+            .WithToolCallDetection();
+
+        var context = new ChatContext(contextWindow: 50000, reserveTokens: 2500)
+            .WithPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true);
+
+        IAgent agent = new Agent(
+            llm: tornado,
+            context: context,
+            instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
+            .WithTools(vsTools)
+            .WithTools(skillTool)
+            .WithToolDiscovery()
+            .WithTools(webTools, new Discoverable("web"))
+            .WithTools(scheduleTool, new Discoverable("schedule"));
 
         await channel.SendAsync(new("ready", Name: config.Model));
 
@@ -84,8 +86,7 @@ internal class App
     {
         try
         {
-            var input = new IContent[] { new Text(prompt) };
-            await foreach (var evt in agent.InvokeStreamingAsync(input))
+            await foreach (var evt in agent.InvokeStreamingAsync(prompt))
             {
                 IpcMessage? payload = evt switch
                 {

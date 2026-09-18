@@ -64,18 +64,17 @@ public class LiveAgentTests
         }
     }
 
-    private AgentBuilder CreateAgentBuilder()
+    private Agent CreateAgent()
     {
         var (api, model) = OpenAICompatibleFixture.CreateTornado();
-        return Agent.Create()
-            .WithTornado(api, model);
+        return new Agent(new TornadoLLM(api, model));
     }
 
     [LiveFact]
     public async Task Test1_BasicAndStreamingInvocation()
     {
         // Arrange
-        var agent = CreateAgentBuilder().Build();
+        var agent = CreateAgent();
         var message = new Text("Explain recursion in one sentence.");
 
         // Act
@@ -115,9 +114,7 @@ public class LiveAgentTests
         var context = new Context.ChatContext(
             contextWindow: 50000
         );
-        var agent = CreateAgentBuilder()
-            .WithContext(lf => context)
-            .Build();
+        var agent = CreateAgent().WithContext(context);
 
         // Act
         PersonInfo? result = null;
@@ -152,20 +149,15 @@ public class LiveAgentTests
                         var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
                         result = JsonSerializer.Deserialize<PersonInfo>(reasoningText, jsonOptions);
                         _output.WriteLine($"[Test 2] Successfully extracted JSON from Reasoning content: {reasoningText}");
-                    }
-                    catch (Exception ex)
-                    {
-                        _output.WriteLine($"[Test 2] Failed to deserialize Reasoning content JSON: {ex}");
-                    }
-                }
-            }
+            throw;
         }
 
         // Assert
         Assert.NotNull(result);
         Assert.Equal("John Doe", result.Name);
         Assert.Equal(30, result.Age);
-        Assert.Contains(result.Roles, r => r.Contains("Engineer", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Roles, r => r.Contains("Software Engineer", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Roles, r => r.Contains("Tech Lead", StringComparison.OrdinalIgnoreCase));
     }
 
     [LiveFact]
@@ -175,9 +167,7 @@ public class LiveAgentTests
         var context = new Context.ChatContext(
             contextWindow: 50000
         );
-        var agent = CreateAgentBuilder()
-            .WithContext(lf => context)
-            .Build();
+        var agent = CreateAgent().WithContext(context);
 
         // Act - Turn 1
         var reply1 = await agent.WithResponse<string>(new Text("My secret code is 8849. Remember this."));
@@ -205,11 +195,10 @@ public class LiveAgentTests
         var context = new Context.ChatContext(
             contextWindow: 50000
         );
-        var agent = CreateAgentBuilder()
+        var agent = CreateAgent()
             .WithInstructions([new Text("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")])
-            .WithContext(lf => context)
-            .WithTools(tools)
-            .Build();
+            .WithContext(context)
+            .WithTools(tools);
 
         // Act
         var result = await agent.GetFinalResponseAsync(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
@@ -243,10 +232,9 @@ public class LiveAgentTests
         var context = new Context.ChatContext(
             contextWindow: 50000
         );
-        var agent = CreateAgentBuilder()
-            .WithContext(lf => context)
-            .WithTools(tools)
-            .Build();
+        var agent = CreateAgent()
+            .WithContext(context)
+            .WithTools(tools);
 
         // Act
         // Invoke a tool designed to throw
