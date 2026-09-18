@@ -42,8 +42,8 @@ public sealed class Agent(
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        await context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
-        var messages = await context.ReadAsync(ct).ConfigureAwait(false);
+        await Context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
+        var messages = await Context.ReadAsync(ct).ConfigureAwait(false);
 
         int iterations = 0;
         List<ToolCall>? toolCalls;
@@ -56,7 +56,7 @@ public sealed class Agent(
             List<Message> prompt = [new Message(Role.System, Instructions), .. messages];
 
             toolCalls = null;
-            await foreach (var evt in context.WriteAsync(llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
+            await foreach (var evt in Context.WriteAsync(llm.GenerateAsync(prompt, ToolDefinitions, ct: ct), ct))
             {
                 if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
                 yield return evt;
@@ -64,12 +64,12 @@ public sealed class Agent(
 
             if (toolCalls is not null)
             {
-                await foreach (var evt in context.WriteAsync(tooling.ExecuteAsync(toolCalls, tools, ct), ct))
+                await foreach (var evt in Context.WriteAsync(tooling.ExecuteAsync(toolCalls, tools, ct), ct))
                 {
                     yield return evt;
                 }
 
-                messages = await context.ReadAsync(ct).ConfigureAwait(false);
+                messages = await Context.ReadAsync(ct).ConfigureAwait(false);
             }
         } while (toolCalls is not null);
     }
