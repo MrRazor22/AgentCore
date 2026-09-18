@@ -10,6 +10,7 @@ public interface IAgent
 {
     IReadOnlyList<IContent> Instructions { get; }
     IReadOnlyList<ToolDefinition> ToolDefinitions { get; }
+    IContext Context { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -19,31 +20,19 @@ public interface IAgent
 public sealed class Agent(
     IContext context,
     ILLM llm,
-    ITooling toolbox,
+    ITooling tooling,
     IReadOnlyList<ITool> tools,
     IReadOnlyList<IContent> instructions,
-    int maxIterations = 20) : IAgent
+    int maxIterations) : IAgent
 {
     public IContext Context => context;
     public ILLM LLM => llm;
-    public ITooling Toolbox => toolbox;
+    public ITooling Tooling => tooling;
     public IReadOnlyList<ITool> Tools => tools;
     public IReadOnlyList<IContent> Instructions => instructions;
     public int MaxIterations => maxIterations;
 
-    public IReadOnlyList<ToolDefinition> ToolDefinitions
-    {
-        get
-        {
-            var discovery = tools.OfType<AgentCore.Layers.Tools.ToolDiscoveryTool>().FirstOrDefault();
-            if (discovery != null)
-            {
-                discovery.CatalogProvider ??= () => tools.Select(t => t.Info).ToList();
-                return tools.Where(t => t.Info.Name == discovery.Info.Name || discovery.IsActive(t.Info)).Select(t => t.Info).ToList();
-            }
-            return tools.Select(t => t.Info).ToList();
-        }
-    }
+    public IReadOnlyList<ToolDefinition> ToolDefinitions => tools.Select(t => t.Info).ToArray();
 
     public static AgentBuilder Create() => new();
 
@@ -96,7 +85,7 @@ public sealed class Agent(
             if (toolCalls is not null)
             {
                 await foreach (var evt in context.IngestAsync(
-                    toolbox.ExecuteAsync(toolCalls, tools, ct), ct))
+                    tooling.ExecuteAsync(toolCalls, tools, ct), ct))
                 {
                     yield return evt;
                 }
