@@ -7,6 +7,8 @@ namespace AgentCore.Tests;
 
 public class WorkflowTests
 {
+    private static readonly IReadOnlyList<IContent> Instructions = [new Text("You are a helpful AI assistant.")];
+
     private (ILLM, IToolbox) CreateServices(MockLLMProvider provider, IToolbox tooling)
     {
         return (provider, tooling);
@@ -21,7 +23,7 @@ public class WorkflowTests
 
         var (llm, tooling) = CreateServices(provider, new MockTooling());
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
         var input = new Text("Hello");
 
         // Act
@@ -71,7 +73,7 @@ public class WorkflowTests
 
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
         var input = new Text("Weather in London?");
 
         // Act
@@ -118,7 +120,7 @@ public class WorkflowTests
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         var events = new List<IContentEvent>();
         await foreach (var evt in agent.InvokeStreamingAsync(new Text("Calculate")))
@@ -160,7 +162,7 @@ public class WorkflowTests
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         await foreach (var _ in agent.InvokeStreamingAsync(new Text("Start"))) { }
 
@@ -203,7 +205,7 @@ public class WorkflowTests
         };
 
         var (llm, _) = CreateServices(provider, tooling);
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         await foreach (var _ in agent.InvokeStreamingAsync(new Text("Test phasing"))) { }
 
@@ -227,7 +229,7 @@ public class WorkflowTests
 
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         await foreach (var _ in agent.InvokeStreamingAsync(new Text("Run"))) { }
 
@@ -264,7 +266,7 @@ public class WorkflowTests
         var tooling = new MockTooling();
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
@@ -300,7 +302,7 @@ public class WorkflowTests
 
         var (llm, _) = CreateServices(provider, tooling);
         var context = new MockMemoryProvider();
-        var agent = new Agent(context, llm, tooling);
+        var agent = new Agent(context, llm, tooling, Instructions);
 
         await foreach (var _ in agent.InvokeStreamingAsync(new Text("Run"))) { }
 
@@ -319,7 +321,7 @@ public class WorkflowTests
             new MessageEnd()
         );
 
-        var recoveryAgent = new Agent(recoveryContext, llm, tooling);
+        var recoveryAgent = new Agent(recoveryContext, llm, tooling, Instructions);
         await foreach (var _ in recoveryAgent.InvokeStreamingAsync(new Text("Recover"))) { }
 
         // Count should still be 1 (did not execute again)
@@ -327,7 +329,7 @@ public class WorkflowTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ResumesPendingToolCallsAfterCrash_WithoutReexecutingCompleted()
+    public async Task ExecuteAsync_ClosesPendingToolCallsAfterCrash_OnNewInput()
     {
         var executedCalls = new List<string>();
         var tooling = new MockTooling
@@ -359,27 +361,25 @@ public class WorkflowTests
             new Message(Role.Tool, [new Text("Card charged")], id: "c1", metadata: [new ToolCallId("c1")])
         ]);
 
-        var agent = new Agent(context, provider, tooling);
+        var agent = new Agent(context, provider, tooling, Instructions);
 
         var events = new List<IContentEvent>();
-        await foreach (var evt in agent.InvokeStreamingAsync([]))
+        await foreach (var evt in agent.InvokeStreamingAsync(new Text("Continue deployment")))
         {
             events.Add(evt);
         }
-
-        // ChargeCard should NOT be re-executed; only ProvisionServer should execute
-        var singleExecuted = Assert.Single(executedCalls);
-        Assert.Equal("ProvisionServer", singleExecuted);
 
         // Verification of final completion
         var textDelta = Assert.Single(events.OfType<TextDelta>());
         Assert.Equal("Deployment finished.", textDelta.Text);
 
-        // Context now has completed tool results for both c1 and c2
+        // Context now has tool results for both c1 (completed) and c2 (auto-interrupted)
         var history = await context.PrepareAsync();
         var toolMessages = history.Where(m => m.Role == Role.Tool).ToList();
         Assert.Equal(2, toolMessages.Count);
         Assert.Equal("c1", toolMessages[0].Metadata.Get<ToolCallId>()?.Value);
         Assert.Equal("c2", toolMessages[1].Metadata.Get<ToolCallId>()?.Value);
+        Assert.NotNull(toolMessages[1].Get<Interrupted>());
+        Assert.Equal("Interrupted", toolMessages[1].Get<Interrupted>()?.Reason);
     }
 }

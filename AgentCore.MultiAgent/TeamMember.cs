@@ -27,7 +27,7 @@ public sealed class TeamMember(
     public IAgent Agent { get; } = agent ?? throw new ArgumentNullException(nameof(agent));
     public HashSet<string>? Collaborators { get; } = collaborators;
     public string Description { get; } = description
-        ?? (agent as Agent)?.Instructions?.OfType<Text>().FirstOrDefault()?.Value
+        ?? agent.Instructions.OfType<Text>().FirstOrDefault()?.Value
         ?? string.Empty;
 
     public string Status

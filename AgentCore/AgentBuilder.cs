@@ -1,6 +1,7 @@
 using AgentCore.Context;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
 using AgentCore.Tooling;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,7 +12,8 @@ public class AgentBuilder
 {
     private ILogger<AgentBuilder> _logger = NullLogger<AgentBuilder>.Instance;
     private int _maxIterations = 20;
-    private IReadOnlyList<IContent>? _instructions;
+    private IReadOnlyList<IContent> _instructions = [new Text("You are a helpful AI assistant.")];
+    private JsonSchema? _responseSchema;
     private readonly LLMBuilder _llm = new();
     private readonly ToolingBuilder _tooling = new();
     private readonly ContextBuilder _context = new();
@@ -31,6 +33,14 @@ public class AgentBuilder
         _instructions = contents.Where(c => c != null).ToArray();
         return this;
     }
+
+    public AgentBuilder WithResponseSchema(JsonSchema? schema)
+    {
+        _responseSchema = schema;
+        return this;
+    }
+
+    public AgentBuilder WithResponseSchema<T>() => WithResponseSchema(typeof(T) == typeof(string) ? null : typeof(T).GetSchemaForType());
 
     public AgentBuilder UseLLM(Action<LLMBuilder> configure)
     {
@@ -70,13 +80,13 @@ public class AgentBuilder
 
         _logger.LogInformation("Agent built: Tools={ToolCount} Instructions={InstructionCount} Provider={ProviderType} Context={ContextType} LLMLayers={LLMLayers} ToolingLayers={ToolingLayers} ContextLayers={ContextLayers}",
             _tooling.Tools.Count,
-            _instructions?.Count ?? 0,
+            _instructions.Count,
             provider.GetType().Name,
             context.GetType().Name,
             _llm.Layers.Count,
             _tooling.Layers.Count,
             _context.Layers.Count);
 
-        return new Agent(context, provider, tooling, _instructions, _maxIterations);
+        return new Agent(context, provider, tooling, _instructions, _responseSchema, _maxIterations);
     }
 }
