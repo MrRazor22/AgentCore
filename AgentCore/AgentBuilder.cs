@@ -40,8 +40,6 @@ public class AgentBuilder
         return this;
     }
 
-    public AgentBuilder WithResponseSchema<T>() => WithResponseSchema(typeof(T) == typeof(string) ? null : typeof(T).GetSchemaForType());
-
     public AgentBuilder UseLLM(Action<LLMBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);

@@ -1,7 +1,6 @@
 using AgentCore.Context;
 using AgentCore.Context.Primitives;
 using AgentCore.LLM;
-using AgentCore.LLM.Chat;
 using AgentCore.Tooling;
 
 namespace AgentCore;
@@ -28,14 +27,4 @@ public static class AgentExtensions
             if (t is T match) return match;
         return null;
     }
-
-    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        this IAgent agent,
-        IContent input,
-        CancellationToken ct = default) => agent.InvokeStreamingAsync([input], ct);
-
-    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
-        this IAgent agent,
-        IEnumerable<IContent> input,
-        CancellationToken ct = default) => agent.InvokeStreamingAsync(input as IReadOnlyList<IContent> ?? input.ToArray(), ct);
 }

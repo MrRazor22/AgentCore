@@ -58,7 +58,7 @@ public sealed class TeamMember(
 
         try
         {
-            await foreach (var evt in Agent.InvokeStreamingAsync(input, ct: ct).WithCancellation(ct).ConfigureAwait(false))
+            await foreach (var evt in Agent.InvokeStreamingAsync(input as IReadOnlyList<IContent> ?? input.ToArray(), ct: ct).WithCancellation(ct).ConfigureAwait(false))
             {
                 if (evt is ToolCallStart tcs)
                 {

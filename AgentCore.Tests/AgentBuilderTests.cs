@@ -235,4 +235,18 @@ public class AgentBuilderTests
         Assert.NotNull(agent.Context);
         Assert.NotNull(agent.Toolbox);
     }
+
+    private record SampleOutput(string Name, int Value);
+
+    [Fact]
+    public void WithResponseSchema_ConfiguresAgentResponseSchema()
+    {
+        var schema = JsonSchema.For<SampleOutput>();
+        var agent = Agent.Create()
+            .WithLLM(lf => new MockLLMProvider())
+            .WithResponseSchema(schema)
+            .Build();
+
+        Assert.Same(schema, agent.ResponseSchema);
+    }
 }

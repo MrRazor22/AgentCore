@@ -34,4 +34,6 @@ public sealed class JsonSchema
     }
 
     public override string ToString() => _cachedJson ??= _schema.ToString();
+
+    public static JsonSchema For<T>() => typeof(T).GetSchemaForType();
 }

@@ -6,6 +6,11 @@ namespace AgentCore.Tests;
 
 internal static class TestExtensions
 {
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct = default) => agent.InvokeStreamingAsync([input], ct);
+
     public static async Task<string?> InvokeAsync(
         this IAgent agent,
         IContent input,
@@ -14,7 +19,7 @@ internal static class TestExtensions
         var sb = new StringBuilder();
         bool hasDeltas = false;
 
-        await foreach (var evt in agent.InvokeStreamingAsync(input, ct))
+        await foreach (var evt in agent.InvokeStreamingAsync([input], ct))
         {
             if (evt is TextDelta td) { sb.Append(td.Text); hasDeltas = true; }
             else if (evt is Text t && !hasDeltas) sb.Append(t.Value);
