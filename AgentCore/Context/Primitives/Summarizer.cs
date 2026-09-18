@@ -18,10 +18,12 @@ public interface ICompactor
 
 public class Summarizer(
     ILLM llm,
-    string prompt = "Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.") : ICompactor
+    string prompt = "Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.",
+    INormalizer? normalizer = null) : ICompactor
 {
     private readonly ILLM _llm = llm ?? throw new ArgumentNullException(nameof(llm));
     private readonly string _prompt = prompt;
+    private readonly INormalizer _normalizer = normalizer ?? new ChatNormalizer();
 
     public async Task<IReadOnlyList<Message>> CompactAsync(
         IReadOnlyList<Message> messages,
@@ -30,9 +32,7 @@ public class Summarizer(
     {
         if (messages.Count == 0) return messages;
 
-        var request = new List<Message>(messages.Count + 1);
-        request.AddRange(messages);
-        request.Add(new Message(Role.User, [new Text(_prompt)]));
+        var request = _normalizer.Normalize([.. messages, new Message(Role.User, [new Text(_prompt)])]);
 
         var summaryMsgs = await _llm.GenerateAsync(request, ct: ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
         var summaryText = summaryMsgs.FirstOrDefault()?.Contents.OfType<Text>().FirstOrDefault()?.Value?.Trim() ?? string.Empty;

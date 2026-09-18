@@ -1,27 +1,14 @@
-using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-using AgentCore.Context;
-using AgentCore.Layers.Context;
+using AgentCore.Context.Primitives;
 using AgentCore.LLM.Chat;
 using Xunit;
 
 namespace AgentCore.Tests;
 
-public class MessageMergingLayerTests
+public class MessageNormalizerTests
 {
-    private class InMemoryContext(IReadOnlyList<Message> messages) : IContext
-    {
-        public Task<IReadOnlyList<Message>> PrepareAsync(IEnumerable<Message>? staged = null, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<Message>>(staged != null ? [.. messages, .. staged] : messages);
-
-        public IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default)
-            => throw new NotImplementedException();
-    }
-
     [Fact]
-    public async Task ChatGrammar_AdjacentUserTextMessages_MergesIntoSingleMessage()
+    public void ChatNormalizer_AdjacentUserTextMessages_MergesIntoSingleMessage()
     {
         var input = new List<Message>
         {
@@ -29,10 +16,8 @@ public class MessageMergingLayerTests
             new Message(Role.User, [new Text("no i mean the class diagram")])
         };
 
-        var layer = new ChatGrammarLayer();
-        layer.Attach(new InMemoryContext(input));
-
-        var output = await layer.PrepareAsync();
+        var normalizer = new ChatNormalizer();
+        var output = normalizer.Normalize(input);
 
         Assert.Single(output);
         Assert.Equal(Role.User, output[0].Role);
@@ -40,7 +25,7 @@ public class MessageMergingLayerTests
     }
 
     [Fact]
-    public async Task ChatGrammar_ToolCallAndToolResultSequences_PreservedUnchanged()
+    public void ChatNormalizer_ToolCallAndToolResultSequences_PreservedUnchanged()
     {
         var toolCall = new ToolCall("1", "Search");
         var input = new List<Message>
@@ -51,10 +36,8 @@ public class MessageMergingLayerTests
             new Message(Role.Assistant, [new Text("here are the files")])
         };
 
-        var layer = new ChatGrammarLayer();
-        layer.Attach(new InMemoryContext(input));
-
-        var output = await layer.PrepareAsync();
+        var normalizer = new ChatNormalizer();
+        var output = normalizer.Normalize(input);
 
         Assert.Equal(4, output.Count);
         Assert.Equal(Role.User, output[0].Role);
@@ -64,7 +47,7 @@ public class MessageMergingLayerTests
     }
 
     [Fact]
-    public async Task ChatGrammar_OrphanToolResult_IsPurged()
+    public void ChatNormalizer_OrphanToolResult_IsPurged()
     {
         var input = new List<Message>
         {
@@ -72,12 +55,28 @@ public class MessageMergingLayerTests
             new Message(Role.Tool, [new Text("orphan result")], metadata: [new ToolCallId("non_existent")])
         };
 
-        var layer = new ChatGrammarLayer();
-        layer.Attach(new InMemoryContext(input));
-
-        var output = await layer.PrepareAsync();
+        var normalizer = new ChatNormalizer();
+        var output = normalizer.Normalize(input);
 
         Assert.Single(output);
         Assert.Equal(Role.User, output[0].Role);
+    }
+
+    [Fact]
+    public void ChatNormalizer_DanglingToolCall_IsPairedWithAbortedToolResult()
+    {
+        var toolCall = new ToolCall("call_1", "Search");
+        var input = new List<Message>
+        {
+            new Message(Role.User, [new Text("find files")]),
+            new Message(Role.Assistant, [toolCall])
+        };
+
+        var normalizer = new ChatNormalizer();
+        var output = normalizer.Normalize(input);
+
+        Assert.Equal(3, output.Count);
+        Assert.Equal(Role.Tool, output[2].Role);
+        Assert.Equal("call_1", output[2].Get<ToolCallId>()?.Value);
     }
 }

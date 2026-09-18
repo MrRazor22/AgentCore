@@ -52,8 +52,7 @@ internal class App
             .WithTornado(config.ApiKey, config.Model, baseUrl)
             .UseContext(ctx => ctx
                 .WithChatContext(contextWindow: 50000, reserveTokens: 2500)
-                .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true)
-                .AddChatGrammar())
+                .AddChatPersistence(Path.Combine(root, ".codesharp", "sessions"), Guid.NewGuid().ToString(), enableWal: true))
             .UseLLM(llm => llm.WithRetry().WithToolCallDetection())
             .UseTool(tools => tools
                 .WithTools(vsTools)

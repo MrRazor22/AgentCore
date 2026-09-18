@@ -23,18 +23,4 @@ public static class ContextBuilderExtensions
             new FileChatStore(storageDirectory, sessionId),
             enableWal ? new FileWalStore(storageDirectory, sessionId) : null);
 
-    public static ContextBuilder AddChatGrammar(
-        this ContextBuilder builder,
-        bool coalesceAdjacentRoles = true,
-        bool ensureToolPairing = true,
-        bool pinSystemInstructions = true,
-        bool stripPastReasoning = true)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        return builder.AddLayer(new ChatGrammarLayer(
-            coalesceAdjacentRoles,
-            ensureToolPairing,
-            pinSystemInstructions,
-            stripPastReasoning));
-    }
 }

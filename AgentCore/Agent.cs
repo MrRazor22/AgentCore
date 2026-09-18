@@ -42,17 +42,6 @@ public sealed class Agent(
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var existing = await context.ReadAsync(ct).ConfigureAwait(false);
-
-        if (existing.LastOrDefault()?.Contents.LastOrDefault() is ToolCall)
-        {
-            var done = existing.Where(m => m.Role == Role.Tool).SelectMany(m => m.Contents.OfType<ToolResult>().Select(r => r.ToolCallId)).ToHashSet();
-            var interrupted = existing[^1].Contents.OfType<ToolCall>().Where(c => !done.Contains(c.Id))
-                .Select(c => new ToolResult(c.Id, [new Text(new Interrupted().Reason)], isError: true)).ToList();
-            if (interrupted.Count > 0)
-                await context.WriteAsync(new Message(Role.Tool, interrupted), ct).ConfigureAwait(false);
-        }
-
         await context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
         var messages = await context.ReadAsync(ct).ConfigureAwait(false);
 

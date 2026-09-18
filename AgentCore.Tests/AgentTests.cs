@@ -24,11 +24,11 @@ public class AgentTests
         var memory = new Context.ChatContext(
             contextWindow: 50000
         );
-        await memory.PrepareAsync(new[] { new Message(Role.User, [new Text("Old message")]) });
+        await memory.WriteAsync(new Message(Role.User, [new Text("Old message")]));
 
         var agent = Agent.Create()
             .UseLLM(llm => llm.Use(lf => mockProvider))
-            .UseContext(ctx => ctx.Use(lf => memory).AddChatGrammar())
+            .UseContext(ctx => ctx.Use(lf => memory))
             .Build();
 
         // Act

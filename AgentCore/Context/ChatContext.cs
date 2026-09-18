@@ -30,13 +30,14 @@ public static class ContextExtensions
 public class ChatContext(
     int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
-    IAssembler? assembler = null, ILogger<ChatContext>? logger = null) : IContext
+    IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null) : IContext
 {
     private Message[] _chat = [];
     private readonly Dictionary<string, IAssembler> _open = new(StringComparer.Ordinal);
     private readonly IAssembler _assembler = assembler ?? new Assembler();
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
     private readonly ITruncator _truncator = truncator ?? new Truncator(counter ?? new Tokenizer());
+    private readonly INormalizer _normalizer = normalizer ?? new ChatNormalizer();
     private readonly int _limit = Math.Max(1, contextWindow - (reserveTokens ?? Math.Min(4_000, contextWindow / 10)));
     private readonly int _maxTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
     private readonly object _lock = new();
@@ -114,7 +115,7 @@ public class ChatContext(
         if (_tokens > _limit && compactor != null)
         {
             logger?.LogInformation("Context overflow ({Tokens}/{Limit}). Compacting via {Compactor}...", _tokens, _limit, compactor.GetType().Name);
-            var compacted = await compactor.CompactAsync(snapshot, _limit, ct).ConfigureAwait(false);
+            var compacted = await compactor.CompactAsync(_normalizer.Normalize(snapshot), _limit, ct).ConfigureAwait(false);
             lock (_lock)
             {
                 _chat = [.. compacted, .. _chat.Skip(snapshot.Length)];
@@ -124,8 +125,9 @@ public class ChatContext(
             logger?.LogInformation("Compacted: {Count} messages ({Tokens} tokens).", snapshot.Length, _tokens);
         }
 
-        logger?.LogDebug("Context staged: {Count} messages ({Tokens}/{Limit} tokens).", snapshot.Length, _tokens, _limit);
-        return snapshot;
+        var normalized = _normalizer.Normalize(snapshot);
+        logger?.LogDebug("Context staged: {Count} messages ({Tokens}/{Limit} tokens).", normalized.Count, _tokens, _limit);
+        return normalized;
     }
 
     private Message Commit(Message m, int? tokens = null)
