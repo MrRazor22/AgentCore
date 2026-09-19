@@ -51,17 +51,22 @@ internal class App
         var baseUrl = config.BaseUrl.EndsWith('/') ? config.BaseUrl : config.BaseUrl + "/";
         string sessionsDir = Path.Combine(root, ".codesharp", "sessions");
 
-        IAgent agent = new Agent(
-            llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl),
+        var discovery = new ToolDiscoveryTool();
+
+        var agent = new Agent(
+            llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl)
+                .UseRetry()
+                .UseToolCallDetection(),
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
             .AddTools(vsTools)
             .AddTools(skillTool)
+            .AddTools(discovery)
             .AddTools(webTools, new Discoverable("web"))
-            .AddTools(scheduleTool, new Discoverable("schedule"))
-            .UseToolDiscovery()
-            .UseRetry()
-            .UseToolCallDetection()
-            .UseSession(sessionsDir, Guid.NewGuid().ToString());
+            .AddTools(scheduleTool, new Discoverable("schedule"));
+
+        agent = agent.With(
+            context: agent.Context.UseSession(sessionsDir, Guid.NewGuid().ToString()),
+            tooling: agent.Tooling.UseToolDiscovery(discovery));
 
         await channel.SendAsync(new("ready", Name: config.Model));
 
@@ -73,21 +78,18 @@ internal class App
                 continue;
             }
 
-            if (agent is Agent live)
+            agent = msg.Type switch
             {
-                agent = msg.Type switch
+                "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(context: agent.Context.UseSession(sessionsDir, msg.Text)),
+                "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(llm: new TornadoLLM(config.ApiKey, msg.Text, baseUrl).UseRetry().UseToolCallDetection()),
+                "enable_approval" => agent.With(tooling: agent.Tooling.UseApproval(async (call, ct) =>
                 {
-                    "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => live.UseSession(sessionsDir, msg.Text),
-                    "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => live.UseTornado(config.ApiKey, msg.Text, baseUrl),
-                    "enable_approval" => live.UseApproval(async (call, ct) =>
-                    {
-                        await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
-                        return true;
-                    }),
-                    "disable_approval" => live.RemoveApproval(),
-                    _ => agent
-                };
-            }
+                    await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
+                    return true;
+                })),
+                "disable_approval" => agent.With(tooling: agent.Tooling.RemoveApproval()),
+                _ => agent
+            };
 
             if (msg.Type == "prompt" && !string.IsNullOrWhiteSpace(msg.Text))
             {

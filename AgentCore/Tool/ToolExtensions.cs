@@ -6,12 +6,12 @@ namespace AgentCore.Tool;
 
 public static class ToolExtensions
 {
-    public static Agent AddLayer(this Agent agent, ToolingLayer layer)
+    public static ITooling AddLayer(this ITooling tooling, ToolingLayer layer)
     {
-        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(layer);
-        layer.Attach(agent.Tooling);
-        return agent.With(tooling: layer);
+        layer.Attach(tooling);
+        return layer;
     }
 
     public static ITooling RemoveLayer<T>(this ITooling tooling) where T : class
@@ -26,12 +26,6 @@ public static class ToolExtensions
                 parent.Attach(newInner);
         }
         return tooling;
-    }
-
-    public static Agent RemoveLayer<T>(this Agent agent) where T : ToolingLayer
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        return agent.With(tooling: agent.Tooling.RemoveLayer<T>());
     }
 
     public static Agent AddTools(this Agent agent, params ITool[] newTools)
@@ -55,7 +49,7 @@ public static class ToolExtensions
             .Where(m => m.GetCustomAttribute<ToolAttribute>() != null)
             .Select(m => (ITool)new MethodTool(m, m.IsStatic ? null : target, extraMetadata: metadata));
 
-        return agent.AddTools(extracted);
+        return agent.AddTools(extracted.ToArray());
     }
 
     public static Agent RemoveTool(this Agent agent, string name)

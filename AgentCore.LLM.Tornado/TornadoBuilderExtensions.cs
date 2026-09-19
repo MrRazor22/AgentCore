@@ -48,10 +48,4 @@ public static class TornadoExtensions
         var chatModel = new ChatModel(model, provider);
         return agent.UseLLM(new TornadoLLM(api, chatModel));
     }
-
-    public static Agent WithTornado(this Agent agent, TornadoApi api, ChatModel model)
-        => agent.UseTornado(api, model);
-
-    public static Agent WithTornado(this Agent agent, string apiKey, string model, string? baseUrl = null, LLmProviders provider = LLmProviders.Custom)
-        => agent.UseTornado(apiKey, model, baseUrl, provider);
 }

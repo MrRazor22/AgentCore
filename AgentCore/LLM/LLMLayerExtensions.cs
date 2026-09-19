@@ -2,12 +2,12 @@ namespace AgentCore.LLM;
 
 public static class LLMLayerExtensions
 {
-    public static Agent AddLayer(this Agent agent, LLMLayer layer)
+    public static ILLM AddLayer(this ILLM llm, LLMLayer layer)
     {
-        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(llm);
         ArgumentNullException.ThrowIfNull(layer);
-        layer.Attach(agent.LLM);
-        return agent.With(llm: layer);
+        layer.Attach(llm);
+        return layer;
     }
 
     public static ILLM RemoveLayer<T>(this ILLM llm) where T : class
@@ -22,11 +22,5 @@ public static class LLMLayerExtensions
                 parent.Attach(newInner);
         }
         return llm;
-    }
-
-    public static Agent RemoveLayer<T>(this Agent agent) where T : LLMLayer
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        return agent.With(llm: agent.LLM.RemoveLayer<T>());
     }
 }
