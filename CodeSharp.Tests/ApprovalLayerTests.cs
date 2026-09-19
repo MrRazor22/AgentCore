@@ -29,7 +29,7 @@ public class ApprovalLayerTests
 {
     private class TestTool(string name) : ITool
     {
-        public ToolDefinition Info { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
+        public ToolDefinition Definition { get; } = new(name, "Test tool", new JsonSchemaBuilder().Type<object>().Build());
         public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
             string callId,
             JsonObject arguments,

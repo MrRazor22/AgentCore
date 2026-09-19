@@ -13,7 +13,7 @@ public static class ToolboxExtensions
     {
         ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(name);
-        return toolbox.With(toolbox.Tools.Where(t => !string.Equals(t.Info.Name, name, StringComparison.OrdinalIgnoreCase)));
+        return toolbox.With(toolbox.Tools.Where(t => !string.Equals(t.Definition.Name, name, StringComparison.OrdinalIgnoreCase)));
     }
 
     public static IToolbox AddLayer(this IToolbox toolbox, ToolboxLayer layer)

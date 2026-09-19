@@ -10,7 +10,7 @@ public class ToolingServiceTests
 {
     private class FakeTool(string name, JsonSchema schema) : ITool
     {
-        public ToolDefinition Info { get; } = new(name, "Fake Description", schema);
+        public ToolDefinition Definition { get; } = new(name, "Fake Description", schema);
 
         public Func<JsonObject, CancellationToken, Task<IReadOnlyList<IContent>>> Invoker { get; set; } =
             (args, ct) => Task.FromResult<IReadOnlyList<IContent>>([new Text("Result")]);

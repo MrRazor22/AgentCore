@@ -17,7 +17,7 @@ public sealed record ToolDefinition(
 
 public interface ITool
 {
-    ToolDefinition Info { get; }
+    ToolDefinition Definition { get; }
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }
 public interface IToolbox
@@ -51,9 +51,9 @@ public sealed class Toolbox : IToolbox
         if (tools != null)
         {
             foreach (var t in tools)
-                _tools[t.Info.Name] = t;
+                _tools[t.Definition.Name] = t;
         }
-        _definitions = _tools.Values.Select(t => t.Info).ToArray();
+        _definitions = _tools.Values.Select(t => t.Definition).ToArray();
     }
 
     public Toolbox With(
@@ -107,7 +107,7 @@ public sealed class Toolbox : IToolbox
             return;
         }
 
-        if (tool.Info.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
+        if (tool.Definition.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
         {
             await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResult(call.Id, [Fail(call.Name, string.Join("; ", errors))], isError: true)), ct).ConfigureAwait(false);
             return;

@@ -45,7 +45,7 @@ public class ToolingTests
         var tooling = new Toolbox([tool]);
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
-        var toolCall = new ToolCall("call_1", tool.Info.Name, args.ToJsonString());
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
 
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
@@ -63,7 +63,7 @@ public class ToolingTests
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
-        var toolCall = new ToolCall("call_1", tool.Info.Name, args.ToJsonString());
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, args.ToJsonString());
 
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
@@ -78,7 +78,7 @@ public class ToolingTests
         var tool = new MethodTool(method, new SampleTools());
         var tooling = new Toolbox([tool]);
 
-        var toolCall = new ToolCall("call_1", tool.Info.Name, "{\"a\": 10, malformed}");
+        var toolCall = new ToolCall("call_1", tool.Definition.Name, "{\"a\": 10, malformed}");
         var toolResult = await tooling.ExecuteAsync(toolCall);
 
         var resultText = toolResult.ToString();
@@ -124,12 +124,12 @@ public class ToolingTests
         var defs = await tooling.GetDefinitionsAsync();
 
         var def = Assert.Single(defs);
-        Assert.Equal(tool.Info.Name, def.Name);
+        Assert.Equal(tool.Definition.Name, def.Name);
     }
 
     private class NullNameTool(string name) : ITool
     {
-        public ToolDefinition Info { get; } = !string.IsNullOrWhiteSpace(name)
+        public ToolDefinition Definition { get; } = !string.IsNullOrWhiteSpace(name)
             ? new(name, "desc", new LLM.Schema.JsonSchemaBuilder().Type<object>().Build())
             : throw new ArgumentException("Name cannot be null or whitespace", nameof(name));
 

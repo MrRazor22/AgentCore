@@ -21,7 +21,7 @@ public sealed class CreateAgentTool(
         .AddProperty("collaborators", new JsonSchemaBuilder().Type<string[]>().Description("Names of other existing agents this new agent is allowed to collaborate with (optional).").Build(), required: false)
         .Build();
 
-    public ToolDefinition Info { get; } = new(
+    public ToolDefinition Definition { get; } = new(
         "create_agent",
         "Dynamically create a new specialized agent to collaborate in the team.",
         Schema);

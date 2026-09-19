@@ -35,7 +35,7 @@ public sealed class MethodTool : ITool
     private readonly ParameterInfo[] _parameters;
     private readonly Func<Task, object?>? _taskResultGetter;
 
-    public ToolDefinition Info { get; }
+    public ToolDefinition Definition { get; }
 
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null, IEnumerable<IMetadata>? extraMetadata = null)
     {
@@ -48,7 +48,7 @@ public sealed class MethodTool : ITool
         _parameters = method.GetParameters();
 
         var metadata = method.GetCustomAttributes().OfType<IMetadata>().Concat(extraMetadata ?? []).ToList();
-        Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method), metadata.Count > 0 ? metadata : null);
+        Definition = new(GetName(method, name), GetDescription(method, description), BuildSchema(method), metadata.Count > 0 ? metadata : null);
 
         if (typeof(Task).IsAssignableFrom(method.ReturnType) && method.ReturnType.IsGenericType)
         {

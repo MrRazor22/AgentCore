@@ -11,21 +11,21 @@ public class ApprovalLayerDuplicateIdTests
 {
     private class DummyTool(string name) : ITool
     {
-        public ToolDefinition Info { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
+        public ToolDefinition Definition { get; } = new(name, "Dummy Description", new JsonSchemaBuilder().Type<object>().Build());
 
         public async IAsyncEnumerable<IAgentEvent> InvokeStreamingAsync(
             string callId,
             JsonObject arguments,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return new ToolResult(callId, [new Text($"Output for {Info.Name}")]);
+            yield return new ToolResult(callId, [new Text($"Output for {Definition.Name}")]);
         }
     }
 
     private class MockTooling(ITool tool) : IToolbox
     {
         public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
-            => new([tool.Info]);
+            => new([tool.Definition]);
 
         public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
             IReadOnlyList<ToolCall> calls,

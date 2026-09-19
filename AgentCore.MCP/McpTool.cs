@@ -18,7 +18,7 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
         element.ValueKind == JsonValueKind.Object
             ? new JsonSchema((JsonNode.Parse(element.GetRawText()) as JsonObject) ?? new JsonObject())
             : new JsonSchema(new JsonObject());
-    public ToolDefinition Info { get; } = new(tool.Name, tool.Description ?? tool.Name, ParseSchema(tool.InputSchema));
+    public ToolDefinition Definition { get; } = new(tool.Name, tool.Description ?? tool.Name, ParseSchema(tool.InputSchema));
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
@@ -28,12 +28,12 @@ public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
             ? JsonSerializer.Deserialize<Dictionary<string, object?>>(arguments.ToJsonString())
             : null;
 
-        var result = await _client.CallToolAsync(Info.Name, dict, cancellationToken: ct).ConfigureAwait(false);
+        var result = await _client.CallToolAsync(Definition.Name, dict, cancellationToken: ct).ConfigureAwait(false);
 
         if (result.IsError == true)
         {
             var msg = string.Join("\n", result.Content.OfType<TextContentBlock>().Select(t => t.Text));
-            throw new InvalidOperationException($"MCP tool '{Info.Name}' failed: {msg}");
+            throw new InvalidOperationException($"MCP tool '{Definition.Name}' failed: {msg}");
         }
 
         foreach (var b in result.Content)

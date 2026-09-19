@@ -16,7 +16,7 @@ public sealed class SendAgentTool(IAgentTeam team, string sender) : ITool
         .AddProperty("notify_interval_seconds", new JsonSchemaBuilder().Type<int>().Description("Optional interval in seconds to receive progress status updates while the agent executes.").Build(), required: false)
         .Build();
 
-    public ToolDefinition Info => new(
+    public ToolDefinition Definition => new(
         "send_agent",
         FormatDescription(),
         Schema);

@@ -18,7 +18,7 @@ public sealed class ToolDiscoveryTool : ITool
 
     public Func<IReadOnlyList<ToolDefinition>>? CatalogProvider { get; set; }
 
-    public ToolDefinition Info { get; } = new(
+    public ToolDefinition Definition { get; } = new(
         "search_tools",
         "Searches available tools in catalog by keyword or domain to activate them into context.",
         new JsonSchemaBuilder()
@@ -71,7 +71,7 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, IToolbox? inner =
     {
         var allDefs = Inner != null ? await Inner.GetDefinitionsAsync(ct).ConfigureAwait(false) : [];
         Tool.CatalogProvider = () => allDefs;
-        return [.. allDefs.Where(Tool.IsActive), Tool.Info];
+        return [.. allDefs.Where(Tool.IsActive), Tool.Definition];
     }
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
@@ -81,7 +81,7 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, IToolbox? inner =
         var innerCalls = new List<ToolCall>();
         foreach (var call in calls)
         {
-            if (string.Equals(call.Name, Tool.Info.Name, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(call.Name, Tool.Definition.Name, StringComparison.OrdinalIgnoreCase))
             {
                 var (args, _) = call.ParseArguments();
                 yield return new MessageStart(Role.Tool, Id: call.Id);

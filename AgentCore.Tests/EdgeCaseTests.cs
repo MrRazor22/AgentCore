@@ -71,20 +71,20 @@ namespace AgentCore.Tests
 
         private class TestExecutionTool(string name, int delayMs = 0) : ITool
         {
-            public ToolDefinition Info { get; } = new(name, "Mock Tool Description", new(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }));
+            public ToolDefinition Definition { get; } = new(name, "Mock Tool Description", new(new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }));
             public List<string> ExecutionLog { get; } = new();
 
             public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
                 JsonObject arguments,
                 [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
             {
-                ExecutionLog.Add($"Started {Info.Name}");
+                ExecutionLog.Add($"Started {Definition.Name}");
                 if (delayMs > 0)
                 {
                     await Task.Delay(delayMs, ct);
                 }
-                ExecutionLog.Add($"Completed {Info.Name}");
-                yield return new Text($"Result of {Info.Name}");
+                ExecutionLog.Add($"Completed {Definition.Name}");
+                yield return new Text($"Result of {Definition.Name}");
             }
         }
 
