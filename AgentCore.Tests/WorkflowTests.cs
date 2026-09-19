@@ -9,7 +9,7 @@ public class WorkflowTests
 {
     private static readonly IReadOnlyList<IContent> Instructions = [new Text("You are a helpful AI assistant.")];
 
-    private (ILLM, ITooling) CreateServices(MockLLMProvider provider, ITooling tooling)
+    private (ILLM, IToolbox) CreateServices(MockLLMProvider provider, IToolbox tooling)
     {
         return (provider, tooling);
     }
@@ -235,9 +235,9 @@ public class WorkflowTests
 
         var toolMessages = context.Messages.Where(m => m.Role == Role.Tool).ToList();
         Assert.Single(toolMessages);
-        var toolResult = Assert.Single(toolMessages[0].Contents.OfType<Text>());
-        Assert.Equal("call_p", toolMessages[0].Metadata.Get<ToolCallId>()?.Value);
-        Assert.Equal("Output123", toolResult.ToString());
+        var tr = Assert.Single(toolMessages[0].Contents.OfType<ToolResult>());
+        Assert.Equal("call_p", tr.ToolCallId);
+        Assert.Equal("Output123", tr.Contents[0].ToString());
     }
 
     [Fact]
@@ -312,7 +312,7 @@ public class WorkflowTests
         // Also test recovery scenario: pre-existing ToolResult in context prevents execution
         var recoveryContext = new MockMemoryProvider();
         await recoveryContext.PrepareAsync([
-            new Message(Role.Tool, [new Text("previously executed")], metadata: [new ToolCallId("call_dup")])
+            new Message(Role.Tool, [new ToolResult("call_dup", [new Text("previously executed")])], id: "call_dup")
         ]);
 
         provider.Enqueue(
@@ -358,7 +358,7 @@ public class WorkflowTests
                 new ToolCall("c1", "ChargeCard"),
                 new ToolCall("c2", "ProvisionServer")
             ]),
-            new Message(Role.Tool, [new Text("Card charged")], id: "c1", metadata: [new ToolCallId("c1")])
+            new Message(Role.Tool, [new ToolResult("c1", [new Text("Card charged")])], id: "c1")
         ]);
 
         var agent = new Agent(provider, tooling, context, Instructions);
@@ -375,11 +375,12 @@ public class WorkflowTests
 
         // Context now has tool results for both c1 (completed) and c2 (auto-interrupted)
         var history = await context.PrepareAsync();
-        var toolMessages = history.Where(m => m.Role == Role.Tool).ToList();
-        Assert.Equal(2, toolMessages.Count);
-        Assert.Equal("c1", toolMessages[0].Metadata.Get<ToolCallId>()?.Value);
-        Assert.Equal("c2", toolMessages[1].Metadata.Get<ToolCallId>()?.Value);
-        Assert.NotNull(toolMessages[1].Get<Interrupted>());
-        Assert.Equal("Interrupted", toolMessages[1].Get<Interrupted>()?.Reason);
+        var toolResults = history.Where(m => m.Role == Role.Tool).SelectMany(m => m.Contents.OfType<ToolResult>()).ToList();
+        Assert.Equal(2, toolResults.Count);
+        Assert.Equal("c1", toolResults[0].ToolCallId);
+        Assert.Equal("c2", toolResults[1].ToolCallId);
+        var autoInterrupted = history.First(m => m.Role == Role.Tool && m.Id == "c2");
+        Assert.NotNull(autoInterrupted.Get<Interrupted>());
+        Assert.Equal("Interrupted", autoInterrupted.Get<Interrupted>()?.Reason);
     }
 }

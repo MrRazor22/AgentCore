@@ -39,7 +39,7 @@ public class AgentRuntimeTests
     [Fact]
     public void AddTool_Generic_RegistersStaticTools()
     {
-        var tooling = new Tooling().AddTool<StaticTestTools>();
+        var tooling = new Toolbox().AddTool<StaticTestTools>();
         Assert.NotNull(tooling);
         Assert.Equal(2, tooling.Tools.Count);
     }
@@ -48,7 +48,7 @@ public class AgentRuntimeTests
     public void AddTool_Instance_RegistersInstanceTools()
     {
         var instance = new InstanceTestTools();
-        var tooling = new Tooling().AddTool(instance);
+        var tooling = new Toolbox().AddTool(instance);
         Assert.NotNull(tooling);
         Assert.Equal(2, tooling.Tools.Count);
     }
@@ -57,7 +57,7 @@ public class AgentRuntimeTests
     public void AddTool_Instance_RegistersMixedTools()
     {
         var instance = new MixedTestTools();
-        var tooling = new Tooling().AddTool(instance);
+        var tooling = new Toolbox().AddTool(instance);
         Assert.NotNull(tooling);
         Assert.Equal(2, tooling.Tools.Count);
     }
@@ -162,6 +162,6 @@ public class AgentRuntimeTests
 
         Assert.NotNull(agent.LLM);
         Assert.NotNull(agent.Context);
-        Assert.NotNull(agent.Tooling);
+        Assert.NotNull(agent.Toolbox);
     }
 }

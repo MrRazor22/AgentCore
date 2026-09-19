@@ -6,13 +6,13 @@ namespace AgentCore.MCP;
 
 public static class McpToolExtensions
 { 
-    public static async Task<Tooling> AddMcpToolsAsync(this Tooling tooling, McpClient client, CancellationToken ct = default)
+    public static async Task<Toolbox> AddMcpToolsAsync(this Toolbox toolbox, McpClient client, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(tooling);
+        ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(client);
 
         var tools = await client.ListToolsAsync(cancellationToken: ct).ConfigureAwait(false);
         var mcpTools = tools.Select(t => (ITool)new McpTool(client, t.ProtocolTool));
-        return tooling.With([.. tooling.Tools, .. mcpTools]);
+        return toolbox.AddTool(mcpTools);
     }
 } 

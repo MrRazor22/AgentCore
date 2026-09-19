@@ -32,15 +32,16 @@ public class ChatNormalizer(
         var toolIds = list.Where(m => m.Role == Role.Assistant)
             .SelectMany(m => m.Contents.OfType<ToolCall>().Select(c => c.Id)).ToHashSet(StringComparer.Ordinal);
         var doneIds = list.Where(m => m.Role == Role.Tool)
-            .Select(m => m.Get<ToolCallId>()?.Value ?? m.Id).Where(id => !string.IsNullOrEmpty(id)).ToHashSet(StringComparer.Ordinal);
+            .SelectMany(GetToolCallIds).Where(id => !string.IsNullOrEmpty(id)).ToHashSet(StringComparer.Ordinal);
 
         var result = new List<Message>(list.Count);
         foreach (var msg in list)
         {
             if (msg.Role == Role.Tool)
             {
-                var id = msg.Get<ToolCallId>()?.Value ?? msg.Id;
-                if (string.IsNullOrEmpty(id) || !toolIds.Contains(id)) continue;
+                var ids = GetToolCallIds(msg).ToList();
+                if (ids.Count > 0 && !ids.Any(toolIds.Contains)) continue;
+                if (ids.Count == 0 && (string.IsNullOrEmpty(msg.Id) || !toolIds.Contains(msg.Id))) continue;
             }
 
             result.Add(msg);
@@ -49,12 +50,18 @@ public class ChatNormalizer(
             {
                 foreach (var call in msg.Contents.OfType<ToolCall>().Where(c => !doneIds.Contains(c.Id)))
                 {
-                    result.Add(new Message(Role.Tool, [new Text($"Tool call '{call.Name}' was aborted.")], call.Id, [new ToolCallId(call.Id)]));
+                    result.Add(new Message(Role.Tool, [new ToolResult(call.Id, [new Text($"Tool call '{call.Name}' was aborted.")])], call.Id));
                     doneIds.Add(call.Id);
                 }
             }
         }
         return result;
+
+        static IEnumerable<string> GetToolCallIds(Message m)
+        {
+            var fromResults = m.Contents.OfType<ToolResult>().Select(tr => tr.ToolCallId);
+            return fromResults.Any() ? fromResults : (m.Id != null ? [m.Id] : []);
+        }
     }
 
     private static List<Message> Coalesce(List<Message> list)

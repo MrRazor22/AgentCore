@@ -14,11 +14,12 @@ namespace CodeSharp.Tests;
 
 internal static class ApprovalTestExtensions
 {
-    public static async Task<ToolResult> ExecuteAsync(this ToolingLayer layer, ToolCall call)
+    public static async Task<ToolResult> ExecuteAsync(this ToolboxLayer layer, ToolCall call)
     {
         await foreach (var evt in layer.ExecuteAsync([call]))
         {
             if (evt is ToolResult tr) return tr;
+            if (evt is MessageDelta { Content: ToolResult mtr }) return mtr;
         }
         throw new InvalidOperationException("No tool result produced");
     }
@@ -38,7 +39,7 @@ public class ApprovalLayerTests
         }
     }
 
-    private class MockTooling : ITooling
+    private class MockTooling : IToolbox
     {
         public bool ExecuteCalled { get; private set; }
 
@@ -53,15 +54,15 @@ public class ApprovalLayerTests
             foreach (var call in calls)
             {
                 yield return new MessageStart(Role.Tool, Id: call.Id);
-                yield return new MessageDelta(call.Id, Content: new Text("Execution Ok"), Metadata: new ToolCallId(call.Id));
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, [new Text("Execution Ok")]));
                 yield return new MessageEnd(Id: call.Id);
             }
         }
     }
 
-    private static void AttachInner(ToolApprovalLayer layer, ITooling inner)
+    private static void AttachInner(ToolApprovalLayer layer, IToolbox inner)
     {
-        var method = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        var method = typeof(ToolboxLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         method!.Invoke(layer, new object[] { inner });
     }
 
@@ -190,7 +191,7 @@ public class ApprovalLayerTests
         Assert.False(mockInner.ExecuteCalled);
     }
 
-    private class TimedMockTooling : ITooling
+    private class TimedMockTooling : IToolbox
     {
         public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default) => new(Array.Empty<ToolDefinition>());
 

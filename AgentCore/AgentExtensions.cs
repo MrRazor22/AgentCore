@@ -18,7 +18,7 @@ public static class AgentExtensions
         {
             ContextLayer contextLayer => contextLayer.Inner,
             LLMLayer llmLayer => llmLayer.Inner,
-            ToolingLayer toolingLayer => toolingLayer.Inner,
+            ToolboxLayer toolingLayer => toolingLayer.Inner,
             _ => null
         };
     }
@@ -60,11 +60,11 @@ public static class AgentExtensions
         return agent.With(context: newCtx);
     }
 
-    public static Agent UseTooling(this Agent agent, ITooling newTooling)
+    public static Agent UseToolbox(this Agent agent, IToolbox newToolbox)
     {
         ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newTooling);
-        return agent.With(tooling: newTooling);
+        ArgumentNullException.ThrowIfNull(newToolbox);
+        return agent.With(toolbox: newToolbox);
     }
 
     public static Agent UseInstructions(this Agent agent, params IContent[] instructions)

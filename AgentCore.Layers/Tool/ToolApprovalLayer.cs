@@ -6,16 +6,16 @@ namespace AgentCore.Tool;
 
 public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, CancellationToken ct);
 
-public sealed class ToolApprovalLayer : ToolingLayer
+public sealed class ToolApprovalLayer : ToolboxLayer
 {
     private readonly ToolApprover _approver;
 
-    public ToolApprovalLayer(ITooling inner, ToolApprover approver) : base(inner) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
+    public ToolApprovalLayer(IToolbox inner, ToolApprover approver) : base(inner) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
 
-    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
+    public ToolApprovalLayer(IToolbox inner, Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
         : this(inner, async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
 
-    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+    public ToolApprovalLayer(IToolbox inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
         : this(inner, async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
     public ToolApprovalLayer(ToolApprover approver) : base(null) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
@@ -38,13 +38,8 @@ public sealed class ToolApprovalLayer : ToolingLayer
             if (denial is { Count: > 0 })
             {
                 yield return new MessageStart(Role.Tool, Id: call.Id);
-                yield return new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id));
-                for (int i = 0; i < denial.Count; i++)
-                {
-                    var item = denial[i];
-                    var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
-                    yield return new MessageDelta(call.Id, Content: content);
-                }
+                var contents = denial.Select(item => item is IToolResultContent trc ? trc : new Text(item.ToString() ?? string.Empty)).ToList();
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, contents, isError: true));
                 yield return new MessageEnd(Id: call.Id);
             }
             else

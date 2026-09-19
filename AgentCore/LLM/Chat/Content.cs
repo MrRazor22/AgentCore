@@ -1,4 +1,6 @@
 using AgentCore.LLM;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 namespace AgentCore.LLM.Chat;
 
 public interface IToolResultContent : IContent, IToolResultContentEvent;
@@ -19,6 +21,23 @@ public class ToolCall(string id, string name, string? arguments = null) : IConte
     public string Id { get; } = id;
     public string Name { get; } = name;
     public string Arguments { get; } = arguments ?? string.Empty;
+}
+public static class ToolCallExtensions
+{
+    public static (JsonObject? Args, string? Error) ParseArguments(this ToolCall call)
+    {
+        if (string.IsNullOrWhiteSpace(call.Arguments)) return ([], null);
+        try
+        {
+            return JsonNode.Parse(call.Arguments) is JsonObject obj
+                ? (obj, null)
+                : (null, $"Tool arguments must be a JSON object, got non-object payload: '{call.Arguments}'.");
+        }
+        catch (JsonException ex)
+        {
+            return (null, $"Invalid JSON ({ex.Message}). Raw payload: '{call.Arguments}'.");
+        }
+    }
 }
 
 public class ToolResult(string toolCallId, IReadOnlyList<IToolResultContent> contents, bool isError = false) : IContent

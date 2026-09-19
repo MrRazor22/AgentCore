@@ -2,16 +2,16 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tool;
 
-public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
+public delegate IAsyncEnumerable<IMessageEvent> ToolboxDelegate(
     IReadOnlyList<ToolCall> calls,
-    ITooling next,
+    IToolbox next,
     CancellationToken ct);
 
-public class ToolingLayer(ITooling? inner = null, ToolingDelegate? handler = null) : ITooling
+public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = null) : IToolbox
 {
-    public ITooling Inner { get; private set; } = inner!;
+    public IToolbox Inner { get; private set; } = inner!;
 
-    public void Attach(ITooling inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    public void Attach(IToolbox inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
     public virtual ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
         => Inner != null ? Inner.GetDefinitionsAsync(ct) : new(Array.Empty<ToolDefinition>());

@@ -16,11 +16,14 @@ internal record ToolExecutionResult(string CallId, IReadOnlyList<IContent> Conte
 
 internal static class ToolingTestExtensions
 {
-    public static async Task<ToolExecutionResult> ExecuteAsync(this ITooling tooling, ToolCall call, CancellationToken ct = default)
+    public static async Task<ToolExecutionResult> ExecuteAsync(this IToolbox tooling, ToolCall call, CancellationToken ct = default)
     {
         var msgs = await tooling.ExecuteAsync([call], ct).ToMessagesAsync(ct: ct);
         var msg = msgs[0];
-        return new ToolExecutionResult(msg.Metadata.Get<ToolCallId>()?.Value ?? msg.Id ?? call.Id, msg.Contents);
+        var tr = msg.Contents.OfType<ToolResult>().FirstOrDefault();
+        var callId = tr?.ToolCallId ?? msg.Id ?? call.Id;
+        var contents = tr?.Contents.Cast<IContent>().ToList() ?? msg.Contents;
+        return new ToolExecutionResult(callId, contents);
     }
 }
 
@@ -39,7 +42,7 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new Tooling([tool]);
+        var tooling = new Toolbox([tool]);
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", tool.Info.Name, args.ToJsonString());
@@ -56,7 +59,7 @@ public class ToolingTests
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
 
-        var tooling = new Tooling([tool]);
+        var tooling = new Toolbox([tool]);
 
         // Missing parameter "b" which is required
         var args = new JsonObject { ["a"] = 10 };
@@ -73,7 +76,7 @@ public class ToolingTests
     {
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
-        var tooling = new Tooling([tool]);
+        var tooling = new Toolbox([tool]);
 
         var toolCall = new ToolCall("call_1", tool.Info.Name, "{\"a\": 10, malformed}");
         var toolResult = await tooling.ExecuteAsync(toolCall);
@@ -102,7 +105,7 @@ public class ToolingTests
     {
         var method = typeof(SampleAddTool).GetMethod(nameof(SampleAddTool.Add))!;
         var tool = new MethodTool(method, new SampleAddTool(), name: "weather_lookup");
-        var tooling = new Tooling([tool]);
+        var tooling = new Toolbox([tool]);
 
         var args = new JsonObject { ["a"] = 10, ["b"] = 15 };
         var toolCall = new ToolCall("call_1", "Weather_Lookup", args.ToJsonString());
@@ -116,7 +119,7 @@ public class ToolingTests
     {
         var method = typeof(SampleTools).GetMethod(nameof(SampleTools.Add))!;
         var tool = new MethodTool(method, new SampleTools());
-        var tooling = new Tooling([tool]);
+        var tooling = new Toolbox([tool]);
 
         var defs = await tooling.GetDefinitionsAsync();
 
@@ -157,7 +160,7 @@ public class ToolingTests
     public async Task ToolingLayer_AnonymousMiddleware_InterceptsExecution()
     {
         bool intercepted = false;
-        var tooling = new ToolingLayer(new Tooling(), (calls, next, ct) =>
+        var tooling = new ToolboxLayer(new Toolbox(), (calls, next, ct) =>
         {
             intercepted = true;
             return next.ExecuteAsync(calls, ct);

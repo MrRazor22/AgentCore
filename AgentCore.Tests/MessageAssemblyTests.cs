@@ -59,7 +59,7 @@ public class MessageAssemblyTests
     public void MessageAssembler_FluidAndStructuralStreaming_BehavesCorrectly()
     {
         var assembler = (Assembler)new Assembler().Create(new MessageStart(Role.Assistant, Id: "msg_123"));
-        assembler.Push(new MessageDelta(Metadata: new ToolCallId("call_abc")));
+        assembler.Push(new MessageDelta(Metadata: new Summary(5)));
         assembler.Push(D(new ReasoningStart(0)));
         assembler.Push(D(new ReasoningDelta(0, "Thinking deeply...")));
         assembler.Push(D(new ReasoningEnd(0)));
@@ -75,7 +75,7 @@ public class MessageAssemblyTests
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
 
         Assert.Equal("msg_123", message.Id);
-        Assert.Equal("call_abc", message.Get<ToolCallId>()?.Value);
+        Assert.Equal(5, message.Get<Summary>()?.Count);
         var usage = message.Get<TokenUsage>();
         Assert.NotNull(usage);
         Assert.Equal(10, usage.InputTokens);

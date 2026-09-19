@@ -63,7 +63,7 @@ public sealed class ToolDiscoveryTool : ITool
     }
 }
 
-public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, ITooling? inner = null) : ToolingLayer(inner)
+public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, IToolbox? inner = null) : ToolboxLayer(inner)
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
@@ -85,11 +85,13 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, ITooling? inner =
             {
                 var (args, _) = call.ParseArguments();
                 yield return new MessageStart(Role.Tool, Id: call.Id);
+                var contents = new List<IToolResultContent>();
                 await foreach (var evt in Tool.InvokeStreamingAsync(args ?? [], ct).ConfigureAwait(false))
                 {
-                    if (evt is IContent c)
-                        yield return new MessageDelta(call.Id, Content: c, Metadata: new ToolCallId(call.Id));
+                    if (evt is IToolResultContent trc) contents.Add(trc);
+                    else if (evt is Text t) contents.Add(t);
                 }
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, contents));
                 yield return new MessageEnd(Id: call.Id);
             }
             else

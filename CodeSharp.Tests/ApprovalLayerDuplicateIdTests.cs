@@ -22,7 +22,7 @@ public class ApprovalLayerDuplicateIdTests
         }
     }
 
-    private class MockTooling(ITool tool) : ITooling
+    private class MockTooling(ITool tool) : IToolbox
     {
         public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
             => new([tool.Info]);
@@ -34,7 +34,7 @@ public class ApprovalLayerDuplicateIdTests
             foreach (var call in calls)
             {
                 yield return new MessageStart(Role.Tool, Id: call.Id);
-                yield return new MessageDelta(call.Id, Content: new Text($"Output for {call.Name}"), Metadata: new ToolCallId(call.Id));
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, [new Text($"Output for {call.Name}")]));
                 yield return new MessageEnd(Id: call.Id);
             }
         }
@@ -48,7 +48,7 @@ public class ApprovalLayerDuplicateIdTests
         var mockInner = new MockTooling(tool);
 
         // Attach inner tooling via internal Attach method using reflection for test isolation
-        var attachMethod = typeof(ToolingLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        var attachMethod = typeof(ToolboxLayer).GetMethod("Attach", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         attachMethod!.Invoke(approvalLayer, new object[] { mockInner });
 
         // Tool calls with duplicate and empty IDs ["", "", "1", "1"]
@@ -64,12 +64,13 @@ public class ApprovalLayerDuplicateIdTests
         await foreach (var evt in approvalLayer.ExecuteAsync(calls))
         {
             if (evt is ToolResult tr) results.Add(tr);
+            else if (evt is MessageDelta { Content: ToolResult mtr }) results.Add(mtr);
         }
 
         Assert.Equal(4, results.Count);
-        Assert.Equal("", results[0].CallId);
-        Assert.Equal("", results[1].CallId);
-        Assert.Equal("1", results[2].CallId);
-        Assert.Equal("1", results[3].CallId);
+        Assert.Equal("", results[0].ToolCallId);
+        Assert.Equal("", results[1].ToolCallId);
+        Assert.Equal("1", results[2].ToolCallId);
+        Assert.Equal("1", results[3].ToolCallId);
     }
 }

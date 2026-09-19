@@ -1,6 +1,6 @@
 namespace AgentCore.LLM;
 
-public static class LLMLayerExtensions
+public static class LLMExtensions
 {
     public static ILLM AddLayer(this ILLM llm, LLMLayer layer)
     {

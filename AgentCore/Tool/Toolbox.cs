@@ -20,13 +20,13 @@ public interface ITool
     ToolDefinition Info { get; }
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }
-public interface ITooling
+public interface IToolbox
 {
     ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default);
     IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
-public sealed class Tooling : ITooling
+public sealed class Toolbox : IToolbox
 {
     private readonly Dictionary<string, ITool> _tools;
     private readonly IReadOnlyList<ToolDefinition> _definitions;
@@ -37,30 +37,34 @@ public sealed class Tooling : ITooling
 
     public IReadOnlyList<ITool> Tools => _tools.Values.ToArray();
 
-    public Tooling(
+    public Toolbox(
         IEnumerable<ITool>? tools = null,
-        ILogger<Tooling>? logger = null,
+        ILogger<Toolbox>? logger = null,
         bool parallel = true,
         int? maxConcurrency = null,
         TimeSpan? timeout = null)
     {
-        _logger = logger ?? NullLogger<Tooling>.Instance;
+        _logger = logger ?? NullLogger<Toolbox>.Instance;
         _parallel = parallel;
         _maxConcurrency = maxConcurrency;
-        _timeout = timeout;
-        _tools = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
+        _tools = new Dictionary<string, ITool>(StringComparer.OrdinalIgnoreCase);
+        if (tools != null)
+        {
+            foreach (var t in tools)
+                _tools[t.Info.Name] = t;
+        }
         _definitions = _tools.Values.Select(t => t.Info).ToArray();
     }
 
-    public Tooling With(
+    public Toolbox With(
         IEnumerable<ITool>? tools = null,
-        ILogger<Tooling>? logger = null,
+        ILogger<Toolbox>? logger = null,
         bool? parallel = null,
         int? maxConcurrency = null,
         TimeSpan? timeout = null)
         => new(
             tools ?? _tools.Values,
-            logger ?? (_logger as ILogger<Tooling>),
+            logger ?? (_logger as ILogger<Toolbox>),
             parallel ?? _parallel,
             maxConcurrency ?? _maxConcurrency,
             timeout ?? _timeout);

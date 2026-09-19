@@ -1,7 +1,7 @@
 using System;
-using System.Collections.Concurrent;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using AgentCore;
 using AgentCore.LLM.Chat;
@@ -10,80 +10,31 @@ namespace AgentCore.Layers.Context.Store;
 
 public static class StoreJson
 {
+    private static readonly Assembly[] Assemblies = [typeof(Agent).Assembly, typeof(StoreJson).Assembly];
+
     public static readonly JsonSerializerOptions Options = new()
     {
         TypeInfoResolver = new DefaultJsonTypeInfoResolver
         {
             Modifiers = { ConfigurePolymorphism }
-        },
-        Converters = { new MetadataConverter() }
+        }
     };
 
     private static void ConfigurePolymorphism(JsonTypeInfo ti)
     {
-        ti.PolymorphismOptions = ti.Type switch
-        {
-            _ when ti.Type == typeof(IMessageEvent) => Polymorphic(
-                (typeof(MessageStart), "msg_start"),
-                (typeof(MessageDelta), "msg_delta"),
-                (typeof(MessageEnd), "msg_end"),
-                (typeof(Message), "message")),
+        if (!ti.Type.IsInterface || (!typeof(IMessageEvent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IContentEvent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IContent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IMetadata).IsAssignableFrom(ti.Type)))
+            return;
 
-            _ when ti.Type == typeof(IContentEvent) => Polymorphic(
-                (typeof(TextStart), "text_start"),
-                (typeof(TextDelta), "text_delta"),
-                (typeof(TextEnd), "text_end"),
-                (typeof(ReasoningStart), "reasoning_start"),
-                (typeof(ReasoningDelta), "reasoning_delta"),
-                (typeof(ReasoningEnd), "reasoning_end"),
-                (typeof(ToolCallStart), "tool_start"),
-                (typeof(ToolCallDelta), "tool_delta"),
-                (typeof(ToolCallEnd), "tool_end"),
-                (typeof(Text), "text"),
-                (typeof(Reasoning), "reasoning"),
-                (typeof(ToolCall), "tool_call"),
-                (typeof(Image), "image")),
+        var poly = new JsonPolymorphismOptions { TypeDiscriminatorPropertyName = "$type" };
+        var derived = Assemblies.SelectMany(a => a.GetTypes())
+            .Where(t => !t.IsAbstract && !t.IsInterface && ti.Type.IsAssignableFrom(t));
 
-            _ when ti.Type == typeof(IContent) => Polymorphic(
-                (typeof(Text), "text"),
-                (typeof(Reasoning), "reasoning"),
-                (typeof(ToolCall), "tool_call"),
-                (typeof(Image), "image")),
+        foreach (var t in derived)
+            poly.DerivedTypes.Add(new JsonDerivedType(t, t.Name));
 
-            _ => ti.PolymorphismOptions
-        };
-    }
-
-    private static JsonPolymorphismOptions Polymorphic(params (Type Type, string Name)[] types)
-    {
-        var options = new JsonPolymorphismOptions { TypeDiscriminatorPropertyName = "$type" };
-        foreach (var (type, name) in types)
-            options.DerivedTypes.Add(new JsonDerivedType(type, name));
-        return options;
-    }
-
-    private sealed class MetadataConverter : JsonConverter<IMetadata>
-    {
-        private static readonly ConcurrentDictionary<string, Type?> Cache = new(StringComparer.OrdinalIgnoreCase);
-
-        public override IMetadata? Read(ref Utf8JsonReader r, Type _, JsonSerializerOptions o)
-        {
-            using var doc = JsonDocument.ParseValue(ref r);
-            var tag = doc.RootElement.TryGetProperty("$type", out var p) ? p.GetString() : null;
-            var type = tag != null ? Cache.GetOrAdd(tag, t => Type.GetType(t) is { } found && typeof(IMetadata).IsAssignableFrom(found) ? found : null) : null;
-            return type != null ? (IMetadata?)doc.RootElement.Deserialize(type, o) : null;
-        }
-
-        public override void Write(Utf8JsonWriter w, IMetadata v, JsonSerializerOptions o)
-        {
-            using var doc = JsonSerializer.SerializeToDocument(v, v.GetType(), o);
-            w.WriteStartObject();
-            w.WriteString("$type", $"{v.GetType().FullName}, {v.GetType().Assembly.GetName().Name}");
-            foreach (var p in doc.RootElement.EnumerateObject())
-                if (!p.NameEquals("$type")) p.WriteTo(w);
-            w.WriteEndObject();
-        }
+        ti.PolymorphismOptions = poly;
     }
 }
-
-

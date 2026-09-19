@@ -52,8 +52,8 @@ public class TornadoTests
         Assert.Contains("5", tc.FunctionCall?.Arguments);
 
         var trMsg = new Message(Role.Tool, [
-            new Text("result_10")
-        ], metadata: [new ToolCallId("call_1")]);
+            new ToolResult("call_1", [new Text("result_10")])
+        ], id: "call_1");
 
         var tornadoTr = trMsg.ToTornadoMessage();
         Assert.Equal(ChatMessageRoles.Tool, tornadoTr.Role);

@@ -54,7 +54,7 @@ internal class App
 
         var discovery = new ToolDiscoveryTool();
 
-        var tooling = new Tooling()
+        var tooling = new Toolbox()
             .AddTool(vsTools)
             .AddTool(skillTool)
             .AddTool(webTools, new Discoverable("web"))
@@ -65,7 +65,7 @@ internal class App
             llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl)
                 .UseRetry()
                 .UseToolCallDetection(),
-            tooling: tooling,
+            toolbox: tooling,
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")]);
 
         agent = agent.With(
@@ -85,12 +85,12 @@ internal class App
             {
                 "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(context: agent.Context.UseSession(sessionsDir, msg.Text)),
                 "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(llm: new TornadoLLM(config.ApiKey, msg.Text, baseUrl).UseRetry().UseToolCallDetection()),
-                "enable_approval" => agent.With(tooling: agent.Tooling.UseApproval(async (call, ct) =>
+                "enable_approval" => agent.With(toolbox: agent.Toolbox.UseApproval(async (call, ct) =>
                 {
                     await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
                     return true;
                 })),
-                "disable_approval" => agent.With(tooling: agent.Tooling.RemoveApproval()),
+                "disable_approval" => agent.With(toolbox: agent.Toolbox.RemoveApproval()),
                 _ => agent
             };
 

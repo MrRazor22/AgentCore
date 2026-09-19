@@ -205,7 +205,7 @@ public class LiveAgentTests
             .With(
                 instructions: [new Text("You are a tool-using assistant. To answer questions, you must call the appropriate tools. If you get a result from a tool, use it in the next tool call as required. Do not simulate tool results in text; always use the actual tool calling feature.")],
                 context: context,
-                tooling: new Tooling().AddTool(tools));
+                toolbox: new Toolbox().AddTool(tools));
 
         // Act
         var result = await agent.GetFinalResponseAsync(new Text("Retrieve the inventory count for a laptop. You must call GetItemId first to get the item ID, and then call GetInventoryCount with that item ID."));
@@ -240,7 +240,7 @@ public class LiveAgentTests
             contextWindow: 50000
         );
         var agent = CreateAgent()
-            .With(context: context, tooling: new Tooling().AddTool(tools));
+            .With(context: context, toolbox: new Toolbox().AddTool(tools));
 
         // Act
         // Invoke a tool designed to throw

@@ -269,7 +269,7 @@ public class ChatPersistenceLayerTests
 
             // Completed tool result for call-1
             new MessageStart(Role.Tool, "call-1"),
-            new MessageDelta("call-1", Content: new Text("Charged successfully"), Metadata: new ToolCallId("call-1")),
+            new MessageDelta("call-1", Content: new ToolResult("call-1", [new Text("Charged successfully")])),
             new MessageEnd("call-1")
         ];
 
@@ -285,8 +285,9 @@ public class ChatPersistenceLayerTests
         Assert.Equal(Role.Assistant, restored[1].Role);
         Assert.Equal(2, restored[1].Contents.Count);
         Assert.Equal(Role.Tool, restored[2].Role);
-        Assert.Equal("call-1", restored[2].Metadata.Get<ToolCallId>()?.Value);
-        Assert.Equal("Charged successfully", restored[2].Contents[0].ToString());
+        var tr = restored[2].Contents.OfType<ToolResult>().First();
+        Assert.Equal("call-1", tr.ToolCallId);
+        Assert.Equal("Charged successfully", tr.Contents[0].ToString());
         Assert.True(walStore.Cleared);
     }
 

@@ -146,7 +146,7 @@ public class MemoryTests
         // Arrange - contextWindow = 1000, maxSingleMessageTokens = 200 -> ~800 chars
         var context = new Context.ChatContext(contextWindow: 1000, reserveTokens: 100, maxSingleMessageTokens: 200);
         string giantOutput = new string('A', 5000);
-        var toolResult = new Message(Role.Tool, [new Text(giantOutput)], metadata: [new ToolCallId("call_1")]);
+        var toolResult = new Message(Role.Tool, [new ToolResult("call_1", [new Text(giantOutput)])], id: "call_1");
 
         // Act
         var messages = await context.PrepareAsync([toolResult]);

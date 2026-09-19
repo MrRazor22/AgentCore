@@ -32,7 +32,7 @@ public class MessageNormalizerTests
         {
             new Message(Role.User, [new Text("find files")]),
             new Message(Role.Assistant, [toolCall]),
-            new Message(Role.Tool, [new Text("search result content")], metadata: [new ToolCallId("1")]),
+            new Message(Role.Tool, [new ToolResult("1", [new Text("search result content")])]),
             new Message(Role.Assistant, [new Text("here are the files")])
         };
 
@@ -52,7 +52,7 @@ public class MessageNormalizerTests
         var input = new List<Message>
         {
             new Message(Role.User, [new Text("find files")]),
-            new Message(Role.Tool, [new Text("orphan result")], metadata: [new ToolCallId("non_existent")])
+            new Message(Role.Tool, [new ToolResult("non_existent", [new Text("orphan result")])])
         };
 
         var normalizer = new ChatNormalizer();
@@ -77,6 +77,6 @@ public class MessageNormalizerTests
 
         Assert.Equal(3, output.Count);
         Assert.Equal(Role.Tool, output[2].Role);
-        Assert.Equal("call_1", output[2].Get<ToolCallId>()?.Value);
+        Assert.Equal("call_1", output[2].Contents.OfType<ToolResult>().First().ToolCallId);
     }
 }

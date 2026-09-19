@@ -158,7 +158,7 @@ public class MockMemoryProvider : IContext
         => _inner.WriteAsync(events, ct);
 }
 
-public class MockTooling : ITooling
+public class MockTooling : IToolbox
 {
     public Func<IEnumerable<ToolCall>, CancellationToken, Task<IReadOnlyList<IContent>>> Handler { get; set; } =
         (calls, ct) => Task.FromResult<IReadOnlyList<IContent>>(
@@ -179,7 +179,8 @@ public class MockTooling : ITooling
         {
             var call = calls[i];
             yield return new MessageStart(Role.Tool, Id: call.Id);
-            yield return new MessageDelta(call.Id, Content: results[i], Metadata: new ToolCallId(call.Id));
+            var content = results[i] is IToolResultContent trc ? trc : new Text(results[i].ToString() ?? string.Empty);
+            yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, [content]));
             yield return new MessageEnd(Id: call.Id);
         }
     }

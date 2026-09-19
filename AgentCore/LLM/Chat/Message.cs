@@ -9,7 +9,6 @@ public interface IContent : IContentEvent;
 
 public interface IMetadata;
 
-public sealed record ToolCallId(string Value) : IMetadata;
 public sealed record TokenUsage(int InputTokens = 0, int OutputTokens = 0, int TotalTokens = 0) : IMetadata;
 public sealed record Summary(int Count = 0) : IMetadata;
 public sealed record Interrupted(string Reason = "Interrupted") : IMetadata;

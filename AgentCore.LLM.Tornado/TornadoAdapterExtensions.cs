@@ -26,7 +26,7 @@ public static class TornadoAdapterExtensions
         var tornadoMsg = new ChatMessage(role);
 
         if (message.Role == Role.Tool)
-            tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Get<ToolCallId>()?.Value ?? message.Id;
+            tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Id;
 
         var textParts = new List<string>();
         List<LlmTornado.ChatFunctions.ToolCall>? toolCalls = null;

@@ -11,7 +11,7 @@ public interface IAgent
     IReadOnlyList<IContent> Instructions { get; }
     IContext Context { get; }
     ILLM LLM { get; }
-    ITooling Tooling { get; }
+    IToolbox Toolbox { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -20,26 +20,26 @@ public interface IAgent
 
 public sealed class Agent(
     ILLM llm,
-    ITooling? tooling = null,
+    IToolbox? toolbox = null,
     IContext? context = null,
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
     public ILLM LLM { get; } = llm ?? throw new ArgumentNullException(nameof(llm));
-    public ITooling Tooling { get; } = tooling ?? new Tooling();
+    public IToolbox Toolbox { get; } = toolbox ?? new Toolbox();
     public IContext Context { get; } = context ?? new ChatContext();
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
 
     public Agent With(
         ILLM? llm = null,
-        ITooling? tooling = null,
+        IToolbox? toolbox = null,
         IContext? context = null,
         IReadOnlyList<IContent>? instructions = null,
         int? maxIterations = null)
         => new(
             llm ?? LLM,
-            tooling ?? Tooling,
+            toolbox ?? Toolbox,
             context ?? Context,
             instructions ?? Instructions,
             maxIterations ?? MaxIterations);
@@ -61,7 +61,7 @@ public sealed class Agent(
             if (++iterations > MaxIterations)
                 throw new InvalidOperationException($"Execution exceeded maximum limit of {MaxIterations} iterations.");
 
-            var toolDefs = await Tooling.GetDefinitionsAsync(ct).ConfigureAwait(false);
+            var toolDefs = await Toolbox.GetDefinitionsAsync(ct).ConfigureAwait(false);
             List<Message> prompt = [new Message(Role.System, Instructions), .. messages];
 
             toolCalls = null;
@@ -73,7 +73,7 @@ public sealed class Agent(
 
             if (toolCalls is not null)
             {
-                await foreach (var evt in Context.WriteAsync(Tooling.ExecuteAsync(toolCalls, ct), ct))
+                await foreach (var evt in Context.WriteAsync(Toolbox.ExecuteAsync(toolCalls, ct), ct))
                     yield return evt;
 
                 messages = await Context.ReadAsync(ct).ConfigureAwait(false);

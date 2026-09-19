@@ -41,9 +41,9 @@ public sealed class CreateAgentTool(
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
 
-        var tooling = (_template.Tooling as Tooling ?? new Tooling()).AddTool(new SendAgentTool(team, name));
+        var tooling = (_template.Toolbox as Toolbox ?? new Toolbox()).AddTool(new SendAgentTool(team, name));
         var newAgent = _template
-            .With(instructions: [new Text(role)], tooling: tooling);
+            .With(instructions: [new Text(role)], toolbox: tooling);
 
         team.Add(new TeamMember(name, newAgent, childCollaborators, description: role));
 
