@@ -36,6 +36,16 @@ public static class AgentExtensions
         return text;
     }
 
+    public static IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        this IAgent agent,
+        IContent input,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(input);
+        return agent.InvokeStreamingAsync([input], ct);
+    }
+
     public static Agent UseLLM(this Agent agent, ILLM newLlm)
     {
         ArgumentNullException.ThrowIfNull(agent);

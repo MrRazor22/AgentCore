@@ -18,10 +18,16 @@ public sealed class ToolApprovalLayer : ToolingLayer
     public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
         : this(inner, async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
+    public ToolApprovalLayer(ToolApprover approver) : base(null) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
+
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
+        : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
+
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
+        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var allowedCalls = new List<ToolCall>();
@@ -49,7 +55,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
 
         if (allowedCalls.Count > 0)
         {
-            await foreach (var evt in base.ExecuteAsync(allowedCalls, tools, ct).ConfigureAwait(false))
+            await foreach (var evt in base.ExecuteAsync(allowedCalls, ct).ConfigureAwait(false))
             {
                 yield return evt;
             }

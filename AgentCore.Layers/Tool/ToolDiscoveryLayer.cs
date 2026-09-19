@@ -67,15 +67,43 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, ITooling? inner =
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
+    public override async ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+    {
+        var allDefs = Inner != null ? await Inner.GetDefinitionsAsync(ct).ConfigureAwait(false) : [];
+        Tool.CatalogProvider = () => allDefs;
+        return [.. allDefs.Where(Tool.IsActive), Tool.Info];
+    }
+
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        Tool.CatalogProvider ??= () => tools.Select(t => t.Info).ToList();
-        await foreach (var evt in base.ExecuteAsync(calls, tools, ct).ConfigureAwait(false))
+        var innerCalls = new List<ToolCall>();
+        foreach (var call in calls)
         {
-            yield return evt;
+            if (string.Equals(call.Name, Tool.Info.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                var (args, _) = call.ParseArguments();
+                yield return new MessageStart(Role.Tool, Id: call.Id);
+                await foreach (var evt in Tool.InvokeStreamingAsync(args ?? [], ct).ConfigureAwait(false))
+                {
+                    if (evt is IContent c)
+                        yield return new MessageDelta(call.Id, Content: c, Metadata: new ToolCallId(call.Id));
+                }
+                yield return new MessageEnd(Id: call.Id);
+            }
+            else
+            {
+                innerCalls.Add(call);
+            }
+        }
+
+        if (innerCalls.Count > 0)
+        {
+            await foreach (var evt in base.ExecuteAsync(innerCalls, ct).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
         }
     }
 }

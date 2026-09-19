@@ -165,9 +165,13 @@ public class MockTooling : ITooling
             calls.Select(_ => (IContent)new Text("Success")).ToList()
         );
 
+    public IReadOnlyList<ToolDefinition> Definitions { get; set; } = [];
+
+    public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+        => new(Definitions);
+
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var results = await Handler(calls, ct).ConfigureAwait(false);

@@ -54,20 +54,22 @@ internal class App
 
         var discovery = new ToolDiscoveryTool();
 
+        var tooling = new Tooling()
+            .AddTool(vsTools)
+            .AddTool(skillTool)
+            .AddTool(webTools, new Discoverable("web"))
+            .AddTool(scheduleTool, new Discoverable("schedule"))
+            .UseToolDiscovery(discovery);
+
         var agent = new Agent(
             llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl)
                 .UseRetry()
                 .UseToolCallDetection(),
-            instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
-            .AddTool(vsTools)
-            .AddTool(skillTool)
-            .AddTool(discovery)
-            .AddTool(webTools, new Discoverable("web"))
-            .AddTool(scheduleTool, new Discoverable("schedule"));
+            tooling: tooling,
+            instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")]);
 
         agent = agent.With(
-            context: agent.Context.UseSession(sessionsDir, Guid.NewGuid().ToString()),
-            tooling: agent.Tooling.UseToolDiscovery(discovery));
+            context: agent.Context.UseSession(sessionsDir, Guid.NewGuid().ToString()));
 
         await channel.SendAsync(new("ready", Name: config.Model));
 

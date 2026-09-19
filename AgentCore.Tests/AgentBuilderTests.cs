@@ -37,29 +37,29 @@ public class AgentRuntimeTests
     }
 
     [Fact]
-    public void WithTools_Generic_RegistersStaticTools()
+    public void AddTool_Generic_RegistersStaticTools()
     {
-        var agent = new Agent(new MockLLMProvider()).WithTools<StaticTestTools>();
-        Assert.NotNull(agent);
-        Assert.Equal(2, agent.Tools.Count);
+        var tooling = new Tooling().AddTool<StaticTestTools>();
+        Assert.NotNull(tooling);
+        Assert.Equal(2, tooling.Tools.Count);
     }
 
     [Fact]
-    public void WithTools_Instance_RegistersInstanceTools()
+    public void AddTool_Instance_RegistersInstanceTools()
     {
         var instance = new InstanceTestTools();
-        var agent = new Agent(new MockLLMProvider()).WithTools(instance);
-        Assert.NotNull(agent);
-        Assert.Equal(2, agent.Tools.Count);
+        var tooling = new Tooling().AddTool(instance);
+        Assert.NotNull(tooling);
+        Assert.Equal(2, tooling.Tools.Count);
     }
 
     [Fact]
-    public void WithTools_Instance_RegistersMixedTools()
+    public void AddTool_Instance_RegistersMixedTools()
     {
         var instance = new MixedTestTools();
-        var agent = new Agent(new MockLLMProvider()).WithTools(instance);
-        Assert.NotNull(agent);
-        Assert.Equal(2, agent.Tools.Count);
+        var tooling = new Tooling().AddTool(instance);
+        Assert.NotNull(tooling);
+        Assert.Equal(2, tooling.Tools.Count);
     }
 
     [Fact]

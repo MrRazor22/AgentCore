@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Schema;
 using AgentCore.Tool;
+using AgentCore.Tool.Tools;
 
 namespace AgentCore.MultiAgent.Tools;
 
@@ -40,9 +41,9 @@ public sealed class CreateAgentTool(
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
 
+        var tooling = (_template.Tooling as Tooling ?? new Tooling()).AddTool(new SendAgentTool(team, name));
         var newAgent = _template
-            .WithInstructions([new Text(role)])
-            .WithTools([.. _template.Tools, new SendAgentTool(team, name)]);
+            .With(instructions: [new Text(role)], tooling: tooling);
 
         team.Add(new TeamMember(name, newAgent, childCollaborators, description: role));
 

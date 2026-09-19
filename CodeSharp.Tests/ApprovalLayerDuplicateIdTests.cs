@@ -24,9 +24,11 @@ public class ApprovalLayerDuplicateIdTests
 
     private class MockTooling(ITool tool) : ITooling
     {
+        public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+            => new([tool.Info]);
+
         public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
             IReadOnlyList<ToolCall> calls,
-            IReadOnlyList<ITool> tools,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             foreach (var call in calls)

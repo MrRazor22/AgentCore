@@ -22,20 +22,54 @@ public interface ITool
 }
 public interface ITooling
 {
-    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, IReadOnlyList<ITool> tools, CancellationToken ct = default);
+    ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
-internal sealed class Tooling(
-    ILogger<Tooling>? logger = null,
-    bool parallel = true,
-    int? maxConcurrency = null,
-    TimeSpan? timeout = null) : ITooling
+public sealed class Tooling : ITooling
 {
-    private readonly ILogger _logger = logger ?? NullLogger<Tooling>.Instance;
+    private readonly Dictionary<string, ITool> _tools;
+    private readonly IReadOnlyList<ToolDefinition> _definitions;
+    private readonly ILogger _logger;
+    private readonly bool _parallel;
+    private readonly int? _maxConcurrency;
+    private readonly TimeSpan? _timeout;
+
+    public IReadOnlyList<ITool> Tools => _tools.Values.ToArray();
+
+    public Tooling(
+        IEnumerable<ITool>? tools = null,
+        ILogger<Tooling>? logger = null,
+        bool parallel = true,
+        int? maxConcurrency = null,
+        TimeSpan? timeout = null)
+    {
+        _logger = logger ?? NullLogger<Tooling>.Instance;
+        _parallel = parallel;
+        _maxConcurrency = maxConcurrency;
+        _timeout = timeout;
+        _tools = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
+        _definitions = _tools.Values.Select(t => t.Info).ToArray();
+    }
+
+    public Tooling With(
+        IEnumerable<ITool>? tools = null,
+        ILogger<Tooling>? logger = null,
+        bool? parallel = null,
+        int? maxConcurrency = null,
+        TimeSpan? timeout = null)
+        => new(
+            tools ?? _tools.Values,
+            logger ?? (_logger as ILogger<Tooling>),
+            parallel ?? _parallel,
+            maxConcurrency ?? _maxConcurrency,
+            timeout ?? _timeout);
+
+    public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+        => new(_definitions);
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (calls is not { Count: > 0 }) yield break;
@@ -43,15 +77,14 @@ internal sealed class Tooling(
         var messageId = Guid.NewGuid().ToString("N");
         yield return new MessageStart(Role.Tool, Id: messageId);
 
-        var toolMap = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
         var channel = Channel.CreateUnbounded<IMessageEvent>();
         var options = new ParallelOptions
         {
-            MaxDegreeOfParallelism = parallel ? (maxConcurrency is > 0 and int max ? max : -1) : 1,
+            MaxDegreeOfParallelism = _parallel ? (_maxConcurrency is > 0 and int max ? max : -1) : 1,
             CancellationToken = ct
         };
 
-        _ = Parallel.ForEachAsync(calls.Select((call, index) => (call, index)), options, (item, token) => new ValueTask(ExecuteCallAsync(item.call, item.index, messageId, toolMap, channel.Writer, token)))
+        _ = Parallel.ForEachAsync(calls.Select((call, index) => (call, index)), options, (item, token) => new ValueTask(ExecuteCallAsync(item.call, item.index, messageId, _tools, channel.Writer, token)))
             .ContinueWith(t => channel.Writer.TryComplete(t.Exception?.InnerException));
 
         await foreach (var evt in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -76,8 +109,8 @@ internal sealed class Tooling(
             return;
         }
 
-        using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
-        cts?.CancelAfter(timeout!.Value);
+        using var cts = _timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+        cts?.CancelAfter(_timeout!.Value);
 
         bool isError = false;
         await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultStart(index, call.Id)), ct).ConfigureAwait(false);
@@ -92,7 +125,7 @@ internal sealed class Tooling(
         catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
         {
             isError = true;
-            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s."))), ct).ConfigureAwait(false);
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, $"Tool execution timed out after {_timeout!.Value.TotalSeconds}s."))), ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -4,7 +4,6 @@ namespace AgentCore.Tool;
 
 public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
     IReadOnlyList<ToolCall> calls,
-    IReadOnlyList<ITool> tools,
     ITooling next,
     CancellationToken ct);
 
@@ -14,11 +13,13 @@ public class ToolingLayer(ITooling? inner = null, ToolingDelegate? handler = nul
 
     public void Attach(ITooling inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
+    public virtual ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+        => Inner != null ? Inner.GetDefinitionsAsync(ct) : new(Array.Empty<ToolDefinition>());
+
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         CancellationToken ct = default)
         => handler != null
-            ? handler(calls, tools, Inner, ct)
-            : Inner.ExecuteAsync(calls, tools, ct);
+            ? handler(calls, Inner, ct)
+            : Inner.ExecuteAsync(calls, ct);
 }
