@@ -4,7 +4,7 @@ using AgentCore.Layers.Context.Store;
 
 namespace AgentCore.Layers.Context;
 
-public static class SessionExtensions
+public static class ContextLayerExtensions
 {
     public static IContext UseSession(
         this IContext context,

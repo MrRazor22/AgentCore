@@ -3,7 +3,7 @@ using AgentCore.Tool;
 
 namespace AgentCore.Layers.Tools;
 
-public static class ToolingExtensions
+public static class ToolingLayerExtensions
 {
     public static ITooling UseApproval(this ITooling tooling, ToolApprover approver)
     {

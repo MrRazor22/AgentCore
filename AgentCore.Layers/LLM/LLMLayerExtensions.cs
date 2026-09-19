@@ -3,7 +3,7 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Layers.LLM;
 
-public static class LLMExtensions
+public static class LLMLayerExtensions
 {
     public static ILLM UseRetry(
         this ILLM llm,
