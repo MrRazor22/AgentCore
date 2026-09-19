@@ -1,7 +1,3 @@
-using System.Reflection;
-using AgentCore.LLM.Chat;
-using AgentCore.Tool.Tools;
-
 namespace AgentCore.Tool;
 
 public static class ToolExtensions
@@ -26,42 +22,5 @@ public static class ToolExtensions
                 parent.Attach(newInner);
         }
         return tooling;
-    }
-
-    public static Agent AddTools(this Agent agent, params ITool[] newTools)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newTools);
-        return agent.With(tools: [.. agent.Tools, .. newTools]);
-    }
-
-    public static Agent AddTools<T>(this Agent agent) => agent.AddTools(typeof(T));
-
-    public static Agent AddTools(this Agent agent, object instance, params IMetadata[] metadata)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(instance);
-        var type = instance as Type ?? instance.GetType();
-        var target = instance is Type ? null : instance;
-        var flags = BindingFlags.Public | BindingFlags.Static | (target != null ? BindingFlags.Instance : 0);
-
-        var extracted = type.GetMethods(flags)
-            .Where(m => m.GetCustomAttribute<ToolAttribute>() != null)
-            .Select(m => (ITool)new MethodTool(m, m.IsStatic ? null : target, extraMetadata: metadata));
-
-        return agent.AddTools(extracted.ToArray());
-    }
-
-    public static Agent RemoveTool(this Agent agent, string name)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        return agent.With(tools: agent.Tools.Where(t => !string.Equals(t.Info.Name, name, StringComparison.OrdinalIgnoreCase)).ToArray());
-    }
-
-    public static Agent RemoveTools(this Agent agent, Func<ITool, bool> predicate)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(predicate);
-        return agent.With(tools: agent.Tools.Where(t => !predicate(t)).ToArray());
     }
 }

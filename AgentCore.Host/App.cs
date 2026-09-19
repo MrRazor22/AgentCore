@@ -13,6 +13,7 @@ using AgentCore.Layers.Context;
 using AgentCore.Layers.LLM;
 using AgentCore.Layers.Tools;
 using AgentCore.Tool;
+using AgentCore.Tool.Tools;
 using CodeSharp.Skills;
 using CodeSharp.Tools;
 using Microsoft.Extensions.Logging;
@@ -58,11 +59,11 @@ internal class App
                 .UseRetry()
                 .UseToolCallDetection(),
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")])
-            .AddTools(vsTools)
-            .AddTools(skillTool)
-            .AddTools(discovery)
-            .AddTools(webTools, new Discoverable("web"))
-            .AddTools(scheduleTool, new Discoverable("schedule"));
+            .AddTool(vsTools)
+            .AddTool(skillTool)
+            .AddTool(discovery)
+            .AddTool(webTools, new Discoverable("web"))
+            .AddTool(scheduleTool, new Discoverable("schedule"));
 
         agent = agent.With(
             context: agent.Context.UseSession(sessionsDir, Guid.NewGuid().ToString()),
