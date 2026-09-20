@@ -22,11 +22,10 @@ public static class ToolingLayerExtensions
     public static IToolbox RemoveApproval(this IToolbox tooling)
         => tooling.RemoveLayer<ToolApprovalLayer>();
 
-    public static IToolbox UseToolDiscovery(this IToolbox tooling, ToolDiscoveryTool tool)
+    public static IToolbox UseToolDiscovery(this IToolbox tooling, ToolDiscoveryTool? tool = null)
     {
         ArgumentNullException.ThrowIfNull(tooling);
-        ArgumentNullException.ThrowIfNull(tool);
-        return tooling.AddLayer(new ToolDiscoveryLayer(tool, tooling));
+        return tooling.AddLayer(new ToolDiscoveryLayer(tool ?? new ToolDiscoveryTool(), tooling));
     }
 
     public static IToolbox RemoveToolDiscovery(this IToolbox tooling)

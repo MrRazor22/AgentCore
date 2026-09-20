@@ -37,7 +37,6 @@ public class AgentRuntimeTests
     }
 
     [Fact]
-    [Fact]
     public async Task AddTool_Generic_RegistersStaticTools()
     {
         var tooling = new Toolbox().AddTool<StaticTestTools>();
@@ -164,5 +163,30 @@ public class AgentRuntimeTests
         Assert.NotNull(agent.LLM);
         Assert.NotNull(agent.Context);
         Assert.NotNull(agent.Toolbox);
+    }
+
+    [Fact]
+    public async Task Agent_LambdaConstructor_ConfiguresToolboxAndContext()
+    {
+        var mockProvider = new MockLLMProvider();
+        var agent = new Agent(
+            mockProvider,
+            toolbox: tools => tools.AddTool<StaticTestTools>(),
+            context: ctx => ctx);
+
+        Assert.NotNull(agent.Toolbox);
+        Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
+    }
+
+    [Fact]
+    public async Task Agent_UseLambdaExtensions_ConfiguresAgentCleanly()
+    {
+        var mockProvider = new MockLLMProvider();
+        var agent = new Agent(mockProvider)
+            .UseToolbox(tools => tools.AddTool<StaticTestTools>())
+            .UseContext(ctx => ctx);
+
+        Assert.NotNull(agent.Toolbox);
+        Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
     }
 }

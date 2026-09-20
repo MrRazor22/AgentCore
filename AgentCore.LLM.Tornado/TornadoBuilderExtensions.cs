@@ -17,7 +17,7 @@ public static class TornadoExtensions
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(api);
         ArgumentNullException.ThrowIfNull(model);
-        return agent.UseLLM(new TornadoLLM(api, model));
+        return agent.With(llm: new TornadoLLM(api, model));
     }
 
     public static Agent UseTornado(
@@ -46,6 +46,6 @@ public static class TornadoExtensions
         }
 
         var chatModel = new ChatModel(model, provider);
-        return agent.UseLLM(new TornadoLLM(api, chatModel));
+        return agent.With(llm: new TornadoLLM(api, chatModel));
     }
 }

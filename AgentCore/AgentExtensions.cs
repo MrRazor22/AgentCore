@@ -46,26 +46,14 @@ public static class AgentExtensions
         return agent.InvokeStreamingAsync([input], ct);
     }
 
-    public static Agent UseLLM(this Agent agent, ILLM newLlm)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newLlm);
-        return agent.With(llm: newLlm);
-    }
+    public static Agent UseLLM(this Agent agent, Func<ILLM, ILLM> configure)
+        => agent.With(llm: configure(agent.LLM));
 
-    public static Agent UseContext(this Agent agent, IContext newCtx)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newCtx);
-        return agent.With(context: newCtx);
-    }
+    public static Agent UseContext(this Agent agent, Func<IContext, IContext> configure)
+        => agent.With(context: configure(agent.Context));
 
-    public static Agent UseToolbox(this Agent agent, IToolbox newToolbox)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newToolbox);
-        return agent.With(toolbox: newToolbox);
-    }
+    public static Agent UseToolbox(this Agent agent, Func<IToolbox, IToolbox> configure)
+        => agent.With(toolbox: configure(agent.Toolbox));
 
     public static Agent UseInstructions(this Agent agent, params IContent[] instructions)
     {

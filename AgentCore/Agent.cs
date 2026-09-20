@@ -31,6 +31,21 @@ public sealed class Agent(
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
 
+    public Agent(
+        ILLM llm,
+        Func<IToolbox, IToolbox>? toolbox = null,
+        Func<IContext, IContext>? context = null,
+        IReadOnlyList<IContent>? instructions = null,
+        int maxIterations = 20)
+        : this(
+            llm,
+            toolbox != null ? toolbox(new Toolbox()) : null,
+            context != null ? context(new ChatContext()) : null,
+            instructions,
+            maxIterations)
+    {
+    }
+
     public Agent With(
         ILLM? llm = null,
         IToolbox? toolbox = null,

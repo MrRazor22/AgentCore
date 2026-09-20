@@ -44,32 +44,21 @@ internal class App
 
         await using IIpcChannel channel = new StdioIpcChannel();
         IVsToolDispatcher dispatcher = new VsToolDispatcher(channel);
-        var vsTools = new VsStudioTools(dispatcher);
-        var skillTool = new SkillTool(new SkillManager(root));
-        var webTools = new WebTools();
-        var scheduleTool = new ScheduleTool();
-
-        var baseUrl = config.BaseUrl.EndsWith('/') ? config.BaseUrl : config.BaseUrl + "/";
         string sessionsDir = Path.Combine(root, ".codesharp", "sessions");
 
-        var discovery = new ToolDiscoveryTool();
-
-        var tooling = new Toolbox()
-            .AddTool(vsTools)
-            .AddTool(skillTool)
-            .AddTool(webTools, new Discoverable("web"))
-            .AddTool(scheduleTool, new Discoverable("schedule"))
-            .UseToolDiscovery(discovery);
-
         var agent = new Agent(
-            llm: new TornadoLLM(config.ApiKey, config.Model, baseUrl)
+            llm: new TornadoLLM(config.ApiKey, config.Model, config.BaseUrl)
                 .UseRetry()
                 .UseToolCallDetection(),
-            toolbox: tooling,
+            toolbox: tools => tools
+                .AddTool(new VsStudioTools(dispatcher))
+                .AddTool(new SkillTool(new SkillManager(root)))
+                .AddTool(new WebTools(), new Discoverable("web"))
+                .AddTool(new ScheduleTool(), new Discoverable("schedule"))
+                .UseToolDiscovery(),
+            context: ctx => ctx
+                .UseSession(sessionsDir, Guid.NewGuid().ToString()),
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")]);
-
-        agent = agent.With(
-            context: agent.Context.UseSession(sessionsDir, Guid.NewGuid().ToString()));
 
         await channel.SendAsync(new("ready", Name: config.Model));
 
@@ -83,14 +72,14 @@ internal class App
 
             agent = msg.Type switch
             {
-                "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(context: agent.Context.UseSession(sessionsDir, msg.Text)),
-                "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => agent.With(llm: new TornadoLLM(config.ApiKey, msg.Text, baseUrl).UseRetry().UseToolCallDetection()),
-                "enable_approval" => agent.With(toolbox: agent.Toolbox.UseApproval(async (call, ct) =>
+                "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => agent.UseContext(c => c.UseSession(sessionsDir, msg.Text)),
+                "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => agent.UseLLM(_ => new TornadoLLM(config.ApiKey, msg.Text, config.BaseUrl).UseRetry().UseToolCallDetection()),
+                "enable_approval" => agent.UseToolbox(t => t.UseApproval(async (call, ct) =>
                 {
                     await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
                     return true;
                 })),
-                "disable_approval" => agent.With(toolbox: agent.Toolbox.RemoveApproval()),
+                "disable_approval" => agent.UseToolbox(t => t.RemoveApproval()),
                 _ => agent
             };
 
