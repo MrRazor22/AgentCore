@@ -17,3 +17,9 @@ public static class AgentExtensions
         return text;
     }
 }
+
+public interface ILayer<T>
+{
+    T Inner { get; }
+    void Attach(T inner);
+}
