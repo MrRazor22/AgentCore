@@ -17,6 +17,21 @@ public class LLMLayer(ILLM? inner = null, LLMDelegate? handler = null) : ILLM
 
     public void Attach(ILLM inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
+    public LLMLayer AddLayer(LLMLayer layer)
+    {
+        ArgumentNullException.ThrowIfNull(layer);
+        layer.Attach(Inner);
+        Inner = layer;
+        return this;
+    }
+
+    public ILLM RemoveLayer<T>() where T : class
+    {
+        if (this is T) return Inner is LLMLayer ml ? ml.RemoveLayer<T>() : Inner;
+        if (Inner is LLMLayer ml) Inner = ml.RemoveLayer<T>();
+        return this;
+    }
+
     public virtual IAsyncEnumerable<IMessageEvent> GenerateAsync(
         IReadOnlyList<Message> messages,
         IReadOnlyList<ToolDefinition>? tools = null,

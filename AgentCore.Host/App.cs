@@ -7,6 +7,7 @@ using AgentCore;
 using AgentCore.Context;
 using AgentCore.Host.Abstractions;
 using AgentCore.Host.Ipc;
+using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
 using AgentCore.Layers.Context;
@@ -70,18 +71,25 @@ internal class App
                 continue;
             }
 
-            agent = msg.Type switch
+            switch (msg.Type)
             {
-                "switch_session" when !string.IsNullOrWhiteSpace(msg.Text) => agent.UseContext(c => c.UseSession(sessionsDir, msg.Text)),
-                "switch_model" when !string.IsNullOrWhiteSpace(msg.Text) => agent.UseLLM(_ => new TornadoLLM(config.ApiKey, msg.Text, config.BaseUrl).UseRetry().UseToolCallDetection()),
-                "enable_approval" => agent.UseToolbox(t => t.UseApproval(async (call, ct) =>
-                {
-                    await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
-                    return true;
-                })),
-                "disable_approval" => agent.UseToolbox(t => t.RemoveApproval()),
-                _ => agent
-            };
+                case "switch_session" when !string.IsNullOrWhiteSpace(msg.Text):
+                    agent.Context.RemoveSession().UseSession(sessionsDir, msg.Text);
+                    break;
+                case "switch_model" when !string.IsNullOrWhiteSpace(msg.Text):
+                    agent.LLM.Attach(new TornadoLLM(config.ApiKey, msg.Text, config.BaseUrl).UseRetry().UseToolCallDetection());
+                    break;
+                case "enable_approval":
+                    agent.Toolbox.UseApproval(async (call, ct) =>
+                    {
+                        await channel.SendAsync(new("approval_required", Id: call.Id, Name: call.Name, Text: call.Arguments));
+                        return true;
+                    });
+                    break;
+                case "disable_approval":
+                    agent.Toolbox.RemoveApproval();
+                    break;
+            }
 
             if (msg.Type == "prompt" && !string.IsNullOrWhiteSpace(msg.Text))
             {

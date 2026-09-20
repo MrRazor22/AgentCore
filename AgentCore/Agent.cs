@@ -25,9 +25,9 @@ public sealed class Agent(
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
-    public ILLM LLM { get; } = llm ?? throw new ArgumentNullException(nameof(llm));
-    public IToolbox Toolbox { get; } = toolbox ?? new Toolbox();
-    public IContext Context { get; } = context ?? new ChatContext();
+    public ILLM LLM { get; } = llm?.GetType() == typeof(LLMLayer) ? (LLMLayer)llm : new LLMLayer(llm ?? throw new ArgumentNullException(nameof(llm)));
+    public IToolbox Toolbox { get; } = toolbox?.GetType() == typeof(ToolboxLayer) ? (ToolboxLayer)toolbox : new ToolboxLayer(toolbox ?? new Toolbox());
+    public IContext Context { get; } = context?.GetType() == typeof(ContextLayer) ? (ContextLayer)context : new ContextLayer(context ?? new ChatContext());
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
 

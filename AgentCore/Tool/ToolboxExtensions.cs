@@ -38,25 +38,23 @@ public static class ToolboxExtensions
         return toolbox;
     }
 
+    public static IToolbox Attach(this IToolbox toolbox, IToolbox inner)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(inner);
+        if (toolbox is ToolboxLayer tl) tl.Attach(inner);
+        return toolbox;
+    }
+
     public static IToolbox AddLayer(this IToolbox toolbox, ToolboxLayer layer)
     {
         ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(layer);
+        if (toolbox is ToolboxLayer tl) return tl.AddLayer(layer);
         layer.Attach(toolbox);
         return layer;
     }
 
     public static IToolbox RemoveLayer<T>(this IToolbox toolbox) where T : class
-    {
-        if (toolbox is T layer && layer is ToolboxLayer tl)
-            return tl.Inner.RemoveLayer<T>();
-
-        if (toolbox is ToolboxLayer parent)
-        {
-            var newInner = parent.Inner.RemoveLayer<T>();
-            if (!ReferenceEquals(newInner, parent.Inner))
-                parent.Attach(newInner);
-        }
-        return toolbox;
-    }
+        => toolbox is ToolboxLayer tl ? tl.RemoveLayer<T>() : toolbox;
 }

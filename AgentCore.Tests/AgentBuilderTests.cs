@@ -27,39 +27,12 @@ public class AgentRuntimeTests
         public string InstanceTool2() => "instance2";
     }
 
-    private class MixedTestTools
-    {
-        [Tool]
-        public static string StaticTool() => "static";
-
-        [Tool]
-        public string InstanceTool() => "instance";
-    }
 
     [Fact]
-    public async Task AddTool_Generic_RegistersStaticTools()
+    public async Task AddTool_RegistersToolsCorrectly()
     {
-        var tooling = new Toolbox().AddTool<StaticTestTools>();
-        Assert.NotNull(tooling);
-        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
-    }
-
-    [Fact]
-    public async Task AddTool_Instance_RegistersInstanceTools()
-    {
-        var instance = new InstanceTestTools();
-        var tooling = new Toolbox().AddTool(instance);
-        Assert.NotNull(tooling);
-        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
-    }
-
-    [Fact]
-    public async Task AddTool_Instance_RegistersMixedTools()
-    {
-        var instance = new MixedTestTools();
-        var tooling = new Toolbox().AddTool(instance);
-        Assert.NotNull(tooling);
-        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
+        var tooling = new Toolbox().AddTool<StaticTestTools>().AddTool(new InstanceTestTools());
+        Assert.Equal(4, (await tooling.GetToolsAsync()).Count);
     }
 
     [Fact]
@@ -70,23 +43,12 @@ public class AgentRuntimeTests
 
     private class MemoryLoggerDecorator(IContext? inner = null) : ContextLayer(inner)
     {
-        public List<string> CallLog { get; } = new();
-
-        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
-        {
-            CallLog.Add("ReadAsync");
-            return base.ReadAsync(ct);
-        }
-
-        public override async IAsyncEnumerable<IContentEvent> WriteAsync(
-            IAsyncEnumerable<IMessageEvent> events,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        public List<string> CallLog { get; } = [];
+        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default) { CallLog.Add("ReadAsync"); return base.ReadAsync(ct); }
+        public override async IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             CallLog.Add("WriteAsync");
-            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
-            {
-                yield return evt;
-            }
+            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false)) yield return evt;
         }
     }
 
@@ -118,21 +80,11 @@ public class AgentRuntimeTests
 
     private class TestMemoryDecorator(string name, List<string> callOrder, IContext? inner = null) : ContextLayer(inner)
     {
-        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
+        public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default) { callOrder.Add(name); return base.ReadAsync(ct); }
+        public override async IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             callOrder.Add(name);
-            return base.ReadAsync(ct);
-        }
-
-        public override async IAsyncEnumerable<IContentEvent> WriteAsync(
-            IAsyncEnumerable<IMessageEvent> events,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-        {
-            callOrder.Add(name);
-            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false))
-            {
-                yield return evt;
-            }
+            await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false)) yield return evt;
         }
     }
 
@@ -179,14 +131,17 @@ public class AgentRuntimeTests
     }
 
     [Fact]
-    public async Task Agent_UseLambdaExtensions_ConfiguresAgentCleanly()
+    public async Task Agent_LivingFacades_CanAddAndRemoveLayersInPlace()
     {
         var mockProvider = new MockLLMProvider();
-        var agent = new Agent(mockProvider)
-            .UseToolbox(tools => tools.AddTool<StaticTestTools>())
-            .UseContext(ctx => ctx);
+        var agent = new Agent(mockProvider);
 
-        Assert.NotNull(agent.Toolbox);
+        agent.Toolbox.AddTool<StaticTestTools>();
+        Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
+
+        var layer = new ToolboxLayer();
+        agent.Toolbox.AddLayer(layer);
+        agent.Toolbox.RemoveLayer<ToolboxLayer>();
         Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
     }
 }

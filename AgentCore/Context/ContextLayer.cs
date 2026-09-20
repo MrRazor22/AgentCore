@@ -3,13 +3,25 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Context;
 
-public abstract class ContextLayer(IContext? inner = null) : IContext
+public class ContextLayer(IContext? inner = null) : IContext
 {
     public IContext Inner { get; private set; } = inner!;
 
-    public void Attach(IContext inner)
+    public void Attach(IContext inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+
+    public ContextLayer AddLayer(ContextLayer layer)
     {
-        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        ArgumentNullException.ThrowIfNull(layer);
+        layer.Attach(Inner);
+        Inner = layer;
+        return this;
+    }
+
+    public IContext RemoveLayer<T>() where T : class
+    {
+        if (this is T) return Inner is ContextLayer cl ? cl.RemoveLayer<T>() : Inner;
+        if (Inner is ContextLayer cl) Inner = cl.RemoveLayer<T>();
+        return this;
     }
 
     public virtual Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)

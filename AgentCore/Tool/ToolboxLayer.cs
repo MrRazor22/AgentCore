@@ -13,6 +13,21 @@ public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = nul
 
     public void Attach(IToolbox inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
+    public ToolboxLayer AddLayer(ToolboxLayer layer)
+    {
+        ArgumentNullException.ThrowIfNull(layer);
+        layer.Attach(Inner);
+        Inner = layer;
+        return this;
+    }
+
+    public IToolbox RemoveLayer<T>() where T : class
+    {
+        if (this is T) return Inner is ToolboxLayer tl ? tl.RemoveLayer<T>() : Inner;
+        if (Inner is ToolboxLayer tl) Inner = tl.RemoveLayer<T>();
+        return this;
+    }
+
     public virtual ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
         => Inner != null ? Inner.GetToolsAsync(ct) : new(Array.Empty<ITool>());
 

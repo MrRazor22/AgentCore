@@ -12,25 +12,23 @@ public static class ContextExtensions
         static async IAsyncEnumerable<IMessageEvent> Stream(IMessageEvent e) { yield return e; }
     }
 
+    public static IContext Attach(this IContext context, IContext inner)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(inner);
+        if (context is ContextLayer cl) cl.Attach(inner);
+        return context;
+    }
+
     public static IContext AddLayer(this IContext context, ContextLayer layer)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(layer);
+        if (context is ContextLayer cl) return cl.AddLayer(layer);
         layer.Attach(context);
         return layer;
     }
 
     public static IContext RemoveLayer<T>(this IContext context) where T : class
-    {
-        if (context is T layer && layer is ContextLayer cl)
-            return cl.Inner.RemoveLayer<T>();
-
-        if (context is ContextLayer parent)
-        {
-            var newInner = parent.Inner.RemoveLayer<T>();
-            if (!ReferenceEquals(newInner, parent.Inner))
-                parent.Attach(newInner);
-        }
-        return context;
-    }
+        => context is ContextLayer cl ? cl.RemoveLayer<T>() : context;
 }
