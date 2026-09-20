@@ -16,19 +16,39 @@ public static class ContextExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(inner);
-        if (context is ContextLayer cl) cl.Attach(inner);
+        if (context is ILayer<IContext> layer) layer.Attach(inner);
         return context;
     }
 
-    public static IContext AddLayer(this IContext context, ContextLayer layer)
+    public static IContext AddLayer(this IContext context, IContext layer)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(layer);
-        if (context is ContextLayer cl) return cl.AddLayer(layer);
-        layer.Attach(context);
+        if (context is ILayer<IContext> head && layer is ILayer<IContext> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return context;
+        }
+        if (layer is ILayer<IContext> l) l.Attach(context);
         return layer;
     }
 
     public static IContext RemoveLayer<T>(this IContext context) where T : class
-        => context is ContextLayer cl ? cl.RemoveLayer<T>() : context;
+    {
+        if (context is T && context is ILayer<IContext> self) return self.Inner.RemoveLayer<T>();
+        if (context is ILayer<IContext> head)
+        {
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
+        }
+        return context;
+    }
+
+    public static TL? FindLayer<TL>(this IContext root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<IContext>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
 }

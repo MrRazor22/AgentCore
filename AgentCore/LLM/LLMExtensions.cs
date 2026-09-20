@@ -6,19 +6,39 @@ public static class LLMExtensions
     {
         ArgumentNullException.ThrowIfNull(llm);
         ArgumentNullException.ThrowIfNull(inner);
-        if (llm is LLMLayer ml) ml.Attach(inner);
+        if (llm is ILayer<ILLM> layer) layer.Attach(inner);
         return llm;
     }
 
-    public static ILLM AddLayer(this ILLM llm, LLMLayer layer)
+    public static ILLM AddLayer(this ILLM llm, ILLM layer)
     {
         ArgumentNullException.ThrowIfNull(llm);
         ArgumentNullException.ThrowIfNull(layer);
-        if (llm is LLMLayer ml) return ml.AddLayer(layer);
-        layer.Attach(llm);
+        if (llm is ILayer<ILLM> head && layer is ILayer<ILLM> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return llm;
+        }
+        if (layer is ILayer<ILLM> l) l.Attach(llm);
         return layer;
     }
 
     public static ILLM RemoveLayer<T>(this ILLM llm) where T : class
-        => llm is LLMLayer ml ? ml.RemoveLayer<T>() : llm;
+    {
+        if (llm is T && llm is ILayer<ILLM> self) return self.Inner.RemoveLayer<T>();
+        if (llm is ILayer<ILLM> head)
+        {
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
+        }
+        return llm;
+    }
+
+    public static TL? FindLayer<TL>(this ILLM root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<ILLM>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
 }

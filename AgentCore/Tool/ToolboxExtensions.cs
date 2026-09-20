@@ -42,19 +42,39 @@ public static class ToolboxExtensions
     {
         ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(inner);
-        if (toolbox is ToolboxLayer tl) tl.Attach(inner);
+        if (toolbox is ILayer<IToolbox> layer) layer.Attach(inner);
         return toolbox;
     }
 
-    public static IToolbox AddLayer(this IToolbox toolbox, ToolboxLayer layer)
+    public static IToolbox AddLayer(this IToolbox toolbox, IToolbox layer)
     {
         ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(layer);
-        if (toolbox is ToolboxLayer tl) return tl.AddLayer(layer);
-        layer.Attach(toolbox);
+        if (toolbox is ILayer<IToolbox> head && layer is ILayer<IToolbox> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return toolbox;
+        }
+        if (layer is ILayer<IToolbox> l) l.Attach(toolbox);
         return layer;
     }
 
     public static IToolbox RemoveLayer<T>(this IToolbox toolbox) where T : class
-        => toolbox is ToolboxLayer tl ? tl.RemoveLayer<T>() : toolbox;
+    {
+        if (toolbox is T && toolbox is ILayer<IToolbox> self) return self.Inner.RemoveLayer<T>();
+        if (toolbox is ILayer<IToolbox> head)
+        {
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
+        }
+        return toolbox;
+    }
+
+    public static TL? FindLayer<TL>(this IToolbox root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<IToolbox>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
 }

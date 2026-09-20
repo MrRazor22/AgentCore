@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tests;
 
