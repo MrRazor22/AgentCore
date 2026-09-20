@@ -13,8 +13,8 @@ public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = nul
 
     public void Attach(IToolbox inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
-    public virtual ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
-        => Inner != null ? Inner.GetDefinitionsAsync(ct) : new(Array.Empty<ToolDefinition>());
+    public virtual ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
+        => Inner != null ? Inner.GetToolsAsync(ct) : new(Array.Empty<ITool>());
 
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,

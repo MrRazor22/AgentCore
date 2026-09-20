@@ -16,10 +16,9 @@ public static class AgentTeamExtensions
         ArgumentNullException.ThrowIfNull(team);
         ArgumentNullException.ThrowIfNull(name);
 
-        var tooling = (agent.Toolbox as Toolbox ?? new Toolbox()).AddTool(new SendAgentTool(team, name));
-        var configuredAgent = agent.With(toolbox: tooling);
+        agent.Toolbox.AddTool(new SendAgentTool(team, name));
         var collabs = collaborators != null ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) : null;
-        team.Add(new TeamMember(name, configuredAgent, collabs, description));
-        return configuredAgent;
+        team.Add(new TeamMember(name, agent, collabs, description));
+        return agent;
     }
 }

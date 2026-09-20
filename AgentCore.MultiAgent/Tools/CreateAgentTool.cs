@@ -41,7 +41,8 @@ public sealed class CreateAgentTool(
             ? new HashSet<string>(collaborators, StringComparer.OrdinalIgnoreCase) { sender }
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sender };
 
-        var tooling = (_template.Toolbox as Toolbox ?? new Toolbox()).AddTool(new SendAgentTool(team, name));
+        var tools = await _template.Toolbox.GetToolsAsync(ct).ConfigureAwait(false);
+        var tooling = new Toolbox(tools).AddTool(new SendAgentTool(team, name));
         var newAgent = _template
             .With(instructions: [new Text(role)], toolbox: tooling);
 

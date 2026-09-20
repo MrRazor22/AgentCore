@@ -165,10 +165,23 @@ public class MockTooling : IToolbox
             calls.Select(_ => (IContent)new Text("Success")).ToList()
         );
 
-    public IReadOnlyList<ToolDefinition> Definitions { get; set; } = [];
+    public IReadOnlyList<ITool> Tools { get; set; } = [];
 
-    public ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
-        => new(Definitions);
+    public ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
+        => new(Tools);
+
+    public IReadOnlyList<ToolDefinition> Definitions
+    {
+        get => Tools.Select(t => t.Definition).ToArray();
+        set => Tools = value.Select(d => (ITool)new MockTool(d)).ToArray();
+    }
+
+    private class MockTool(ToolDefinition def) : ITool
+    {
+        public ToolDefinition Definition => def;
+        public IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(System.Text.Json.Nodes.JsonObject arguments, CancellationToken ct = default)
+            => throw new NotImplementedException();
+    }
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,

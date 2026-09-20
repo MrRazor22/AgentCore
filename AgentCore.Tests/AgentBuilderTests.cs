@@ -37,29 +37,30 @@ public class AgentRuntimeTests
     }
 
     [Fact]
-    public void AddTool_Generic_RegistersStaticTools()
+    [Fact]
+    public async Task AddTool_Generic_RegistersStaticTools()
     {
         var tooling = new Toolbox().AddTool<StaticTestTools>();
         Assert.NotNull(tooling);
-        Assert.Equal(2, tooling.Tools.Count);
+        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
     }
 
     [Fact]
-    public void AddTool_Instance_RegistersInstanceTools()
+    public async Task AddTool_Instance_RegistersInstanceTools()
     {
         var instance = new InstanceTestTools();
         var tooling = new Toolbox().AddTool(instance);
         Assert.NotNull(tooling);
-        Assert.Equal(2, tooling.Tools.Count);
+        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
     }
 
     [Fact]
-    public void AddTool_Instance_RegistersMixedTools()
+    public async Task AddTool_Instance_RegistersMixedTools()
     {
         var instance = new MixedTestTools();
         var tooling = new Toolbox().AddTool(instance);
         Assert.NotNull(tooling);
-        Assert.Equal(2, tooling.Tools.Count);
+        Assert.Equal(2, (await tooling.GetToolsAsync()).Count);
     }
 
     [Fact]

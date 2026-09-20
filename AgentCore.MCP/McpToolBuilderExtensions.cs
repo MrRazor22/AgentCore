@@ -6,7 +6,7 @@ namespace AgentCore.MCP;
 
 public static class McpToolExtensions
 { 
-    public static async Task<Toolbox> AddMcpToolsAsync(this Toolbox toolbox, McpClient client, CancellationToken ct = default)
+    public static async Task<IToolbox> AddMcpToolsAsync(this IToolbox toolbox, McpClient client, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(client);

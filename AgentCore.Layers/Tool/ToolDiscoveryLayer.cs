@@ -67,11 +67,11 @@ public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, IToolbox? inner =
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
-    public override async ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(CancellationToken ct = default)
+    public override async ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
     {
-        var allDefs = Inner != null ? await Inner.GetDefinitionsAsync(ct).ConfigureAwait(false) : [];
-        Tool.CatalogProvider = () => allDefs;
-        return [.. allDefs.Where(Tool.IsActive), Tool.Definition];
+        var innerTools = Inner != null ? await Inner.GetToolsAsync(ct).ConfigureAwait(false) : [];
+        Tool.CatalogProvider = () => innerTools.Select(t => t.Definition).ToArray();
+        return [.. innerTools.Where(t => Tool.IsActive(t.Definition)), Tool];
     }
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
