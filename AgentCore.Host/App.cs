@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using AgentCore;
 using AgentCore.Context;
+using AgentCore.Context.Primitives;
 using AgentCore.Host.Abstractions;
 using AgentCore.Host.Ipc;
 using AgentCore.LLM;
@@ -47,17 +48,27 @@ internal class App
         IVsToolDispatcher dispatcher = new VsToolDispatcher(channel);
         string sessionsDir = Path.Combine(root, ".codesharp", "sessions");
 
+        var tokenizer = new Tokenizer(charsPerToken: 3);
         var agent = new Agent(
-            llm: new TornadoLLM(config.ApiKey, config.Model, config.BaseUrl)
-                .UseRetry()
+            llm: llm => llm
+                .UseTornado(config.ApiKey, config.Model, config.BaseUrl)
+                .UseRetry(maxRetries: 3, backoffMultiplier: 2.0)
                 .UseToolCallDetection(),
             toolbox: tools => tools
+                .Configure(parallel: true, maxConcurrency: 8, timeout: TimeSpan.FromMinutes(2))
                 .AddTool(new VsStudioTools(dispatcher))
                 .AddTool(new SkillTool(new SkillManager(root)))
                 .AddTool(new WebTools(), new Discoverable("web"))
                 .AddTool(new ScheduleTool(), new Discoverable("schedule"))
                 .UseToolDiscovery(),
             context: ctx => ctx
+                .Configure(
+                    contextWindow: 128_000,
+                    reserveTokens: 10_000,
+                    maxSingleMessageTokens: 8_000,
+                    counter: tokenizer,
+                    truncator: new Truncator(tokenizer, headRatio: 0.7, notice: "\n... [truncated]"),
+                    compactor: new Summarizer(new TornadoLLM(config.ApiKey, config.Model, config.BaseUrl)))
                 .UseSession(sessionsDir, Guid.NewGuid().ToString()),
             instructions: [new Text("You are Devin Agent embedded in Visual Studio. Keep responses precise. Prefer ReadFile, EditFile, Search.")]);
 

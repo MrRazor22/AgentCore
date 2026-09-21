@@ -77,4 +77,10 @@ public static class ToolboxExtensions
             if (c is TL match) return match;
         return null;
     }
+
+    public static IToolbox Configure(
+        this IToolbox? toolbox,
+        IEnumerable<ITool>? tools = null, ILogger<Toolbox>? logger = null,
+        bool parallel = true, int? maxConcurrency = null, TimeSpan? timeout = null)
+            => new Toolbox(tools, logger, parallel, maxConcurrency, timeout);
 }

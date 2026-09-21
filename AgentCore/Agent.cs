@@ -19,32 +19,17 @@ public interface IAgent
 }
 
 public sealed class Agent(
-    ILLM llm,
-    IToolbox? toolbox = null,
-    IContext? context = null,
+    Func<ILLM, ILLM> llm,
+    Func<IToolbox, IToolbox>? toolbox = null,
+    Func<IContext, IContext>? context = null,
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
-    public ILLM LLM { get; } = llm?.GetType() == typeof(LLMLayer) ? (LLMLayer)llm : new LLMLayer(llm ?? throw new ArgumentNullException(nameof(llm)));
-    public IToolbox Toolbox { get; } = toolbox?.GetType() == typeof(ToolboxLayer) ? (ToolboxLayer)toolbox : new ToolboxLayer(toolbox ?? new Toolbox());
-    public IContext Context { get; } = context?.GetType() == typeof(ContextLayer) ? (ContextLayer)context : new ContextLayer(context ?? new ChatContext());
+    public ILLM LLM { get; } = (llm ?? throw new ArgumentNullException(nameof(llm)))(new LLMLayer()) is LLMLayer l ? l : new LLMLayer(llm(new LLMLayer()));
+    public IToolbox Toolbox { get; } = (toolbox != null ? toolbox(new Toolbox()) : new Toolbox()) is ToolboxLayer t ? t : new ToolboxLayer(toolbox != null ? toolbox(new Toolbox()) : new Toolbox());
+    public IContext Context { get; } = (context != null ? context(new ChatContext()) : new ChatContext()) is ContextLayer c ? c : new ContextLayer(context != null ? context(new ChatContext()) : new ChatContext());
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
-
-    public Agent(
-        ILLM llm,
-        Func<IToolbox, IToolbox>? toolbox = null,
-        Func<IContext, IContext>? context = null,
-        IReadOnlyList<IContent>? instructions = null,
-        int maxIterations = 20)
-        : this(
-            llm,
-            toolbox != null ? toolbox(new Toolbox()) : null,
-            context != null ? context(new ChatContext()) : null,
-            instructions,
-            maxIterations)
-    {
-    }
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,

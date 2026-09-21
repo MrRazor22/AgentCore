@@ -1,4 +1,6 @@
+using AgentCore.Context.Primitives;
 using AgentCore.LLM.Chat;
+using Microsoft.Extensions.Logging;
 
 namespace AgentCore.Context;
 
@@ -51,6 +53,14 @@ public static class ContextExtensions
             if (c is TL match) return match;
         return null;
     }
+
+    public static IContext Configure(
+        this IContext? context,
+        int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
+        ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
+        IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null,
+        IEnumerable<Message>? messages = null)
+            => new ChatContext(contextWindow, reserveTokens, maxSingleMessageTokens, compactor, counter, truncator, assembler, normalizer, logger, messages);
 
     public static IReadOnlyList<Message> Snapshot(this IReadOnlyList<Message> messages, string? upToMessageId = null)
     {

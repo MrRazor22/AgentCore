@@ -111,5 +111,14 @@ public static class TornadoAdapterExtensions
         var fn = new ToolFunction(tool.Name, tool.Description, jsonElem);
         return new LlmTornado.Common.Tool(fn);
     }
+
+    public static ILLM UseTornado(
+        this ILLM llm, string apiKey,
+        string model, string? baseUrl = null,
+        LLmProviders provider = LLmProviders.Custom)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        return llm.Attach(new TornadoLLM(apiKey, model, baseUrl, provider));
+    }
 }
 public sealed record TornadoUsage(ChatUsage Raw) : IMetadata;
