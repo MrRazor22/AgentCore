@@ -46,19 +46,6 @@ public sealed class Agent(
     {
     }
 
-    public Agent With(
-        ILLM? llm = null,
-        IToolbox? toolbox = null,
-        IContext? context = null,
-        IReadOnlyList<IContent>? instructions = null,
-        int? maxIterations = null)
-        => new(
-            llm ?? LLM,
-            toolbox ?? Toolbox,
-            context ?? Context,
-            instructions ?? Instructions,
-            maxIterations ?? MaxIterations);
-
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
         [EnumeratorCancellation] CancellationToken ct = default)

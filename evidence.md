@@ -167,9 +167,9 @@ Test suite: 19 files, 2,796 lines, 99 test methods.
 
 | Capability | Who Has It | AgentCore | Architecturally Blocked? |
 |---|---|---|---|
-| Checkpoint + time-travel (replay from snapshot) | LangGraph ✅, claw-code ✅ | ❌ | **NO** — implementable as `ContextLayer` with snapshot IDs |
+| Checkpoint + time-travel (replay from snapshot) | LangGraph ✅, claw-code ✅ | ✅ | **BUILT** — message `Snapshot`, `ChatContext` seeding, and `agent.With(...)` |
 | Declarative agent definition (YAML/JSON) | MS Agent ✅, pydantic-ai ⚠️ | ❌ | **NO** — builder serialization, orthogonal |
-| Auto-planner (goal → plan → execute) | Google ADK ✅ (Planners), DSPy ✅ | ❌ | **NO** — implementable as `LLMLayer` or tool |
+| Auto-planner (goal → plan → execute) | Google ADK ✅ (Planners), DSPy ✅ | ❌ | **NO** — orchestration pattern (agent/tool), not a layer |
 | A2A protocol | Google ADK ✅, MS Agent ✅ | ❌ | **NO** — implementable as `ToolboxLayer` |
 | Audio content type | pydantic-ai ✅, Claude SDK ✅, DSPy ✅ | ❌ | **NO** — trivial `IContentEvent` addition |
 | Web UI / DevUI | MS Agent ✅ (DevUI) | ❌ | **NO** — completely orthogonal |
@@ -178,10 +178,13 @@ Test suite: 19 files, 2,796 lines, 99 test methods.
 | Guardrails / input validation | OpenAI Agents ✅, pydantic-ai ✅ | ❌ | **NO** — implementable as `LLMLayer` |
 | Embedded language support (Python, JS) | Google ADK ✅, LangChain ✅ | ❌ | **NO** — language ecosystem, not architecture |
 
+> [!NOTE]
+> **On "Auto-planner":** Google ADK implements "Planners" simply as prompt interceptors (prepending tag instructions to system prompt and stripping them from output). In AgentCore, this is natively handled by `Instructions` or a planning tool in `IToolbox`. A true goal → plan → execute workflow is an orchestration pattern (`IAgent`), not a decorator layer.
+
 > **Verdict: ZERO architectural gaps.** Every missing feature maps cleanly to the existing layer decomposition. No feature requires modifying `Agent.cs` or violating the three-axis orthogonality.
 
 > [!WARNING]
-> "Could be built" ≠ "Has been built." For paper rigor, at minimum checkpoint, guardrails, and audio content should be implemented.
+> "Could be built" ≠ "Has been built." For paper rigor, at minimum guardrails and audio content should be implemented.
 
 ---
 

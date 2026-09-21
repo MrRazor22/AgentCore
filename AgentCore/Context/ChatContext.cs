@@ -19,9 +19,10 @@ public interface IContext
 public class ChatContext(
     int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
-    IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null) : IContext
+    IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null,
+    IEnumerable<Message>? messages = null) : IContext
 {
-    private Message[] _chat = [];
+    private Message[] _chat = messages?.ToArray() ?? [];
     private readonly Dictionary<string, IAssembler> _open = new(StringComparer.Ordinal);
     private readonly IAssembler _assembler = assembler ?? new Assembler();
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
@@ -31,7 +32,7 @@ public class ChatContext(
     private readonly int _maxTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
     private readonly object _lock = new();
     private string? _activeId;
-    private int _tokens;
+    private int _tokens = messages != null ? messages.Sum(m => (int)((1 + m.Contents.Sum((counter ?? new Tokenizer()).Estimate)) * 1.15)) : 0;
 
     public async IAsyncEnumerable<IContentEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,

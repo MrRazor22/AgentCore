@@ -25,6 +25,24 @@ public static class ContextLayerExtensions
         return context.AddLayer(new ChatPersistenceLayer(store, walStore, context));
     }
 
+    public static async Task<IContext> ForkSessionAsync(
+        this IContext context,
+        string storageDirectory,
+        string sourceSessionId,
+        string newSessionId,
+        string? upToMessageId = null,
+        bool enableWal = true,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var sourceStore = new FileChatStore(storageDirectory, sourceSessionId);
+        var snapshot = history?.Snapshot(upToMessageId);
+        var targetStore = new FileChatStore(storageDirectory, newSessionId);
+        if (snapshot is { Count: > 0 })
+            await targetStore.AppendAsync(snapshot, ct).ConfigureAwait(false);
+        return context.UseSession(targetStore, enableWal ? new FileWalStore(storageDirectory, newSessionId) : null);
+    }
+
     public static IContext RemoveSession(this IContext context)
         => context.RemoveLayer<ChatPersistenceLayer>();
 }

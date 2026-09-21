@@ -319,4 +319,89 @@ public class ChatPersistenceLayerTests
             if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
         }
     }
+
+    [Fact]
+    public async Task Context_Snapshot_ClonesHistoryUpToSpecifiedMessageId()
+    {
+        var m1 = new Message(Role.User, [new Text("Turn 1")], id: "id-1");
+        var m2 = new Message(Role.Assistant, [new Text("Reply 1")], id: "id-2");
+        var m3 = new Message(Role.User, [new Text("Turn 2")], id: "id-3");
+        var m4 = new Message(Role.Assistant, [new Text("Reply 2")], id: "id-4");
+
+        IContext context = new ChatContext(messages: [m1, m2, m3, m4]);
+
+        var snapshot = (await context.ReadAsync()).Snapshot("id-2");
+        var forkedAtTurn1 = new ChatContext(messages: snapshot);
+        var forkedMessages = await forkedAtTurn1.ReadAsync();
+
+        Assert.Equal(2, forkedMessages.Count);
+        Assert.Equal("id-1", forkedMessages[0].Id);
+        Assert.Equal("id-2", forkedMessages[1].Id);
+
+        // Original context is completely unchanged
+        Assert.Equal(4, (await context.ReadAsync()).Count);
+    }
+
+    [Fact]
+    public async Task Agent_With_CreatesNewAgentWithSnapshotContext()
+    {
+        var mockProvider = new MockLLMProvider();
+        mockProvider.Enqueue(new Text("New branch reply"));
+
+        var m1 = new Message(Role.User, [new Text("Initial question")], id: "m1");
+        var m2 = new Message(Role.Assistant, [new Text("Initial answer")], id: "m2");
+
+        var context = new ChatContext(messages: [m1, m2]);
+        IAgent agent = new Agent(mockProvider, context: context);
+
+        var snapshot = (await agent.Context.ReadAsync()).Snapshot("m1");
+        var forkedAgent = agent.With(context: new ChatContext(messages: snapshot));
+
+        Assert.NotSame(agent, forkedAgent);
+        Assert.Single(await forkedAgent.Context.ReadAsync());
+
+        await foreach (var _ in forkedAgent.InvokeStreamingAsync([new Text("Branch alternative")])) { }
+
+        // Forked branch now has 3 messages (m1, branch prompt, branch reply)
+        Assert.Equal(3, (await forkedAgent.Context.ReadAsync()).Count);
+        // Original context still has its 2 original messages
+        Assert.Equal(2, (await agent.Context.ReadAsync()).Count);
+    }
+
+    [Fact]
+    public async Task ForkSessionAsync_BranchesDurableSessionFromSnapshot()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "agentcore_fork_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var sourceStore = new FileChatStore(tempDir, "source-session");
+            await sourceStore.AppendAsync([
+                new(Role.User, [new Text("Turn 1")], id: "m-1"),
+                new(Role.Assistant, [new Text("Reply 1")], id: "m-2"),
+                new(Role.User, [new Text("Turn 2")], id: "m-3"),
+                new(Role.Assistant, [new Text("Reply 2")], id: "m-4")
+            ]);
+
+            var forkedContext = await new ChatContext().ForkSessionAsync(
+                tempDir,
+                sourceSessionId: "source-session",
+                newSessionId: "branched-session",
+                upToMessageId: "m-2");
+
+            var messages = await forkedContext.ReadAsync();
+            Assert.Equal(2, messages.Count);
+            Assert.Equal("m-1", messages[0].Id);
+            Assert.Equal("m-2", messages[1].Id);
+
+            var branchedStore = new FileChatStore(tempDir, "branched-session");
+            var persistedBranched = await branchedStore.LoadAsync();
+            Assert.NotNull(persistedBranched);
+            Assert.Equal(2, persistedBranched.Count);
+            Assert.Equal("m-2", persistedBranched[1].Id);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
 }

@@ -51,4 +51,14 @@ public static class ContextExtensions
             if (c is TL match) return match;
         return null;
     }
+
+    public static IReadOnlyList<Message> Snapshot(this IReadOnlyList<Message> messages, string? upToMessageId = null)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        if (upToMessageId == null) return messages;
+        for (int i = 0; i < messages.Count; i++)
+            if (string.Equals(messages[i].Id, upToMessageId, StringComparison.Ordinal))
+                return messages.Take(i + 1).ToList();
+        return messages;
+    }
 }
