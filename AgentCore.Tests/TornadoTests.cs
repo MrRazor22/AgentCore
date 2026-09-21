@@ -62,6 +62,25 @@ public class TornadoTests
     }
 
     [Fact]
+    public void ToTornadoMessage_ConvertsMultimodalParts()
+    {
+        var msg = new Message(Role.User, [
+            new Text("Analyze audio and video"),
+            new Audio(new byte[] { 1, 2, 3 }, MediaType: "audio/wav"),
+            new Video(Uri: new Uri("https://example.com/video.mp4"), MediaType: "video/mp4"),
+            new Image(Uri: new Uri("https://example.com/image.png"))
+        ]);
+
+        var tornadoMsg = msg.ToTornadoMessage();
+        Assert.NotNull(tornadoMsg.Parts);
+        Assert.Equal(4, tornadoMsg.Parts.Count);
+        Assert.Equal(ChatMessageTypes.Text, tornadoMsg.Parts[0].Type);
+        Assert.Equal(ChatMessageTypes.Audio, tornadoMsg.Parts[1].Type);
+        Assert.Equal(ChatMessageTypes.FileLink, tornadoMsg.Parts[2].Type);
+        Assert.Equal(ChatMessageTypes.Image, tornadoMsg.Parts[3].Type);
+    }
+
+    [Fact]
     public void WithTornado_RegistersProvider()
     {
         var api = new TornadoApi("test_key");

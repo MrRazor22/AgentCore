@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
@@ -5,6 +8,7 @@ using LlmTornado.Chat;
 using LlmTornado.ChatFunctions;
 using LlmTornado.Code;
 using LlmTornado.Common;
+using LlmTornado.Images;
 using ToolCall = AgentCore.LLM.Chat.ToolCall;
 
 namespace AgentCore.LLM.Tornado;
@@ -29,6 +33,7 @@ public static class TornadoAdapterExtensions
             tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Id;
 
         var textParts = new List<string>();
+        List<ChatMessagePart>? parts = null;
         List<LlmTornado.ChatFunctions.ToolCall>? toolCalls = null;
 
         foreach (var content in message.Contents)
@@ -40,6 +45,29 @@ public static class TornadoAdapterExtensions
 
                 case Reasoning reasoning:
                     tornadoMsg.Reasoning = reasoning.Thought;
+                    break;
+
+                case Image img:
+                    parts ??= [];
+                    if (img.Uri != null)
+                        parts.Add(new ChatMessagePart(img.Uri));
+                    else if (img.Data != null)
+                        parts.Add(new ChatMessagePart(Convert.ToBase64String(img.Data.Value.ToArray()), ImageDetail.Auto, img.MediaType));
+                    break;
+
+                case Audio audio:
+                    parts ??= [];
+                    var audioFormat = audio.MediaType.Contains("mp3", StringComparison.OrdinalIgnoreCase) ? ChatAudioFormats.Mp3 : ChatAudioFormats.Wav;
+                    if (audio.Data != null)
+                        parts.Add(new ChatMessagePart(audio.Data.Value.ToArray(), audioFormat));
+                    else if (audio.Uri != null)
+                        parts.Add(new ChatMessagePart(new ChatMessagePartFileLinkData(audio.Uri.AbsoluteUri, audio.MediaType)));
+                    break;
+
+                case Video video:
+                    parts ??= [];
+                    if (video.Uri != null)
+                        parts.Add(new ChatMessagePart(new ChatMessagePartFileLinkData(video.Uri.AbsoluteUri, video.MediaType)));
                     break;
 
                 case ToolCall tc:
@@ -58,7 +86,13 @@ public static class TornadoAdapterExtensions
             }
         }
 
-        if (textParts.Count > 0)
+        if (parts is { Count: > 0 })
+        {
+            if (textParts.Count > 0)
+                parts.Insert(0, new ChatMessagePart(string.Join("\n", textParts)));
+            tornadoMsg.Parts = parts;
+        }
+        else if (textParts.Count > 0)
         {
             tornadoMsg.Content = string.Join("\n", textParts);
         }

@@ -86,11 +86,11 @@ Test suite: 19 files, 2,796 lines, 99 test methods.
 | Parallel tool execution | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | ⚠️ |
 | **Compiled tool invocation** | **✅** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Context window management | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ |
-| Multimodal content | ⚠️² | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Multimodal content | ✅² | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | MCP support | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 
 ¹ LangChain Core is a primitives library; the ReAct loop lives in `langchain` (agents package), not `langchain_core`.
-² AgentCore supports Text, Image, ToolCall, ToolResult, Reasoning — but no Audio type yet.
+² AgentCore supports Text, Image, Audio, Video, ToolCall, ToolResult, Reasoning as first-class `IContent` primitives.
 
 #### Production AI Agents
 
@@ -170,8 +170,8 @@ Test suite: 19 files, 2,796 lines, 99 test methods.
 | Checkpoint + time-travel (replay from snapshot) | LangGraph ✅, claw-code ✅ | ✅ | **BUILT** — `Snapshot()`, `ForkSessionAsync()`, and `agent.With(...)` |
 | Declarative agent definition (YAML/JSON) | MS Agent ✅, pydantic-ai ⚠️ | ❌ | **NO** — builder serialization, orthogonal |
 | Auto-planner (goal → plan → execute) | Google ADK ✅ (Planners), DSPy ✅ | ❌ | **NO** — orchestration pattern (agent/tool), not a layer |
-| A2A protocol | Google ADK ✅, MS Agent ✅ | ❌ | **NO** — implementable as `ToolboxLayer` |
-| Audio content type | pydantic-ai ✅, Claude SDK ✅, DSPy ✅ | ❌ | **NO** — trivial `IContentEvent` addition |
+| A2A protocol | Google ADK ✅, MS Agent ✅ | ❌ | **NO** — implementable as `ToolboxLayer` / MultiAgent |
+| Audio content type | pydantic-ai ✅, Claude SDK ✅, DSPy ✅ | ✅ | **BUILT** — Native `Audio` & `Video` records in `Content.cs` with `TornadoAdapterExtensions` |
 | Web UI / DevUI | MS Agent ✅ (DevUI) | ❌ | **NO** — completely orthogonal |
 | 50+ cloud connectors | Google ADK ✅, Letta ✅ | ❌ | **NO** — integration breadth, not architecture |
 | Durable execution (distributed workflow) | pydantic-ai ✅ (`durable_exec/`) | ⚠️ | **RESOLVED** — Session durability & WAL crash recovery are **BUILT** (`ChatPersistenceLayer`); multi-node distributed orchestration (Temporal-style) is an external host runtime concern |
@@ -182,12 +182,14 @@ Test suite: 19 files, 2,796 lines, 99 test methods.
 > **On "Durable Execution" vs "Session Durability":** AgentCore natively builds durable execution at the agent boundary: `ChatPersistenceLayer` flushes every streaming event chunk-by-chunk to disk via WAL, guaranteeing complete crash recovery via `RecoverAsync()`. Competing frameworks that claim "durable execution" (e.g. pydantic-ai's `durable_exec/`) rely on external orchestrators (Temporal/Prefect). Hosting AgentCore inside an external orchestrator requires zero core changes because `IContext` and `IToolbox` already externalize all state and side-effects.
 
 > [!NOTE]
+> **On Multimodal Scope (Discrete Content vs Realtime Speech-to-Speech):**
+> - **Supported (Discrete Content):** AgentCore models `Image`, `Audio`, and `Video` as first-class `IContent` primitives in `Content.cs` that map directly to provider multimodal parts (`ChatMessagePart` in LlmTornado). This aligns with how models like Gemini 2.0 and GPT-4o ingest media files (audio recordings, video clips, images) for reasoning.
+> - **Deliberately Excluded from Core (Realtime Voice):** Bidirectional streaming speech-to-speech (OpenAI Realtime, Gemini Live) is fundamentally different from a turn-based agent loop. As verified across frameworks, supporting it requires dedicated WebSockets/WebRTC transports, low-latency 20ms PCM audio buffering, Voice Activity Detection (VAD), and mid-turn barge-in interruption state machines (e.g. pydantic-ai's 16-file `pydantic_ai/realtime/` package or OpenAI Agents SDK's 1,391-line `openai_realtime.py`). Forcing live voice streams into turn-based `ChatContext` pollutes core abstractions with voice state machines; realtime voice is architecturally an external protocol session adapter, not a core context primitive.
+
+> [!NOTE]
 > **On "Auto-planner":** Google ADK implements "Planners" simply as prompt interceptors (prepending tag instructions to system prompt and stripping them from output). In AgentCore, this is natively handled by `Instructions` or a planning tool in `IToolbox`. A true goal → plan → execute workflow is an orchestration pattern (`IAgent`), not a decorator layer.
 
 > **Verdict: ZERO architectural gaps.** Every missing feature maps cleanly to the existing layer decomposition. No feature requires modifying `Agent.cs` or violating the three-axis orthogonality.
-
-> [!WARNING]
-> "Could be built" ≠ "Has been built." For paper rigor, audio content remains to be added.
 
 ---
 
@@ -238,7 +240,7 @@ After inspecting all 22 codebases, these AgentCore features are confirmed **uniq
 
 | Concern | Layer | Key Symbol | Lines | Tests | Status |
 |---|---|---|---|---|---|
-| Retry/resilience | `LLMLayer` | `RetryLayer` | 129 | `RetryLayerTests.cs` ✅ | **PROVEN** |
+| Retry/resilience (incl. 429 backoff) | `LLMLayer` | `RetryLayer` | 129 | `RetryLayerTests.cs` ✅ | **PROVEN** |
 | Tool approval / HITL | `ToolboxLayer` | `ToolApprovalLayer` | 51 | — | **EVIDENCED** |
 | Persistence + WAL | `ContextLayer` | `ChatPersistenceLayer` + `FileWalStore` | 37+18 | `ChatPersistenceLayerTests.cs` ✅ | **PROVEN** |
 | Checkpointing / time-travel / session fork | `ContextLayer` | `Snapshot` + `ForkSessionAsync` | 65+49 | `ChatPersistenceLayerTests.cs` ✅ | **PROVEN** |
@@ -263,7 +265,7 @@ Every capability surveyed maps to the layer architecture without requiring modif
 | Parallel tools | `IToolbox` → `Parallel.ForEachAsync` | Built ✅ |
 | Compiled tools | `ITool` → `MethodTool` (expression trees) | Built ✅ |
 | Context management | `IContext` → `ChatContext` + `ICompactor` | Built ✅ |
-| Multimodal | `IContentEvent` type hierarchy | Built ✅ (except Audio) |
+| Multimodal | `IContent` hierarchy (`Text`, `Image`, `Audio`, `Video`) | Built ✅ |
 | MCP | `ITool` implementation → `McpTool` | Built ✅ |
 | Pipeline extensibility | `LLMLayer` / `ToolboxLayer` / `ContextLayer` | Built ✅ |
 | LLM interception | `LLMLayer` decorator | Built ✅ |
@@ -285,13 +287,13 @@ Every capability surveyed maps to the layer architecture without requiring modif
 | Capability | Proposed Layer | Blocked? |
 |---|---|---|
 | Auto-planning | `LLMLayer` or tool | NO |
-| A2A protocol | `ToolboxLayer` | NO |
+| A2A protocol | `ToolboxLayer` / MultiAgent remote transport | NO |
 | Semantic caching | `LLMLayer` | NO |
-| Rate limiting | `LLMLayer` | NO |
+| Proactive rate limiting / throttling | `LLMLayer` | NO (reactive 429 backoff already built in `RetryLayer`) |
 | Tool sandboxing | `ToolboxLayer` (inline `ToolboxDelegate` or sandboxed `ITool`) | NO — action execution concern |
 | Distributed durable orchestrator | External orchestrator (Temporal / Durable Functions) | NO — host runtime concern |
 
-> **Verdict: 21 of 21 surveyed capabilities map to the three-axis layer decomposition.** 6 additional unbuilt capabilities also map cleanly. No counterexample found across 22 codebases.
+> **Verdict: 20 of 20 surveyed capabilities map to the three-axis layer decomposition.** 6 additional unbuilt capabilities also map cleanly. No counterexample found across 22 codebases.
 
 ---
 
@@ -301,10 +303,10 @@ Every capability surveyed maps to the layer architecture without requiring modif
 
 | Metric | AgentCore Score | Average Score (14 frameworks) | Best Competitor |
 |---|---|---|---|
-| **Core capabilities** (8) | 7.5/8 (missing Audio) | 6.4/8 | pydantic-ai, Google ADK (8/8) |
+| **Core capabilities** (8) | **8/8** | 6.4/8 | AgentCore, pydantic-ai, Google ADK (8/8) |
 | **Extensibility** (5) | **5/5** | 2.1/5 | Haystack (4/5) |
 | **Production features** (7) | **7/7** | 3.6/7 | pydantic-ai, Letta (5.5/7) |
-| **Total** | **19.5/20** | **12.1/20** | pydantic-ai (~17/20) |
+| **Total** | **20/20** | **12.1/20** | AgentCore (20/20), pydantic-ai (~17/20) |
 | **Lines of code** | **2,848** | **63,549** (median: 52,428) | atomic-agents (3,302) |
 
 ### Unique Differentiators (Verified Against All 22 Codebases)

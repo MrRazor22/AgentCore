@@ -91,3 +91,14 @@
 - Identify the primitive, fundamental concept and model it using real-world object-oriented metaphors.
 - Readability is the primary goal; minimal code is the natural side-effect of accurate, real-world modeling.
 - In ambiguous situations, anchor and clarify the design with concrete real-world metaphors and examples.
+
+## 19. MINIMAL CODE IS THE ONLY CORRECT CODE — PRIMITIVES FIRST, ZERO TOP-DOWN BLOAT
+- Less code is correct code. Correct code WILL BE minimal.
+- Always design strictly bottom-up from the raw primitive. Only add abstractions when strictly proven and needed—never top-down speculative abstractions.
+- Never introduce bloat, speculative wrapper layers, helper classes, custom enums for things frameworks already provide, or procedural UI boilerplate.
+- Keep sample apps and consumer code dead simple, declarative, and minimal.
+
+## 20. PROJECT LIFECYCLE & COMPLETION STATUS
+- Only `AgentCore`, `AgentCore.MCP`, `AgentCore.Layers`, and `AgentCore.LLM.Tornado` are completed, production-ready projects.
+- All other projects (including `AgentCore.MultiAgent`, etc.) are actively under development and must not be considered complete.
+

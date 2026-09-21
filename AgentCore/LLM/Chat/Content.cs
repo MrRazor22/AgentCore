@@ -53,3 +53,17 @@ public record Image(
     string MediaType = "image/png",
     int? Width = null,
     int? Height = null) : IContent, IToolResultContent;
+
+public record Audio(
+    ReadOnlyMemory<byte>? Data = null,
+    Uri? Uri = null,
+    string MediaType = "audio/wav",
+    TimeSpan? Duration = null) : IContent, IToolResultContent;
+
+public record Video(
+    ReadOnlyMemory<byte>? Data = null,
+    Uri? Uri = null,
+    string MediaType = "video/mp4",
+    int? Width = null,
+    int? Height = null,
+    TimeSpan? Duration = null) : IContent, IToolResultContent;
