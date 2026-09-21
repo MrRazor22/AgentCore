@@ -1,0 +1,545 @@
+{
+  "definitions": [
+    {
+      "page": 9,
+      "kind": "definition",
+      "num": "1",
+      "text": "Definition 1. Define the twisted composition of pairs of context transformations by (\ud835\udc531, \ud835\udc541) \u2218 (\ud835\udc532, \ud835\udc542) \u2254 (\ud835\udc531 \u2218 \ud835\udc532, \ud835\udc542 \u2218 \ud835\udc541) (4) As for \u2218 itself, the left operand acts after the right, and the inverses accumulate in the opposite  order. It makes (\u0393 \u2192 \u0393) \u00d7 (\u0393 \u2192 \u0393) a monoid with unit (id\u0393, id\u0393), the product of the monoid of  transformations with its opposite, which we call the twisted composition monoid \ud835\udd17\u0393 over \u0393. 9"
+    },
+    {
+      "page": 10,
+      "kind": "definition",
+      "num": "2",
+      "text": "Definition 2. Given a context \u0393, define its effect context as: \ud835\udf15\u0393 \u2254 \u0393 \u00d7 (\u0393 \u2192 \u0393) (5) It can be understood as a pair (\ud835\udefe, \ud835\udf11), where: \u2022 \ud835\udefe : \u0393 is the current context state; \u2022 \ud835\udf11 : \u0393 \u2192 \u0393 is the accumulator, the composite of the inverses of the effects performed so far,  and the function that recovers the context to its initial state. In particular, the initial effect context can be represented as (\ud835\udefe0, id\u0393). We also write \ud835\udf152\u0393 for \ud835\udf15(\ud835\udf15\u0393) = \ud835\udf15\u0393 \u00d7 (\ud835\udf15\u0393 \u2192 \ud835\udf15\u0393); iterating \ud835\udf15 this way yields the tower  \u0393, \ud835\udf15\u0393, \ud835\udf152\u0393, \u22ef. Given the presence of the accumulator \ud835\udf11, all effects performed on \ud835\udf15\u0393 can be tracked and the  con"
+    },
+    {
+      "page": 10,
+      "kind": "definition",
+      "num": "3",
+      "text": "Definition 3. Define the transformation track\u0393 on pairs of context functions: track\u0393 : (\u0393 \u2192 \u0393) \u00d7 (\u0393 \u2192 \u0393) \u2192 \ud835\udf15\u0393 \u2192 \ud835\udf15\u0393 track\u0393 = (\ud835\udc53, \ud835\udc54) \u21a6 (\ud835\udefe, \ud835\udf11) \u21a6 (\ud835\udc53(\ud835\udefe), \ud835\udf11 \u2218 \ud835\udc54) (6) This transformation converts a forward function \ud835\udc53 together with a candidate inverse \ud835\udc54 into  a transformation of the effect context \ud835\udf15\u0393. Applying track\u0393(\ud835\udc53, \ud835\udc54) to a state (\ud835\udefe, \ud835\udf11) transforms \ud835\udefe  by \ud835\udc53 and composes the inverse \ud835\udc54 onto \ud835\udf11, thereby tracking the effect of \ud835\udc53 in the context. Theorem 4. For every (\ud835\udc53, \ud835\udc54) \u2208 (\u0393 \u2192 \u0393) \u00d7 (\u0393 \u2192 \u0393), write \ud835\udc53\u2032 \u2254 track\u0393(\ud835\udc53, \ud835\udc54); then the following  diagram commutes, that is, pr1 \u2218 \ud835\udc53\u2032 = \ud835\udc53 \u2218 pr1 (7) \ud835\udc53 \ud835\udc53\u2032 pr1 pr1track "
+    },
+    {
+      "page": 11,
+      "kind": "definition",
+      "num": "6",
+      "text": "Definition 6. Define the transformation recover\u0393 on \ud835\udf15\u0393: recover\u0393 : \ud835\udf15\u0393 \u2192 \ud835\udf15\u0393 recover\u0393 = (\ud835\udefe, \ud835\udf11) \u21a6 (\ud835\udf11(\ud835\udefe), id\u0393) (9) This transformation applies the recovery function \ud835\udf11 to the current state \ud835\udefe and resets \ud835\udf11 to the  identity. The following diagram illustrates how recover recovers the context to its initial state  after a sequence of effects \ud835\udc53\u2032 \ud835\udc56 \u2254 track\u0393(\ud835\udc53\ud835\udc56, \ud835\udc54\ud835\udc56), \ud835\udc56 = 1, \u22ef, \ud835\udc5b, has been applied to \ud835\udf15\u0393: \ud835\udc531 \ud835\udc53\ud835\udc5b \ud835\udc53\u2032 1 \ud835\udc53\u2032 \ud835\udc5b track track track recover \u0393 \u0393 \u0393 \u0393 \ud835\udf15\u0393 \ud835\udf15\u0393 \ud835\udf15\u0393 \ud835\udf15\u0393 The diagram shows that the tracked effects followed by recover carry the initial effect context  back to itself. Each tracking step in fact pres"
+    },
+    {
+      "page": 12,
+      "kind": "definition",
+      "num": "8",
+      "text": "Definition 8. Define the effect function \ud835\udd08\u0393 and witnessed effect function \ud835\udd08\u2217 \u0393 as: \ud835\udd08\u0393 \u2254 \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393) \ud835\udd08\u2217 \u0393 \u2254 (\ud835\udc52 : \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393)) \u00d7 ((\ud835\udefe : \u0393) \u2192 (\ud835\udeff : \u0393) \u2192 (\ud835\udc54 : \u0393 \u2192 \u0393) \u2192 ((\ud835\udeff, \ud835\udc54) = \ud835\udc52(\ud835\udefe) \u2192 \ud835\udc54(\ud835\udeff) = \ud835\udefe)) (12) where \ud835\udc52(\ud835\udefe) yields a pair (\ud835\udeff, \ud835\udc54) representing: \u2022 \ud835\udeff : \u0393 is the new context; \u2022 \ud835\udc54 : \u0393 \u2192 \u0393 is the inverse function of the current effect. The witness holds each returned inverse to one equation, \ud835\udc54(\ud835\udeff) = \ud835\udefe: the inverse is required to  revert the effect only at the state where it was applied. An element of \ud835\udd08\u2217 \u0393 may therefore choose  a different inverse at every state. A single \ud835\udc54 with \ud835\udc54 \u2218 \ud835\udc53 = id\u0393 meets "
+    },
+    {
+      "page": 13,
+      "kind": "definition",
+      "num": "9",
+      "text": "Definition 9. Given functions \ud835\udc53, \ud835\udc54 \u2208 \ud835\udd08\u0393, define their effect composition \ud835\udc53 \u22c4 \ud835\udc54 as: \ud835\udc53 \u22c4 \ud835\udc54 : \u0393 \u2192 \ud835\udf15\u0393 \ud835\udc53 \u22c4 \ud835\udc54 = \ud835\udefe \u21a6 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udeff, \ud835\udc60) = \ud835\udc54(\ud835\udefe) \ud835\udc22\ud835\udc27 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udf00, \ud835\udc61) = \ud835\udc53(\ud835\udeff) \ud835\udc22\ud835\udc27 (\ud835\udf00, \ud835\udc60 \u2218 \ud835\udc61) (13) Theorem 10. Effect composition carries the monoid structure of \ud835\udd17\u0393 over to \ud835\udd08\u0393. That is, 1. (\ud835\udd08\u0393, \u22c4) is a monoid with unit \ud835\udf02\u0393 \u2254 \ud835\udefe \u21a6 (\ud835\udefe, id\u0393); 2. the assignment (\ud835\udc53, \ud835\udc54) \u21a6 \ud835\udefe \u21a6 (\ud835\udc53(\ud835\udefe), \ud835\udc54) is a monoid homomorphism from \ud835\udd17\u0393 into \ud835\udd08\u0393. Proof. 1. Associativity and the unit laws follow componentwise from those of \u2218. 2. Write \ud835\udc52\ud835\udc56 = \ud835\udefe \u21a6 (\ud835\udc53\ud835\udc56(\ud835\udefe), \ud835\udc54\ud835\udc56); then (\ud835\udc521 \u22c4 \ud835\udc522)(\ud835\udefe) = (\ud835\udc531(\ud835\udc532(\ud835\udefe)), \ud835\udc542 \u2218 \ud835\udc541), which is the image of  (\ud835\udc531, \ud835\udc541) \u2218 (\ud835\udc532, \ud835\udc542), and (id\u0393, id\u0393"
+    },
+    {
+      "page": 13,
+      "kind": "definition",
+      "num": "12",
+      "text": "Definition 12. Define the effect function transformation effect\u0393 as: effect\u0393 : \ud835\udd08\u0393 \u2192 \ud835\udf15\u0393 \u2192 \ud835\udf152\u0393 effect\u0393 = \ud835\udc52 \u21a6 (\ud835\udefe, \ud835\udf11) \u21a6 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udeff, \ud835\udc54) = \ud835\udc52(\ud835\udefe) \ud835\udc22\ud835\udc27 ((\ud835\udeff, \ud835\udf11 \u2218 \ud835\udc54), track\u0393(\ud835\udc54, pr1 \u2218 \ud835\udc52)) (14) Since effect\u0393(\ud835\udc52) is itself \ud835\udd08\ud835\udf15\u0393, what it returns is an inverse in the sense of Definition\u00a08 read  one level up. That inverse is itself a track of the pair obtained by swapping the two directions  of the effect. The ordinary tracking rule applies once more: undoing the effect is an effect in its  13"
+    },
+    {
+      "page": 15,
+      "kind": "definition",
+      "num": "17",
+      "text": "Definition 17. Define the effect iterator \u2111\u0393 and witnessed effect iterator \u2111\u2217 \u0393 as the following  recursive types: \u2111\u0393 \u2254 \ud835\udf07\u2111. \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393) \u00d7 \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\u2111) \u2111\u2217 \u0393 \u2254 \ud835\udf07\u2111. (\ud835\udc52 : \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393) \u00d7 \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\u2111)) \u00d7 ((\ud835\udefe : \u0393) \u2192 (\ud835\udeff : \u0393) \u2192 (\ud835\udc54 : \u0393 \u2192 \u0393) \u2192 (\ud835\udc5c : \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\u2111)) \u2192 ((\ud835\udeff, \ud835\udc54, \ud835\udc5c) = \ud835\udc52(\ud835\udefe) \u2192 \ud835\udc54(\ud835\udeff) = \ud835\udefe)) (17) where \ud835\udc52(\ud835\udefe) yields a triple (\ud835\udeff, \ud835\udc54, \ud835\udc5c) representing: \u2022 \ud835\udeff is the new context; \u2022 \ud835\udc54 is the inverse function of the current effect; \u2022 \ud835\udc5c indicates the continuation: \u2023 \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0 signals iteration termination; \u2023 \ud835\udda9\ud835\uddce\ud835\uddcc\ud835\uddcd(\ud835\udc56) provides the next iteration. 15"
+    },
+    {
+      "page": 16,
+      "kind": "definition",
+      "num": "18",
+      "text": "Definition 18. Define the effect iterator transformation effectiter \u0393  as: effectiter \u0393 : \u2111\u0393 \u2192 \ud835\udf15\u0393 \u2192 \ud835\udf152\u0393 effectiter \u0393 = \ud835\udc56 \u21a6 (\ud835\udefe, \ud835\udf11) \u21a6 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udeff, \ud835\udc54, \ud835\udc5c) = \ud835\udc56(\ud835\udefe) \ud835\udc22\ud835\udc27 \ud835\udc25\ud835\udc1e\ud835\udc2d \ud835\udc61 = track\u0393(\ud835\udc54, pr1 \u2218 \ud835\udc56) \ud835\udc22\ud835\udc27 \ud835\udc26\ud835\udc1a\ud835\udc2d\ud835\udc1c\ud835\udc21 \ud835\udc5c | \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0 \u21d2 ((\ud835\udeff, \ud835\udf11 \u2218 \ud835\udc54), \ud835\udc61) | \ud835\udda9\ud835\uddce\ud835\uddcc\ud835\uddcd(\ud835\udc56\u2032) \u21d2 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udc60, \ud835\udc5f) = effectiter \u0393 (\ud835\udc56\u2032)(\ud835\udeff, \ud835\udf11 \u2218 \ud835\udc54) \ud835\udc22\ud835\udc27 (\ud835\udc60, \ud835\udc61 \u2218 \ud835\udc5f) (18) At each iteration, the inverse \ud835\udc54 is composed onto \ud835\udf11 in application order, so the accumulator  \ud835\udf11 \u2218 \ud835\udc541 \u2218 \u22ef \u2218 \ud835\udc54\ud835\udc58 reverts the effects in LIFO order when applied ( Theorem\u00a016). Because effectiter \u0393   lands in the same \ud835\udf15\u0393 \u2192 \ud835\udf152\u0393 as effect\u0393 does, an iterator is an effect in its own right and can  be used whereve"
+    },
+    {
+      "page": 17,
+      "kind": "definition",
+      "num": "19",
+      "text": "Definition 19. Given a type family \ud835\udcb1\ufe00 : \ud835\udc3e \u2192 Type, define the coeffect context as the dependent  partial function type: \u03a3 \u2254 (\ud835\udc58 : \ud835\udc3e) \u21c0 \ud835\udcb1\ufe00\ud835\udc58 (20) where \ud835\udf0e : \u03a3 is a finite partial function assigning to each \ud835\udc58 \u2208 dom(\ud835\udf0e) \u2286 \ud835\udc3e a value of type \ud835\udcb1\ufe00\ud835\udc58.  We write: \u2022 \ud835\udf0e(\ud835\udc58) for application (defined when \ud835\udc58 \u2208 dom(\ud835\udf0e)); \u2022 \ud835\udf0e[\ud835\udc58 \u21a6 \ud835\udc63] for the table binding \ud835\udc63 at \ud835\udc58 and agreeing with \ud835\udf0e elsewhere; \u2022 \ud835\udf0e \u2216 \ud835\udc58 for restriction (defined when \ud835\udc58 \u2208 dom(\ud835\udf0e)); \u2022 \ud835\udc58 \u2208 dom(\ud835\udf0e) for membership. The use of a type family \ud835\udcb1\ufe00 ensures that each dependency key \ud835\udc58 is associated with a specific  value type \ud835\udcb1\ufe00\ud835\udc58, providing static type safety for dependen"
+    },
+    {
+      "page": 17,
+      "kind": "definition",
+      "num": "20",
+      "text": "Definition 20. The get and set operations on \u03a3 are defined as: get : (\ud835\udc58 : \ud835\udc3e) \u2192 \u03a3 \u21c0 \ud835\udcb1\ufe00\ud835\udc58 get = \ud835\udc58 \u21a6 \ud835\udf0e \u21a6 \ud835\udf0e(\ud835\udc58) set : (\ud835\udc58 : \ud835\udc3e) \u00d7 \ud835\udcb1\ufe00\ud835\udc58 \u2192 \u03a3 \u21c0 \u03a3 \u00d7 (\u03a3 \u21c0 \u03a3) set = (\ud835\udc58, \ud835\udc63) \u21a6 \ud835\udf0e \u21a6 (\ud835\udf0e[\ud835\udc58 \u21a6 \ud835\udc63], \ud835\udf06\ud835\udf0e\u2032.\ud835\udf0e\u2032 \u2216 \ud835\udc58) (21) where get(\ud835\udc58) requires \ud835\udc58 \u2208 dom(\ud835\udf0e) and set(\ud835\udc58, \ud835\udc63) requires \ud835\udc58 \u2209 dom(\ud835\udf0e) as preconditions. Notably, set(\ud835\udc58, \ud835\udc63) has type \ud835\udd08\u2217 \u03a3, i.e., an effect function on the coeffect context. We can there - fore directly apply the effect machinery from Section\u00a03.1: effect\u03a3 provides automatic tracking  and recovery of dependency registrations. This is the synergy between reactive coeffects and  revertible effects: coeffect operat"
+    },
+    {
+      "page": 18,
+      "kind": "definition",
+      "num": "21",
+      "text": "Definition 21. A coeffect specification is: \ud835\udd07\u03a3 \u2254 \ud835\uddb2\ud835\uddbe\ud835\uddcd(\ud835\udc3e) (23) representing the set of dependencies a component declares from the environment. What makes this specification reactive is how it classifies state transitions. Any effect that  transforms \ud835\udf0e to \ud835\udf0e\u2032 can be classified by a specification \ud835\udc51 \u2208 \ud835\udd07\u03a3 according to whether \ud835\udc51\u2019s satis- faction status is altered: Definition 22. Given a coeffect specification \ud835\udc51 \u2286 \ud835\udc3e and states \ud835\udf0e, \ud835\udf0e\u2032 \u2208 \u03a3, define: notify\ud835\udc51(\ud835\udf0e, \ud835\udf0e\u2032) \u2254 {\u0093\u0094 \u0093\u0095activating if \ud835\udf0e \u22ad \ud835\udc51 \u2227 \ud835\udf0e\u2032 \u22a7 \ud835\udc51 deactivating if \ud835\udf0e \u22a7 \ud835\udc51 \u2227 \ud835\udf0e\u2032 \u22ad \ud835\udc51 neutral otherwise (24) An activating transition triggers the execution of th"
+    },
+    {
+      "page": 18,
+      "kind": "definition",
+      "num": "22",
+      "text": "Definition 22. Given a coeffect specification \ud835\udc51 \u2286 \ud835\udc3e and states \ud835\udf0e, \ud835\udf0e\u2032 \u2208 \u03a3, define: notify\ud835\udc51(\ud835\udf0e, \ud835\udf0e\u2032) \u2254 {\u0093\u0094 \u0093\u0095activating if \ud835\udf0e \u22ad \ud835\udc51 \u2227 \ud835\udf0e\u2032 \u22a7 \ud835\udc51 deactivating if \ud835\udf0e \u22a7 \ud835\udc51 \u2227 \ud835\udf0e\u2032 \u22ad \ud835\udc51 neutral otherwise (24) An activating transition triggers the execution of the component\u2019s effects, tracked as Sec- tion\u00a03.1 prescribes, and a deactivating transition triggers recovery by applying the accumulator.  The activation and deactivation so triggered receive their operational semantics in Section\u00a04. What set and notify deliver together is local spatial composability, local in the same sense as  before, the guarantee being r"
+    },
+    {
+      "page": 19,
+      "kind": "definition",
+      "num": "23",
+      "text": "Definition 23. An effect function on a context admits two realizations: \u2022 In-place realization mutates the context and returns a nontrivial inverse; the successor  aliases the input, and recovery runs the inverse to undo the mutation. \u2022 Derived realization leaves the input intact and returns a fresh context deriving from it,  with the identity as its inverse; recovery discards the derived context. A context derived  from another is what the recursive structure of Definition\u00a028 carries. In a purely functional setting the two coincide, and an imperative host may choose either  per operation; Sec"
+    },
+    {
+      "page": 19,
+      "kind": "definition",
+      "num": "24",
+      "text": "Definition 24. Define the coeffect context with isolation as: \u03a3iso \u2254 (\ud835\udc3e \u21c0 \ud835\udc45) \u00d7 ((\ud835\udc5f : \ud835\udc45) \u21c0 \ud835\udcb1\ufe00\ud835\udc5f) (25) It can be represented as a pair (\ud835\udf0c, \ud835\udf0e), where: \u2022 \ud835\udf0c : \ud835\udc3e \u21c0 \ud835\udc45 is the isolation realm table, assigning a realm identifier to each isolated key; a  key outside dom(\ud835\udf0c) resolves to its own realm, so we write \ud835\udf0c(\ud835\udc58) = \ud835\udc58 there (\ud835\udc45 \u2287 \ud835\udc3e); \u2022 \ud835\udf0e : (\ud835\udc5f : \ud835\udc45) \u21c0 \ud835\udcb1\ufe00\ud835\udc5f is the dependency table, a partial dependent function from realm identi- fiers to typed values. The two-layer mapping structure decouples the logical layer from the storage layer, making  dependency access context-aware. When accessing a key \ud835\udc58, the system"
+    },
+    {
+      "page": 19,
+      "kind": "definition",
+      "num": "25",
+      "text": "Definition 25. The get, set, and isolate operations on \u03a3iso are: 19"
+    },
+    {
+      "page": 20,
+      "kind": "definition",
+      "num": "26",
+      "text": "Definition 26. Define the coeffect context and specification with interception as: \u03a3inter \u2254 ((\ud835\udc58 : \ud835\udc3e) \u2192 \u2133\ufe00\ud835\udc58) \u00d7 ((\ud835\udc58 : \ud835\udc3e) \u21c0 (\u2133\ufe00\ud835\udc58 \u2192 \ud835\udcb1\ufe00\ud835\udc58)) \ud835\udd07inter \u2254 (\ud835\udc58 : \ud835\udc3e) \u21c0 \u2133\ufe00\ud835\udc58 (27) The context \u03a3inter is a pair (\ud835\udf04, \ud835\udf0e): \ud835\udf04 is the context-carried metadata installed on the context itself,  empty (\ud835\udf16\ud835\udc58) by default; and \ud835\udf0e maps each key \ud835\udc58 to a provider function from metadata \u2133\ufe00\ud835\udc58 to value  \ud835\udcb1\ufe00\ud835\udc58. A specification \ud835\udc51 \u2208 \ud835\udd07inter carries the component-declared metadata, assigning each key its  metadata \ud835\udc51(\ud835\udc58), with dom(\ud835\udc51) serving as the dependency set. Each key equips its metadata with  a monoid (\u2133\ufe00\ud835\udc58, \u2295\ud835\udc58, \ud835\udf16\ud835\udc58): the merge \u2295\ud835\udc58 is associa"
+    },
+    {
+      "page": 20,
+      "kind": "definition",
+      "num": "27",
+      "text": "Definition 27. The get, set, and intercept operations on \u03a3inter are: get : (\ud835\udc58 : \ud835\udc3e) \u00d7 \u2133\ufe00\ud835\udc58 \u2192 \u03a3inter \u21c0 \ud835\udcb1\ufe00\ud835\udc58 get = (\ud835\udc58, \ud835\udf07) \u21a6 (\ud835\udf04, \ud835\udf0e) \u21a6 \ud835\udf0e(\ud835\udc58)(\ud835\udf07 \u2295\ud835\udc58 \ud835\udf04(\ud835\udc58)) set : (\ud835\udc58 : \ud835\udc3e) \u00d7 (\u2133\ufe00\ud835\udc58 \u2192 \ud835\udcb1\ufe00\ud835\udc58) \u2192 \u03a3inter \u21c0 \u03a3inter \u00d7 (\u03a3inter \u21c0 \u03a3inter) set = (\ud835\udc58, \ud835\udf13) \u21a6 (\ud835\udf04, \ud835\udf0e) \u21a6 ((\ud835\udf04, \ud835\udf0e[\ud835\udc58 \u21a6 \ud835\udf13]), \ud835\udf06(\ud835\udf04\u2032, \ud835\udf0e\u2032).(\ud835\udf04\u2032, \ud835\udf0e\u2032 \u2216 \ud835\udc58)) intercept : (\ud835\udc58 : \ud835\udc3e) \u00d7 \u2133\ufe00\ud835\udc58 \u2192 \u03a3inter \u2192 \u03a3inter intercept = (\ud835\udc58, \ud835\udf08) \u21a6 (\ud835\udf04, \ud835\udf0e) \u21a6 (\ud835\udf04[\ud835\udc58 \u21a6 \ud835\udf04(\ud835\udc58) \u2295\ud835\udc58 \ud835\udf08], \ud835\udf0e) (28) where get and set carry the preconditions of Definition\u00a020 on the provider table, namely \ud835\udc58 \u2208 dom(\ud835\udf0e) and \ud835\udc58 \u2209 dom(\ud835\udf0e). The context that intercept(\ud835\udc58, \ud835\udf08) derives merges \ud835\udf08 onto the metadata  inherited at \ud835\udc58 and inherits the provider"
+    },
+    {
+      "page": 21,
+      "kind": "definition",
+      "num": "28",
+      "text": "Definition 28. The context type \u0393\u221e is defined as: \u0393\u221e \u2254 \ud835\udf07\u0393. \u0393 \u00d7 (\u0393 \u2192 \u0393) \u00d7 \u03a3 (29) where the three projections are: \u2022 \u0393: the current context state (recursive); \u2022 \u0393 \u2192 \u0393: the accumulator, which reverts this level\u2019s effects; \u2022 \u03a3: the coeffect context carrying dependency information. Under this definition, effect maps \ud835\udd08\u0393\u221e  to itself, unifying the \ud835\udf15-tower into a single self- similar type. The coeffect context \u03a3 is structurally integrated: dependency operations (set, get)  act on \u03a3, and the accumulator holds their inverses. Since the type family \ud835\udcb1\ufe00 underlying \u03a3 is  unconstrained, any state the system n"
+    },
+    {
+      "page": 21,
+      "kind": "definition",
+      "num": "29",
+      "text": "Definition 29. A coeffect at a key \ud835\udc58 is a pair (\ud835\udcb1\ufe00\ud835\udc58, \ud835\udc9c\ufe00\ud835\udc58), where \ud835\udcb1\ufe00\ud835\udc58 is the value type of Definition\u00a019  and \ud835\udc9c\ufe00\ud835\udc58 is a set of coeffect operations, the operations the value bound at \ud835\udc58 provides to a component  holding it. An operation \ud835\udc4e \u2208 \ud835\udc9c\ufe00\ud835\udc58 carries an argument type \ud835\udc4b\ud835\udc4e and an outcome type \ud835\udc35\ud835\udc4e, and acts  on the value alone: \ud835\udc4e : \ud835\udc4b\ud835\udc4e \u2192 \ud835\udcb1\ufe00\ud835\udc58 \u21c0 \ud835\udcb1\ufe00\ud835\udc58 \u00d7 (\ud835\udcb1\ufe00\ud835\udc58 \u21c0 \ud835\udcb1\ufe00\ud835\udc58) \u00d7 \ud835\udc35\ud835\udc4e (30) 21"
+    },
+    {
+      "page": 22,
+      "kind": "definition",
+      "num": "30",
+      "text": "Definition 30. For key sets \ud835\udc43 \u2286 \ud835\udc46 \u2286 \ud835\udc3e, the context-mediated iterators \u2111\ud835\udc9c\ufe00 \u03a3(\ud835\udc46, \ud835\udc43) form the least  set of iterators on \u03a3 that contains the unit \ud835\udf0e \u21a6 (\ud835\udf0e, id\u03a3, \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0) and, whenever each named  continuation is \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0 or \ud835\udda9\ud835\uddce\ud835\uddcc\ud835\uddcd of a member, contains \ud835\udf0e \u21a6 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udeff, \ud835\udc60, \ud835\udc4f) = \ud835\udc4e\u03a3(\ud835\udc65)(\ud835\udf0e) \ud835\udc22\ud835\udc27 (\ud835\udeff, \ud835\udc60, \ud835\udc50\ud835\udc4f) for \ud835\udc58 \u2208 \ud835\udc46, \ud835\udc4e \u2208 \ud835\udc9c\ufe00\ud835\udc58, \ud835\udc65 : \ud835\udc4b\ud835\udc4e, (\ud835\udc50\ud835\udc4f)\ud835\udc4f\u2208\ud835\udc35\ud835\udc4e \ud835\udf0e \u21a6 \ud835\udc25\ud835\udc1e\ud835\udc2d (\ud835\udeff, \ud835\udc60) = set(\ud835\udc58, \ud835\udc63)(\ud835\udf0e) \ud835\udc22\ud835\udc27 (\ud835\udeff, \ud835\udc60, \ud835\udc50) for \ud835\udc58 \u2208 \ud835\udc43, \ud835\udc63 : \ud835\udcb1\ufe00\ud835\udc58, \ud835\udc50 (32) An operation stage performs one coeffect operation and chooses what follows it by the outcome,  so an argument may depend on the outcomes already obtained. A provision stage installs one  binding, at a key"
+    },
+    {
+      "page": 23,
+      "kind": "definition",
+      "num": "31",
+      "text": "Definition 31. Let \ud835\udc49  carry a set \ud835\udc9c\ufe00 of operations in the sense of Definition\u00a029. A test over \ud835\udc9c\ufe00  is a finite word whose letters are forward maps and yielded inverses of the effect functions  \ud835\udc4e(\ud835\udc65), over every \ud835\udc4e \u2208 \ud835\udc9c\ufe00 and every argument \ud835\udc65 : \ud835\udc4b\ud835\udc4e, each letter applied to the value the letters  before it left; its outcomes are those the letters that are forward maps yield along the way, and  it is undefined where a precondition fails. Values \ud835\udc63, \ud835\udc63\u2032 : \ud835\udc49  are indistinguishable, written \ud835\udc63 \u2248\ud835\udc9c\ufe00 \ud835\udc63\u2032,  when every test over \ud835\udc9c\ufe00 is defined at both or at neither and yields the same outcomes at both.  The equivale"
+    },
+    {
+      "page": 24,
+      "kind": "definition",
+      "num": "33",
+      "text": "Definition 33. Two coeffect contexts are related at a set \ud835\udc46 \u2286 \ud835\udc3e of keys when they bind the same  keys of \ud835\udc46 to related values, and two states of a context when their coeffect projections are: \ud835\udf0e \u2243\ud835\udc46 \ud835\udf0e\u2032 \u2254 dom(\ud835\udf0e) \u2229 \ud835\udc46 = dom(\ud835\udf0e\u2032) \u2229 \ud835\udc46 \u2227 \u2200\ud835\udc58 \u2208 dom(\ud835\udf0e) \u2229 \ud835\udc46. \ud835\udf0e(\ud835\udc58) \u2243\ud835\udc58 \ud835\udf0e\u2032(\ud835\udc58) \ud835\udefe \u2243\ud835\udc46 \ud835\udefe\u2032 \u2254 \ud835\udf0e\ud835\udefe \u2243\ud835\udc46 \ud835\udf0e\ud835\udefe\u2032 (34) writing \ud835\udf0e\ud835\udefe for the coeffect projection of \ud835\udefe (Definition\u00a028). Each \u2243\ud835\udc58 is an equivalence on \ud835\udcb1\ufe00\ud835\udc58  by Lemma\u00a032, so \u2243\ud835\udc46 is an equivalence on coeffect contexts and on states, each of the three  properties holding key by key. The subscript is dropped where \ud835\udc46 = \ud835\udc3e, so that \u2243 is the finest  of these relations and \u2243\ud835\udc46 forgets t"
+    },
+    {
+      "page": 24,
+      "kind": "definition",
+      "num": "34",
+      "text": "Definition 34. The relation of Definition\u00a033 on states and each \u2243\ud835\udc58 on the values of its key are  the base cases, and on any other base type \u2243\ud835\udc46 is equality. The relation extends along the type  formers: for \ud835\udc53, \ud835\udc54 : \ud835\udc4b \u2192 \ud835\udc4c , \ud835\udc53 \u2243\ud835\udc46 \ud835\udc54 \u2254 (\ud835\udefe : \ud835\udc4b) \u2192 (\ud835\udefe\u2032 : \ud835\udc4b) \u2192 (\ud835\udefe \u2243\ud835\udc46 \ud835\udefe\u2032 \u2192 \ud835\udc53(\ud835\udefe) \u2243\ud835\udc46 \ud835\udc54(\ud835\udefe\u2032)) for \ud835\udc4e, \ud835\udc4f : \ud835\udc4b1 \u00d7 \u22ef \u00d7 \ud835\udc4b\ud835\udc5b, \ud835\udc4e \u2243\ud835\udc46 \ud835\udc4f \u2254 (\ud835\udc4e1 \u2243\ud835\udc46 \ud835\udc4f1) \u2227 \u22ef \u2227 (\ud835\udc4e\ud835\udc5b \u2243\ud835\udc46 \ud835\udc4f\ud835\udc5b) for \ud835\udc65, \ud835\udc66 : \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\ud835\udc4b), \ud835\udc65 \u2243\ud835\udc46 \ud835\udc66 \u2254 {\u0093\u0094 \u0093\u0095\ud835\udc67 \u2243\ud835\udc46 \ud835\udc67\u2032 if \ud835\udc65 = \ud835\udda9\ud835\uddce\ud835\uddcc\ud835\uddcd(\ud835\udc67) and \ud835\udc66 = \ud835\udda9\ud835\uddce\ud835\uddcc\ud835\uddcd(\ud835\udc67\u2032) \u22a4 if \ud835\udc65 = \ud835\udc66 = \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0 \u22a5 otherwise (35) On a recursive type the clauses are read coinductively, \u2243\ud835\udc46 being the greatest relation satisfying  its unfolding, as on \u2111\u0393. A map or an iterator res"
+    },
+    {
+      "page": 25,
+      "kind": "definition",
+      "num": "36",
+      "text": "Definition 36. Define the effect function witnessed up to \u2243\ud835\udc46 as: \ud835\udd08\ud835\udc46 \u0393 \u2254 (\ud835\udc52 : \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393)) \u00d7 (\ud835\udc52 \u2243\ud835\udc46 \ud835\udc52) \u00d7 ((\ud835\udefe : \u0393) \u2192 (\ud835\udeff : \u0393) \u2192 (\ud835\udc54 : \u0393 \u2192 \u0393) \u2192 ((\ud835\udeff, \ud835\udc54) = \ud835\udc52(\ud835\udefe) \u2192 \ud835\udc54(\ud835\udeff) \u2243\ud835\udc46 \ud835\udefe)) (36) The clause \ud835\udc52 \u2243\ud835\udc46 \ud835\udc52 carries every constituent\u2019s respect, its instance at \ud835\udefe \u2243\ud835\udc46 \ud835\udefe relating each yielded  inverse to itself. We write \ud835\udd08\u2217 \u0393 for \ud835\udd08\ud835\udc3e \u0393 , and taking \u2243 to be equality on \u0393 recovers Definition\u00a08,  every map being equal to itself. The key set is where a component\u2019s declarations enter: what  Section\u00a04 holds an effect function to is \ud835\udd08\ud835\udc46 \u0393 at the keys that component names (Definition\u00a048). The iterator of Section\u00a03.1.3 is"
+    },
+    {
+      "page": 25,
+      "kind": "definition",
+      "num": "37",
+      "text": "Definition 37. Define the effect iterator witnessed up to \u2243\ud835\udc46 as: \u2111\ud835\udc46 \u0393 \u2254 \ud835\udf07\u2111. (\ud835\udc52 : \u0393 \u2192 \u0393 \u00d7 (\u0393 \u2192 \u0393) \u00d7 \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\u2111)) \u00d7 (\ud835\udc52 \u2243\ud835\udc46 \ud835\udc52) \u00d7 ((\ud835\udefe : \u0393) \u2192 (\ud835\udeff : \u0393) \u2192 (\ud835\udc54 : \u0393 \u2192 \u0393) \u2192 (\ud835\udc5c : \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe(\u2111)) \u2192 ((\ud835\udeff, \ud835\udc54, \ud835\udc5c) = \ud835\udc52(\ud835\udefe) \u2192 \ud835\udc54(\ud835\udeff) \u2243\ud835\udc46 \ud835\udefe)) (37) The embedding of Section\u00a03.1.3 carries \ud835\udd08\ud835\udc46 \u0393 into \u2111\ud835\udc46 \u0393, and taking \u2243 to be equality on \u0393 and \ud835\udc46 = \ud835\udc3e  recovers the witnessed \u2111\u2217 \u0393 of Definition\u00a017. Lemma 38. With \ud835\udd08\u2217 \u0393 read as in Definition\u00a036, every equality of states asserted in Section\u00a03.1  holds with = replaced by \u2243, and the accumulator of every state reachable from (\ud835\udefe0, id\u0393) respects  \u2243. The same holds of any equivalence substituted f"
+    },
+    {
+      "page": 26,
+      "kind": "definition",
+      "num": "40",
+      "text": "Definition 40. For an iterator \ud835\udc56 \u2208 \u2111\u0393, let reach(\ud835\udc56) be the least set of iterators containing \ud835\udc56  and closed under continuation. The transformation monoid \ud835\udd10(\ud835\udc56) is the submonoid of \u0393 \u2192 \u0393  generated by the forward maps and the yielded inverses of every iterator in reach(\ud835\udc56), and the  generators of \ud835\udd10(\ud835\udc56) are the elements of that generating set: 26"
+    },
+    {
+      "page": 27,
+      "kind": "definition",
+      "num": "42",
+      "text": "Definition 42. Iterators \ud835\udc56, \ud835\udc57 \u2208 \u2111\u0393 are independent when 1. every transformation of one commutes with every transformation of the other, \u2200\ud835\udc53 \u2208 \ud835\udd10(\ud835\udc56), \ud835\udc54 \u2208 \ud835\udd10(\ud835\udc57). \ud835\udc53 \u2218 \ud835\udc54 = \ud835\udc54 \u2218 \ud835\udc53 (39) 2. neither one\u2019s transformations disturb what the other yields, inverse and continuation  alike, \u2200\ud835\udc56\u2032 \u2208 reach(\ud835\udc56), \ud835\udc54 \u2208 \ud835\udd10(\ud835\udc57), \ud835\udefe \u2208 \u0393. pr2,3(\ud835\udc56\u2032(\ud835\udc54(\ud835\udefe))) = pr2,3(\ud835\udc56\u2032(\ud835\udefe)) (40) and the same with \ud835\udc56 and \ud835\udc57 exchanged. A family (\ud835\udc56\ud835\udc59)\ud835\udc59\u2208\ud835\udc3f is pairwise independent when \ud835\udc56\ud835\udc59 and \ud835\udc56\ud835\udc59\u2032 are independent for every \ud835\udc59 \u2260 \ud835\udc59\u2032. A family  may repeat an iterator, and holding one independent of itself is holding \ud835\udd10(\ud835\udc56) commutative. Read at effect functions thro"
+    },
+    {
+      "page": 28,
+      "kind": "definition",
+      "num": "44",
+      "text": "Definition 44. Operations \ud835\udc4e and \ud835\udc4e\u2032 are independent when their lifts are independent as effect  functions (Definition\u00a042) at every pair of arguments, and neither one\u2019s transformations disturb  the outcome the other yields: \u2200\ud835\udc65 : \ud835\udc4b\ud835\udc4e, \ud835\udc54 \u2208 \ud835\udd10(\ud835\udc4e\u2032\u03a3), \ud835\udf0e \u2208 \u03a3. pr3(\ud835\udc4e\u03a3(\ud835\udc65)(\ud835\udc54(\ud835\udf0e))) = pr3(\ud835\udc4e\u03a3(\ud835\udc65)(\ud835\udf0e)) (41) and the same with \ud835\udc4e and \ud835\udc4e\u2032 exchanged, writing \ud835\udd10(\ud835\udc4e\u03a3) for the submonoid generated by the  forward maps and yielded inverses of the lifts \ud835\udc4e\u03a3(\ud835\udc65) over every argument, as Definition\u00a040  generates \ud835\udd10. A key \ud835\udc58 is commutative when any two operations of \ud835\udc9c\ufe00\ud835\udc58 are independent, an  operation being held independent of itself a"
+    },
+    {
+      "page": 29,
+      "kind": "definition",
+      "num": "46",
+      "text": "Definition 46. A coeffect at \ud835\udc58 (Definition\u00a029) is witnessed when it carries, as a third constituent  beside \ud835\udcb1\ufe00\ud835\udc58 and \ud835\udc9c\ufe00\ud835\udc58, a proof that \ud835\udc58 is commutative (Definition\u00a044). The two witnesses are parallel: each certifies the condition its consumers would otherwise  have to assume, the returned inverse reverting there and the operations commuting here,  and each is supplied where the definition is written rather than checked where it is used. By  Theorem\u00a045 the proof concerns the operations of \ud835\udc58 alone, so the obligation falls on the compo- nent providing the key and on no component consuming it; the "
+    },
+    {
+      "page": 31,
+      "kind": "definition",
+      "num": "48",
+      "text": "Definition 48. A component over a context \u0393 carrying both effects and coeffects (Definition\u00a028)  is defined as: \u212d\u0393 \u2254 (\ud835\udc51 : \ud835\udd07\u0393) \u00d7 (\ud835\udc5d : \ud835\udd13\u0393) \u00d7 \u2111\ud835\udc51\u222a\ud835\udc5d \u0393 (42) representing a triple (\ud835\udc51, \ud835\udc5d, \ud835\udc52), where: \u2022 \ud835\udc51 : \ud835\udd07\u0393 is the coeffect specification of Definition\u00a021, declaring the dependencies required  from the environment; \u2022 \ud835\udc5d : \ud835\udd13\u0393 \u2254 \ud835\uddb2\ud835\uddbe\ud835\uddcd(\ud835\udc3e) is the coeffect provision, declaring the coeffect keys the component may  provide, and no key outside \ud835\udc5d is one its effect function installs a binding at; \u2022 \ud835\udc52 : \u2111\ud835\udc51\u222a\ud835\udc5d \u0393  is the witnessed effect function, an effect iterator ( Definition\u00a017) witnessed up  to \u2243\ud835\udc51\u222a\ud835\udc5d (Definition\u00a037)"
+    },
+    {
+      "page": 32,
+      "kind": "definition",
+      "num": "49",
+      "text": "Definition 49. Fix a set \ud835\udd11 of fiber names. A fiber instantiating the component (\ud835\udc51, \ud835\udc5d, \ud835\udc52) \u2208 \u212d\u0393 is a  tuple \u27e8\ud835\udc51, \ud835\udc5d, \ud835\udc52, \ud835\udf0b, \ud835\udf0e, \ud835\udf0f, \ud835\udf03\u27e9, where \u2022 \ud835\udc51 : \ud835\udd07\u0393, \ud835\udc5d : \ud835\udd13\u0393, and \ud835\udc52 : \u2111\ud835\udc51\u222a\ud835\udc5d \u0393  are the coeffect specification, provision, and effect function of  Definition\u00a048; \u2022 \ud835\udf0b : \ud835\udd11 \u222a {\ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd} is the parent, the fiber this one was instantiated under, or the root marker  \ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd; \u2022 \ud835\udf0e : \u03a3 is the fiber\u2019s own coeffect table (Definition\u00a019), empty until it activates and written  by its effects as they run; \u2022 \ud835\udf0f : {\u22a5, \u22a4} is the retirement flag, \u22a5 in a fresh fiber and \u22a4 once the orchestrator has retired  the fiber; \u2022 \ud835\udf03 : \u0398\u0393 is the"
+    },
+    {
+      "page": 32,
+      "kind": "definition",
+      "num": "50",
+      "text": "Definition 50. Write \ud835\udd09\u0393 for the set of fibers over \u0393. A state \ud835\udefe \u2208 \u0393 carries a registry \ud835\udc39\ud835\udefe : \ud835\udd11 \u21c0 \ud835\udd09\u0393 (45) a finite partial function whose parent pointers form a tree rooted at \ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd, together with whatever  else in \u0393 no fiber\u2019s \ud835\udf0e names. We write \ud835\udefe(\ud835\udc5b) for \ud835\udc39\ud835\udefe(\ud835\udc5b), and abbreviate a field of \ud835\udefe(\ud835\udc5b) by  subscripting it with \ud835\udc5b where the state is clear, so that \ud835\udc51\ud835\udc5b, \ud835\udc5d\ud835\udc5b, \ud835\udc52\ud835\udc5b, \ud835\udf0b\ud835\udc5b, \ud835\udf0e\ud835\udc5b, \ud835\udf0f\ud835\udc5b, \ud835\udf03\ud835\udc5b are the fields of  Definition\u00a049 and \ud835\udc54\ud835\udc5b, \ud835\udf14\ud835\udc5b the accumulator and committed view that \ud835\udf03\ud835\udc5b carries; \ud835\udefe[\ud835\udf03\ud835\udc5b \u21a6 \ud835\udf03\u2032], \ud835\udefe[\ud835\udc5b \u21a6 \u27e8\u22ef\u27e9], and \ud835\udefe \u2216 \ud835\udc5b are the states differing from \ud835\udefe in one field, one fiber, and the presence of one  fiber resp"
+    },
+    {
+      "page": 33,
+      "kind": "definition",
+      "num": "51",
+      "text": "Definition 51. Write \ud835\udf0e\ud835\udc46 \ud835\udefe \u2254 \u22c3{\ud835\udf0e\ud835\udc5a|\ud835\udc46 | \ud835\udc5a \u2208 dom(\ud835\udc39\ud835\udefe)} (47) for the bindings the registry records at a set \ud835\udc46 \u2286 \ud835\udc3e of keys, over every fiber and not the \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe  ones alone; disjointness of provisions makes it a function, and \ud835\udf0e\ud835\udefe is the restriction of \ud835\udf0e\ud835\udc3e \ud835\udefe  to the  \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe fibers. This is the coeffect projection Definition\u00a033 is read at throughout this section, so  that \ud835\udefe \u2243\ud835\udc46 \ud835\udeff is \ud835\udf0e\ud835\udc46 \ud835\udefe \u2243 \ud835\udf0e\ud835\udc46 \ud835\udeff  and \u2111\ud835\udc46 \u0393 (Definition\u00a037) is the effect functions witnessed at those keys. 33"
+    },
+    {
+      "page": 35,
+      "kind": "definition",
+      "num": "52",
+      "text": "Definition 52. An iteration of \ud835\udc52\ud835\udc5b may instantiate a component (\ud835\udc51, \ud835\udc5d, \ud835\udc52) \u2208 \u212d\u0393. In place of a state  map it takes the O-Insert of that component with \ud835\udf0b = \ud835\udc5b, and it yields as its inverse the O-Retire  of the fiber so instantiated. The rule draws the name, subject to the freshness premise of O- Insert, and hands it to the effect function. The inverse retires rather than removes, and the reason is that an inverse has to apply  wherever it is reached. O-Remove carries premises, so an inverse built from it can fail to: a  parent whose child is still \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe could not run its accumulator, and no rule w"
+    },
+    {
+      "page": 35,
+      "kind": "definition",
+      "num": "53",
+      "text": "Definition 53. The target view of \ud835\udc5b at \ud835\udefe maps each declared key to its provider, so it is a total  map \ud835\udc51\ud835\udc5b \u2192 \ud835\udd11, and is \u22a5 when \ud835\udc5b ought not to be running at all: target\ud835\udc5b(\ud835\udefe) \u2254 {\u22a5 if \ud835\udf0f\ud835\udc5b \u2228 \u00ac(\ud835\udefe \u22a7 \ud835\udc51\ud835\udc5b) (\ud835\udc58 \u2208 \ud835\udc51\ud835\udc5b) \u21a6 provider\ud835\udc58(\ud835\udefe) otherwise (48) A state is quiescent when every fiber has settled at its target view, no transition left in progress: quiet(\ud835\udefe) \u2254 \u2200\ud835\udc5b \u2208 dom(\ud835\udc39\ud835\udefe). {\u0093\u0094 \u0093\u0095target\ud835\udc5b(\ud835\udefe) = \u22a5 if \ud835\udf03\ud835\udc5b = \ud835\udda8\ud835\uddc7\ud835\uddba\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe target\ud835\udc5b(\ud835\udefe) = \ud835\udf14\ud835\udc5b if \ud835\udf03\ud835\udc5b = \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe(\u2212, \ud835\udf14\ud835\udc5b) \u22a5 otherwise (49) 35"
+    },
+    {
+      "page": 36,
+      "kind": "definition",
+      "num": "54",
+      "text": "Definition 54. The fiber \ud835\udc5b is relied upon at \ud835\udefe when some other installed fiber resolves a key to it: relied\ud835\udc5b(\ud835\udefe) \u2254 \u2203\ud835\udc5a \u2208 dom(\ud835\udc39\ud835\udefe), \ud835\udc58 \u2208 \ud835\udc51\ud835\udc5a. \ud835\udc5a \u2260 \ud835\udc5b \u2227 installed\ud835\udc5a(\ud835\udefe) \u2227 \ud835\udf14\ud835\udc5a(\ud835\udc58) = \ud835\udc5b (50) 36"
+    },
+    {
+      "page": 38,
+      "kind": "definition",
+      "num": "55",
+      "text": "Definition 55. A map \ud835\udc53 : \u0393 \u2192 \u0393 is confined to \ud835\udc5b when for every \ud835\udefe \u2208 \u0393 with \ud835\udc5b \u2208 dom(\ud835\udc39\ud835\udefe), writing  \ud835\udeff = \ud835\udc53(\ud835\udefe), 1. (Writes.) dom(\ud835\udc39\ud835\udeff) = dom(\ud835\udc39\ud835\udefe), \ud835\udeff(\ud835\udc5a) and \ud835\udefe(\ud835\udc5a) differ at most in \ud835\udf0e\ud835\udc5a|\ud835\udc51\ud835\udc5b  for every \ud835\udc5a \u2208 dom(\ud835\udc39\ud835\udefe) with \ud835\udc5a \u2260 \ud835\udc5b, and \ud835\udeff(\ud835\udc5b) and \ud835\udefe(\ud835\udc5b) differ in \ud835\udf0e alone; 2. (Reads.) two states agreeing on \ud835\udf0e\ud835\udc5b and on the restrictions \ud835\udf0e\ud835\udc5a|\ud835\udc51\ud835\udc5b  for every \ud835\udc5a \u2208 dom(\ud835\udc39\ud835\udefe)  are carried by \ud835\udc53 to states agreeing on the same two. An effect function \ud835\udc52 is confined to \ud835\udc5b when every iterator \ud835\udc56 \u2208 reach(\ud835\udc52) either instantiates a compo- nent (Definition\u00a052) or has both its state map pr1 \u2218 \ud835\udc56 and every inverse it yields confined to \ud835\udc5b. An instan"
+    },
+    {
+      "page": 38,
+      "kind": "definition",
+      "num": "56",
+      "text": "Definition 56. A stage of Definition\u00a030 lifts along the coeffect projection : it acts on the one table  that holds the binding at its key, over every fiber and not the \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe ones alone as Definition\u00a051  reads the tables, an extension landing in the table of the fiber acting, and it leaves the rest of the  state as it stands. The context-mediated iterators for \ud835\udc5b form the least set \u2111\ud835\udc9c\ufe00 \u0393(\ud835\udc5b) of iterators on \u0393  that contains the unit and, each continuation drawn from \ud835\uddad\ud835\uddc8\ud835\uddcd\ud835\uddc1\ud835\uddc2\ud835\uddc7\ud835\uddc0 and the members, contains  three iteration forms: the lift of an operation stage at a key of \ud835\udc51\ud835\udc5b \u222a \ud835\udc5d\ud835\udc5b, the lift of a provisi"
+    },
+    {
+      "page": 39,
+      "kind": "definition",
+      "num": "58",
+      "text": "Definition 58. Index the steps by \ud835\udc61, so that \ud835\udefe\ud835\udc61 is the state the first \ud835\udc61 of them reach, and write step\ud835\udc61 \u2254 \ud835\udc5f(\ud835\udc5b) (51) for the step taken at \ud835\udefe\ud835\udc61: the rule \ud835\udc5f it applies, one of the nine, and the name \ud835\udc5b \u2208 \ud835\udd11 it applies that  rule at. The sequence starts at a \ud835\udefe0 with dom(\ud835\udc39 0) = \u2300, so every fiber comes into existence by  an O-Insert, whether the orchestrator\u2019s or one an iteration takes ( Definition\u00a052). A field of \ud835\udefe\ud835\udc61  carries the index as a superscript, so that \ud835\udf03\ud835\udc61 \ud835\udc5b, \ud835\udf14\ud835\udc61 \ud835\udc5b, \ud835\udf0e\ud835\udc61 \ud835\udc5b, \ud835\udc54\ud835\udc61 \ud835\udc5b, and \ud835\udc56\ud835\udc61 \ud835\udc5b are the lifecycle state, committed  view, table, accumulator, and remaining iterator of \ud835\udc5b at \ud835\udefe\ud835\udc61, and \ud835\udc39 \ud835\udc61 and \ud835\udf0e"
+    },
+    {
+      "page": 43,
+      "kind": "definition",
+      "num": "63",
+      "text": "Definition 63. A registry \ud835\udc39\ud835\udefe is well formed when, for all \ud835\udc5a, \ud835\udc5b \u2208 dom(\ud835\udc39\ud835\udefe) and all \ud835\udc58 \u2208 \ud835\udc3e, 1. \ud835\udf0b\ud835\udc5b \u2208 dom(\ud835\udc39\ud835\udefe) \u222a {\ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd}; 2. \ud835\udc5a \u2260 \ud835\udc5b \u21d2 \ud835\udc5d\ud835\udc5a \u2229 \ud835\udc5d\ud835\udc5b = \u2300; 3. installed\ud835\udc5b(\ud835\udefe) \u21d2 \ud835\udf14\ud835\udc5b is total on \ud835\udc51\ud835\udc5b and valued in dom(\ud835\udc39\ud835\udefe); 4. installed\ud835\udc5b(\ud835\udefe) \u2227 \ud835\udc58 \u2208 \ud835\udc51\ud835\udc5b \u2227 \ud835\udf14\ud835\udc5b(\ud835\udc58) = \ud835\udc5a \u21d2 installed\ud835\udc5a(\ud835\udefe). Clause (1) is the tree of Definition\u00a050 read one edge at a time, keeping a parent pointer landing  in the registry. The acyclicity that definition also requires needs no clause, since the fiber a  pointer names is introduced before the fiber naming it. Theorem 64. (Preservation.) If \ud835\udc39 \ud835\udc61 is well formed then so is \ud835\udc39 \ud835\udc61+1, whichever rule step \ud835\udc61 appl"
+    },
+    {
+      "page": 44,
+      "kind": "definition",
+      "num": "65",
+      "text": "Definition 65. Two iterators \ud835\udc56, \ud835\udc57 over \u0393 are independent when they are so in the sense of  Definition\u00a0 42, reading \u2243 on maps, triples, and continuations as Definition\u00a0 34 does, and an  instantiating iteration (Definition\u00a052) as agreement of the component it names. Fibers \ud835\udc5a and \ud835\udc5b  are entangled when one\u2019s provision meets the other\u2019s declarations, \ud835\udc5d\ud835\udc5a \u2229 (\ud835\udc51\ud835\udc5b \u222a \ud835\udc5d\ud835\udc5b) \u2260 \u2300 or \ud835\udc5d\ud835\udc5b \u2229 (\ud835\udc51\ud835\udc5a \u222a \ud835\udc5d\ud835\udc5a) \u2260 \u2300. A sequence of steps is pairwise independent when for every two names \ud835\udc5a \u2260 \ud835\udc5b it  ever holds \u2014 one for each fiber the orchestrator inserts and each fiber an iteration instantiates \u2014  either \ud835\udc52\ud835\udc5a and \ud835\udc52\ud835\udc5b are independe"
+    },
+    {
+      "page": 46,
+      "kind": "definition",
+      "num": "52",
+      "text": "Definition\u00a052. Let step \ud835\udc62 act on \ud835\udc5b. Since the episode is open at \ud835\udc62 and \ud835\udc62 + 1, Lemma\u00a059(4) excludes an L-Begin  and an L-Unload of \ud835\udc5b, and O-Insert and O-Remove read a \ud835\udf03\ud835\udc5b that installed\ud835\udc62 \ud835\udc5b denies, leaving two  cases. Where the rule is L-Iter, L-Finish, or a landing L-Divert, Table\u00a01 gives \u03a8\ud835\udc62 = pr1 \u2218 \ud835\udc56\ud835\udc62 \ud835\udc5b and  \ud835\udc54\ud835\udc62+1 \ud835\udc5b = \ud835\udc54\ud835\udc62 \ud835\udc5b \u2218 \u210e for the inverse \u210e that iteration yields. The witness condition of Definition\u00a037 reads  \u210e(\u03a8\ud835\udc62(\ud835\udefe\ud835\udc62)) \u2243\ud835\udc51\ud835\udc5b\u222a\ud835\udc5d\ud835\udc5b \ud835\udefe\ud835\udc62, which is \u2243\ud835\udc3e once Lemma\u00a057 adds that neither map moves a binding  outside the two declarations, and the instantiating iteration is the case where the two states  diff"
+    },
+    {
+      "page": 49,
+      "kind": "definition",
+      "num": "72",
+      "text": "Definition 72. The precedence relation on the names of a registry is \ud835\udc5b \u227a \ud835\udc5a \u2254 \ud835\udc5d\ud835\udc5b \u2229 \ud835\udc51\ud835\udc5a \u2260 \u2300 (59) so that \ud835\udc5b may provide a key \ud835\udc5a declares. It reads \ud835\udc51 and \ud835\udc5d alone, which by Lemma\u00a059(5) come  into existence with a fiber\u2019s entry and are never written again. Theorem\u00a073 and Theorem\u00a080 are established on the hypothesis that \u227a is acyclic, which is  an assumption and not something the definition delivers, \ud835\udc5b \u227a \ud835\udc5b holding of a component that  declares a key it provides itself. What \u227a orders is the two fibers\u2019 activations and not their  lifetimes: \ud835\udc5b \u227a \ud835\udc5a says that \ud835\udc5b has to become \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe before \ud835\udc5a can, whereas th"
+    },
+    {
+      "page": 51,
+      "kind": "definition",
+      "num": "74",
+      "text": "Definition 74. A fiber is supported at \ud835\udefe when it is not retired, the fiber instantiating it is  supported, and every key it declares is provided by a supported fiber. The support relation on  dom(\ud835\udc39\ud835\udefe) is the union of the two relations those clauses read, \ud835\udc5a \u22b2 \ud835\udc5b \u2254 \ud835\udc5a \u227a \ud835\udc5b \u2228 \ud835\udf0b\ud835\udc5b = \ud835\udc5a (61) and where it is well founded (Lemma\u00a075) we write \ud835\udc34 for the support set, the fibers supported  at \ud835\udefe: \ud835\udc5b \u2208 \ud835\udc34 \u2254 \u00ac\ud835\udf0f\ud835\udc5b \u2227 (\ud835\udf0b\ud835\udc5b = \ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd \u2228 \ud835\udf0b\ud835\udc5b \u2208 \ud835\udc34) \u2227 \u2200\ud835\udc58 \u2208 \ud835\udc51\ud835\udc5b. \u2203\ud835\udc5a \u2208 \ud835\udc34. \ud835\udc58 \u2208 \ud835\udc5d\ud835\udc5a (62) where \ud835\udf0b\ud835\udc5b = \ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd marks a fiber the orchestrator inserted and \ud835\udf0b\ud835\udc5b otherwise the fiber whose  activation instantiates \ud835\udc5b. The clauses read no field but \ud835\udf0f, \ud835\udf0b,"
+    },
+    {
+      "page": 52,
+      "kind": "definition",
+      "num": "76",
+      "text": "Definition 76. A component (\ud835\udc51, \ud835\udc5d, \ud835\udc52) is total on its provision when an activation of it that finishes  has installed every key of \ud835\udc5d, so that dom(\ud835\udf0e\ud835\udc5b) = \ud835\udc5d\ud835\udc5b at every \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe fiber instantiating it. This is a condition on the components alone, mentioning no lifecycle state and no step, and  independence (Lemma\u00a066) already bounds how far it can fail: were a component to install a key  only at context states another component\u2019s effects reach, its forward map would not commute  with that component\u2019s, so the keys a fiber installs are fixed by its component rather than by the  schedule. What totality ad"
+    },
+    {
+      "page": 65,
+      "kind": "definition",
+      "num": "81",
+      "text": "Definition 81. An entry declares a single fiber, recording: \u2022 id \u2014 a stable identifier, used as the reconciliation key when its group\u2019s child list changes; \u2022 url \u2014 the URL of the component module to instantiate; \u2022 isolate \u2014 an isolation annotation applied to the entry\u2019s context; \u2022 intercept \u2014 an interception annotation applied to the entry\u2019s context; \u2022 config \u2014 the configuration bound into the component to form its effect function apply; \u2022 disabled \u2014 whether the entry is administratively turned off. An entry can serve as a faithful specification because what supports a fiber is exactly what  a"
+    }
+  ],
+  "theorems": [
+    {
+      "page": 10,
+      "kind": "theorem",
+      "num": "4",
+      "text": "Theorem 4. For every (\ud835\udc53, \ud835\udc54) \u2208 (\u0393 \u2192 \u0393) \u00d7 (\u0393 \u2192 \u0393), write \ud835\udc53\u2032 \u2254 track\u0393(\ud835\udc53, \ud835\udc54); then the following  diagram commutes, that is, pr1 \u2218 \ud835\udc53\u2032 = \ud835\udc53 \u2218 pr1 (7) \ud835\udc53 \ud835\udc53\u2032 pr1 pr1track \u0393 \u0393 \ud835\udf15\u0393 \ud835\udf15\u0393 Proof. For all (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393: (pr1 \u2218 track\u0393(\ud835\udc53, \ud835\udc54))(\ud835\udefe, \ud835\udf11) = pr1(\ud835\udc53(\ud835\udefe), \ud835\udf11 \u2218 \ud835\udc54) = \ud835\udc53(\ud835\udefe) = (\ud835\udc53 \u2218 pr1)(\ud835\udefe, \ud835\udf11) \u25a1 Theorem\u00a04 ensures that tracking leaves the forward behavior untouched: on the context  state, track\u0393(\ud835\udc53, \ud835\udc54) acts as \ud835\udc53 does, whatever candidate inverse it carries. Theorem 5. track\u0393 is a monoid homomorphism from \ud835\udd17\u0393 into \ud835\udf15\u0393 \u2192 \ud835\udf15\u0393. That is, 1. track\u0393(id\u0393, id\u0393) = id\ud835\udf15\u0393; 2. for all (\ud835\udc531, \ud835\udc541), (\ud835\udc532, \ud835\udc542) \u2208 \ud835\udd17\u0393, track\u0393((\ud835\udc531, \ud835\udc541) \u2218 (\ud835\udc532, \ud835\udc542))"
+    },
+    {
+      "page": 10,
+      "kind": "theorem",
+      "num": "5",
+      "text": "Theorem 5. track\u0393 is a monoid homomorphism from \ud835\udd17\u0393 into \ud835\udf15\u0393 \u2192 \ud835\udf15\u0393. That is, 1. track\u0393(id\u0393, id\u0393) = id\ud835\udf15\u0393; 2. for all (\ud835\udc531, \ud835\udc541), (\ud835\udc532, \ud835\udc542) \u2208 \ud835\udd17\u0393, track\u0393((\ud835\udc531, \ud835\udc541) \u2218 (\ud835\udc532, \ud835\udc542)) = track\u0393(\ud835\udc531, \ud835\udc541) \u2218 track\u0393(\ud835\udc532, \ud835\udc542) (8) 10"
+    },
+    {
+      "page": 11,
+      "kind": "theorem",
+      "num": "7",
+      "text": "Theorem 7. For every (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393 and every pair (\ud835\udc53, \ud835\udc54) with \ud835\udc54(\ud835\udc53(\ud835\udefe)) = \ud835\udefe, recover\u0393(track\u0393(\ud835\udc53, \ud835\udc54)(\ud835\udefe, \ud835\udf11)) = recover\u0393(\ud835\udefe, \ud835\udf11) (10) Proof. recover\u0393(track\u0393(\ud835\udc53, \ud835\udc54)(\ud835\udefe, \ud835\udf11)) = recover\u0393(\ud835\udc53(\ud835\udefe), \ud835\udf11 \u2218 \ud835\udc54) = (\ud835\udf11(\ud835\udc54(\ud835\udc53(\ud835\udefe))), id\u0393) = (\ud835\udf11(\ud835\udefe), id\u0393) = recover\u0393(\ud835\udefe, \ud835\udf11) \u25a1 Theorem\u00a07 ensures that a tracked effect whose inverse reverts it does not move the result  of recovery: recovering after the step returns what recovering before it would have. Recovery  reads a state through the quantity \ud835\udf11(\ud835\udefe) alone, so the guarantee amounts to preserving \ud835\udf11(\ud835\udefe);  we refer to \ud835\udf11(\ud835\udefe) = \ud835\udefe0 as the soundness invariant of a state in \ud835\udf15\u0393. In particular, st"
+    },
+    {
+      "page": 13,
+      "kind": "theorem",
+      "num": "10",
+      "text": "Theorem 10. Effect composition carries the monoid structure of \ud835\udd17\u0393 over to \ud835\udd08\u0393. That is, 1. (\ud835\udd08\u0393, \u22c4) is a monoid with unit \ud835\udf02\u0393 \u2254 \ud835\udefe \u21a6 (\ud835\udefe, id\u0393); 2. the assignment (\ud835\udc53, \ud835\udc54) \u21a6 \ud835\udefe \u21a6 (\ud835\udc53(\ud835\udefe), \ud835\udc54) is a monoid homomorphism from \ud835\udd17\u0393 into \ud835\udd08\u0393. Proof. 1. Associativity and the unit laws follow componentwise from those of \u2218. 2. Write \ud835\udc52\ud835\udc56 = \ud835\udefe \u21a6 (\ud835\udc53\ud835\udc56(\ud835\udefe), \ud835\udc54\ud835\udc56); then (\ud835\udc521 \u22c4 \ud835\udc522)(\ud835\udefe) = (\ud835\udc531(\ud835\udc532(\ud835\udefe)), \ud835\udc542 \u2218 \ud835\udc541), which is the image of  (\ud835\udc531, \ud835\udc541) \u2218 (\ud835\udc532, \ud835\udc542), and (id\u0393, id\u0393) maps to \ud835\udf02\u0393. \u25a1 Theorem 11. Witnessing survives effect composition, and a uniform inverse witnesses at every  state. That is, 1. \ud835\udd08\u2217 \u0393 is a submonoid of \ud835\udd08\u0393; 2. the homom"
+    },
+    {
+      "page": 13,
+      "kind": "theorem",
+      "num": "11",
+      "text": "Theorem 11. Witnessing survives effect composition, and a uniform inverse witnesses at every  state. That is, 1. \ud835\udd08\u2217 \u0393 is a submonoid of \ud835\udd08\u0393; 2. the homomorphism of Theorem\u00a010 carries every pair with \ud835\udc54 \u2218 \ud835\udc53 = id\u0393 into \ud835\udd08\u2217 \u0393. Proof. 1. The unit lies in \ud835\udd08\u2217 \u0393 since id\u0393(\ud835\udefe) = \ud835\udefe. For closure, take \ud835\udc53, \ud835\udc54 \u2208 \ud835\udd08\u2217 \u0393 and any \ud835\udefe \u2208 \u0393, and  let (\ud835\udeff, \ud835\udc60) = \ud835\udc54(\ud835\udefe), (\ud835\udf00, \ud835\udc61) = \ud835\udc53(\ud835\udeff), so that (\ud835\udc53 \u22c4 \ud835\udc54)(\ud835\udefe) = (\ud835\udf00, \ud835\udc60 \u2218 \ud835\udc61). Then \ud835\udc60(\ud835\udeff) = \ud835\udefe and \ud835\udc61(\ud835\udf00) = \ud835\udeff,  therefore (\ud835\udc60 \u2218 \ud835\udc61)(\ud835\udf00) = \ud835\udc60(\ud835\udeff) = \ud835\udefe. 2. \ud835\udc54 \u2218 \ud835\udc53 = id\u0393 gives \ud835\udc54(\ud835\udc53(\ud835\udefe)) = \ud835\udefe at every \ud835\udefe, so the image of such a pair is witnessed at every  state. \u25a1 Just as track lifts a pair of transformations"
+    },
+    {
+      "page": 14,
+      "kind": "theorem",
+      "num": "13",
+      "text": "Theorem 13. effect preserves the \u22c4 operation. That is, \u2200\ud835\udc53, \ud835\udc54 \u2208 \ud835\udd08\u0393: effect\u0393(\ud835\udc53) \u22c4 effect\u0393(\ud835\udc54) = effect\u0393(\ud835\udc53 \u22c4 \ud835\udc54) (15) Proof. Take any (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393, and let (\ud835\udeff, \ud835\udc60) = \ud835\udc54(\ud835\udefe) and (\ud835\udf00, \ud835\udc61) = \ud835\udc53(\ud835\udeff), so that (\ud835\udc53 \u22c4 \ud835\udc54)(\ud835\udefe) = (\ud835\udf00, \ud835\udc60 \u2218 \ud835\udc61)  and pr1 \u2218 (\ud835\udc53 \u22c4 \ud835\udc54) = (pr1 \u2218 \ud835\udc53) \u2218 (pr1 \u2218 \ud835\udc54). Then (effect\u0393(\ud835\udc53) \u22c4 effect\u0393(\ud835\udc54))(\ud835\udefe, \ud835\udf11) = ((\ud835\udf00, \ud835\udf11 \u2218 \ud835\udc60 \u2218 \ud835\udc61), track\u0393(\ud835\udc60, pr1 \u2218 \ud835\udc54) \u2218 track\u0393(\ud835\udc61, pr1 \u2218 \ud835\udc53)) = ((\ud835\udf00, \ud835\udf11 \u2218 \ud835\udc60 \u2218 \ud835\udc61), track\u0393(\ud835\udc60 \u2218 \ud835\udc61, (pr1 \u2218 \ud835\udc53) \u2218 (pr1 \u2218 \ud835\udc54))) = effect\u0393(\ud835\udc53 \u22c4 \ud835\udc54)(\ud835\udefe, \ud835\udf11) where the first step unfolds Definition\u00a012 at (\ud835\udefe, \ud835\udf11) and at (\ud835\udeff, \ud835\udf11 \u2218 \ud835\udc60), the second is Theorem\u00a05,  and the third folds Definition\u00a012. \u25a1 How the two levels relate is "
+    },
+    {
+      "page": 14,
+      "kind": "theorem",
+      "num": "14",
+      "text": "Theorem 14. Let \ud835\udc52 \u2208 \ud835\udd08\u0393, write \ud835\udc53 \u2254 pr1 \u2218 \ud835\udc52, and let \ud835\udc52\u2032 \u2254 effect\u0393(\ud835\udc52) with forward map \ud835\udc53\u2032 \u2254 pr1 \u2218 \ud835\udc52\u2032. Then 1. pr1 \u2218 \ud835\udc53\u2032 = \ud835\udc53 \u2218 pr1; 2. for each (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393, the lifted inverse \ud835\udc54\u2032 \u2254 pr2(\ud835\udc52\u2032(\ud835\udefe, \ud835\udf11)) and the inverse \ud835\udc54 \u2254 pr2(\ud835\udc52(\ud835\udefe))  witnessed there satisfy pr1 \u2218 \ud835\udc54\u2032 = \ud835\udc54 \u2218 pr1. Proof. 1. By Definition\u00a012, \ud835\udc53\u2032(\ud835\udefe, \ud835\udf11) = (\ud835\udc53(\ud835\udefe), \ud835\udf11 \u2218 \ud835\udc54), whose state is \ud835\udc53(\ud835\udefe) = (\ud835\udc53 \u2218 pr1)(\ud835\udefe, \ud835\udf11). 2. This is Theorem\u00a04 applied to \ud835\udc54\u2032 = track\u0393(\ud835\udc54, \ud835\udc53). \u25a1 Whether the lower triangle closes is settled by computing what the lifted inverse returns: Theorem 15. Let \ud835\udc52 \u2208 \ud835\udd08\u2217 \u0393 and write \ud835\udc53 \u2254 pr1 \u2218 \ud835\udc52. Fix (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393, let (\ud835\udeff, \ud835\udc54) = \ud835\udc52(\ud835\udefe), and write (\u0394, "
+    },
+    {
+      "page": 14,
+      "kind": "theorem",
+      "num": "15",
+      "text": "Theorem 15. Let \ud835\udc52 \u2208 \ud835\udd08\u2217 \u0393 and write \ud835\udc53 \u2254 pr1 \u2218 \ud835\udc52. Fix (\ud835\udefe, \ud835\udf11) \u2208 \ud835\udf15\u0393, let (\ud835\udeff, \ud835\udc54) = \ud835\udc52(\ud835\udefe), and write (\u0394, \ud835\udc54\u2032)  for the value of effect\u0393(\ud835\udc52) at (\ud835\udefe, \ud835\udf11). Then 14"
+    },
+    {
+      "page": 15,
+      "kind": "theorem",
+      "num": "16",
+      "text": "Theorem 16. Let \ud835\udc521, \u22ef, \ud835\udc52\ud835\udc5b \u2208 \ud835\udd08\u2217 \u0393 be applied in order from (\ud835\udefe0, id\u0393) and reverted in the reverse  order. Then 1. each revert recovers the context state its application ran against; 2. every intermediate state satisfies the soundness invariant. Proof. Each step is an application or a revert. An application carries (\ud835\udefe, \ud835\udf11) to (\ud835\udeff, \ud835\udf11 \u2218 \ud835\udc54) with  \ud835\udc54(\ud835\udeff) = \ud835\udefe, so it preserves \ud835\udf11(\ud835\udefe) by Theorem\u00a07, whose hypothesis is exactly the witness of \ud835\udd08\u2217 \u0393.  Reverting in the reverse order hands each inverse the state its own application produced, so by  Theorem\u00a015 that revert recovers the preceding state exactly and pre"
+    },
+    {
+      "page": 28,
+      "kind": "theorem",
+      "num": "43",
+      "text": "Theorem 43. Let \ud835\udc521, \u22ef, \ud835\udc52\ud835\udc5b \u2208 \ud835\udd08\u2217 \u0393 be pairwise independent and applied in order from \ud835\udefe0, and let  each \ud835\udc54\ud835\udc56 be the inverse \ud835\udc52\ud835\udc56 yields where it is applied. Applying the \ud835\udc5b inverses at the state the  sequence reaches, in the order of any permutation of {1, \u22ef, \ud835\udc5b}, reaches \ud835\udefe0. Proof. Write \ud835\udc53\ud835\udc56 \u2254 pr1 \u2218 \ud835\udc52\ud835\udc56, let \ud835\udeff\ud835\udc56 \u2254 \ud835\udc53\ud835\udc56(\ud835\udeff\ud835\udc56\u22121) with \ud835\udeff0 \u2254 \ud835\udefe0, so that \ud835\udc54\ud835\udc56 = pr2(\ud835\udc52\ud835\udc56(\ud835\udeff\ud835\udc56\u22121)). Fix \ud835\udc57 and  write \ud835\udeff\u2032 \ud835\udc56 \u2254 (\ud835\udc53\ud835\udc56 \u2218 \u22ef \u2218 \ud835\udc53\ud835\udc57+1)(\ud835\udeff\ud835\udc57\u22121) for the states of the sequence with \ud835\udc52\ud835\udc57 omitted, so that \ud835\udeff\u2032 \ud835\udc57 = \ud835\udeff\ud835\udc57\u22121.  Two claims hold for every \ud835\udc62 with \ud835\udc57 \u2264 \ud835\udc62 \u2264 \ud835\udc5b. (1) \ud835\udeff\ud835\udc62 = \ud835\udc53\ud835\udc57(\ud835\udeff\u2032 \ud835\udc62) and \ud835\udc54\ud835\udc57(\ud835\udeff\ud835\udc62) = \ud835\udeff\u2032 \ud835\udc62. The first equation is an induction on \ud835\udc62: at \ud835\udc62 ="
+    },
+    {
+      "page": 29,
+      "kind": "theorem",
+      "num": "45",
+      "text": "Theorem 45. Operations at distinct keys are independent. Proof. Let \ud835\udc4e lie in \ud835\udc9c\ufe00\ud835\udc58 and \ud835\udc4e\u2032 in \ud835\udc9c\ufe00\ud835\udc58\u2032 with \ud835\udc58 \u2260 \ud835\udc58\u2032. By Definition\u00a029 every generator of \ud835\udd10(\ud835\udc4e\u03a3) is of  the form \ud835\udf0e \u21a6 \ud835\udf0e[\ud835\udc58 \u21a6 \ud835\udc62(\ud835\udf0e(\ud835\udc58))] for a map \ud835\udc62 on \ud835\udcb1\ufe00\ud835\udc58, being either the lift of a forward map or the  lift of a yielded inverse, and likewise for \ud835\udc4e\u2032 at \ud835\udc58\u2032. Two such maps commute, each reading and  writing one key alone and the two keys differing, and Lemma\u00a041(1) extends the commutation  from the generators to the two monoids. For the second condition, what \ud835\udc4e\u03a3 yields at \ud835\udf0e, inverse  and outcome alike, is determined by \ud835\udf0e(\ud835\udc58), which every generator o"
+    },
+    {
+      "page": 30,
+      "kind": "theorem",
+      "num": "47",
+      "text": "Theorem 47. Let \ud835\udc561 \u2208 \u2111\ud835\udc9c\ufe00 \u03a3(\ud835\udc461, \ud835\udc431) and \ud835\udc562 \u2208 \u2111\ud835\udc9c\ufe00 \u03a3(\ud835\udc462, \ud835\udc432) with \ud835\udc431 \u2229 \ud835\udc462 = \ud835\udc432 \u2229 \ud835\udc461 = \u2300, and let every  key at which operations of both occur be commutative ( Definition\u00a0 44). Then \ud835\udc561 and \ud835\udc562 are  independent (Definition\u00a042). Proof. Every iterator reach(\ud835\udc56\ud835\udc59) contains is the unit or a stage, whose forward map and yielded  inverses are the constituents of the operation or the set its head performs, so the generators of  \ud835\udd10(\ud835\udc56\ud835\udc59) are among those of the stages occurring in \ud835\udc56\ud835\udc59, together with id\u03a3. For clause (1) of Definition\u00a042 it is enough, by Lemma\u00a041(1), that those generators commute  pairwise. Each is "
+    },
+    {
+      "page": 43,
+      "kind": "theorem",
+      "num": "64",
+      "text": "Theorem 64. (Preservation.) If \ud835\udc39 \ud835\udc61 is well formed then so is \ud835\udc39 \ud835\udc61+1, whichever rule step \ud835\udc61 applies.  Each clause is established at \ud835\udefe\ud835\udc61+1 from all four at \ud835\udefe\ud835\udc61. Proof. Let step \ud835\udc61 act on \ud835\udc5b. (1) By Table\u00a01 only O-Insert and O-Remove write a \ud835\udf0b or dom(\ud835\udc39\ud835\udefe). O-Insert has \ud835\udf0b\ud835\udc5b \u2208 dom(\ud835\udc39 \ud835\udc61) \u222a {\ud835\uddcb\ud835\uddc8\ud835\uddc8\ud835\uddcd} as a premise, which is the clause for the fiber it adds, and it leaves every other \ud835\udf0b alone  while enlarging dom(\ud835\udc39\ud835\udefe). O-Remove has \u2200\ud835\udc5a. \ud835\udf0b\ud835\udc5a \u2260 \ud835\udc5b, so no surviving \ud835\udf0b\ud835\udc5a names the fiber it  takes away. (2) The last premise of O-Insert is \u2200\ud835\udc5a. \ud835\udc5d\ud835\udc5b \u2229 \ud835\udc5d\ud835\udc5a = \u2300, which is the clause for the fiber it adds,  and by Table\u00a01 no other ru"
+    },
+    {
+      "page": 46,
+      "kind": "theorem",
+      "num": "68",
+      "text": "Theorem 68. (Recovery exactness.) Let an episode of \ud835\udc5b open at \ud835\udc4f, let \ud835\udc62 \u2265 \ud835\udc4f lie in it, and let \ud835\udc611 < \u22ef < \ud835\udc61\ud835\udc59 be the indices in [\ud835\udc4f, \ud835\udc62) at which the acting fiber is not \ud835\udc5b. Then \ud835\udc54\ud835\udc62 \ud835\udc5b(\ud835\udefe\ud835\udc62) \u2243\ud835\udc3e (\u03a8\ud835\udc61\ud835\udc59 \u2218 \u22ef \u2218 \u03a8\ud835\udc611)(\ud835\udefe\ud835\udc4f) (55) That is, applying \ud835\udc5b\u2019s accumulator at \ud835\udefe\ud835\udc62 leaves every fiber\u2019s table where those same steps would  have left it from \ud835\udefe\ud835\udc4f, the control fields lying outside the comparison. Reading the right side as  the state reached had \ud835\udc5b never begun assumes that no fiber \ud835\udc5b instantiates take a step in [\ud835\udc4f, \ud835\udc62),  since a fiber \ud835\udc5b instantiates is one that would not be there to take it. Proof. By induction on \ud835\udc62, o"
+    },
+    {
+      "page": 47,
+      "kind": "theorem",
+      "num": "70",
+      "text": "Theorem 70. (Ordering.) A fiber begins a transition only where its dependencies are provided: step\ud835\udc61 = L-Begin(\ud835\udc5a) \u21d2 \ud835\udefe\ud835\udc61 \u22a7 \ud835\udc51\ud835\udc5a (57) Let further [\ud835\udc4f\u2032, \ud835\udc62\u2032] be an episode of \ud835\udc5a with \ud835\udf14\ud835\udc4f\u2032 \ud835\udc5a(\ud835\udc58) = \ud835\udc5b for some \ud835\udc5a \u2260 \ud835\udc5b and \ud835\udc58 \u2208 \ud835\udc51\ud835\udc5a, let [\ud835\udc4f, \ud835\udc62] be  the episode of \ud835\udc5b containing \ud835\udc4f\u2032, and let \ud835\udc61 range over [\ud835\udc4f\u2032, \ud835\udc62\u2032]. Then 1. \ud835\udf14\ud835\udc61 \ud835\udc5a(\ud835\udc58) = \ud835\udc5b; 2. \ud835\udc4f < \ud835\udc4f\u2032, and \ud835\udc62\u2032 < \ud835\udc62 if [\ud835\udc4f, \ud835\udc62] closes; 3. \ud835\udc58 \u2208 dom(\ud835\udf0e\ud835\udc61 \ud835\udc5b), and \ud835\udf0e\ud835\udc61 \ud835\udc5b(\ud835\udc58) moves only by operations at \ud835\udc58 of fibers declaring \ud835\udc58. Proof. The first claim is the premise target\ud835\udc61 \ud835\udc5a \u2260 \u22a5 of L-Begin, which by Definition\u00a053 gives \ud835\udefe\ud835\udc61 \u22a7 \ud835\udc51\ud835\udc5a. (1) is Lemma\u00a059(2). 47"
+    },
+    {
+      "page": 48,
+      "kind": "theorem",
+      "num": "71",
+      "text": "Theorem 71. (Resolution coherence.) Let an episode [\ud835\udc4f, \ud835\udc62] of \ud835\udc5b open at \ud835\udc4f with \ud835\udf14\ud835\udc4f \ud835\udc5b = \ud835\udf14. Then  \ud835\udf03\ud835\udc5b is \ud835\uddb1\ud835\uddbe\ud835\uddc5\ud835\uddc8\ud835\uddba\ud835\uddbd\ud835\uddc2\ud835\uddc7\ud835\uddc0(\u2212, \u2212, \u2212) on an initial interval [\ud835\udc4f, \ud835\udc5f] of the episode, and every iteration of the  transition runs against the one resolution \ud835\udf14: \u2200\ud835\udc61 \u2208 [\ud835\udc4f, \ud835\udc5f]. step\ud835\udc61 \u2208 {L-Iter(\ud835\udc5b), L-Finish(\ud835\udc5b)} \u21d2 target\ud835\udc61 \ud835\udc5b = \ud835\udf14 (58) Where the fiber leaves that interval, so that \ud835\udc5f < \ud835\udc62, exactly one of the following holds: 1. step\ud835\udc5f = L-Finish(\ud835\udc5b) and \ud835\udf03\ud835\udc5f+1 \ud835\udc5b = \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe(\u2212, \ud835\udf14); 2. step\ud835\udc5f = L-Divert(\ud835\udc5b), and the episode closes at some \ud835\udc62 > \ud835\udc5f with \ud835\udefe\ud835\udc62+1 \u2243\ud835\udc3e (\u03a8\ud835\udc61\ud835\udc59 \u2218 \u22ef \u2218 \u03a8\ud835\udc611)(\ud835\udefe\ud835\udc4f) as in Corollary\u00a069. Proof. The L-Begin at \ud835\udc4f \u2212 1 writes \ud835\uddb1\ud835\uddbe\ud835\uddc5\ud835\uddc8\ud835\uddba\ud835\uddbd"
+    },
+    {
+      "page": 49,
+      "kind": "theorem",
+      "num": "73",
+      "text": "Theorem 73. (Progress.) Assume \u227a acyclic, len(\ud835\udc52\ud835\udc5b) \u2264 \ud835\udc3e for every \ud835\udc5b, and the set \ud835\udc41 of names  the sequence ever holds ( Definition\u00a065) finite; and let every step apply a lifecycle rule. Write  \ud835\udc46(\ud835\udc5b) for the number of steps acting on \ud835\udc5b and \ud835\udc49 (\ud835\udc5b) \u2254 |{\ud835\udc61 : target\ud835\udc61 \ud835\udc5b \u2260 target\ud835\udc61+1 \ud835\udc5b }| (60) for the number of times its target view turns. Then 1. (No deadlock.) \u00ac quiet\ud835\udc61 implies that some lifecycle rule applies at \ud835\udefe\ud835\udc61; 2. (Termination.) \ud835\udc46(\ud835\udc5b) \u2264 (\ud835\udc3e + 3)(\ud835\udc49 (\ud835\udc5b) + 1), and both \ud835\udc49 (\ud835\udc5b) and \u2211\ud835\udc5b \ud835\udc46(\ud835\udc5b) are finite. Consequently every maximal sequence of lifecycle steps ends in a quiescent state. Proof. No deadlock. Let \u00ac "
+    },
+    {
+      "page": 54,
+      "kind": "theorem",
+      "num": "80",
+      "text": "Theorem 80. (Confluence.) Let a sequence of steps reach a quiescent \ud835\udefe\ud835\udc47 , let every component  be total on its provision (Definition\u00a076), and let \ud835\udc34 be as in Definition\u00a074. Then 1. (Canonical form.) \ud835\udefe\ud835\udc47  is reached, up to the names whose entries the reduction withdraws,  from \ud835\udefe0 by a sequence that takes the same orchestration steps in their original order,  those at a fiber the orchestrator inserted preceding every lifecycle step and each of the rest  following the step that instantiated the fiber it acts on, and that takes, for an enumeration  \ud835\udc5b1, \u2026, \ud835\udc5b\ud835\udc58 of \ud835\udc34 linearizing \u22b2, one episode of each \ud835\udc5b\ud835\udc56"
+    }
+  ],
+  "lemmas": [
+    {
+      "page": 23,
+      "kind": "lemma",
+      "num": "32",
+      "text": "Lemma 32. Each \u2243\ud835\udc58 is an equivalence that every operation of \ud835\udc9c\ufe00\ud835\udc58 respects, and it is the coarsest  such relation. That is, 1. \u2248\ud835\udc9c\ufe00 is an equivalence, and every operation of \ud835\udc9c\ufe00 respects it; 2. every equivalence that every operation of \ud835\udc9c\ufe00 respects is contained in \u2248\ud835\udc9c\ufe00. Proof. 1. Agreement of tests, in definedness and in outcomes, is reflexive, symmetric, and transi - tive. Let \ud835\udc63 \u2248\ud835\udc9c\ufe00 \ud835\udc63\u2032 and let \ud835\udc4e \u2208 \ud835\udc9c\ufe00 be applied to an argument. Prefixing a test by one letter  is again a test, so the values the forward map reaches are indistinguishable, as are the  values any one yielded inverse reaches from indistin"
+    },
+    {
+      "page": 24,
+      "kind": "lemma",
+      "num": "35",
+      "text": "Lemma 35. On maps and on iterators \u2243\ud835\udc46 is a partial equivalence: it is symmetric and transitive,  so two related members each respect it. Proof. On the base types \u2243\ud835\udc46 is an equivalence, by Definition\u00a033 and Lemma\u00a032. For functions,  symmetry is symmetry of the base relations applied at input and output, and transitivity  reads the middle map at \ud835\udefe\u2032 \u2243\ud835\udc46 \ud835\udefe\u2032: from \ud835\udc53 \u2243\ud835\udc46 \ud835\udc54, \ud835\udc54 \u2243\ud835\udc46 \u210e, and \ud835\udefe \u2243\ud835\udc46 \ud835\udefe\u2032 follow \ud835\udc53(\ud835\udefe) \u2243\ud835\udc46 \ud835\udc54(\ud835\udefe\u2032) and  \ud835\udc54(\ud835\udefe\u2032) \u2243\ud835\udc46 \u210e(\ud835\udefe\u2032), whence \ud835\udc53(\ud835\udefe) \u2243\ud835\udc46 \u210e(\ud835\udefe\u2032); products inherit both componentwise and \ud835\uddac\ud835\uddba\ud835\uddd2\ud835\uddbb\ud835\uddbe by  cases. For iterators, the inverse \ud835\udc45\u22121 and the composite \ud835\udc45 \u2218 \ud835\udc45 of the greatest relation \ud835\udc45 satisfy  "
+    },
+    {
+      "page": 25,
+      "kind": "lemma",
+      "num": "38",
+      "text": "Lemma 38. With \ud835\udd08\u2217 \u0393 read as in Definition\u00a036, every equality of states asserted in Section\u00a03.1  holds with = replaced by \u2243, and the accumulator of every state reachable from (\ud835\udefe0, id\u0393) respects  \u2243. The same holds of any equivalence substituted for \u2243, the proof using no property of the  relation beyond transitivity and respect. Proof. An accumulator is a composition of inverses, each respecting \u2243, the clause \ud835\udc52 \u2243 \ud835\udc52 of  Definition\u00a036 read at \ud835\udefe \u2243 \ud835\udefe, and a composition of maps respecting \u2243 respects \u2243, the base case  being id\u0393. The proofs of Section\u00a03.1 then go through unchanged, respect being what ca"
+    },
+    {
+      "page": 25,
+      "kind": "lemma",
+      "num": "39",
+      "text": "Lemma 39. Let \ud835\udc56 \u2208 \u2111\ud835\udc9c\ufe00 \u03a3(\ud835\udc46\u2032, \ud835\udc43) and let \ud835\udc46 \u2286 \ud835\udc3e contain every key at which a stage of \ud835\udc56 occurs.  Then \ud835\udc56 lies in \u2111\ud835\udc46 \u03a3 (Definition\u00a037); in particular \ud835\udc56 and every inverse it yields respect \u2243\ud835\udc46, and the  witnesses hold at equality. 25"
+    },
+    {
+      "page": 27,
+      "kind": "lemma",
+      "num": "41",
+      "text": "Lemma 41. Commutation is settled on the generators, and \u22c4 enlarges no transformation  monoid. That is, 1. if every generator of \ud835\udd10(\ud835\udc521) commutes with every generator of \ud835\udd10(\ud835\udc522), then every element  of \ud835\udd10(\ud835\udc521) commutes with every element of \ud835\udd10(\ud835\udc522); 2. \ud835\udd10(\ud835\udc521 \u22c4 \ud835\udc522) \u2286 \u27e8\ud835\udd10(\ud835\udc521) \u222a \ud835\udd10(\ud835\udc522)\u27e9. Proof. 1. The maps commuting with every generator of \ud835\udd10(\ud835\udc522) form a submonoid of \u0393 \u2192 \u0393, since  id\u0393 lies in it and \ud835\udc53 \u2218 \ud835\udc53\u2032 does where \ud835\udc53 and \ud835\udc53\u2032 do. That submonoid contains the generators of  \ud835\udd10(\ud835\udc521) by hypothesis and hence contains \ud835\udd10(\ud835\udc521). Fixing \ud835\udc53 \u2208 \ud835\udd10(\ud835\udc521), the maps commuting  with \ud835\udc53 likewise form a submonoid containing the generato"
+    },
+    {
+      "page": 38,
+      "kind": "lemma",
+      "num": "57",
+      "text": "Lemma 57. A member of \u2111\ud835\udc9c\ufe00 \u0393(\ud835\udc5b) is confined to \ud835\udc5b, and it lies in \u2111\ud835\udc51\ud835\udc5b\u222a\ud835\udc5d\ud835\udc5b \u0393  (Definition\u00a037) at the  projection Definition\u00a051 fixes, which is the witness Definition\u00a048 requires of it. Proof. For confinement, by induction on the construction. An instantiation is the exception  Definition\u00a055 carves out. The lift of a stage at \ud835\udc58 writes the binding at \ud835\udc58 and nothing else: at \ud835\udc58 \u2208 \ud835\udc5d\ud835\udc5b that binding lies in \ud835\udf0e\ud835\udc5b, by disjointness of provisions, and at \ud835\udc58 \u2208 \ud835\udc51\ud835\udc5b it lies in some \ud835\udf0e\ud835\udc5a|\ud835\udc51\ud835\udc5b ,  which is clause (1); the inverse it yields, the lift of the operation\u2019s inverse or the restriction at  \ud835\udc58 \u2208 \ud835\udc5d\ud835\udc5b, writes the same b"
+    },
+    {
+      "page": 40,
+      "kind": "lemma",
+      "num": "59",
+      "text": "Lemma 59. Reading Table\u00a01 together with Definition\u00a055, for every step \ud835\udc61 and all fibers \ud835\udc5a, \ud835\udc5b  present at \ud835\udefe\ud835\udc61: 1. a table moves only inside a \u03a8\ud835\udc61: \ud835\udf0e\ud835\udc61+1 \ud835\udc5a \u2260 \ud835\udf0e\ud835\udc61 \ud835\udc5a only where step \ud835\udc61 acts on \ud835\udc5a, or acts on an \ud835\udc5b \u2260 \ud835\udc5a with dom(\ud835\udf0e\ud835\udc61 \ud835\udc5a) \u2229 \ud835\udc51\ud835\udc5b \u2260 \u2300, in which case the two tables differ in values at keys of \ud835\udc51\ud835\udc5b  alone and dom(\ud835\udf0e\ud835\udc5a) is unchanged; 2. \ud835\udf14\ud835\udc5b comes into existence only where step\ud835\udc61 = L-Begin(\ud835\udc5b) and ceases only where step\ud835\udc61 = L-Unload(\ud835\udc5b), so \ud835\udf14\ud835\udc61 \ud835\udc5b is constant for \ud835\udc61 in an episode of \ud835\udc5b; 3. \u03a8\ud835\udc61 = \ud835\udc54\ud835\udc61 \ud835\udc5b only where step\ud835\udc61 = L-Unload(\ud835\udc5b), and no other step applies \ud835\udc54\ud835\udc5b to the state; 40"
+    },
+    {
+      "page": 41,
+      "kind": "lemma",
+      "num": "60",
+      "text": "Lemma 60. (\u2243-invariance.) Let \ud835\udefe \u2243 \ud835\udefe\u2032 as read above. Then a rule of Section\u00a04.2 applies at \ud835\udefe  acting on \ud835\udc5b if and only if it applies at \ud835\udefe\u2032 acting on \ud835\udc5b, and the states the two applications reach  are again related by \u2243. Proof. Every premise of Section\u00a04.2 is of one of four kinds, and each reads a constituent the  relation keeps. A premise matching \ud835\udf03\ud835\udc5b or \ud835\udf0f\ud835\udc5b against a pattern, and the premise \u2200\ud835\udc5a. \ud835\udf0b\ud835\udc5a \u2260 \ud835\udc5b  of O-Remove, read control fields. The premises (\ud835\udc51, \ud835\udc5d, \ud835\udc52) \u2208 \u212d\u0393 and \u2200\ud835\udc5a. \ud835\udc5d \u2229 \ud835\udc5d\ud835\udc5a = \u2300 of O-Insert  read \ud835\udc51, \ud835\udc5d, and \ud835\udc52. A premise mentioning target\ud835\udc5b or relied\ud835\udc5b reads \ud835\udf0f\ud835\udc5b, the committed views  inside the \ud835\udf03\ud835\udc5a,"
+    },
+    {
+      "page": 42,
+      "kind": "lemma",
+      "num": "61",
+      "text": "Lemma 61. (Equivariance.) Let \ud835\udf12 : \ud835\udd11 \u2192 \ud835\udd11 be a bijection and let \ud835\udf12 \u22c5 \ud835\udefe be the state carrying the  registry \ud835\udc39\ud835\udefe \u2218 \ud835\udf12\u22121, with every name occurring in a \ud835\udf0b\ud835\udc5a or an \ud835\udf14\ud835\udc5a replaced by its image. Then \ud835\udf12 \u22c5 \ud835\udefe is a state, well formed where \ud835\udefe is, and step\ud835\udc61 = \ud835\udc5f(\ud835\udc5b) carries \ud835\udefe\ud835\udc61 to \ud835\udefe\ud835\udc61+1 if and only if \ud835\udc5f(\ud835\udf12(\ud835\udc5b))  carries \ud835\udf12 \u22c5 \ud835\udefe\ud835\udc61 to \ud835\udf12 \u22c5 \ud835\udefe\ud835\udc61+1. Proof. A premise reads a name only by comparing it with another, whether directly, as in the  freshness \ud835\udc5b \u2209 dom(\ud835\udc39\ud835\udefe) of O-Insert and the \u2200\ud835\udc5a. \ud835\udf0b\ud835\udc5a \u2260 \ud835\udc5b of O-Remove, or through a table of  names, as target\ud835\udc5b and relied\ud835\udc5b read the \ud835\udf0b\ud835\udc5a and the \ud835\udf14\ud835\udc5a. A bijection preserves each such compar- ison. T"
+    },
+    {
+      "page": 42,
+      "kind": "lemma",
+      "num": "62",
+      "text": "Lemma 62. (Vestigial entries.) Call \ud835\udc5b vestigial at \ud835\udefe when \ud835\udf0f\ud835\udc5b = \u22a4, \ud835\udf03\ud835\udc5b = \ud835\udda8\ud835\uddc7\ud835\uddba\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe, \ud835\udf0e\ud835\udc5b = \u2300, and no  \ud835\udc5a has \ud835\udf0b\ud835\udc5a = \ud835\udc5b; a vestigial entry satisfies \ud835\udefe \u2243\ud835\udc3e \ud835\udefe \u2216 \ud835\udc5b. If \ud835\udc5b is vestigial at \ud835\udefe then for every rule and  every \ud835\udc5a \u2260 \ud835\udc5b: 1. a rule applying at \ud835\udefe acting on \ud835\udc5a applies at \ud835\udefe \u2216 \ud835\udc5b acting on \ud835\udc5a, and the states the two reach  differ in the entry at \ud835\udc5b alone, which stays vestigial; 2. conversely a rule applying at \ud835\udefe \u2216 \ud835\udc5b acting on \ud835\udc5a applies at \ud835\udefe, unless it is an O-Insert  drawing the name \ud835\udc5b or claiming a key of \ud835\udc5d\ud835\udc5b. Proof. A vestigial \ud835\udc5b contributes to no observation a premise of a rule acting on \ud835\udc5a \u2260 \ud835\udc5b reads. It  is n"
+    },
+    {
+      "page": 44,
+      "kind": "lemma",
+      "num": "66",
+      "text": "Lemma 66. (Pairwise independence.) Every sequence of steps is pairwise independent. Proof. Every key is commutative, its coeffect carrying the proof as its witness ( Definition\u00a046),  which settles the second disjunct at an entangled pair. A pair that is not entangled has each  member\u2019s provision outside the other\u2019s every key, which is the hypothesis \ud835\udc431 \u2229 \ud835\udc462 = \ud835\udc432 \u2229 \ud835\udc461 = \u2300 of Theorem\u00a0 47 read at the underlying members of Definition\u00a0 30, so those members are  independent, the commutativity of every shared operation key again supplied by the witness;  independence transfers along the lift of Defin"
+    },
+    {
+      "page": 45,
+      "kind": "lemma",
+      "num": "67",
+      "text": "Lemma 67. (Entangled steps.) Let an episode of \ud835\udc5b open at \ud835\udc4f, and let step \ud835\udc61 \u2265 \ud835\udc4f in the episode  act on an \ud835\udc5a \u2260 \ud835\udc5b entangled with \ud835\udc5b. Then 1. where \ud835\udc5d\ud835\udc5a \u2229 (\ud835\udc51\ud835\udc5b \u222a \ud835\udc5d\ud835\udc5b) \u2260 \u2300, \u03a8\ud835\udc61 = id\u0393; 2. otherwise \ud835\udc54\ud835\udc61 \ud835\udc5b(\u03a8\ud835\udc61(\ud835\udefe\ud835\udc61)) \u2243\ud835\udc3e \u03a8\ud835\udc61(\ud835\udc54\ud835\udc61 \ud835\udc5b(\ud835\udefe\ud835\udc61)); 3. where moreover \ud835\udf03\ud835\udc61 \ud835\udc5b = \ud835\uddb1\ud835\uddbe\ud835\uddc5\ud835\uddc8\ud835\uddba\ud835\uddbd\ud835\uddc2\ud835\uddc7\ud835\uddc0(\u2212, \u2212, \u2212), \u03a8\ud835\udc61 = id\u0393 in either case. Proof. (1) A key of \ud835\udc5d\ud835\udc5a \u2229 \ud835\udc5d\ud835\udc5b would put two registered provisions in conflict with the premise  of O-Insert, so some \ud835\udc58 \u2208 \ud835\udc5d\ud835\udc5a \u2229 \ud835\udc51\ud835\udc5b, and \ud835\udc5a is the one registered fiber whose provision carries \ud835\udc58.  The premise of \ud835\udc5b\u2019s L-Begin at \ud835\udc4f \u2212 1 resolves \ud835\udc58 to an \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe provider, so \ud835\udf14\ud835\udc4f \ud835\udc5b(\ud835\udc58) = \ud835\udc5a and \ud835\udf03\ud835\udc4f\u22121 \ud835\udc5a = \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe(\u2212, \u2212); \ud835\udf14\ud835\udc5b holds \ud835\udc5a f"
+    },
+    {
+      "page": 46,
+      "kind": "corollary",
+      "num": "69",
+      "text": "Corollary 69. (Terminal recovery.) Let an episode of \ud835\udc5b open at \ud835\udc4f and close at \ud835\udc62. Then, with  \ud835\udc611 < \u22ef < \ud835\udc61\ud835\udc59 as in Theorem\u00a068, 46"
+    },
+    {
+      "page": 51,
+      "kind": "lemma",
+      "num": "75",
+      "text": "Lemma 75. (Support is well founded.) Let \u227a be acyclic and let \ud835\udefe be reached by a sequence of  steps. Then \u22b2 is well founded, and \ud835\udc34 is the one solution of Definition\u00a074, a function of \ud835\udf0f, \ud835\udf0b, \ud835\udc51,  and \ud835\udc5d alone. Proof. Order the names of dom(\ud835\udc39\ud835\udefe) by the index of the O-Insert that introduced each, which  Definition\u00a0 58 supplies by starting the sequence at an empty registry. The parent half of \u22b2  descends in that index: an O-Insert has \ud835\udf0b \u2208 dom(\ud835\udc39\ud835\udefe) as a premise, so a parent pointer names a  fiber introduced earlier, and iterating it reaches the whole ancestry of a name in finitely many  steps. A cycle th"
+    },
+    {
+      "page": 52,
+      "kind": "lemma",
+      "num": "77",
+      "text": "Lemma 77. (Support at quiescence.) Let \u227a be acyclic, let quiet(\ud835\udefe), and let every component of  \ud835\udefe be total on its provision (Definition\u00a076). Then the support set is the set of \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe fibers: \ud835\udc34 = {\ud835\udc5b : \ud835\udf03\ud835\udc5b = \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe(\u2212, \u2212)} (63) Proof. Write \ud835\udc34\u2032 for the right-hand side. The quiet of Definition\u00a053 leaves \ud835\udda8\ud835\uddc7\ud835\uddba\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe and \ud835\udda0\ud835\uddbc\ud835\uddcd\ud835\uddc2\ud835\uddcf\ud835\uddbe as  the only states and reads \ud835\udc5b \u2208 \ud835\udc34\u2032 \u27fa target\ud835\udc5b(\ud835\udefe) \u2260 \u22a5 By Definition\u00a053 the right side holds exactly when \u00ac\ud835\udf0f\ud835\udc5b and every \ud835\udc58 \u2208 \ud835\udc51\ud835\udc5b lies in dom(\ud835\udf0e\ud835\udefe), and  dom(\ud835\udf0e\ud835\udefe) = \u22c3\ud835\udc5a\u2208\ud835\udc34\u2032 \ud835\udc5d\ud835\udc5a by Definition\u00a076. The middle clause is the one the target no longer carries,  and instantiation supplies it: a fibe"
+    },
+    {
+      "page": 52,
+      "kind": "lemma",
+      "num": "78",
+      "text": "Lemma 78. (Transposition.) Let \ud835\udc39 \ud835\udc61 be well formed and let steps \ud835\udc61 and \ud835\udc61 + 1 act on distinct  fibers \ud835\udc5a and \ud835\udc5b. 1. If both apply an activation rule, namely L-Begin, L-Iter, or L-Finish, \ud835\udc52\ud835\udc5a and \ud835\udc52\ud835\udc5b are  independent (Definition\u00a065), and step \ud835\udc61 + 1 is applicable at \ud835\udefe\ud835\udc61, then step \ud835\udc61 is applicable  at the state step \ud835\udc61 + 1 produces from \ud835\udefe\ud835\udc61, and the two orders reach the same \ud835\udefe\ud835\udc61+2. 2. If step \ud835\udc61 applies an activation rule at \ud835\udc5a, step \ud835\udc61 + 1 an orchestration rule at \ud835\udc5b, and step \ud835\udc61  does not instantiate \ud835\udc5b, then the same holds of the two. Proof. For (1), by Table\u00a01 the step of \ud835\udc5a writes \ud835\udf03\ud835\udc5a and, within \u03a8\ud835\udc61 \u2208 \ud835\udd10(\ud835\udc52\ud835\udc5a), "
+    },
+    {
+      "page": 53,
+      "kind": "lemma",
+      "num": "79",
+      "text": "Lemma 79. (Deletion.) Let every component be total on its provision ( Definition\u00a076), let the  sequence of steps reach a quiescent \ud835\udefe\ud835\udc47 , let [\ud835\udc4f, \ud835\udc62] be an episode of \ud835\udc5b that closes, let no episode  of any \ud835\udc5a with \ud835\udc5b \u227a \ud835\udc5a close in the sequence, and let no fiber \ud835\udc5b instantiates during [\ud835\udc4f, \ud835\udc62] have an  episode. Write \ud835\udc45 for the names those instantiations draw. Then deleting the steps that act on \ud835\udc5b  in [\ud835\udc4f, \ud835\udc62], together with every step acting on a name of \ud835\udc45, leaves a sequence of steps reaching a  state \u2243\ud835\udc3e-equal to \ud835\udefe\ud835\udc47  and \u2243-equal to it outside \ud835\udc45. Proof. The deleted steps leave the state where they found it."
+    }
+  ],
+  "problems_solved": [],
+  "evaluations_tests": [
+    "Page 57: 5.  Implementation and Case Study",
+    "Page 57: cation frameworks such as Koishi (Section\u00a05.3) build domain-specific functionality on top of",
+    "Page 60: with a guard that tests the stability of fiber.target instead of armed.",
+    "Page 60: Algorithm\u00a03 propagates each binding change to dependents by testing, for each live fiber,",
+    "Page 60: refresh (Section\u00a05.1.3) to re-evaluate that fiber against the new state, and it returns the fibers it",
+    "Page 60: re-evaluated so that a caller can wait for them. This is the reactive classification of Definition\u00a022:",
+    "Page 61: renders a neutral change harmless. The interaction of this re-evaluation with diverse control",
+    "Page 66: when a fiber activates rather than when its module is fetched and evaluated, so the loader",
+    "Page 67: 18 notify(entry.ctx, \u0394, affected) \u25b7 in place of the realm test of Algorithm\u00a03",
+    "Page 67: The test turns on one property of delimiters. The tag under \ud835\udeff\ud835\udc58 is written on the entry\u2019s",
+    "Page 67: separation, and the membership test drops the dependents resolving \ud835\udc58 in neither realm, which",
+    "Page 69: 5.3.  Case Study: Koishi",
+    "Page 69: Koishi is an open-source chatbot application framework built on Cordis 4. Over four years of",
+    "Page 69: Expressiveness and generality of the meta-framework.  Koishi runs as a server-side bot",
+    "Page 69: whose every feature is realized as a plugin over the context primitives of Section\u00a05.1; Koishi",
+    "Page 69: different runtime: Koishi\u2019s web console is a second, independent Cordis application whose",
+    "Page 69: Temporal composability without cognitive overhead.  The plugin systems surveyed in",
+    "Page 69: 4Koishi currently uses Cordis v3. This paper presents Cordis v4, which refines the effect and coeffect semantics",
+    "Page 69: 5Koishi uses the term plugin for the concept this paper formalizes as component.",
+    "Page 70: host. Koishi routinely performs this operation: an orchestrator disables a plugin from the",
+    "Page 70: Section\u00a01.2.1, where inter-plugin dependencies are largely absent, Koishi\u2019s ecosystem exhibits",
+    "Page 70: erroring. What the case study substantiates is that this composition holds across independently",
+    "Page 70: or of Koishi\u2019s particular domain, and it is observational rather than a controlled comparison",
+    "Page 70: against an alternative architecture. What the case study establishes is thus an existence-and-",
+    "Page 70: adoption result rather than a quantitative one; measuring the abstraction\u2019s overhead and its",
+    "Page 71: leaving its medium as it was. For example, a memory region lies inside when the system",
+    "Page 71: them according to a configurable policy (e.g., round-robin, least-loaded, latency-weighted) or",
+    "Page 72: consumers. One caveat is that a cross-process call incurs latency and may fail mid-flight, so",
+    "Page 74: correctness or runtime performance (components are lightweight), and finer granularity can",
+    "Page 74: more components require more configuration, more naming, and more cognitive overhead in",
+    "Page 76: there then leaks out of its own lifecycle, and a coeffect it reads there escapes its dependency",
+    "Page 77: party that hands the resource out and can attribute it to the component that asked. Memory",
+    "Page 80: pared with Cordis\u2019s module replacement (Section\u00a05.2), these approaches migrate in-memory",
+    "Page 80: component\u2019s from a clean slate, so a component\u2019s own in-memory state does not survive a",
+    "Page 80: decoupled from the operation, so that a forgotten one leaks resources silently (as documented",
+    "Page 80: but confines reversal to a scope fixed in advance. Software transactional memory [109, 110],",
+    "Page 80: descended from hardware transactional memory [111], records a read/write log so that a",
+    "Page 80: group of memory operations either commits or aborts, rolling memory back to its pre-trans -",
+    "Page 81: semantics itself: RCCS [115] carries a memory alongside each process and admits a step to be",
+    "Page 82: leaks silently. Second, the callback is synchronous: should teardown require an asynchronous",
+    "Page 83: component loader with configuration reconciliation and hot module replacement. The Koishi",
+    "Page 83: case study validates the design of Cordis in a production system with over 4000 community"
+  ]
+}

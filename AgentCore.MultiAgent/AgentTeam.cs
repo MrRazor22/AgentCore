@@ -74,16 +74,23 @@ public sealed class AgentTeam : IAgentTeam
                 progressTask = RunProgressTimerAsync(member, currentMsg.Sender, interval, cts.Token);
             }
 
-            List<IContent> reply = [];
+            IReadOnlyList<IContent> reply;
             try
             {
-                await foreach (var evt in member.ExecuteAsync(currentMsg.Contents, ct).ConfigureAwait(false))
-                {
-                    if (evt is IContent c)
-                        reply.Add(c);
-
+                await foreach (var evt in member.ExecuteAsync(currentMsg.Contents, cts.Token).ConfigureAwait(false))
                     yield return new TeamEvent(Sender: currentMsg.Recipient, Recipient: currentMsg.Sender, Event: evt);
-                }
+
+                var contextMessages = await member.Agent.Context.ReadAsync(cts.Token).ConfigureAwait(false);
+                var lastAssistant = contextMessages.LastOrDefault(m => m.Role == Role.Assistant);
+                var cleanContents = lastAssistant?.Contents.Where(c => c is not ToolCall).ToList();
+
+                reply = cleanContents is { Count: > 0 }
+                    ? [new Text($"[{member.Name}]: "), .. cleanContents]
+                    : [new Text($"[{member.Name}]: Task completed.")];
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                reply = [new Text($"[{member.Name} Error]: {ex.GetBaseException().Message}")];
             }
             finally
             {
@@ -94,11 +101,8 @@ public sealed class AgentTeam : IAgentTeam
                 }
             }
 
-            // Deliver reply back to sender if sender is a registered team member
-            if (_members.ContainsKey(currentMsg.Sender) && reply.Count > 0)
-            {
+            if (_members.ContainsKey(currentMsg.Sender))
                 await SendAsync(new TeamMessage(Sender: currentMsg.Recipient, Recipient: currentMsg.Sender, Contents: reply), ct).ConfigureAwait(false);
-            }
         }
     }
 

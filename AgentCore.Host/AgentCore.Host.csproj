@@ -26,7 +26,7 @@
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>CodeSharp.Tests</_Parameter1>
+      <_Parameter1>AgentCore.Host.Tests</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 

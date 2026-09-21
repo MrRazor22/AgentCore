@@ -1,0 +1,38 @@
+framework,task,replicate,P_ext_Interp_A_Strict,P_ext_Interp_B_AppScript,P_ext_Interp_C_SeparationOfConcerns
+AgentCore,T02,1,0,0,0
+AgentCore,T03,1,0,0,0
+AgentCore,T04,1,0,0,0
+AgentCore,T05,1,0,0,0
+AgentCore,T06,1,0,0,0
+AgentCore,T07,1,0,0,0
+AgentCore,T08,1,0,0,0
+AgentCore,T09,1,0,0,0
+AgentCore,T10,1,0,0,0
+AgentCore,T11,1,0,0,0
+AgentCore,T12,1,0,0,0
+LangGraph,T02,1,1,0,1
+LangGraph,T03,1,1,0,1
+LangGraph,T04,1,1,0,1
+LangGraph,T05,1,1,0,1
+LangGraph,T06,1,1,0,1
+LangGraph,T07,1,1,0,0
+LangGraph,T08,1,1,0,1
+LangGraph,T09,1,1,0,1
+LangGraph,T10,1,1,0,1
+LangGraph,T11,1,1,0,1
+LangGraph,T12,1,1,0,1
+OpenAI Agents SDK,T01,1,1,0,0
+OpenAI Agents SDK,T02,1,1,0,0
+OpenAI Agents SDK,T03,1,1,0,1
+OpenAI Agents SDK,T06,1,1,0,1
+OpenAI Agents SDK,T07,1,1,0,0
+AgentCore,T01,1,0,0,0
+AgentCore,T01,2,0,0,0
+LangGraph,T01,1,1,0,0
+LangGraph,T01,2,1,0,0
+PydanticAI,T01,1,1,0,0
+PydanticAI,T02,1,1,0,1
+PydanticAI,T03,1,1,0,1
+PydanticAI,T05,1,1,0,0
+PydanticAI,T06,1,1,0,1
+PydanticAI,T07,1,1,0,1

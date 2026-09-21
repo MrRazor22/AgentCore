@@ -1,0 +1,498 @@
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tool;
+using AgentCore.Layers.LLM;
+using System.Text.Json.Nodes;
+using Xunit;
+
+namespace AgentCore.Tests.LLM;
+
+public class ToolCallDetectionLayerTests
+{
+    private class MockLLM : ILLM
+    {
+        public IAsyncEnumerable<IMessageEvent> EmittedOutputs { get; set; } = AsyncEnumerableExtensions.ToAsyncEnumerable(Array.Empty<IMessageEvent>());
+
+        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
+            IReadOnlyList<Message> messages,
+            IReadOnlyList<ToolDefinition>? tools = null,
+            JsonSchema? responseSchema = null,
+            CancellationToken ct = default)
+        {
+            return EmittedOutputs;
+        }
+    }
+
+    private class DummyTool(string name) : ITool
+    {
+        public ToolDefinition Definition { get; } = new(name, "Dummy desc", new AgentCore.LLM.Schema.JsonSchema(new JsonObject()));
+        public Task<IReadOnlyList<IContent>> InvokeAsync(JsonObject arguments, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<IContent>>([new Text("result")]);
+    }
+
+    private static void AttachMockInner(ToolCallDetectionLayer layer, ILLM mockInner)
+    {
+        var attachMethod = typeof(LLMLayer).GetMethod("Attach", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+        attachMethod!.Invoke(layer, new object[] { mockInner });
+    }
+
+    [Fact]
+    public async Task NativeToolCallContentDelta_PassesThroughUntouched()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new ToolCallStart(0, "call-1", "TestTool"),
+            new ToolCallEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("TestTool").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var call = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("call-1", call.Id);
+        Assert.Equal("TestTool", call.Name);
+    }
+
+    [Fact]
+    public async Task TwoToolCallsInOneStream_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>\n"),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolB\", \"arguments\": {\"param\": 1}}</tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var toolStarts = results.OfType<ToolCall>().ToList();
+        Assert.Equal(2, toolStarts.Count);
+        Assert.Equal("ToolA", toolStarts[0].Name);
+        Assert.Equal("ToolB", toolStarts[1].Name);
+    }
+
+    [Fact]
+    public async Task TwoToolCallsInSingleChunk_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call><tool_call>{\"name\": \"ToolB\", \"arguments\": {}}</tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition, new DummyTool("ToolB").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var toolStarts = results.OfType<ToolCall>().ToList();
+        Assert.Equal(2, toolStarts.Count);
+        Assert.Equal("ToolA", toolStarts[0].Name);
+        Assert.Equal("ToolB", toolStarts[1].Name);
+    }
+
+    [Fact]
+    public async Task TextToolCallText_StreamsCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "Before tool "),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": {}}</tool_call>"),
+            new TextDelta(0, " After tool"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var textDeltas = results.OfType<Text>().ToList();
+        var fullText = string.Concat(textDeltas.Select(t => t.Value));
+        Assert.Contains("Before tool ", fullText);
+
+        var toolStart = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("ToolA", toolStart.Name);
+    }
+
+    [Fact]
+    public async Task RawJsonMatchingNoRegisteredTool_PassesThroughAsText()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "{\"name\": \"UnregisteredTool\", \"arguments\": {}}"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var single = Assert.Single(results);
+        var text = Assert.IsType<Text>(single);
+        Assert.Equal("{\"name\": \"UnregisteredTool\", \"arguments\": {}}", text.Value);
+    }
+
+    [Fact]
+    public async Task NonToolCallJson_DoesNotCauseExcessiveBufferingLatency()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "You can use a List<string> here: {\"something\": 123}"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
+        Assert.Contains("List<string>", text);
+        Assert.Contains("{\"something\": 123}", text);
+    }
+
+    [Fact]
+    public async Task ComplexEscapedQuotesAndNestedBraces_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        var rawText = "{\"name\":\"ToolA\",\"arguments\":{\"text\":\"var x = \\\"{ hello }\\\"; \\\\\\\\ test\"}}";
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, rawText),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var call = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("ToolA", call.Name);
+        Assert.Contains("hello", call.Arguments);
+    }
+
+    [Fact]
+    public async Task RegisteredToolButMalformedArguments_PassesThroughOrFlushes()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": { malformed } }</tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
+        Assert.Contains("malformed", text);
+    }
+
+    [Fact]
+    public async Task IncompleteCandidate_GetsReplayedUnchanged()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call>{\"name\": \"ToolA\", \"arguments\": "),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
+        Assert.Equal("<tool_call>{\"name\": \"ToolA\", \"arguments\": ", text);
+    }
+
+    [Fact]
+    public async Task JsonSplitAtEveryPossibleChunkBoundary_ParsedCorrectly()
+    {
+        // Arrange
+        var jsonStr = "<tool_call>{\"name\": \"ToolA\", \"arguments\": {\"x\": 1}}</tool_call>";
+        var dummyTool = new DummyTool("ToolA");
+
+        for (int splitIdx = 1; splitIdx < jsonStr.Length; splitIdx++)
+        {
+            var chunk1 = jsonStr.Substring(0, splitIdx);
+            var chunk2 = jsonStr.Substring(splitIdx);
+
+            var mockLlm = new MockLLM();
+            mockLlm.EmittedOutputs = new IMessageEvent[]
+            {
+                new TextStart(0),
+                new TextDelta(0, chunk1),
+                new TextDelta(0, chunk2),
+                new TextEnd(0)
+            }.ToAsyncEnumerable();
+
+            var layer = new ToolCallDetectionLayer();
+            AttachMockInner(layer, mockLlm);
+
+            // Act
+            var results = await layer.GenerateAsync(
+                Array.Empty<Message>(),
+                tools: new[] { dummyTool.Definition }
+            ).ToContentsAsync();
+
+            // Assert
+            var call = Assert.Single(results.OfType<ToolCall>());
+            Assert.Equal("ToolA", call.Name);
+        }
+    }
+
+    [Fact]
+    public async Task ReasoningContentDelta_WhenFlushed_PreservesReasoningContentDeltaType()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new ReasoningStart(0),
+            new ReasoningDelta(0, "Thinking process: { \"name\": \"NotATool\" }"),
+            new ReasoningEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("ToolA").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var single = Assert.Single(results);
+        var reasoning = Assert.IsType<Reasoning>(single);
+        Assert.Equal("Thinking process: { \"name\": \"NotATool\" }", reasoning.Thought);
+    }
+
+    [Fact]
+    public async Task XmlTagStructuredToolCall_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call>\n<function=TodoList>\n<parameter=todos>\n[\"ReadFile\", \"RunCommand\"]\n</parameter>\n</function>\n</tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("TodoList").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var call = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("TodoList", call.Name);
+        Assert.Contains("ReadFile", call.Arguments);
+    }
+
+    [Fact]
+    public async Task XmlTagStructuredToolCall_MultipleParameters_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call><function=EditFile><parameter=filePath>test.txt</parameter><parameter=replacementContent>hello world</parameter></function></tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("EditFile").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var call = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("EditFile", call.Name);
+        Assert.Contains("test.txt", call.Arguments);
+        Assert.Contains("hello world", call.Arguments);
+    }
+
+    [Fact]
+    public async Task XmlTagStructuredToolCall_SplitDeltas_ParsedCorrectly()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, "<tool_call><function=TodoList>"),
+            new TextDelta(0, "<parameter=todos>[\"Search\"]</parameter>"),
+            new TextDelta(0, "</function></tool_call>"),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("TodoList").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var call = Assert.Single(results.OfType<ToolCall>());
+        Assert.Equal("TodoList", call.Name);
+        Assert.Contains("Search", call.Arguments);
+    }
+
+    [Fact]
+    public async Task XmlTagStructuredToolCall_UnknownFunction_ReplayedUnchanged()
+    {
+        // Arrange
+        var mockLlm = new MockLLM();
+        var rawText = "<tool_call><function=FakeDangerousThing><parameter=todos>[\"Search\"]</parameter></function></tool_call>";
+        mockLlm.EmittedOutputs = new IMessageEvent[]
+        {
+            new TextStart(0),
+            new TextDelta(0, rawText),
+            new TextEnd(0)
+        }.ToAsyncEnumerable();
+
+        var layer = new ToolCallDetectionLayer();
+        AttachMockInner(layer, mockLlm);
+
+        // Act
+        var results = await layer.GenerateAsync(
+            Array.Empty<Message>(),
+            tools: new[] { new DummyTool("TodoList").Definition }
+        ).ToContentsAsync();
+
+        // Assert
+        var text = string.Concat(results.OfType<Text>().Select(d => d.Value));
+        Assert.Equal(rawText, text);
+        Assert.Empty(results.OfType<ToolCall>());
+    }
+}
+
+internal static class AsyncEnumerableExtensions
+{
+    public static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(this IEnumerable<T> source)
+    {
+        foreach (var item in source)
+        {
+            yield return item;
+            await Task.CompletedTask;
+        }
+    }
+}
+
+internal static class ListExtensions
+{
+    public static async Task<List<IContent>> ToContentsAsync(this IAsyncEnumerable<IMessageEvent> stream)
+    {
+        var message = new StreamingMessage();
+        await foreach (var evt in stream)
+        {
+            message.Push(evt);
+        }
+        return [.. message.Contents];
+    }
+
+    public static async Task<List<T>> ToListAsync<T>(this IAsyncEnumerable<T> source)
+    {
+        var list = new List<T>();
+        await foreach (var item in source)
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+}

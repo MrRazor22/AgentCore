@@ -1,0 +1,7 @@
+audit_item,count,status,notes
+Physical Agent Transcripts,0,MISSING,No JSONL or text session logs exist for Claude or o3-mini coding runs.
+Tool Call Logs,0,MISSING,No recorded tool execution history or compiler error feedback.
+Generated Source Trees,0,MISSING,No generated workspace folders exist for the 480 reported runs.
+Compile/Test Output Logs,0,MISSING,No compiler logs or test execution dumps exist.
+Token Accounting Records,0,SYNTHETIC,Tokens in ai_runs.csv generated via random.gauss around fixed base values.
+Hardcoded Generation Code,1,CONFIRMED_SYNTHETIC,"FRAMEWORK_AI_PARAMS dictionary in ai_implementation_runner.py defines base_in, base_out, iters, first_pass."

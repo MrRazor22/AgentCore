@@ -1,0 +1,89 @@
+=== PAGE 69 ===
+Phase 3: Transactional reload.  Finally, the engine reloads the stale entries. It invalidates 
+the accepted modules’ caches 3, backing up each removed module to enable rollback, then re-
+imports each stale entry’s component module by its url and swaps in a fresh fiber:
+Algorithm 10 Transactional module reload
+1 function reload(ctx, accepted, stale_entries)
+2 backup ← invalidate_caches(accepted)
+3 try
+4 for entry in stale_entries do
+5 entry.fiber.dispose()
+6 entry.fiber ← ctx.use(import(entry.url), entry.config)
+7 catch error
+8 restore_caches(backup)
+9 for entry in stale_entries do
+10 entry.fiber.dispose()
+11 entry.fiber ← ctx.use(backup[entry.url], entry.config)
+12 throw error
+The transactional guarantee ensures that the system never enters a half-reloaded state: if 
+any module fails to import (e.g., due to a syntax error), the caches are restored and every 
+stale entry is rebuilt from backup[entry.url], the previous component whose cache was just 
+restored, undoing the swaps already made.
+5.3.  Case Study: Koishi
+Koishi is an open-source chatbot application framework built on Cordis 4. Over four years of 
+development, it has accumulated over 4000 community-contributed plugins 5, ranging from 
+instant-messaging (IM) adapters and database drivers to administrative consoles and end-
+user features. Its scale and diversity make it a representative validation of Cordis’s dynamic 
+composability in a production setting.
+Expressiveness and generality of the meta-framework.  Koishi runs as a server-side bot 
+whose every feature is realized as a plugin over the context primitives of Section 5.1; Koishi 
+itself contributes only the chatbot-domain vocabulary. The same model reappears in a wholly 
+different runtime: Koishi’s web console is a second, independent Cordis application whose 
+plugins compose the primitives of the browser and its user interface rather than those of the 
+server. The disparate settings above establish two properties of the model of Section 3. (1) It 
+is expressive: its primitives suffice to carry a complete production system, the host framework 
+supplying only domain vocabulary. (2) It is general: it fixes how effects and coeffects compose 
+while leaving their meaning to each application, and so presupposes neither a particular 
+domain nor a particular runtime.
+Temporal composability without cognitive overhead.  The plugin systems surveyed in 
+Section 1.2.1 cannot unload an individual extension’s effects without restarting the extension 
+3On Node.js, this means clearing the caches of both the ES module and CommonJS module systems, since a 
+module imported through the ES loader can appear in both.
+4Koishi currently uses Cordis v3. This paper presents Cordis v4, which refines the effect and coeffect semantics 
+and redesigns the loader; the core compositional model is shared across both versions.
+5Koishi uses the term plugin for the concept this paper formalizes as component.
+69
+=== PAGE 70 ===
+host. Koishi routinely performs this operation: an orchestrator disables a plugin from the 
+console and its effects are reverted in place; during development, the HMR engine re-applies 
+edited plugins on save while preserving cache state and live connections elsewhere in the 
+system. Cordis makes such removal not merely possible but effortless for the plugin author. 
+Because effects performed through the context are tracked and their inverses composed auto -
+matically (Section 3.1), even an inexperienced author obtains ordered cleanup for a plugin’s 
+context-mediated effects without writing an uninstall path. This achieves the locality of concern 
+whose absence Section 1.2.1 identifies: correctness that would otherwise rest on each author’s 
+diligence is instead discharged once, by the abstraction.
+Spatial composability across an open ecosystem.  In contrast to the plugin systems of 
+Section 1.2.1, where inter-plugin dependencies are largely absent, Koishi’s ecosystem exhibits 
+a genuine dependency topology: IM adapters provide access to each messaging platform, 
+database drivers provide persistent storage, and functional plugins declare these as coeffects 
+and access them. Reconfiguring a provider at runtime, such as switching the storage backend or 
+reconnecting an adapter, reactivates only the dependents whose resolved dependency changed 
+(Section 3.2); a plugin whose dependency is unavailable stays inactive until it appears, without 
+erroring. What the case study substantiates is that this composition holds across independently 
+authored code: a plugin and its dependencies are typically written by different authors who 
+coordinate on nothing beyond the coeffect that connects them, so reactive coeffects keep the 
+assembly consistent across an open ecosystem of independent contributors.
+Threats to validity. The evidence here is drawn from a single ecosystem in a single host lan-
+guage, so it cannot separate the merits of the paradigm from those of its TypeScript realization 
+or of Koishi’s particular domain, and it is observational rather than a controlled comparison 
+against an alternative architecture. What the case study establishes is thus an existence-and-
+adoption result rather than a quantitative one; measuring the abstraction’s overhead and its 
+effect on developer productivity against a baseline remains future work.
+6.  Discussion
+The formal model and implementation presented in the preceding sections introduce a 
+programming paradigm for dynamic composability. This section examines how the paradigm 
+extends to broader engineering concerns, and discusses the design tensions and open prob -
+lems.
+6.1.  System Boundary
+Every effect in Section 3.1 carries an inverse, and what that inverse amounts to is settled by the 
+system boundary. The boundary divides the environment a system runs against into two parts. 
+(1) A location lies inside when the system is able to modify it exclusively and to restore the state 
+before that modification, so an operation on it is tracked in Γ and can be reverted later. (2) A 
+location lies outside when either ability fails, so an operation on it acts as idΓ and is therefore 
+neither tracked nor reverted. This section develops the properties of this boundary and their 
+consequences for recovery.
+Boundaries from coeffects. A coeffect moves the boundary by reifying an external location: 
+it confines every access to that location to a set of operations it provides, each of which it can 
+supply an inverse for, so operations that acted as idΓ come to be tracked in Γ and reverted. The 
+70

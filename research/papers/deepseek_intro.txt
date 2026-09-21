@@ -1,0 +1,174 @@
+--- PAGE 1 ---
+A Programming Paradigm for Spatiotemporal Composability
+Yifan Shi1,2, Wei Zhang1, Tianyi Cui2
+1Peking University 2DeepSeek-AI
+Abstract
+Modern software—from plugin systems to self-evolving agent harnesses—increasingly 
+requires dynamic composition, yet its formal foundations remain underdeveloped. We identify 
+two orthogonal dimensions of the problem: temporal composability, the ability to completely 
+revert a component’s side effects upon removal, and spatial composability, the ability to declare 
+and reactively manage inter-component dependencies. We address the two dimensions by 
+lifting classical effect and coeffect concepts to runtime mechanisms. In particular, we formalize 
+revertible effects, in which every context transformation carries an inverse that the runtime holds, 
+establishing temporal composability local to one component. We formalize reactive coeffects, in 
+which every context change is classified against a component’s coeffect specification to drive its 
+activation and deactivation, establishing spatial composability local to one component. We then 
+unify the effect context and the coeffect context into a single context type and mediate every 
+effect and coeffect through it, yielding a discipline we call the context paradigm; the mediation 
+induces an observational equivalence up to which the effects of distinct components interleave 
+without disturbing one another. Combining these mechanisms into the notion of a component, 
+we give a calculus of dynamic composition whose metatheory carries spatiotemporal compos-
+ability from a single component to a whole system of interleaved components. We implement 
+these ideas in Cordis, a meta-framework of spatiotemporal composability that provides a core 
+library with effect tracking and coeffect resolution, as well as a declarative component loader 
+with configuration reconciliation and hot module replacement.
+1--- PAGE 2 ---
+Contents
+1. Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.1. Dimensions of Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.2. Motivating Examples . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.2.1. Plugin Systems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+1.2.2. Self-Evolving Agent Harnesses . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+1.2.3. The Coarse-Grained Workaround . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+1.3. Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+2. Preliminaries . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.1. Effects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.2. Coeffects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+2.3. Relationship to Dynamic Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3. Revertible Effects and Reactive Coeffects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.1. Revertible Effects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.1.1. Effect Context . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+3.1.2. Effect Functions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12
+3.1.3. Effect Iterators . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+3.2. Reactive Coeffects . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+3.2.1. Coeffect Context . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+3.2.2. Specification and Notification . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18
+3.2.3. Isolation and Interception . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19
+3.3. The Context Paradigm . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+3.3.1. Unified Context . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21
+3.3.2. Observational Equivalence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+3.4. Attaining Independence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+3.4.1. Effect Independence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 26
+3.4.2. Coeffect Commutativity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+4. A Calculus of Dynamic Composition . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+4.1. Components and Fibers . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 31
+4.2. The Calculus . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+4.2.1. Orchestration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 34
+4.2.2. Lifecycle . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+4.2.3. Confinement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 38
+4.3. Metatheory . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39
+2--- PAGE 3 ---
+4.3.1. Preservation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 43
+4.3.2. Temporal Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 44
+4.3.3. Spatial Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 47
+4.3.4. Progress . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 49
+4.3.5. Confluence . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 51
+4.4. Extensions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 55
+5. Implementation and Case Study . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 57
+5.1. Core Library . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 57
+5.1.1. Effect Tracking . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 59
+5.1.2. Coeffect Operations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 60
+5.1.3. Component Lifecycle . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 61
+5.1.4. Context Access . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 64
+5.2. Component Loader . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 64
+5.2.1. Declarative Configuration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 65
+5.2.2. Hot Module Replacement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 67
+5.3. Case Study: Koishi . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 69
+6. Discussion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 70
+6.1. System Boundary . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 70
+6.2. Service Multiplexing . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 71
+6.3. Access Control and Sandboxing . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 72
+6.4. Language Independence and Selection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 73
+6.5. Mutual Dependencies and Component Granularity . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 74
+6.6. Dependency Typing and Versioning . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 75
+6.7. Co-Design with Languages and Operating Systems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 76
+7. Related Work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 77
+7.1. Effect and Coeffect Systems . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 77
+7.2. Programming Paradigms . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 78
+7.3. Temporal Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 79
+7.4. Spatial Composability . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 81
+8. Conclusion . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 82
+References . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 83
+3--- PAGE 4 ---
+1.  Introduction
+Composition—assembling complex systems from simpler parts—is a foundational principle of 
+software engineering [1]. Traditionally, composition is static: function calls, module imports, 
+and class inheritance are resolved at compile time and remain fixed throughout execution. 
+However, modern software increasingly demands dynamic composition, where components 
+are loaded, unloaded, and reconfigured at runtime. Plugin architectures [2] and self-evolving 
+agent harnesses both require systems that can safely add and remove functionality on the 
+fly, yet current practice defers to coarse-grained mechanisms [3] that reconfigure only by 
+restarting, discarding runtime state. Despite the growing practical importance of dynamic 
+composition, its theoretical foundations remain underdeveloped, compared to the rich formal 
+frameworks available for static composition.
+1.1.  Dimensions of Composability
+To characterize the requirements of dynamic composition, we identify two orthogonal dimen-
+sions beyond the well-studied algebraic aspects of composition:
+• Temporal composability addresses the time dimension: upon removal of a component, 
+the modifications the component made to the shared environment must be completely 
+and safely reversed. This requires tracking every resource allocation, event registration, 
+and state mutation the component performs, and guaranteeing their orderly reclamation 
+upon removal.
+• Spatial composability  addresses the space dimension: components must be able to 
+declare, discover, and resolve their dependencies on one another in a structured and 
+verifiable manner. This requires managing dependency topology and coordinating com-
+ponent lifecycles in response to dependency changes.
+In the static setting, temporal composability reduces to lexical scoping (e.g., RAII [4], 
+bracket patterns [5]), and spatial composability reduces to module import resolution [6]. 
+In the dynamic setting, where components arrive and depart at runtime, both dimensions 
+become significantly harder: temporal composability must handle long-lived, stateful effects 
+whose scope is not lexically bounded; and spatial composability must handle dependencies 
+that appear, disappear, or change identity during execution.
+1.2.  Motivating Examples
+1.2.1.  Plugin Systems
+Plugin systems are a canonical instance of dynamic composition. We use Visual Studio Code 
+(VSCode), one of the most widely-used extensible IDEs, as a representative example.
+Temporal limitation. VSCode runs all extensions in a shared process called the extension 
+host. Although extensions can be installed dynamically, this host provides no mechanism to 
+unload an individual extension’s code at runtime. Once an extension’s activate function has 
+executed, disabling or uninstalling it requires restarting the entire host, affecting all loaded 
+extensions. Purely declarative extensions such as themes, keybindings, and snippets carry no 
+4--- PAGE 5 ---
+code and can be removed freely. Among the top 100 extensions by install count, however, 87 
+contain executable code 1 and will therefore require such a restart upon removal. Although 
+VSCode provides a deactivate hook, it serves only as a graceful shutdown callback during the 
+host process’ termination, and thus does not enable live removal. Moreover, the hook separates 
+effect disposal from effect creation (in activate), violating locality of concern and making 
+complete cleanup difficult to verify.
+Spatial limitation. VSCode does provide extensionDependencies for declaring dependen -
+cies between extensions, but it sees little use: among the top 100 extensions by install count, 
+only 7 declare extensionDependencies on non-built-in extensions. 1 This scarcity reflects the 
+shape of the extension API, which exposes fixed, surface-level extension points such as com -
+mands, views, and language features. Extensions contribute to the host through these points 
+rather than depending on one another, so inter-extension dependencies rarely arise. Moreover, 
+VSCode’s mechanism for inter-extension interaction provides no structural contract: it exposes 
+an extension’s functionality to others through vscode.extensions.getExtension(...).exports, 
+but the returned value is untyped (any by default), so the dependent cannot rely on a checked 
+interface. In short, VSCode steers extensions toward a fixed set of host-provided extension 
+points, and offers no safe, structured way for them to depend on one another.
+These two limitations are not unique to VSCode; they recur across plugin systems generally 
+[2, 7], differing only in degree.
+1.2.2.  Self-Evolving Agent Harnesses
+Modern AI agents rely on runtime agent harnesses [8–10]. These systems may compose diverse 
+tool suites [11] and execution environments, govern permissions and sandboxing, maintain 
+session state and persistence, provide context management and memory systems [12], orches-
+trate subagents and multi-agent workflows [13], and expose interfaces to users and automation. 
+A future harness may generate and deploy modifications to its own components while contin-
+uously serving requests. Model-synthesized reusable tools provide a narrower precursor to 
+component-level self-modification [14]. Each such modification is itself an instance of dynamic 
+composition.
+Because these modifications occur continuously and with limited or no human oversight, 
+dynamic composability becomes indispensable. Without temporal composability, each self-
+modification forces a full restart that discards all process-local accumulated state; at such 
+frequency the cumulative unavailability becomes substantial, and in-flight tasks are disrupted 
+repeatedly; even worse, a faulty self-modification can disable the very process needed to 
+recover. Without spatial composability, each module must itself detect and adapt to changes in 
+the modules it depends on as they appear, disappear, or change identity, and can do so only by 
+ad hoc means; even worse, a naive code-replacement strategy may silently break dependents 
+or introduce circular dependencies that surface only at reload time.
+1.2.3.  The Coarse-Grained Workaround
+One reason dynamic composability has received limited formal attention is that operating 
+systems and container orchestrators already provide a coarse-grained substitute. Operating 
+systems yield temporal composability at the granularity of a process; container orchestrators 
+1Data retrieved from the Visual Studio Code Marketplace on June 9, 2026.
+5

@@ -7,16 +7,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore", "AgentCore\Agen
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
 	ProjectSection(SolutionItems) = preProject
-		evidence.md = evidence.md
-		math.md = math.md
-		Notes.txt = Notes.txt
+		DESIGN.md = DESIGN.md
+		README.md = README.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Tests", "AgentCore.Tests\AgentCore.Tests.csproj", "{A374013F-9DDD-490B-8A20-0BEFAC7E83A9}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Host", "AgentCore.Host\AgentCore.Host.csproj", "{F3145E45-EB5B-6852-8D08-94047D8BA459}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeSharp.Tests", "CodeSharp.Tests\CodeSharp.Tests.csproj", "{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Host.Tests", "AgentCore.Host.Tests\AgentCore.Host.Tests.csproj", "{5A5EE429-2BDE-435A-A3AF-F7E1E052DB38}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentCore.Layers", "AgentCore.Layers\AgentCore.Layers.csproj", "{57BBF322-1F3C-4B01-A0B7-C89A14505E88}"
 EndProject
