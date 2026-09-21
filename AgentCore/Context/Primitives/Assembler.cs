@@ -99,7 +99,7 @@ public sealed class Assembler : IAssembler
         {
             var contents = new List<IToolResultContent>(tr.Contents);
             if (tr.TextBuffer.Length > 0) contents.Add(new Text(tr.TextBuffer.ToString()));
-            if (contents.Count > 0) snapshotContents.Add(new ToolResult(tr.Start.ToolCallId, contents));
+            if (contents.Count > 0) snapshotContents.Add(new ToolResult(tr.Start.ToolCallId, contents, isError: true));
         }
         return new Message(_role, snapshotContents, _id, _metadata);
     }
@@ -112,7 +112,7 @@ public sealed class Assembler : IAssembler
         }
         foreach (var index in _toolResultBlocks.Keys.ToList())
         {
-            CompleteToolResultBlock(index);
+            CompleteToolResultBlock(index, isError: true);
         }
     }
 

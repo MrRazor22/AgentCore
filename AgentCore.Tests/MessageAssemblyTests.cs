@@ -75,7 +75,7 @@ public class MessageAssemblyTests
         Assert.Equal("Here is the answer.", Assert.IsType<Text>(message.Contents[1]).Value);
 
         Assert.Equal("msg_123", message.Id);
-        Assert.Equal(5, message.Get<Summary>()?.Count);
+        Assert.Equal(5, message.Get<Summary>()?.CompactedMessages);
         var usage = message.Get<TokenUsage>();
         Assert.NotNull(usage);
         Assert.Equal(10, usage.InputTokens);
@@ -99,5 +99,19 @@ public class MessageAssemblyTests
         Assert.Equal("First text. ", Assert.IsType<Text>(message.Contents[0]).Value);
         Assert.Equal("call_1", Assert.IsType<ToolCall>(message.Contents[1]).Id);
         Assert.Equal("Second text.", Assert.IsType<Text>(message.Contents[2]).Value);
+    }
+
+    [Fact]
+    public void MessageAssembler_UnclosedToolResult_MarksAsError()
+    {
+        var assembler = new Assembler();
+        assembler.Push(D(new ToolResultStart(0, "call_1")));
+        assembler.Push(D(new ToolResultDelta(0, new TextDelta(0, "partial tool output"))));
+
+        var message = assembler.ToMessage();
+        var result = Assert.Single(message.Contents.OfType<ToolResult>());
+        Assert.Equal("call_1", result.ToolCallId);
+        Assert.True(result.IsError);
+        Assert.Equal("partial tool output", Assert.IsType<Text>(result.Contents[0]).Value);
     }
 }

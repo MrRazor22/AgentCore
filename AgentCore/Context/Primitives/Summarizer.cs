@@ -49,7 +49,7 @@ public class Summarizer(
         result.Add(new Message(
             Role.User, 
             [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")],
-            [new Summary(original.Count)]));
+            metadata: [new Summary(original.Count, original.LastOrDefault()?.Id)]));
 
         foreach (var msg in GetTrailingTurn(original))
             if (msg.Role != Role.System)

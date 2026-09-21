@@ -50,7 +50,7 @@ public class ChatNormalizer(
             {
                 foreach (var call in msg.Contents.OfType<ToolCall>().Where(c => !doneIds.Contains(c.Id)))
                 {
-                    result.Add(new Message(Role.Tool, [new ToolResult(call.Id, [new Text($"Tool call '{call.Name}' was aborted.")])], call.Id));
+                    result.Add(new Message(Role.Tool, [new ToolResult(call.Id, [new Text($"Tool call '{call.Name}' was aborted.")], isError: true)], call.Id));
                     doneIds.Add(call.Id);
                 }
             }

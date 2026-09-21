@@ -9,14 +9,14 @@ public static class ToolingLayerExtensions
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(approver);
-        return tooling.AddLayer(new ToolApprovalLayer(tooling, approver));
+        return tooling.AddLayer(new ToolApprovalLayer(approver, tooling));
     }
 
     public static IToolbox UseApproval(this IToolbox tooling, Func<ToolCall, CancellationToken, Task<bool>> prompt)
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(prompt);
-        return tooling.AddLayer(new ToolApprovalLayer(tooling, prompt));
+        return tooling.AddLayer(new ToolApprovalLayer(prompt, tooling));
     }
 
     public static IToolbox RemoveApproval(this IToolbox tooling)

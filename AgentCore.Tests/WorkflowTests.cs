@@ -378,9 +378,9 @@ public class WorkflowTests
         var toolResults = history.Where(m => m.Role == Role.Tool).SelectMany(m => m.Contents.OfType<ToolResult>()).ToList();
         Assert.Equal(2, toolResults.Count);
         Assert.Equal("c1", toolResults[0].ToolCallId);
-        Assert.Equal("c2", toolResults[1].ToolCallId);
         var autoInterrupted = history.First(m => m.Role == Role.Tool && m.Id == "c2");
-        Assert.NotNull(autoInterrupted.Get<Interrupted>());
-        Assert.Equal("Interrupted", autoInterrupted.Get<Interrupted>()?.Reason);
+        var tr = Assert.Single(autoInterrupted.Contents.OfType<ToolResult>());
+        Assert.True(tr.IsError);
+        Assert.Contains("aborted", tr.Contents.OfType<Text>().First().Value);
     }
 }

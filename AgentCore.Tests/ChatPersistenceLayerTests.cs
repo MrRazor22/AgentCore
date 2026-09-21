@@ -97,10 +97,10 @@ public class ChatPersistenceLayerTests
             new(Role.System, [new Text("System instruction")]),
             new(Role.User, [new Text("First message")]),
             new(Role.Assistant, [new Text("First answer")]),
-            new(Role.User, [new Text("Summary 1")], [new Summary(3)]),
+            new(Role.User, [new Text("Summary 1")], metadata: [new Summary(3)]),
             new(Role.User, [new Text("Second message")]),
             new(Role.Assistant, [new Text("Second answer")]),
-            new(Role.User, [new Text("Latest Summary 2")], [new Summary(6)]),
+            new(Role.User, [new Text("Latest Summary 2")], metadata: [new Summary(6)]),
             new(Role.User, [new Text("Third message")]),
             new(Role.Assistant, [new Text("Third answer")])
         ];

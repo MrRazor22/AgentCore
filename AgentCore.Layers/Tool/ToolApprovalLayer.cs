@@ -6,25 +6,15 @@ namespace AgentCore.Tool;
 
 public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, CancellationToken ct);
 
-public sealed class ToolApprovalLayer : ToolboxLayer
+public sealed class ToolApprovalLayer(ToolApprover approver, IToolbox? inner = null) : ToolboxLayer(inner)
 {
-    private readonly ToolApprover _approver;
+    private readonly ToolApprover _approver = approver ?? throw new ArgumentNullException(nameof(approver));
 
-    public ToolApprovalLayer(IToolbox inner, ToolApprover approver) : base(inner) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator, IToolbox? inner = null)
+        : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null, inner) { }
 
-    public ToolApprovalLayer(IToolbox inner, Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
-        : this(inner, async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
-
-    public ToolApprovalLayer(IToolbox inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
-        : this(inner, async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
-
-    public ToolApprovalLayer(ToolApprover approver) : base(null) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
-
-    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
-        : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
-
-    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt)
-        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt, IToolbox? inner = null)
+        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")], inner) { }
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
