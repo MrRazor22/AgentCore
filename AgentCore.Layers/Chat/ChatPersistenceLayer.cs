@@ -25,7 +25,7 @@ public sealed class ChatPersistenceLayer(
         return await base.ReadAsync(ct).ConfigureAwait(false);
     }
 
-    public override async IAsyncEnumerable<IContentEvent> WriteAsync(
+    public override async IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {

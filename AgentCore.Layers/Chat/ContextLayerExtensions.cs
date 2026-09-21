@@ -36,6 +36,7 @@ public static class ContextLayerExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         var sourceStore = new FileChatStore(storageDirectory, sourceSessionId);
+        var history = await sourceStore.LoadAsync(ct).ConfigureAwait(false);
         var snapshot = history?.Snapshot(upToMessageId);
         var targetStore = new FileChatStore(storageDirectory, newSessionId);
         if (snapshot is { Count: > 0 })

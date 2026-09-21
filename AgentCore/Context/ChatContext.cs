@@ -13,7 +13,7 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default);
-    IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
 public class ChatContext(
@@ -34,7 +34,7 @@ public class ChatContext(
     private string? _activeId;
     private int _tokens = messages != null ? messages.Sum(m => (int)((1 + m.Contents.Sum((counter ?? new Tokenizer()).Estimate)) * 1.15)) : 0;
 
-    public async IAsyncEnumerable<IContentEvent> WriteAsync(
+    public async IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -43,11 +43,11 @@ public class ChatContext(
         {
             await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
             {
-                IContent? completedContent;
-                lock (_lock) completedContent = AppendLocked(evt);
+                IMessageEvent? completed;
+                lock (_lock) completed = AppendLocked(evt);
 
-                if (evt is MessageDelta { Content: { } ce }) yield return ce;
-                if (completedContent is not null) yield return completedContent;
+                yield return evt;
+                if (completed is not null) yield return completed;
             }
         }
         finally
@@ -63,7 +63,7 @@ public class ChatContext(
         }
     }
 
-    private IContent? AppendLocked(IMessageEvent evt)
+    private IMessageEvent? AppendLocked(IMessageEvent evt)
     {
         if (evt is Message m)
         {
@@ -91,10 +91,10 @@ public class ChatContext(
             if (id == _activeId) _activeId = null;
             var msg = asm.ToMessage(me);
             Commit(msg, msg.Metadata.Get<TokenUsage>()?.TotalTokens);
-            return null;
+            return msg;
         }
 
-        return evt is MessageDelta md ? asm.Push(md) : null;
+        return evt is MessageDelta md && asm.Push(md) is { } c ? new MessageDelta(id, Content: c) : null;
     }
 
     public async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)

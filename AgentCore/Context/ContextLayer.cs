@@ -12,7 +12,7 @@ public class ContextLayer(IContext? inner = null) : IContext, ILayer<IContext>
     public virtual Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
         => Inner.ReadAsync(ct);
 
-    public virtual IAsyncEnumerable<IContentEvent> WriteAsync(
+    public virtual IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
         => Inner.WriteAsync(events, ct);

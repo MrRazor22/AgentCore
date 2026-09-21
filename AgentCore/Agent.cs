@@ -68,15 +68,16 @@ public sealed class Agent(
 
             toolCalls = null;
             await foreach (var evt in Context.WriteAsync(LLM.GenerateAsync(prompt, toolDefs, ct: ct), ct))
+            if (evt is MessageDelta { Content: { } c })
             {
-                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
-                yield return evt;
+                if (c is ToolCall tc) (toolCalls ??= []).Add(tc);
+                yield return c;
             }
 
             if (toolCalls is not null)
             {
                 await foreach (var evt in Context.WriteAsync(Toolbox.ExecuteAsync(toolCalls, ct), ct))
-                    yield return evt;
+                    if (evt is MessageDelta { Content: { } c }) yield return c;
 
                 messages = await Context.ReadAsync(ct).ConfigureAwait(false);
             }

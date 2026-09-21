@@ -45,7 +45,7 @@ public class AgentRuntimeTests
     {
         public List<string> CallLog { get; } = [];
         public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default) { CallLog.Add("ReadAsync"); return base.ReadAsync(ct); }
-        public override async IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        public override async IAsyncEnumerable<IMessageEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             CallLog.Add("WriteAsync");
             await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false)) yield return evt;
@@ -81,7 +81,7 @@ public class AgentRuntimeTests
     private class TestMemoryDecorator(string name, List<string> callOrder, IContext? inner = null) : ContextLayer(inner)
     {
         public override Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default) { callOrder.Add(name); return base.ReadAsync(ct); }
-        public override async IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        public override async IAsyncEnumerable<IMessageEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             callOrder.Add(name);
             await foreach (var evt in base.WriteAsync(events, ct).ConfigureAwait(false)) yield return evt;

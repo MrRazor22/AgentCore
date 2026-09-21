@@ -152,7 +152,7 @@ public class MockMemoryProvider : IContext
         return list;
     }
 
-    public IAsyncEnumerable<IContentEvent> WriteAsync(
+    public IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
         => _inner.WriteAsync(events, ct);
