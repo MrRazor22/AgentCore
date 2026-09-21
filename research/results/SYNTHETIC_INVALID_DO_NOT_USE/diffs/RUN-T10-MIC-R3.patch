@@ -1,0 +1,17 @@
+# Benchmark Run Diff: RUN-T10-MIC-R3
+# Framework: Microsoft Agent Framework
+# Task: T10
+# Generated: 2026-09-21 15:49:58
+--- a/Microsoft Agent Framework/baseline
++++ b/Microsoft Agent Framework/T10
+diff --git a/src/extension_T10_0.cs b/src/extension_T10_0.cs
+new file mode 100644
++ // Implementation of T10 inside natural boundary B(r)
+diff --git a/src/framework_wiring_0.cs b/src/framework_wiring_0.cs
+--- a/src/framework_wiring_0.cs
++++ b/src/framework_wiring_0.cs
++ // Wiring change outside natural boundary (external propagation P_ext)
+diff --git a/src/framework_wiring_1.cs b/src/framework_wiring_1.cs
+--- a/src/framework_wiring_1.cs
++++ b/src/framework_wiring_1.cs
++ // Wiring change outside natural boundary (external propagation P_ext)

@@ -1,0 +1,27 @@
+{
+  "run_id": "RUN-T02-OAI-R1",
+  "framework": "OpenAI Agents SDK",
+  "framework_commit": "fdf21db62c303a3db54b0dfbee82de2141fa2799",
+  "task_id": "T02",
+  "replicate_id": 1,
+  "files_added": [
+    "telemetry.py",
+    "test_T02.py"
+  ],
+  "files_modified": [
+    "agent_app.py"
+  ],
+  "natural_boundary": [
+    "telemetry.py",
+    "test_T02.py"
+  ],
+  "modified_outside_boundary": [
+    "agent_app.py"
+  ],
+  "core_touched": false,
+  "external_propagation": 1,
+  "test_exit_code": 0,
+  "test_output": "Ran 4 tests in 0.012s\n\nOK",
+  "wall_clock_seconds": 2.268,
+  "pass_fail": "pass"
+}

@@ -1,0 +1,27 @@
+{
+  "run_id": "RUN-T03-PYD-R1",
+  "framework": "PydanticAI",
+  "framework_commit": "c4898abb54dc25ae6f6aef208a4c0661b30a455e",
+  "task_id": "T03",
+  "replicate_id": 1,
+  "files_added": [
+    "approval.py",
+    "test_T03.py"
+  ],
+  "files_modified": [
+    "agent.py"
+  ],
+  "natural_boundary": [
+    "approval.py",
+    "test_T03.py"
+  ],
+  "modified_outside_boundary": [
+    "agent.py"
+  ],
+  "core_touched": false,
+  "external_propagation": 1,
+  "test_exit_code": 0,
+  "test_output": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.017s\n\nOK",
+  "wall_clock_seconds": 1.671,
+  "pass_fail": "pass"
+}

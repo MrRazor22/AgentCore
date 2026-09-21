@@ -1,0 +1,259 @@
+diff --git a/research/runs/agentcore_T08/AgentCoreT08.csproj b/research/runs/agentcore_T08/AgentCoreT08.csproj
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T08/AgentCoreT08.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T08/ContextCompactionLayer.cs b/research/runs/agentcore_T08/ContextCompactionLayer.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T08/ContextCompactionLayer.cs
+@@ -0,0 +1,82 @@
++using System.Runtime.CompilerServices;
++using AgentCore;
++using AgentCore.Context;
++using AgentCore.Context.Primitives;
++using AgentCore.LLM.Chat;
++
++namespace AgentCoreT08;
++
++public sealed class ContextCompactionLayer(
++    int tokenThreshold,
++    int preserveLastTurns = 2,
++    Func<IReadOnlyList<Message>, Task<string>>? summarizer = null,
++    IContext? inner = null) : IContext
++{
++    public IContext Inner { get; } = inner!;
++    private readonly int _tokenThreshold = tokenThreshold;
++    private readonly int _preserveLastTurns = Math.Max(1, preserveLastTurns);
++    private readonly Func<IReadOnlyList<Message>, Task<string>> _summarizer =
++        summarizer ?? (msgs => Task.FromResult($"Summary of {msgs.Count} prior interactions. Key facts preserved."));
++
++    public int CompactionCount { get; private set; }
++
++    public static int EstimateTokens(Message message)
++    {
++        var chars = 0;
++        foreach (var c in message.Contents)
++        {
++            chars += c is Text t ? t.Value.Length : (c.ToString()?.Length ?? 0);
++        }
++        return Math.Max(1, chars / 4);
++    }
++
++    public static int EstimateTokens(IEnumerable<Message> messages)
++        => messages.Sum(EstimateTokens);
++
++    public async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
++    {
++        var messages = Inner != null ? await Inner.ReadAsync(ct).ConfigureAwait(false) : [];
++        if (messages.Count == 0) return messages;
++
++        var totalTokens = EstimateTokens(messages);
++        if (totalTokens <= _tokenThreshold) return messages;
++
++        CompactionCount++;
++
++        var system = messages.FirstOrDefault(m => m.Role == Role.System);
++        var nonSystem = messages.Where(m => m.Role != Role.System).ToList();
++
++        if (nonSystem.Count <= _preserveLastTurns) return messages;
++
++        var toSummarize = nonSystem.Take(nonSystem.Count - _preserveLastTurns).ToList();
++        var preserved = nonSystem.Skip(nonSystem.Count - _preserveLastTurns).ToList();
++
++        var summaryText = await _summarizer(toSummarize).ConfigureAwait(false);
++
++        var compacted = new List<Message>();
++        if (system != null)
++        {
++            compacted.Add(system);
++        }
++
++        compacted.Add(new Message(
++            Role.User,
++            [new Text($"[Prior conversation summary]: {summaryText}")],
++            metadata: [new Summary()]));
++
++        compacted.AddRange(preserved);
++
++        return compacted;
++    }
++
++    public IAsyncEnumerable<IContentEvent> WriteAsync(
++        IAsyncEnumerable<IMessageEvent> events,
++        CancellationToken ct = default)
++        => Inner != null ? Inner.WriteAsync(events, ct) : EmptyAsync();
++
++    private static async IAsyncEnumerable<IContentEvent> EmptyAsync()
++    {
++        await Task.CompletedTask;
++        yield break;
++    }
++}
+diff --git a/research/runs/agentcore_T08/ContextCompactionLayerTests.cs b/research/runs/agentcore_T08/ContextCompactionLayerTests.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T08/ContextCompactionLayerTests.cs
+@@ -0,0 +1,129 @@
++using AgentCore;
++using AgentCore.Context;
++using AgentCore.LLM.Chat;
++using Xunit;
++
++namespace AgentCoreT08;
++
++public class ContextCompactionLayerTests
++{
++    private sealed class MockContext(List<Message> initial) : IContext
++    {
++        public List<Message> Messages { get; } = [.. initial];
++
++        public Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
++            => Task.FromResult<IReadOnlyList<Message>>(Messages);
++
++        public async IAsyncEnumerable<IContentEvent> WriteAsync(
++            IAsyncEnumerable<IMessageEvent> events,
++            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
++        {
++            await foreach (var _ in events.WithCancellation(ct)) { }
++            yield break;
++        }
++    }
++
++    [Fact]
++    public async Task Test1_MonitorsConversationTokenLengthAgainstConfiguredThreshold()
++    {
++        // 5 messages with small content (~25 tokens total)
++        var mock = new MockContext([
++            new(Role.System, [new Text("System prompt")]),
++            new(Role.User, [new Text("Message 1")]),
++            new(Role.Assistant, [new Text("Message 2")]),
++            new(Role.User, [new Text("Message 3")]),
++            new(Role.Assistant, [new Text("Message 4")])
++        ]);
++
++        // Threshold = 100 tokens -> does not trigger compaction
++        var layer = new ContextCompactionLayer(tokenThreshold: 100, preserveLastTurns: 2, inner: mock);
++        var read = await layer.ReadAsync();
++
++        Assert.Equal(5, read.Count);
++        Assert.Equal(0, layer.CompactionCount);
++
++        // Threshold = 5 tokens -> triggers compaction
++        var compactingLayer = new ContextCompactionLayer(tokenThreshold: 5, preserveLastTurns: 2, inner: mock);
++        var compactedRead = await compactingLayer.ReadAsync();
++
++        Assert.True(compactingLayer.CompactionCount > 0);
++        Assert.True(compactedRead.Count < 5);
++    }
++
++    [Fact]
++    public async Task Test2_ReplacesOldestTurnsWithConciseSummaryMessage()
++    {
++        var mock = new MockContext([
++            new(Role.System, [new Text("System directions")]),
++            new(Role.User, [new Text("Detailed historical conversation turn A")]),
++            new(Role.Assistant, [new Text("Detailed historical conversation turn B")]),
++            new(Role.User, [new Text("Recent prompt C")]),
++            new(Role.Assistant, [new Text("Recent response D")])
++        ]);
++
++        var layer = new ContextCompactionLayer(
++            tokenThreshold: 10,
++            preserveLastTurns: 2,
++            summarizer: msgs => Task.FromResult($"Summarized {msgs.Count} turns including historical details."),
++            inner: mock);
++
++        var compacted = await layer.ReadAsync();
++
++        // Should have: System prompt, 1 Summary message, 2 Preserved turns = 4 messages (down from 5)
++        Assert.Equal(4, compacted.Count);
++
++        var summaryMsg = compacted[1];
++        Assert.Equal(Role.User, summaryMsg.Role);
++        Assert.Contains("Summarized 2 turns including historical details", summaryMsg.Contents.OfType<Text>().First().Value);
++    }
++
++    [Fact]
++    public async Task Test3_PreservesSystemPromptAndLastNTurnsVerbatim()
++    {
++        var sysText = "You are a specialized financial analyst.";
++        var lastTurn1 = "What was Q3 revenue?";
++        var lastTurn2 = "Q3 revenue was $4.2B.";
++
++        var mock = new MockContext([
++            new(Role.System, [new Text(sysText)]),
++            new(Role.User, [new Text("Turn 1")]),
++            new(Role.Assistant, [new Text("Turn 2")]),
++            new(Role.User, [new Text(lastTurn1)]),
++            new(Role.Assistant, [new Text(lastTurn2)])
++        ]);
++
++        var layer = new ContextCompactionLayer(tokenThreshold: 10, preserveLastTurns: 2, inner: mock);
++        var compacted = await layer.ReadAsync();
++
++        // System message preserved verbatim at index 0
++        Assert.Equal(Role.System, compacted[0].Role);
++        Assert.Equal(sysText, compacted[0].Contents.OfType<Text>().First().Value);
++
++        // Last 2 turns preserved verbatim at end
++        Assert.Equal(lastTurn1, compacted[^2].Contents.OfType<Text>().First().Value);
++        Assert.Equal(lastTurn2, compacted[^1].Contents.OfType<Text>().First().Value);
++    }
++
++    [Fact]
++    public async Task Test4_MaintainsCorrectOrderingAndTurnSemanticsAfterCompaction()
++    {
++        var mock = new MockContext([
++            new(Role.System, [new Text("Root System")]),
++            new(Role.User, [new Text("Older Turn 1")]),
++            new(Role.Assistant, [new Text("Older Turn 2")]),
++            new(Role.User, [new Text("Older Turn 3")]),
++            new(Role.Assistant, [new Text("Older Turn 4")]),
++            new(Role.User, [new Text("Active User Question")]),
++            new(Role.Assistant, [new Text("Active Assistant Reply")])
++        ]);
++
++        var layer = new ContextCompactionLayer(tokenThreshold: 10, preserveLastTurns: 2, inner: mock);
++        var compacted = await layer.ReadAsync();
++
++        // Verify sequence order: System -> Summary -> Active User -> Active Assistant
++        Assert.Equal(Role.System, compacted[0].Role);
++        Assert.Contains("[Prior conversation summary]", compacted[1].Contents.OfType<Text>().First().Value);
++        Assert.Equal("Active User Question", compacted[2].Contents.OfType<Text>().First().Value);
++        Assert.Equal("Active Assistant Reply", compacted[3].Contents.OfType<Text>().First().Value);
++    }
++}

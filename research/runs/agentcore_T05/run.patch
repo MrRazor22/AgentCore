@@ -1,0 +1,305 @@
+﻿diff --git a/research/runs/agentcore_T05/AgentCoreT05.csproj b/research/runs/agentcore_T05/AgentCoreT05.csproj
+new file mode 100644
+index 0000000..6f29f73
+--- /dev/null
++++ b/research/runs/agentcore_T05/AgentCoreT05.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T05/RateLimitLayer.cs b/research/runs/agentcore_T05/RateLimitLayer.cs
+new file mode 100644
+index 0000000..233d9df
+--- /dev/null
++++ b/research/runs/agentcore_T05/RateLimitLayer.cs
+@@ -0,0 +1,136 @@
++using System.Diagnostics;
++using System.Runtime.CompilerServices;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT05;
++
++public class RateLimitExceededException(string message) : Exception(message);
++
++public sealed class TokenBucket
++{
++    private readonly double _capacity;
++    private readonly double _refillPerSecond;
++    private double _tokens;
++    private long _lastRefillTicks;
++    private readonly object _lock = new();
++
++    public TokenBucket(double capacity, double refillPerSecond)
++    {
++        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
++        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(refillPerSecond);
++        _capacity = capacity;
++        _refillPerSecond = refillPerSecond;
++        _tokens = capacity;
++        _lastRefillTicks = Stopwatch.GetTimestamp();
++    }
++
++    public double AvailableTokens
++    {
++        get
++        {
++            lock (_lock)
++            {
++                RefillLocked();
++                return _tokens;
++            }
++        }
++    }
++
++    public bool TryConsume(double count = 1.0)
++    {
++        lock (_lock)
++        {
++            RefillLocked();
++            if (_tokens >= count)
++            {
++                _tokens -= count;
++                return true;
++            }
++            return false;
++        }
++    }
++
++    public async Task<bool> ConsumeAsync(double count = 1.0, TimeSpan maxWait = default, CancellationToken ct = default)
++    {
++        while (!ct.IsCancellationRequested)
++        {
++            TimeSpan delayNeeded;
++            lock (_lock)
++            {
++                RefillLocked();
++                if (_tokens >= count)
++                {
++                    _tokens -= count;
++                    return true;
++                }
++
++                var deficit = count - _tokens;
++                var secondsNeeded = deficit / _refillPerSecond;
++                delayNeeded = TimeSpan.FromSeconds(secondsNeeded);
++
++                if (maxWait != TimeSpan.Zero && delayNeeded > maxWait)
++                {
++                    return false;
++                }
++            }
++
++            if (delayNeeded > TimeSpan.Zero)
++            {
++                await Task.Delay(delayNeeded, ct).ConfigureAwait(false);
++            }
++        }
++        return false;
++    }
++
++    private void RefillLocked()
++    {
++        var now = Stopwatch.GetTimestamp();
++        var elapsedSeconds = (now - _lastRefillTicks) / (double)Stopwatch.Frequency;
++        _lastRefillTicks = now;
++
++        _tokens = Math.Min(_capacity, _tokens + (elapsedSeconds * _refillPerSecond));
++    }
++}
++
++public sealed class RateLimitLayer(
++    TokenBucket bucket,
++    bool blocking = true,
++    TimeSpan maxWait = default,
++    ILLM? inner = null) : LLMLayer(inner)
++{
++    private readonly TokenBucket _bucket = bucket ?? throw new ArgumentNullException(nameof(bucket));
++    private readonly bool _blocking = blocking;
++    private readonly TimeSpan _maxWait = maxWait;
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        if (!_blocking)
++        {
++            if (!_bucket.TryConsume(1.0))
++            {
++                throw new RateLimitExceededException("Rate limit burst capacity exceeded (non-blocking).");
++            }
++        }
++        else
++        {
++            var consumed = await _bucket.ConsumeAsync(1.0, _maxWait, ct).ConfigureAwait(false);
++            if (!consumed)
++            {
++                throw new RateLimitExceededException($"Rate limit exceeded: queue wait time exceeds {_maxWait.TotalMilliseconds}ms.");
++            }
++        }
++
++        await foreach (var evt in Inner.GenerateAsync(messages, tools, responseSchema, ct).ConfigureAwait(false))
++        {
++            yield return evt;
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T05/RateLimitLayerTests.cs b/research/runs/agentcore_T05/RateLimitLayerTests.cs
+new file mode 100644
+index 0000000..a77eb2c
+--- /dev/null
++++ b/research/runs/agentcore_T05/RateLimitLayerTests.cs
+@@ -0,0 +1,121 @@
++using System.Diagnostics;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace AgentCoreT05;
++
++public class RateLimitLayerTests
++{
++    private sealed class MockLLM : ILLM
++    {
++        public int CallCount { get; private set; }
++
++        public async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
++        {
++            Interlocked.Increment(ref _callCount);
++            yield return new MessageDelta("m1", Content: new TextDelta(0, "response"));
++            await Task.Yield();
++        }
++
++        private int _callCount;
++        public int TotalCalls => _callCount;
++    }
++
++    [Fact]
++    public async Task Test1_EnforcesMaximumCallRateAndBurstCapacity()
++    {
++        // Burst capacity = 3, refill = 10 per second
++        var bucket = new TokenBucket(capacity: 3, refillPerSecond: 10);
++        var mock = new MockLLM();
++        var layer = new RateLimitLayer(bucket, blocking: false, inner: mock);
++
++        // First 3 should succeed immediately within burst
++        for (int i = 0; i < 3; i++)
++        {
++            await foreach (var _ in layer.GenerateAsync([])) { }
++        }
++
++        Assert.Equal(3, mock.TotalCalls);
++
++        // 4th immediate call should exceed burst capacity
++        await Assert.ThrowsAsync<RateLimitExceededException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync([])) { }
++        });
++    }
++
++    [Fact]
++    public async Task Test2_DelaysOrThrottlesRequestUntilCapacityReplenishes()
++    {
++        // Burst capacity = 1, refill = 5 per sec (takes ~200ms for 1 token)
++        var bucket = new TokenBucket(capacity: 1, refillPerSecond: 5);
++        var mock = new MockLLM();
++        var layer = new RateLimitLayer(bucket, blocking: true, maxWait: TimeSpan.FromSeconds(2), inner: mock);
++
++        var sw = Stopwatch.StartNew();
++        // Call 1 consumes the 1 token immediately
++        await foreach (var _ in layer.GenerateAsync([])) { }
++
++        // Call 2 must wait for refill
++        await foreach (var _ in layer.GenerateAsync([])) { }
++        sw.Stop();
++
++        Assert.Equal(2, mock.TotalCalls);
++        Assert.True(sw.ElapsedMilliseconds >= 150, $"Expected wait >= 150ms, got {sw.ElapsedMilliseconds}ms");
++    }
++
++    [Fact]
++    public async Task Test3_ThrowsRateLimitExceededExceptionWhenNonBlockingOrMaxWaitExceeded()
++    {
++        var bucket = new TokenBucket(capacity: 1, refillPerSecond: 0.1); // refills 1 token every 10 seconds
++        var mock = new MockLLM();
++        var layer = new RateLimitLayer(bucket, blocking: true, maxWait: TimeSpan.FromMilliseconds(50), inner: mock);
++
++        // Call 1 succeeds
++        await foreach (var _ in layer.GenerateAsync([])) { }
++
++        // Call 2 needs 10 seconds, but maxWait is 50ms -> throws
++        await Assert.ThrowsAsync<RateLimitExceededException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync([])) { }
++        });
++    }
++
++    [Fact]
++    public async Task Test4_ThreadSafeTokenConsumptionUnderConcurrentRequests()
++    {
++        const int concurrentTasks = 20;
++        const int capacity = 10;
++        var bucket = new TokenBucket(capacity: capacity, refillPerSecond: 0.001); // virtually no refill during test
++        var mock = new MockLLM();
++        var layer = new RateLimitLayer(bucket, blocking: false, inner: mock);
++
++        var successCount = 0;
++        var failureCount = 0;
++
++        await Parallel.ForEachAsync(Enumerable.Range(0, concurrentTasks), async (i, ct) =>
++        {
++            try
++            {
++                await foreach (var _ in layer.GenerateAsync([], ct: ct)) { }
++                Interlocked.Increment(ref successCount);
++            }
++            catch (RateLimitExceededException)
++            {
++                Interlocked.Increment(ref failureCount);
++            }
++        });
++
++        Assert.Equal(capacity, successCount);
++        Assert.Equal(concurrentTasks - capacity, failureCount);
++        Assert.Equal(capacity, mock.TotalCalls);
++    }
++}

@@ -1,0 +1,50 @@
+--- a/research/runs/openai_agents_T01/agent_app.py
++++ b/research/runs/openai_agents_T01/agent_app.py
+@@ -10,12 +10,18 @@
+ from typing import Optional, Callable
+ from agents import Agent, Runner, set_tracing_disabled
+ from agents.models.interface import Model, ModelResponse
+ from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
+ from agents.usage import Usage
+ 
++try:
++    from retry_policy import RetryModelWrapper
++except ImportError:
++    from research.runs.openai_agents_T01.retry_policy import RetryModelWrapper
++
+ set_tracing_disabled(True)
+ 
+ 
+ class DefaultMockModel(Model):
+     def __init__(self, response_text: str = "Default agent response"):
+         self.response_text = response_text
+ 
+@@ -23,10 +29,18 @@
+         msg = ResponseOutputMessage(
+             id="msg_1",
+             content=[ResponseOutputText(annotations=[], text=self.response_text, type="output_text")],
+             role="assistant",
+             status="completed",
+             type="message"
+         )
+         return ModelResponse(output=[msg], usage=Usage(), response_id="resp_1", request_id="req_1")
+ 
+     async def stream_response(self, *args, **kwargs):
+         raise NotImplementedError()
+ 
+ 
+-def create_agent(model: Optional[Model] = None) -> Agent:
++def create_agent(
++    model: Optional[Model] = None,
++    max_retries: int = 3,
++    sleep_fn: Optional[Callable] = None
++) -> Agent:
+     raw_model = model or DefaultMockModel()
+-    agent = Agent(name="retry_agent", model=raw_model)
++    kwargs = {"max_retries": max_retries}
++    if sleep_fn is not None:
++        kwargs["sleep_fn"] = sleep_fn
++    retry_model = RetryModelWrapper(raw_model, **kwargs)
++    agent = Agent(name="retry_agent", model=retry_model)
++    agent._retry_wrapper = retry_model
+     return agent

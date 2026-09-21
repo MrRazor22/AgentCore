@@ -22,21 +22,20 @@ AgentCore-Main/
 │   │   │   ├── JsonSchemaBuilder.cs
 │   │   │   └── JsonSchemaExtensions.cs
 │   │   ├── ILLM.cs
-│   │   ├── LLMLayer.cs
-│   │   └── LLMLayerExtensions.cs
+│   │   ├── LLMExtensions.cs
+│   │   └── LLMLayer.cs
 │   ├── Tool/
 │   │   ├── InternalTools/
 │   │   ├── Tools/
 │   │   │   ├── MethodTool.cs
 │   │   │   └── MethodToolExtensions.cs
-│   │   ├── ToolCallExtensions.cs
-│   │   ├── ToolExtensions.cs
-│   │   ├── Tooling.cs
-│   │   └── ToolingLayer.cs
+│   │   ├── Toolbox.cs
+│   │   ├── ToolboxExtensions.cs
+│   │   └── ToolboxLayer.cs
 │   ├── Agent.cs
 │   ├── AgentCore.csproj
 │   ├── AgentExtensions.cs
-│   └── Events.cs
+│   └── MessageEvents.cs
 ├── AgentCore.Layers/
 │   ├── Chat/
 │   │   ├── Store/
@@ -46,9 +45,9 @@ AgentCore-Main/
 │   │   ├── ChatPersistenceLayer.cs
 │   │   └── ContextLayerExtensions.cs
 │   ├── LLM/
+│   │   ├── InputGuardrailLayer.cs
 │   │   ├── LLMLayerExtensions.cs
 │   │   ├── RetryLayer.cs
-│   │   ├── StreamingEventLayer.cs
 │   │   └── ToolCallDetectionLayer.cs
 │   ├── Tool/
 │   │   ├── ToolApprovalLayer.cs
@@ -58,6 +57,9 @@ AgentCore-Main/
 ├── AgentCore.LLM.Tornado/
 │   ├── AgentCore.LLM.Tornado.csproj
 │   ├── TornadoAdapterExtensions.cs
-│   ├── TornadoBuilderExtensions.cs
 │   └── TornadoLLM.cs
+├── AgentCore.MCP/
+│   ├── AgentCore.MCP.csproj
+│   ├── McpTool.cs
+│   └── McpToolBuilderExtensions.cs
 ```

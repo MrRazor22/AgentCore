@@ -1,0 +1,49 @@
+--- a/research/runs/langgraph_T09/agent_graph.py
++++ b/research/runs/langgraph_T09/agent_graph.py
+@@ -1,13 +1,18 @@
+ """
+-Baseline turn-based LangGraph agent graph.
++Turn-based LangGraph agent graph implementation with model provider substitution.
+ 
+ Constructs a standard cyclical agent graph using StateGraph, MessagesState,
+-a model execution node, and a tool execution node.
++a model node adapted to an alternate provider schema, and a tool execution node.
+ """
+ from typing import Any, Callable, Dict, List, Optional
+ from langchain_core.messages import AIMessage
+ from langgraph.graph import StateGraph, MessagesState, START, END
+ from langgraph.prebuilt import ToolNode, tools_condition
++
++try:
++    from provider_adapter import AnthropicProviderAdapter
++except ImportError:
++    from research.runs.langgraph_T09.provider_adapter import AnthropicProviderAdapter
+ 
+ 
+ def default_model_fn(state: MessagesState) -> Dict[str, Any]:
+@@ -23,16 +28,21 @@
+ def build_agent_graph(
+     model_fn: Optional[Callable[[MessagesState], Dict[str, Any]]] = None,
+     tools: Optional[List[Callable[..., Any]]] = None,
++    provider_adapter: Optional[AnthropicProviderAdapter] = None,
+ ):
+     """
+-    Constructs and compiles the baseline LangGraph agent workflow.
++    Constructs and compiles the LangGraph agent workflow with provider substitution.
+     """
+     builder = StateGraph(MessagesState)
+ 
+-    node_model = model_fn or default_model_fn
++    node_tools = tools if tools is not None else [default_search_tool]
++
++    if provider_adapter is not None:
++        node_model = provider_adapter.as_model_node(tools=node_tools)
++    else:
++        node_model = model_fn or default_model_fn
++
+     builder.add_node("model", node_model)
+-
+-    node_tools = tools if tools is not None else [default_search_tool]
+     builder.add_node("tools", ToolNode(node_tools))
+ 
+     builder.add_edge(START, "model")

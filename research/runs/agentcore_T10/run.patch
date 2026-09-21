@@ -1,0 +1,273 @@
+diff --git a/research/runs/agentcore_T10/AgentCoreT10.csproj b/research/runs/agentcore_T10/AgentCoreT10.csproj
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T10/AgentCoreT10.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T10/StreamObservationLayer.cs b/research/runs/agentcore_T10/StreamObservationLayer.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T10/StreamObservationLayer.cs
+@@ -0,0 +1,85 @@
++using System.Runtime.CompilerServices;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT10;
++
++public record StreamObservedEvent(string EventType, object? Payload, DateTimeOffset Timestamp);
++
++public sealed class StreamObservationLayer(
++    Action<StreamObservedEvent>? onEvent = null,
++    ILLM? inner = null) : LLMLayer(inner)
++{
++    private readonly Action<StreamObservedEvent>? _onEvent = onEvent;
++
++    public List<StreamObservedEvent> ObservedEvents { get; } = [];
++    public List<string> TokenDeltas { get; } = [];
++    public bool Completed { get; private set; }
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        Completed = false;
++
++        await foreach (var evt in Inner.GenerateAsync(messages, tools, responseSchema, ct).ConfigureAwait(false))
++        {
++            RecordEvent(evt);
++            yield return evt;
++        }
++
++        Completed = true;
++        var compEvt = new StreamObservedEvent("completion", null, DateTimeOffset.UtcNow);
++        ObservedEvents.Add(compEvt);
++        _onEvent?.Invoke(compEvt);
++    }
++
++    private void RecordEvent(IMessageEvent evt)
++    {
++        switch (evt)
++        {
++            case MessageDelta { Content: TextDelta td }:
++                TokenDeltas.Add(td.Text);
++                var textEvt = new StreamObservedEvent("token_delta", td.Text, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(textEvt);
++                _onEvent?.Invoke(textEvt);
++                break;
++
++            case MessageDelta { Content: ToolCall tc }:
++                var tcEvt = new StreamObservedEvent("tool_call_delta", tc, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(tcEvt);
++                _onEvent?.Invoke(tcEvt);
++                break;
++
++            case MessageDelta { Content: ToolCallDelta tcd }:
++                var tcdEvt = new StreamObservedEvent("tool_call_delta", tcd, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(tcdEvt);
++                _onEvent?.Invoke(tcdEvt);
++                break;
++
++            case MessageDelta { Content: Text t }:
++                TokenDeltas.Add(t.Value);
++                var fullTextEvt = new StreamObservedEvent("token_delta", t.Value, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(fullTextEvt);
++                _onEvent?.Invoke(fullTextEvt);
++                break;
++
++            case MessageStart ms:
++                var startEvt = new StreamObservedEvent("message_start", ms, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(startEvt);
++                _onEvent?.Invoke(startEvt);
++                break;
++
++            case MessageEnd me:
++                var endEvt = new StreamObservedEvent("message_end", me, DateTimeOffset.UtcNow);
++                ObservedEvents.Add(endEvt);
++                _onEvent?.Invoke(endEvt);
++                break;
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T10/StreamObservationLayerTests.cs b/research/runs/agentcore_T10/StreamObservationLayerTests.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T10/StreamObservationLayerTests.cs
+@@ -0,0 +1,140 @@
++using System.Diagnostics;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace AgentCoreT10;
++
++public class StreamObservationLayerTests
++{
++    private sealed class MockStreamingLLM(Func<IAsyncEnumerable<IMessageEvent>> generator) : ILLM
++    {
++        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            CancellationToken ct = default)
++            => generator();
++    }
++
++    [Fact]
++    public async Task Test1_YieldsTokenDeltasInRealTime()
++    {
++        var chunks = new[] { "Response ", "from ", "baseline ", "model." };
++        async IAsyncEnumerable<IMessageEvent> StreamGenerator()
++        {
++            yield return new MessageStart(Role.Assistant, Id: "m1");
++            for (int i = 0; i < chunks.Length; i++)
++            {
++                yield return new MessageDelta("m1", Content: new TextDelta(i, chunks[i]));
++                await Task.Yield();
++            }
++            yield return new MessageEnd(Id: "m1");
++        }
++
++        var mock = new MockStreamingLLM(StreamGenerator);
++        var observer = new StreamObservationLayer(inner: mock);
++
++        var received = new List<IMessageEvent>();
++        await foreach (var evt in observer.GenerateAsync([new Message(Role.User, [new Text("Hello streaming")])]))
++        {
++            received.Add(evt);
++        }
++
++        // Downstream received all events
++        Assert.Equal(6, received.Count); // start + 4 deltas + end
++        Assert.Equal(chunks, observer.TokenDeltas);
++    }
++
++    [Fact]
++    public async Task Test2_PassesChunksTransparentlyWithoutBuffering()
++    {
++        var words = new[] { "alpha ", "beta ", "gamma " };
++        async IAsyncEnumerable<IMessageEvent> TimedStreamGenerator()
++        {
++            yield return new MessageStart(Role.Assistant, Id: "m2");
++            for (int i = 0; i < words.Length; i++)
++            {
++                await Task.Delay(30);
++                yield return new MessageDelta("m2", Content: new TextDelta(i, words[i]));
++            }
++            yield return new MessageEnd(Id: "m2");
++        }
++
++        var mock = new MockStreamingLLM(TimedStreamGenerator);
++        var observer = new StreamObservationLayer(inner: mock);
++
++        var delays = new List<long>();
++        var sw = Stopwatch.StartNew();
++
++        await foreach (var evt in observer.GenerateAsync([new Message(Role.User, [new Text("test")])]))
++        {
++            if (evt is MessageDelta { Content: TextDelta })
++            {
++                delays.Add(sw.ElapsedMilliseconds);
++            }
++        }
++
++        Assert.Equal(3, delays.Count);
++        Assert.True(delays[1] > delays[0]);
++        Assert.True(delays[2] > delays[1]);
++    }
++
++    [Fact]
++    public async Task Test3_EmitsDistinctEventsForContentToolAndCompletion()
++    {
++        async IAsyncEnumerable<IMessageEvent> MixedStreamGenerator()
++        {
++            yield return new MessageStart(Role.Assistant, Id: "m3");
++            yield return new MessageDelta("m3", Content: new TextDelta(0, "I will invoke a tool."));
++            yield return new MessageDelta("m3", Content: new ToolCall("c1", "calculator", "{\"expr\":\"2+2\"}"));
++            yield return new MessageEnd(Id: "m3");
++            await Task.Yield();
++        }
++
++        var mock = new MockStreamingLLM(MixedStreamGenerator);
++        var observer = new StreamObservationLayer(inner: mock);
++
++        await foreach (var _ in observer.GenerateAsync([new Message(Role.User, [new Text("Compute 2+2")])])) { }
++
++        var eventTypes = observer.ObservedEvents.Select(e => e.EventType).ToList();
++        Assert.Contains("token_delta", eventTypes);
++        Assert.Contains("tool_call_delta", eventTypes);
++        Assert.Contains("completion", eventTypes);
++        Assert.True(observer.Completed);
++    }
++
++    [Fact]
++    public async Task Test4_DoesNotDuplicateOrDropStreamItems()
++    {
++        var tokens = Enumerable.Range(0, 15).Select(i => $"tok_{i} ").ToArray();
++        async IAsyncEnumerable<IMessageEvent> LargeStreamGenerator()
++        {
++            yield return new MessageStart(Role.Assistant, Id: "m4");
++            for (int i = 0; i < tokens.Length; i++)
++            {
++                yield return new MessageDelta("m4", Content: new TextDelta(i, tokens[i]));
++                await Task.Yield();
++            }
++            yield return new MessageEnd(Id: "m4");
++        }
++
++        var mock = new MockStreamingLLM(LargeStreamGenerator);
++        var observer = new StreamObservationLayer(inner: mock);
++
++        var downstreamReceived = new List<IMessageEvent>();
++        await foreach (var evt in observer.GenerateAsync([new Message(Role.User, [new Text("count")])]))
++        {
++            downstreamReceived.Add(evt);
++        }
++
++        // Downstream received 1 start + 15 deltas + 1 end = 17 items
++        Assert.Equal(17, downstreamReceived.Count);
++        // Observer observed exactly 15 tokens without duplicates or drops
++        Assert.Equal(15, observer.TokenDeltas.Count);
++        Assert.Equal(string.Concat(tokens), string.Concat(observer.TokenDeltas));
++    }
++}

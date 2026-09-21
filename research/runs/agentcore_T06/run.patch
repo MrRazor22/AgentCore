@@ -1,0 +1,283 @@
+﻿diff --git a/research/runs/agentcore_T06/AgentCoreT06.csproj b/research/runs/agentcore_T06/AgentCoreT06.csproj
+new file mode 100644
+index 0000000..6f29f73
+--- /dev/null
++++ b/research/runs/agentcore_T06/AgentCoreT06.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T06/GuardrailLayer.cs b/research/runs/agentcore_T06/GuardrailLayer.cs
+new file mode 100644
+index 0000000..7df9f9e
+--- /dev/null
++++ b/research/runs/agentcore_T06/GuardrailLayer.cs
+@@ -0,0 +1,89 @@
++using System.Runtime.CompilerServices;
++using System.Text.RegularExpressions;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT06;
++
++public record ValidationDiagnostic(
++    string Target,
++    string RuleName,
++    string ViolatingValue,
++    string Reason,
++    DateTimeOffset Timestamp);
++
++public class ValidationException(string message, ValidationDiagnostic diagnostic) : Exception(message)
++{
++    public ValidationDiagnostic Diagnostic { get; } = diagnostic;
++}
++
++public sealed class InputGuardrailLLMLayer(
++    Func<string, (bool IsValid, string Rule, string Reason)> promptValidator,
++    Action<ValidationDiagnostic>? onDiagnostic = null,
++    ILLM? inner = null) : LLMLayer(inner)
++{
++    private readonly Func<string, (bool IsValid, string Rule, string Reason)> _validator =
++        promptValidator ?? throw new ArgumentNullException(nameof(promptValidator));
++    private readonly Action<ValidationDiagnostic>? _onDiagnostic = onDiagnostic;
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        foreach (var message in messages)
++        {
++            foreach (var content in message.Contents)
++            {
++                var text = content is Text t ? t.Value : content.ToString() ?? string.Empty;
++                var (isValid, rule, reason) = _validator(text);
++                if (!isValid)
++                {
++                    var diag = new ValidationDiagnostic("Prompt", rule, text, reason, DateTimeOffset.UtcNow);
++                    _onDiagnostic?.Invoke(diag);
++                    throw new ValidationException($"Input validation rejected prompt: {reason}", diag);
++                }
++            }
++        }
++
++        await foreach (var evt in Inner.GenerateAsync(messages, tools, responseSchema, ct).ConfigureAwait(false))
++        {
++            yield return evt;
++        }
++    }
++}
++
++public sealed class ToolArgumentGuardrailLayer(
++    Func<ToolCall, (bool IsValid, string Rule, string Reason)> toolValidator,
++    Action<ValidationDiagnostic>? onDiagnostic = null,
++    IToolbox? inner = null) : ToolboxLayer(inner)
++{
++    private readonly Func<ToolCall, (bool IsValid, string Rule, string Reason)> _validator =
++        toolValidator ?? throw new ArgumentNullException(nameof(toolValidator));
++    private readonly Action<ValidationDiagnostic>? _onDiagnostic = onDiagnostic;
++
++    public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
++        IReadOnlyList<ToolCall> calls,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        foreach (var call in calls)
++        {
++            var (isValid, rule, reason) = _validator(call);
++            if (!isValid)
++            {
++                var diag = new ValidationDiagnostic(call.Name, rule, call.Arguments, reason, DateTimeOffset.UtcNow);
++                _onDiagnostic?.Invoke(diag);
++                throw new ValidationException($"Tool argument validation failed for '{call.Name}': {reason}", diag);
++            }
++        }
++
++        await foreach (var evt in base.ExecuteAsync(calls, ct).ConfigureAwait(false))
++        {
++            yield return evt;
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T06/GuardrailLayerTests.cs b/research/runs/agentcore_T06/GuardrailLayerTests.cs
+new file mode 100644
+index 0000000..25c5407
+--- /dev/null
++++ b/research/runs/agentcore_T06/GuardrailLayerTests.cs
+@@ -0,0 +1,146 @@
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace AgentCoreT06;
++
++public class GuardrailLayerTests
++{
++    private sealed class MockLLM : ILLM
++    {
++        public int CallCount { get; private set; }
++
++        public async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
++        {
++            CallCount++;
++            yield return new MessageDelta("m1", Content: new TextDelta(0, "Safe response"));
++            await Task.Yield();
++        }
++    }
++
++    private sealed class MockToolbox : IToolbox
++    {
++        public int CallCount { get; private set; }
++
++        public ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
++            => ValueTask.FromResult<IReadOnlyList<ITool>>([]);
++
++        public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
++            IReadOnlyList<ToolCall> calls,
++            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
++        {
++            CallCount++;
++            yield return new MessageDelta(calls[0].Id, Content: new ToolResult(calls[0].Id, [new Text("Tool output")]));
++            await Task.Yield();
++        }
++    }
++
++    [Fact]
++    public async Task Test1_RejectsPromptMatchingProhibitedPatternWithValidationException()
++    {
++        var diagnostics = new List<ValidationDiagnostic>();
++        var mock = new MockLLM();
++        var layer = new InputGuardrailLLMLayer(
++            promptValidator: text => text.Contains("PROHIBITED_INJECTION")
++                ? (false, "PromptSafetyRule", "Prompt contains prohibited injection pattern")
++                : (true, "", ""),
++            onDiagnostic: d => diagnostics.Add(d),
++            inner: mock);
++
++        var messages = new List<Message> { new(Role.User, [new Text("Execute PROHIBITED_INJECTION attack")]) };
++
++        var ex = await Assert.ThrowsAsync<ValidationException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync(messages)) { }
++        });
++
++        Assert.Equal(0, mock.CallCount); // LLM was NEVER called
++        Assert.Equal("PromptSafetyRule", ex.Diagnostic.RuleName);
++        Assert.Single(diagnostics);
++        Assert.Equal("Prompt", diagnostics[0].Target);
++    }
++
++    [Fact]
++    public async Task Test2_ValidatesToolArgumentsAgainstConstraintsPriorToInvocation()
++    {
++        var diagnostics = new List<ValidationDiagnostic>();
++        var mock = new MockToolbox();
++        var layer = new ToolArgumentGuardrailLayer(
++            toolValidator: call =>
++            {
++                if (call.Name == "transfer_funds" && call.Arguments.Contains("\"amount\": -100"))
++                {
++                    return (false, "PositiveAmountRule", "Transfer amount must be non-negative");
++                }
++                return (true, "", "");
++            },
++            onDiagnostic: d => diagnostics.Add(d),
++            inner: mock);
++
++        var calls = new List<ToolCall> { new("c1", "transfer_funds", "{\"amount\": -100}") };
++
++        var ex = await Assert.ThrowsAsync<ValidationException>(async () =>
++        {
++            await foreach (var _ in layer.ExecuteAsync(calls)) { }
++        });
++
++        Assert.Equal(0, mock.CallCount); // Toolbox was NEVER called
++        Assert.Equal("PositiveAmountRule", ex.Diagnostic.RuleName);
++        Assert.Equal("transfer_funds", ex.Diagnostic.Target);
++        Assert.Single(diagnostics);
++    }
++
++    [Fact]
++    public async Task Test3_AllowsBenignInputsToProceedUnmodified()
++    {
++        var mock = new MockLLM();
++        var layer = new InputGuardrailLLMLayer(
++            promptValidator: text => text.Contains("MALICIOUS")
++                ? (false, "Rule", "Bad")
++                : (true, "", ""),
++            inner: mock);
++
++        var messages = new List<Message> { new(Role.User, [new Text("What is the weather today?")]) };
++        var results = new List<IMessageEvent>();
++
++        await foreach (var evt in layer.GenerateAsync(messages))
++        {
++            results.Add(evt);
++        }
++
++        Assert.Equal(1, mock.CallCount);
++        Assert.Single(results);
++    }
++
++    [Fact]
++    public async Task Test4_EmitsStructuredValidationFailureDiagnostics()
++    {
++        ValidationDiagnostic? captured = null;
++        var mock = new MockLLM();
++        var layer = new InputGuardrailLLMLayer(
++            promptValidator: text => (false, "StrictSafetyPolicy", "Disallowed topic"),
++            onDiagnostic: d => captured = d,
++            inner: mock);
++
++        var messages = new List<Message> { new(Role.User, [new Text("Restricted query")]) };
++
++        var ex = await Assert.ThrowsAsync<ValidationException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync(messages)) { }
++        });
++
++        Assert.NotNull(captured);
++        Assert.Equal("Prompt", captured.Target);
++        Assert.Equal("StrictSafetyPolicy", captured.RuleName);
++        Assert.Equal("Restricted query", captured.ViolatingValue);
++        Assert.Equal("Disallowed topic", captured.Reason);
++        Assert.True(captured.Timestamp <= DateTimeOffset.UtcNow);
++    }
++}

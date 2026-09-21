@@ -1,0 +1,114 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
+using AgentCore;
+using AgentCore.Context;
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.Tool;
+
+namespace AgentCoreT11;
+
+public sealed record InterruptionSnapshot(
+    string InterruptionType,
+    IReadOnlyList<Message> History,
+    IReadOnlyList<ToolCall>? PendingToolCalls = null,
+    JsonObject? Metadata = null);
+
+public class AgentInterruptedException(string message, InterruptionSnapshot snapshot) : Exception(message)
+{
+    public InterruptionSnapshot Snapshot { get; } = snapshot;
+}
+
+public interface IInterruptionStore
+{
+    Task SaveSnapshotAsync(string sessionId, InterruptionSnapshot snapshot, CancellationToken ct = default);
+    Task<InterruptionSnapshot?> LoadSnapshotAsync(string sessionId, CancellationToken ct = default);
+    Task ClearSnapshotAsync(string sessionId, CancellationToken ct = default);
+}
+
+public sealed class InMemoryInterruptionStore : IInterruptionStore
+{
+    private readonly Dictionary<string, InterruptionSnapshot> _store = new();
+    private readonly object _lock = new();
+
+    public Task SaveSnapshotAsync(string sessionId, InterruptionSnapshot snapshot, CancellationToken ct = default)
+    {
+        lock (_lock) _store[sessionId] = snapshot;
+        return Task.CompletedTask;
+    }
+
+    public Task<InterruptionSnapshot?> LoadSnapshotAsync(string sessionId, CancellationToken ct = default)
+    {
+        lock (_lock)
+        {
+            _store.TryGetValue(sessionId, out var snapshot);
+            return Task.FromResult(snapshot);
+        }
+    }
+
+    public Task ClearSnapshotAsync(string sessionId, CancellationToken ct = default)
+    {
+        lock (_lock) _store.Remove(sessionId);
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class InterruptionLayer(
+    Func<IReadOnlyList<ToolCall>, bool>? shouldInterruptTools = null,
+    IInterruptionStore? store = null,
+    string sessionId = "default_session",
+    IToolbox? inner = null) : ToolboxLayer(inner)
+{
+    private readonly Func<IReadOnlyList<ToolCall>, bool>? _shouldInterruptTools = shouldInterruptTools;
+    private readonly IInterruptionStore _store = store ?? new InMemoryInterruptionStore();
+    private readonly string _sessionId = sessionId;
+
+    public bool IsInterrupted { get; private set; }
+    public InterruptionSnapshot? LastSnapshot { get; private set; }
+
+    public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
+        IReadOnlyList<ToolCall> calls,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (_shouldInterruptTools != null && _shouldInterruptTools(calls))
+        {
+            IsInterrupted = true;
+            LastSnapshot = new InterruptionSnapshot(
+                "tool_approval",
+                [],
+                calls,
+                new JsonObject { ["reason"] = "Requires external approval" });
+
+            await _store.SaveSnapshotAsync(_sessionId, LastSnapshot, ct).ConfigureAwait(false);
+            throw new AgentInterruptedException("Execution paused for tool approval.", LastSnapshot);
+        }
+
+        await foreach (var evt in base.ExecuteAsync(calls, ct).ConfigureAwait(false))
+        {
+            yield return evt;
+        }
+    }
+
+    public async Task<IReadOnlyList<IMessageEvent>> ResumeAsync(
+        string sessionId,
+        JsonObject? resumePayload = null,
+        CancellationToken ct = default)
+    {
+        var snapshot = await _store.LoadSnapshotAsync(sessionId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"No snapshot found for session {sessionId}");
+
+        await _store.ClearSnapshotAsync(sessionId, ct).ConfigureAwait(false);
+        IsInterrupted = false;
+
+        var results = new List<IMessageEvent>();
+        if (snapshot.PendingToolCalls != null && snapshot.PendingToolCalls.Count > 0)
+        {
+            await foreach (var evt in base.ExecuteAsync(snapshot.PendingToolCalls, ct).ConfigureAwait(false))
+            {
+                results.Add(evt);
+            }
+        }
+
+        return results;
+    }
+}

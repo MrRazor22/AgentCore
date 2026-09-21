@@ -1,0 +1,54 @@
+--- a/research/runs/langgraph_T03/agent_graph.py
++++ b/research/runs/langgraph_T03/agent_graph.py
+@@ -1,13 +1,19 @@
+ """
+-Baseline turn-based LangGraph agent graph.
++Turn-based LangGraph agent graph implementation with HITL tool approval via interrupt().
+ 
+-Constructs a standard cyclical agent graph using StateGraph, MessagesState,
+-a model execution node, and a tool execution node.
++Constructs a cyclical agent graph with StateGraph, MessagesState,
++ApprovalToolNode, and compiles with a checkpointer for durable interrupt/resumption.
+ """
+-from typing import Any, Callable, Dict, List, Optional
++from typing import Any, Callable, Dict, List, Optional, Set
+ from langchain_core.messages import AIMessage
+ from langgraph.graph import StateGraph, MessagesState, START, END
+ from langgraph.prebuilt import ToolNode, tools_condition
++from langgraph.checkpoint.memory import MemorySaver
++
++try:
++    from approval_policy import ApprovalToolNode
++except ImportError:
++    from research.runs.langgraph_T03.approval_policy import ApprovalToolNode
+ 
+ 
+ def default_model_fn(state: MessagesState) -> Dict[str, Any]:
+@@ -23,9 +29,11 @@
+ def build_agent_graph(
+     model_fn: Optional[Callable[[MessagesState], Dict[str, Any]]] = None,
+     tools: Optional[List[Callable[..., Any]]] = None,
++    sensitive_tools: Optional[Set[str]] = None,
++    checkpointer: Optional[Any] = None,
+ ):
+     """
+-    Constructs and compiles the baseline LangGraph agent workflow.
++    Constructs and compiles the LangGraph agent workflow with HITL approval.
+     """
+     builder = StateGraph(MessagesState)
+ 
+@@ -33,10 +41,12 @@
+     builder.add_node("model", node_model)
+ 
+     node_tools = tools if tools is not None else [default_search_tool]
+-    builder.add_node("tools", ToolNode(node_tools))
++    builder.add_node("tools", ApprovalToolNode(node_tools, sensitive_tools=sensitive_tools))
+ 
+     builder.add_edge(START, "model")
+     builder.add_conditional_edges("model", tools_condition)
+     builder.add_edge("tools", "model")
+ 
+-    return builder.compile()
++    # interrupt() requires a checkpointer in LangGraph
++    saver = checkpointer if checkpointer is not None else MemorySaver()
++    return builder.compile(checkpointer=saver)

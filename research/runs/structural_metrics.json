@@ -1,0 +1,74 @@
+[
+  {
+    "framework": "AgentCore",
+    "language": "C#",
+    "scope_path": "AgentCore (5 Core Packages: AgentCore, AgentCore.Layers, AgentCore.LLM.Tornado, AgentCore.Host, AgentCore.MCP)",
+    "public_types": 112,
+    "public_methods": 127,
+    "max_dit": 2,
+    "mean_dit": 1.01,
+    "mean_cbo": 0.12,
+    "sloc": 3840,
+    "cli": 50.09
+  },
+  {
+    "framework": "LangGraph",
+    "language": "Python",
+    "scope_path": "D:\\CodeBase\\Popular Agent Frameworks\\langgraph\\libs\\langgraph\\langgraph",
+    "public_types": 92,
+    "public_methods": 256,
+    "max_dit": 3,
+    "mean_dit": 2.08,
+    "mean_cbo": 1.08,
+    "sloc": 15312,
+    "cli": 47.45
+  },
+  {
+    "framework": "PydanticAI",
+    "language": "Python",
+    "scope_path": "D:\\CodeBase\\Popular Agent Frameworks\\pydantic-ai\\pydantic_ai_slim\\pydantic_ai",
+    "public_types": 765,
+    "public_methods": 1951,
+    "max_dit": 3,
+    "mean_dit": 1.82,
+    "mean_cbo": 0.82,
+    "sloc": 106461,
+    "cli": 384.42
+  },
+  {
+    "framework": "OpenAI Agents SDK",
+    "language": "Python",
+    "scope_path": "D:\\CodeBase\\Popular Agent Frameworks\\openai-agents-python\\src\\agents",
+    "public_types": 400,
+    "public_methods": 544,
+    "max_dit": 3,
+    "mean_dit": 1.6,
+    "mean_cbo": 0.6,
+    "sloc": 40548,
+    "cli": 182.12
+  },
+  {
+    "framework": "Microsoft Agent Framework",
+    "language": "Python",
+    "scope_path": "D:\\CodeBase\\Popular Agent Frameworks\\microsoft-agent-framework\\python\\packages\\core",
+    "public_types": 277,
+    "public_methods": 744,
+    "max_dit": 5,
+    "mean_dit": 1.87,
+    "mean_cbo": 0.87,
+    "sloc": 59258,
+    "cli": 141.15
+  },
+  {
+    "framework": "DeepSeek Harness",
+    "language": "TypeScript",
+    "scope_path": "D:\\CodeBase\\Popular AI Agnets\\deepseek-harness\\packages",
+    "public_types": 4224,
+    "public_methods": 10955,
+    "max_dit": 3,
+    "mean_dit": 1.1,
+    "mean_cbo": 0.1,
+    "sloc": 256213,
+    "cli": 2128.11
+  }
+]

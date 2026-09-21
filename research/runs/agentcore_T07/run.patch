@@ -1,0 +1,314 @@
+﻿diff --git a/research/runs/agentcore_T07/AgentCoreT07.csproj b/research/runs/agentcore_T07/AgentCoreT07.csproj
+new file mode 100644
+index 0000000..6f29f73
+--- /dev/null
++++ b/research/runs/agentcore_T07/AgentCoreT07.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T07/DurableContextLayer.cs b/research/runs/agentcore_T07/DurableContextLayer.cs
+new file mode 100644
+index 0000000..05f2a4f
+--- /dev/null
++++ b/research/runs/agentcore_T07/DurableContextLayer.cs
+@@ -0,0 +1,136 @@
++using System.Runtime.CompilerServices;
++using AgentCore;
++using AgentCore.Context;
++using AgentCore.Context.Primitives;
++using AgentCore.LLM.Chat;
++
++namespace AgentCoreT07;
++
++public interface IEventStore
++{
++    Task AppendWalAsync(IMessageEvent evt, CancellationToken ct = default);
++    Task CommitCheckpointAsync(IReadOnlyList<Message> snapshot, CancellationToken ct = default);
++    Task ClearWalAsync(CancellationToken ct = default);
++    Task<IReadOnlyList<IMessageEvent>> ReadWalAsync(CancellationToken ct = default);
++    Task<IReadOnlyList<Message>> LoadCheckpointAsync(CancellationToken ct = default);
++}
++
++public sealed class InMemoryEventStore : IEventStore
++{
++    private readonly List<IMessageEvent> _wal = new();
++    private List<Message> _checkpoint = new();
++    private readonly object _lock = new();
++
++    public Task AppendWalAsync(IMessageEvent evt, CancellationToken ct = default)
++    {
++        lock (_lock) _wal.Add(evt);
++        return Task.CompletedTask;
++    }
++
++    public Task CommitCheckpointAsync(IReadOnlyList<Message> snapshot, CancellationToken ct = default)
++    {
++        lock (_lock)
++        {
++            _checkpoint = new List<Message>(snapshot);
++            _wal.Clear();
++        }
++        return Task.CompletedTask;
++    }
++
++    public Task ClearWalAsync(CancellationToken ct = default)
++    {
++        lock (_lock) _wal.Clear();
++        return Task.CompletedTask;
++    }
++
++    public Task<IReadOnlyList<IMessageEvent>> ReadWalAsync(CancellationToken ct = default)
++    {
++        lock (_lock) return Task.FromResult<IReadOnlyList<IMessageEvent>>([.. _wal]);
++    }
++
++    public Task<IReadOnlyList<Message>> LoadCheckpointAsync(CancellationToken ct = default)
++    {
++        lock (_lock) return Task.FromResult<IReadOnlyList<Message>>([.. _checkpoint]);
++    }
++
++    public int WalCount { get { lock (_lock) return _wal.Count; } }
++}
++
++public sealed class DurableContextLayer(IEventStore store, IContext? inner = null) : ContextLayer(inner)
++{
++    private readonly IEventStore _store = store ?? throw new ArgumentNullException(nameof(store));
++    private bool _recovered;
++    private readonly SemaphoreSlim _gate = new(1, 1);
++
++    public override async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
++    {
++        await EnsureRecoveredAsync(ct).ConfigureAwait(false);
++        return await base.ReadAsync(ct).ConfigureAwait(false);
++    }
++
++    public override async IAsyncEnumerable<IContentEvent> WriteAsync(
++        IAsyncEnumerable<IMessageEvent> events,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        await EnsureRecoveredAsync(ct).ConfigureAwait(false);
++
++        async IAsyncEnumerable<IMessageEvent> LoggingStream()
++        {
++            await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
++            {
++                await _store.AppendWalAsync(evt, ct).ConfigureAwait(false);
++                yield return evt;
++            }
++        }
++
++        await foreach (var evt in base.WriteAsync(LoggingStream(), ct).ConfigureAwait(false))
++        {
++            yield return evt;
++        }
++
++        var snapshot = await Inner.ReadAsync(ct).ConfigureAwait(false);
++        await _store.CommitCheckpointAsync(snapshot, ct).ConfigureAwait(false);
++    }
++
++    public async Task EnsureRecoveredAsync(CancellationToken ct = default)
++    {
++        if (_recovered) return;
++        await _gate.WaitAsync(ct).ConfigureAwait(false);
++        try
++        {
++            if (_recovered) return;
++
++            var checkpoint = await _store.LoadCheckpointAsync(ct).ConfigureAwait(false);
++            if (checkpoint.Count > 0)
++            {
++                foreach (var msg in checkpoint)
++                {
++                    await Inner.WriteAsync(msg, ct).ConfigureAwait(false);
++                }
++            }
++
++            var walEntries = await _store.ReadWalAsync(ct).ConfigureAwait(false);
++            if (walEntries.Count > 0)
++            {
++                await foreach (var _ in Inner.WriteAsync(ToAsyncEnumerable(walEntries), ct).ConfigureAwait(false)) { }
++                var recoveredSnapshot = await Inner.ReadAsync(ct).ConfigureAwait(false);
++                await _store.CommitCheckpointAsync(recoveredSnapshot, ct).ConfigureAwait(false);
++            }
++
++            _recovered = true;
++        }
++        finally
++        {
++            _gate.Release();
++        }
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> ToAsyncEnumerable(IEnumerable<IMessageEvent> items)
++    {
++        foreach (var item in items)
++        {
++            yield return item;
++            await Task.Yield();
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T07/DurableContextLayerTests.cs b/research/runs/agentcore_T07/DurableContextLayerTests.cs
+new file mode 100644
+index 0000000..b65ace3
+--- /dev/null
++++ b/research/runs/agentcore_T07/DurableContextLayerTests.cs
+@@ -0,0 +1,130 @@
++using AgentCore;
++using AgentCore.Context;
++using AgentCore.LLM.Chat;
++using Xunit;
++
++namespace AgentCoreT07;
++
++public class DurableContextLayerTests
++{
++    [Fact]
++    public async Task Test1_AppendsIncomingEventsToWalSynchronously()
++    {
++        var store = new InMemoryEventStore();
++        var inner = new ChatContext();
++        var layer = new DurableContextLayer(store, inner);
++
++        // Stream complete message events
++        var events = CreateEvents(
++            new MessageStart(Role.User, Id: "u1"),
++            new MessageDelta("u1", Content: new TextStart(0)),
++            new MessageDelta("u1", Content: new TextDelta(0, "Streaming chunk 1")),
++            new MessageDelta("u1", Content: new TextDelta(0, "Streaming chunk 2")),
++            new MessageDelta("u1", Content: new TextEnd(0)),
++            new MessageEnd(Id: "u1")
++        );
++
++        // As the events are written, store.AppendWalAsync is called synchronously
++        await foreach (var _ in layer.WriteAsync(events)) { }
++
++        // Turn completed: checkpoint was committed and WAL cleared
++        var checkpoint = await store.LoadCheckpointAsync();
++        Assert.NotEmpty(checkpoint);
++        Assert.Contains("Streaming chunk 1Streaming chunk 2", checkpoint[0].Contents.OfType<Text>().First().Value);
++    }
++
++    [Fact]
++    public async Task Test2_RecoversFullConversationHistoryUponRehydration()
++    {
++        var store = new InMemoryEventStore();
++
++        // Phase 1: Session 1 creates conversation
++        {
++            var inner1 = new ChatContext();
++            var layer1 = new DurableContextLayer(store, inner1);
++
++            await layer1.WriteAsync(new Message(Role.User, [new Text("Turn 1 user prompt")]));
++            await layer1.WriteAsync(new Message(Role.Assistant, [new Text("Turn 1 assistant answer")]));
++        }
++
++        // Phase 2: Session 2 rehydrates from same store
++        {
++            var inner2 = new ChatContext();
++            var layer2 = new DurableContextLayer(store, inner2);
++
++            var recoveredHistory = await layer2.ReadAsync();
++
++            Assert.Equal(2, recoveredHistory.Count);
++            Assert.Equal("Turn 1 user prompt", recoveredHistory[0].Contents.OfType<Text>().First().Value);
++            Assert.Equal("Turn 1 assistant answer", recoveredHistory[1].Contents.OfType<Text>().First().Value);
++        }
++    }
++
++    [Fact]
++    public async Task Test3_ClearsTemporaryWalUncommittedChunksUponSuccessfulCheckpoint()
++    {
++        var store = new InMemoryEventStore();
++        var inner = new ChatContext();
++        var layer = new DurableContextLayer(store, inner);
++
++        var events = CreateEvents(
++            new MessageStart(Role.User, Id: "m1"),
++            new MessageDelta("m1", Content: new TextStart(0)),
++            new MessageDelta("m1", Content: new TextDelta(0, "Test payload")),
++            new MessageDelta("m1", Content: new TextEnd(0)),
++            new MessageEnd(Id: "m1")
++        );
++
++        await foreach (var _ in layer.WriteAsync(events)) { }
++
++        // After successful checkpoint, WAL is cleared
++        Assert.Equal(0, store.WalCount);
++
++        var checkpoint = await store.LoadCheckpointAsync();
++        Assert.Single(checkpoint);
++    }
++
++    [Fact]
++    public async Task Test4_RecoversGracefullyWithoutHistoryTruncationAfterSimulatedCrash()
++    {
++        var store = new InMemoryEventStore();
++
++        // Phase 1: Session 1 commits turn 1
++        var inner1 = new ChatContext();
++        var layer1 = new DurableContextLayer(store, inner1);
++        await layer1.WriteAsync(new Message(Role.User, [new Text("Completed turn 1")]));
++
++        // Now simulate mid-turn stream crash: events written to WAL, but process crashes before checkpoint
++        await store.AppendWalAsync(new MessageStart(Role.Assistant, Id: "crash1"));
++        await store.AppendWalAsync(new MessageDelta("crash1", Content: new TextStart(0)));
++        await store.AppendWalAsync(new MessageDelta("crash1", Content: new TextDelta(0, "In-flight text before crash")));
++        await store.AppendWalAsync(new MessageDelta("crash1", Content: new TextEnd(0)));
++        await store.AppendWalAsync(new MessageEnd(Id: "crash1"));
++
++        // WAL count is 5
++        Assert.Equal(5, store.WalCount);
++
++        // Phase 2: New session recovers after crash
++        var inner2 = new ChatContext();
++        var layer2 = new DurableContextLayer(store, inner2);
++
++        var recovered = await layer2.ReadAsync();
++
++        // Both turn 1 and crashed turn are recovered intact!
++        Assert.Equal(2, recovered.Count);
++        Assert.Equal("Completed turn 1", recovered[0].Contents.OfType<Text>().First().Value);
++        Assert.Equal("In-flight text before crash", recovered[1].Contents.OfType<Text>().First().Value);
++
++        // And WAL is now committed into checkpoint
++        Assert.Equal(0, store.WalCount);
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> CreateEvents(params IMessageEvent[] events)
++    {
++        foreach (var evt in events)
++        {
++            yield return evt;
++            await Task.Yield();
++        }
++    }
++}

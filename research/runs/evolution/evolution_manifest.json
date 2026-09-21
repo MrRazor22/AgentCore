@@ -1,0 +1,325 @@
+{
+  "benchmark": "Experiment 2: Requirement Evolution across 10 Phases",
+  "verification_status": "All 10 phases executed and passed across all 3 frameworks",
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Base Tool Execution",
+      "category": "capability"
+    },
+    {
+      "phase": 2,
+      "name": "Streaming Output",
+      "category": "protocol"
+    },
+    {
+      "phase": 3,
+      "name": "Retry with Backoff",
+      "category": "cross-cutting"
+    },
+    {
+      "phase": 4,
+      "name": "Persistence WAL",
+      "category": "cross-cutting"
+    },
+    {
+      "phase": 5,
+      "name": "Tool Approval (HITL)",
+      "category": "cross-cutting"
+    },
+    {
+      "phase": 6,
+      "name": "Multi-Agent Delegation",
+      "category": "composition"
+    },
+    {
+      "phase": 7,
+      "name": "Persistence SQLite Migration",
+      "category": "cross-cutting"
+    },
+    {
+      "phase": 8,
+      "name": "Context Compaction",
+      "category": "cross-cutting"
+    },
+    {
+      "phase": 9,
+      "name": "Retire Retry",
+      "category": "refactoring"
+    },
+    {
+      "phase": 10,
+      "name": "Input Guardrails",
+      "category": "cross-cutting"
+    }
+  ],
+  "results": {
+    "AgentCore": {
+      "phases": [
+        {
+          "phase": 1,
+          "F_new": 2,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "WeatherTool and test runner added"
+        },
+        {
+          "phase": 2,
+          "F_new": 0,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "Native streaming via IAsyncEnumerable"
+        },
+        {
+          "phase": 3,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "RetryLayer decorator wrapping ILLM"
+        },
+        {
+          "phase": 4,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "FileWalStore wrapping IContext"
+        },
+        {
+          "phase": 5,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "EvolutionApprovalLayer wrapping IToolbox"
+        },
+        {
+          "phase": 6,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "AgentTool added to IToolbox"
+        },
+        {
+          "phase": 7,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "SqliteChatStore passed to persistence"
+        },
+        {
+          "phase": 8,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "CompactingContextLayer wrapping IContext"
+        },
+        {
+          "phase": 9,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 0,
+          "I_s": 1.0,
+          "description": "Unwrap RetryLayer in composition root"
+        },
+        {
+          "phase": 10,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "EvolutionGuardrailLayer wrapping ILLM"
+        }
+      ],
+      "mean_Is_phases_1_to_9": 0.1111111111111111,
+      "phase_10_Is": 0.0,
+      "total_F_core_mod": 0,
+      "total_F_mod": 1,
+      "total_F_new": 9
+    },
+    "LangGraph": {
+      "phases": [
+        {
+          "phase": 1,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 1,
+          "I_s": 0.0,
+          "description": "agent_graph.py StateGraph definition"
+        },
+        {
+          "phase": 2,
+          "F_new": 0,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "Graph streaming iteration"
+        },
+        {
+          "phase": 3,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Modify model node retry_policy in agent_graph.py"
+        },
+        {
+          "phase": 4,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Modify compile(checkpointer=...) in agent_graph.py"
+        },
+        {
+          "phase": 5,
+          "F_new": 1,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 0.5,
+          "description": "Modify tool dispatch in agent_graph.py"
+        },
+        {
+          "phase": 6,
+          "F_new": 1,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 0.5,
+          "description": "Add subagent tool & modify agent_graph.py"
+        },
+        {
+          "phase": 7,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "SqliteSaver class added"
+        },
+        {
+          "phase": 8,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Add summarize node and rewire edges in agent_graph.py"
+        },
+        {
+          "phase": 9,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Remove retry_policy from model node in agent_graph.py"
+        },
+        {
+          "phase": 10,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Add guardrail node and rewire START edge in agent_graph.py"
+        }
+      ],
+      "mean_Is_phases_1_to_9": 0.5555555555555556,
+      "phase_10_Is": 1.0,
+      "total_F_core_mod": 8,
+      "total_F_mod": 7,
+      "total_F_new": 4
+    },
+    "PydanticAI": {
+      "phases": [
+        {
+          "phase": 1,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 1,
+          "I_s": 0.0,
+          "description": "agent_app.py Agent definition"
+        },
+        {
+          "phase": 2,
+          "F_new": 0,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "Agent run streaming"
+        },
+        {
+          "phase": 3,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "External retry caller wrapper"
+        },
+        {
+          "phase": 4,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "External WAL caller wrapper"
+        },
+        {
+          "phase": 5,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Modify tool in agent_app.py to check permission"
+        },
+        {
+          "phase": 6,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 1,
+          "I_s": 1.0,
+          "description": "Modify agent_app.py to register subagent tool"
+        },
+        {
+          "phase": 7,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "SQLite session persistence wrapper"
+        },
+        {
+          "phase": 8,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "History compaction utility"
+        },
+        {
+          "phase": 9,
+          "F_new": 0,
+          "F_mod": 1,
+          "F_core_mod": 0,
+          "I_s": 1.0,
+          "description": "Remove retry caller wrapper"
+        },
+        {
+          "phase": 10,
+          "F_new": 1,
+          "F_mod": 0,
+          "F_core_mod": 0,
+          "I_s": 0.0,
+          "description": "Input validation guardrail function"
+        }
+      ],
+      "mean_Is_phases_1_to_9": 0.3333333333333333,
+      "phase_10_Is": 0.0,
+      "total_F_core_mod": 3,
+      "total_F_mod": 3,
+      "total_F_new": 6
+    }
+  }
+}

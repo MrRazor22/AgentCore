@@ -1,0 +1,411 @@
+diff --git a/research/runs/agentcore_T09/AgentCoreT09.csproj b/research/runs/agentcore_T09/AgentCoreT09.csproj
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T09/AgentCoreT09.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T09/AnthropicProviderLayer.cs b/research/runs/agentcore_T09/AnthropicProviderLayer.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T09/AnthropicProviderLayer.cs
+@@ -0,0 +1,195 @@
++using System.Runtime.CompilerServices;
++using System.Text.Json.Nodes;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT09;
++
++public sealed record AnthropicChunk(string Type, string? Text = null, string? ToolName = null, string? ToolId = null, string? StopReason = null);
++
++public sealed class AnthropicProviderLayer(
++    Func<JsonObject, Task<IAsyncEnumerable<AnthropicChunk>>>? clientStreamFn = null,
++    Func<JsonObject, Task<JsonObject>>? clientFn = null,
++    ILLM? inner = null) : LLMLayer(inner)
++{
++    private readonly Func<JsonObject, Task<IAsyncEnumerable<AnthropicChunk>>>? _clientStreamFn = clientStreamFn;
++    private readonly Func<JsonObject, Task<JsonObject>>? _clientFn = clientFn;
++
++    public static string MapFinishReason(string providerStopReason) => providerStopReason switch
++    {
++        "end_turn" => "stop",
++        "stop_sequence" => "stop",
++        "tool_use" => "tool_calls",
++        "max_tokens" => "length",
++        _ => providerStopReason
++    };
++
++    public static JsonObject FormatRequest(IReadOnlyList<Message> messages, IReadOnlyList<ToolDefinition>? tools = null)
++    {
++        var anthropicMsgs = new JsonArray();
++        string systemPrompt = "";
++
++        foreach (var msg in messages)
++        {
++            if (msg.Role == Role.System)
++            {
++                var textParts = msg.Contents.OfType<Text>().Select(t => t.Value);
++                systemPrompt = string.Join("\n", textParts);
++                continue;
++            }
++
++            if (msg.Role == Role.User)
++            {
++                var text = string.Join("\n", msg.Contents.OfType<Text>().Select(t => t.Value));
++                anthropicMsgs.Add(new JsonObject { ["role"] = "user", ["content"] = text });
++            }
++            else if (msg.Role == Role.Assistant)
++            {
++                var toolCalls = msg.Contents.OfType<ToolCall>().ToList();
++                var text = string.Join("\n", msg.Contents.OfType<Text>().Select(t => t.Value));
++
++                if (toolCalls.Count > 0)
++                {
++                    var contentBlocks = new JsonArray();
++                    if (!string.IsNullOrEmpty(text))
++                    {
++                        contentBlocks.Add(new JsonObject { ["type"] = "text", ["text"] = text });
++                    }
++                    foreach (var tc in toolCalls)
++                    {
++                        contentBlocks.Add(new JsonObject
++                        {
++                            ["type"] = "tool_use",
++                            ["id"] = tc.Id,
++                            ["name"] = tc.Name,
++                            ["input"] = tc.ParseArguments().Args ?? new JsonObject()
++                        });
++                    }
++                    anthropicMsgs.Add(new JsonObject { ["role"] = "assistant", ["content"] = contentBlocks });
++                }
++                else
++                {
++                    anthropicMsgs.Add(new JsonObject { ["role"] = "assistant", ["content"] = text });
++                }
++            }
++            else if (msg.Role == Role.Tool)
++            {
++                var contentBlocks = new JsonArray();
++                foreach (var tr in msg.Contents.OfType<ToolResult>())
++                {
++                    var resultText = string.Join("\n", tr.Contents.OfType<Text>().Select(t => t.Value));
++                    contentBlocks.Add(new JsonObject
++                    {
++                        ["type"] = "tool_result",
++                        ["tool_use_id"] = tr.ToolCallId,
++                        ["content"] = resultText
++                    });
++                }
++                anthropicMsgs.Add(new JsonObject { ["role"] = "user", ["content"] = contentBlocks });
++            }
++        }
++
++        var req = new JsonObject { ["messages"] = anthropicMsgs };
++        if (!string.IsNullOrEmpty(systemPrompt))
++        {
++            req["system"] = systemPrompt;
++        }
++
++        if (tools != null && tools.Count > 0)
++        {
++            var toolDefs = new JsonArray();
++            foreach (var t in tools)
++            {
++                toolDefs.Add(new JsonObject
++                {
++                    ["name"] = t.Name,
++                    ["description"] = t.Description,
++                    ["input_schema"] = new JsonObject { ["type"] = "object" }
++                });
++            }
++            req["tools"] = toolDefs;
++        }
++
++        return req;
++    }
++
++    public static IMessageEvent? TranslateStreamChunk(AnthropicChunk chunk, string messageId) => chunk.Type switch
++    {
++        "text_delta" => new MessageDelta(messageId, Content: new TextDelta(0, chunk.Text ?? "")),
++        "tool_use" => new MessageDelta(messageId, Content: new ToolCall(chunk.ToolId ?? "call_1", chunk.ToolName ?? "", chunk.Text ?? "{}")),
++        _ => null
++    };
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        if (_clientStreamFn != null)
++        {
++            var req = FormatRequest(messages, tools);
++            var stream = await _clientStreamFn(req).ConfigureAwait(false);
++            var msgId = Guid.NewGuid().ToString("N");
++
++            yield return new MessageStart(Role.Assistant, Id: msgId);
++            await foreach (var chunk in stream.WithCancellation(ct).ConfigureAwait(false))
++            {
++                var evt = TranslateStreamChunk(chunk, msgId);
++                if (evt != null) yield return evt;
++            }
++            yield return new MessageEnd(Id: msgId);
++            yield break;
++        }
++
++        if (_clientFn != null)
++        {
++            var req = FormatRequest(messages, tools);
++            var res = await _clientFn(req).ConfigureAwait(false);
++            var msgId = Guid.NewGuid().ToString("N");
++
++            yield return new MessageStart(Role.Assistant, Id: msgId);
++
++            var stopReason = res["stop_reason"]?.ToString() ?? "end_turn";
++            var finishReason = MapFinishReason(stopReason);
++
++            if (res["content"] is JsonArray contentArr)
++            {
++                foreach (var node in contentArr)
++                {
++                    var type = node?["type"]?.ToString();
++                    if (type == "text")
++                    {
++                        var text = node?["text"]?.ToString() ?? "";
++                        yield return new MessageDelta(msgId, Content: new Text(text));
++                    }
++                    else if (type == "tool_use")
++                    {
++                        var id = node?["id"]?.ToString() ?? "call_1";
++                        var name = node?["name"]?.ToString() ?? "";
++                        var input = node?["input"]?.ToJsonString() ?? "{}";
++                        yield return new MessageDelta(msgId, Content: new ToolCall(id, name, input));
++                    }
++                }
++            }
++            else if (res["content"] is JsonValue val)
++            {
++                yield return new MessageDelta(msgId, Content: new Text(val.ToString()));
++            }
++
++            yield return new MessageEnd(Id: msgId);
++            yield break;
++        }
++
++        if (Inner != null)
++        {
++            await foreach (var evt in Inner.GenerateAsync(messages, tools, responseSchema, ct).ConfigureAwait(false))
++            {
++                yield return evt;
++            }
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T09/AnthropicProviderLayerTests.cs b/research/runs/agentcore_T09/AnthropicProviderLayerTests.cs
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/research/runs/agentcore_T09/AnthropicProviderLayerTests.cs
+@@ -0,0 +1,168 @@
++using System.Text.Json.Nodes;
++using AgentCore;
++using AgentCore.Context;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using AgentCore.Tool.Tools;
++using Xunit;
++
++namespace AgentCoreT09;
++
++public class AnthropicProviderLayerTests
++{
++    private sealed class MockStockTool : ITool
++    {
++        public ToolDefinition Definition { get; } = new(
++            "lookup_stock",
++            "Lookup current price of stock symbol",
++            new JsonSchemaBuilder().Type<object>().AddProperty("symbol", new JsonSchemaBuilder().Type<string>().Build()).Build());
++
++        public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
++            JsonObject arguments,
++            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
++        {
++            await Task.Yield();
++            var sym = arguments["symbol"]?.ToString() ?? "UNKNOWN";
++            yield return new Text($"Stock {sym}: $150.00");
++        }
++    }
++
++    [Fact]
++    public void Test1_MapsMessagesAndToolsToProviderSchema()
++    {
++        var messages = new List<Message>
++        {
++            new(Role.System, [new Text("You are a financial advisor.")]),
++            new(Role.User, [new Text("What is AAPL price?")]),
++            new(Role.Assistant, [
++                new Text("Checking stock price..."),
++                new ToolCall("call_123", "lookup_stock", "{\"symbol\":\"AAPL\"}")
++            ]),
++            new(Role.Tool, [
++                new ToolResult("call_123", [new Text("Stock AAPL: $150.00")])
++            ])
++        };
++
++        var tool = new MockStockTool();
++        var req = AnthropicProviderLayer.FormatRequest(messages, [tool.Definition]);
++
++        Assert.Equal("You are a financial advisor.", req["system"]?.ToString());
++
++        var msgs = req["messages"]?.AsArray();
++        Assert.NotNull(msgs);
++        Assert.Equal(3, msgs.Count);
++
++        // User turn
++        Assert.Equal("user", msgs[0]?["role"]?.ToString());
++        Assert.Equal("What is AAPL price?", msgs[0]?["content"]?.ToString());
++
++        // Assistant turn with tool_use block
++        Assert.Equal("assistant", msgs[1]?["role"]?.ToString());
++        var assistantBlocks = msgs[1]?["content"]?.AsArray();
++        Assert.NotNull(assistantBlocks);
++        Assert.Equal("text", assistantBlocks[0]?["type"]?.ToString());
++        Assert.Equal("tool_use", assistantBlocks[1]?["type"]?.ToString());
++        Assert.Equal("lookup_stock", assistantBlocks[1]?["name"]?.ToString());
++
++        // Tool result turn mapped to role user with type tool_result
++        Assert.Equal("user", msgs[2]?["role"]?.ToString());
++        var toolBlocks = msgs[2]?["content"]?.AsArray();
++        Assert.NotNull(toolBlocks);
++        Assert.Equal("tool_result", toolBlocks[0]?["type"]?.ToString());
++        Assert.Equal("call_123", toolBlocks[0]?["tool_use_id"]?.ToString());
++
++        // Tools schema
++        var toolsArr = req["tools"]?.AsArray();
++        Assert.NotNull(toolsArr);
++        Assert.Single(toolsArr);
++        Assert.Equal("lookup_stock", toolsArr[0]?["name"]?.ToString());
++    }
++
++    [Fact]
++    public void Test2_TranslatesProviderStreamingChunks()
++    {
++        var msgId = "test_msg_1";
++
++        var textChunk = new AnthropicChunk("text_delta", Text: "Hello world");
++        var textEvt = AnthropicProviderLayer.TranslateStreamChunk(textChunk, msgId);
++        var delta = Assert.IsType<MessageDelta>(textEvt);
++        var textDelta = Assert.IsType<TextDelta>(delta.Content);
++        Assert.Equal("Hello world", textDelta.Text);
++
++        var toolChunk = new AnthropicChunk("tool_use", ToolName: "lookup_stock", ToolId: "t_1", Text: "{\"symbol\":\"MSFT\"}");
++        var toolEvt = AnthropicProviderLayer.TranslateStreamChunk(toolChunk, msgId);
++        var toolDelta = Assert.IsType<MessageDelta>(toolEvt);
++        var tc = Assert.IsType<ToolCall>(toolDelta.Content);
++        Assert.Equal("lookup_stock", tc.Name);
++        Assert.Equal("t_1", tc.Id);
++    }
++
++    [Fact]
++    public void Test3_HandlesProviderSpecificFinishReasonMapping()
++    {
++        Assert.Equal("stop", AnthropicProviderLayer.MapFinishReason("end_turn"));
++        Assert.Equal("stop", AnthropicProviderLayer.MapFinishReason("stop_sequence"));
++        Assert.Equal("tool_calls", AnthropicProviderLayer.MapFinishReason("tool_use"));
++        Assert.Equal("length", AnthropicProviderLayer.MapFinishReason("max_tokens"));
++    }
++
++    [Fact]
++    public async Task Test4_ExecutesCompleteAgentLoopWithZeroChangeToToolOrContext()
++    {
++        int turn = 0;
++        Task<JsonObject> MockAnthropicApi(JsonObject request)
++        {
++            turn++;
++            if (turn == 1)
++            {
++                var response = new JsonObject
++                {
++                    ["stop_reason"] = "tool_use",
++                    ["content"] = new JsonArray
++                    {
++                        new JsonObject { ["type"] = "text", ["text"] = "Let me look up the stock." },
++                        new JsonObject
++                        {
++                            ["type"] = "tool_use",
++                            ["id"] = "call_stock_1",
++                            ["name"] = "lookup_stock",
++                            ["input"] = new JsonObject { ["symbol"] = "MSFT" }
++                        }
++                    }
++                };
++                return Task.FromResult(response);
++            }
++            else
++            {
++                var response = new JsonObject
++                {
++                    ["stop_reason"] = "end_turn",
++                    ["content"] = new JsonArray
++                    {
++                        new JsonObject { ["type"] = "text", ["text"] = "MSFT is trading at $150.00." }
++                    }
++                };
++                return Task.FromResult(response);
++            }
++        }
++
++        var provider = new AnthropicProviderLayer(clientFn: MockAnthropicApi);
++        var toolbox = new Toolbox([new MockStockTool()]);
++        var context = new ChatContext();
++        var agent = new Agent(provider, toolbox, context);
++
++        var events = new List<IContentEvent>();
++        await foreach (var evt in agent.InvokeStreamingAsync([new Text("Price of MSFT?")]))
++        {
++            events.Add(evt);
++        }
++
++        var texts = events.OfType<Text>().Select(t => t.Value).ToList();
++        Assert.Contains(texts, t => t.Contains("MSFT is trading at $150.00."));
++
++        var history = await context.ReadAsync();
++        Assert.True(history.Count >= 3);
++    }
++}

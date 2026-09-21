@@ -6,10 +6,11 @@
 
 | Project | Files | Code Lines | Total Lines |
 |---|---|---|---|
-| AgentCore.Layers | 12 | 794 | 916 |
-| AgentCore.LLM.Tornado | 3 | 285 | 325 |
-| AgentCore | 25 | 1,344 | 1,583 |
-| **Total** | **40** | **2,423** | **2,824** |
+| AgentCore.Layers | 12 | 793 | 910 |
+| AgentCore.LLM.Tornado | 2 | 269 | 307 |
+| AgentCore.MCP | 2 | 59 | 68 |
+| AgentCore | 24 | 1,457 | 1,706 |
+| **Total** | **40** | **2,578** | **2,991** |
 
 
 # Project Structure
@@ -36,21 +37,20 @@ AgentCore-Main/
 │   │   │   ├── JsonSchemaBuilder.cs
 │   │   │   └── JsonSchemaExtensions.cs
 │   │   ├── ILLM.cs
-│   │   ├── LLMLayer.cs
-│   │   └── LLMLayerExtensions.cs
+│   │   ├── LLMExtensions.cs
+│   │   └── LLMLayer.cs
 │   ├── Tool/
 │   │   ├── InternalTools/
 │   │   ├── Tools/
 │   │   │   ├── MethodTool.cs
 │   │   │   └── MethodToolExtensions.cs
-│   │   ├── ToolCallExtensions.cs
-│   │   ├── ToolExtensions.cs
-│   │   ├── Tooling.cs
-│   │   └── ToolingLayer.cs
+│   │   ├── Toolbox.cs
+│   │   ├── ToolboxExtensions.cs
+│   │   └── ToolboxLayer.cs
 │   ├── Agent.cs
 │   ├── AgentCore.csproj
 │   ├── AgentExtensions.cs
-│   └── Events.cs
+│   └── MessageEvents.cs
 ├── AgentCore.Layers/
 │   ├── Chat/
 │   │   ├── Store/
@@ -60,9 +60,9 @@ AgentCore-Main/
 │   │   ├── ChatPersistenceLayer.cs
 │   │   └── ContextLayerExtensions.cs
 │   ├── LLM/
+│   │   ├── InputGuardrailLayer.cs
 │   │   ├── LLMLayerExtensions.cs
 │   │   ├── RetryLayer.cs
-│   │   ├── StreamingEventLayer.cs
 │   │   └── ToolCallDetectionLayer.cs
 │   ├── Tool/
 │   │   ├── ToolApprovalLayer.cs
@@ -72,13 +72,16 @@ AgentCore-Main/
 ├── AgentCore.LLM.Tornado/
 │   ├── AgentCore.LLM.Tornado.csproj
 │   ├── TornadoAdapterExtensions.cs
-│   ├── TornadoBuilderExtensions.cs
 │   └── TornadoLLM.cs
+├── AgentCore.MCP/
+│   ├── AgentCore.MCP.csproj
+│   ├── McpTool.cs
+│   └── McpToolBuilderExtensions.cs
 ```
 
 ## Source Code
 
-### File: `AgentCore.Layers/Chat/ChatPersistenceLayer.cs` (85 code lines, 94 total)
+### File: `AgentCore.Layers/Chat/ChatPersistenceLayer.cs` (95 code lines, 104 total)
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -99,6 +102,7 @@ public sealed class ChatPersistenceLayer(
     IContext? inner = null) : ContextLayer(inner)
 {
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _restored;
 
     public override async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
@@ -107,7 +111,7 @@ public sealed class ChatPersistenceLayer(
         return await base.ReadAsync(ct).ConfigureAwait(false);
     }
 
-    public override async IAsyncEnumerable<IContentEvent> WriteAsync(
+    public override async IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -147,19 +151,28 @@ public sealed class ChatPersistenceLayer(
     private async Task RestoreAsync(CancellationToken ct)
     {
         if (_restored) return;
-        _restored = true;
-
-        if (walStore != null)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
-            if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
-            await walStore.ClearAsync(ct).ConfigureAwait(false);
+            if (_restored) return;
+
+            if (walStore != null)
+            {
+                var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
+                if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
+                await walStore.ClearAsync(ct).ConfigureAwait(false);
+            }
+
+            if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
+            {
+                foreach (var m in ExtractWorkingContext(history))
+                    await Inner.WriteAsync(m, ct).ConfigureAwait(false);
+            }
+            _restored = true;
         }
-
-        if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
+        finally
         {
-            foreach (var m in ExtractWorkingContext(history))
-                await Inner.WriteAsync(m, ct).ConfigureAwait(false);
+            _gate.Release();
         }
     }
 
@@ -177,7 +190,7 @@ public sealed class ChatPersistenceLayer(
 
 ```
 
-### File: `AgentCore.Layers/Chat/ContextLayerExtensions.cs` (26 code lines, 30 total)
+### File: `AgentCore.Layers/Chat/ContextLayerExtensions.cs` (44 code lines, 49 total)
 ```csharp
 using AgentCore;
 using AgentCore.Context;
@@ -206,6 +219,25 @@ public static class ContextLayerExtensions
         return context.AddLayer(new ChatPersistenceLayer(store, walStore, context));
     }
 
+    public static async Task<IContext> ForkSessionAsync(
+        this IContext context,
+        string storageDirectory,
+        string sourceSessionId,
+        string newSessionId,
+        string? upToMessageId = null,
+        bool enableWal = true,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var sourceStore = new FileChatStore(storageDirectory, sourceSessionId);
+        var history = await sourceStore.LoadAsync(ct).ConfigureAwait(false);
+        var snapshot = history?.Snapshot(upToMessageId);
+        var targetStore = new FileChatStore(storageDirectory, newSessionId);
+        if (snapshot is { Count: > 0 })
+            await targetStore.AppendAsync(snapshot, ct).ConfigureAwait(false);
+        return context.UseSession(targetStore, enableWal ? new FileWalStore(storageDirectory, newSessionId) : null);
+    }
+
     public static IContext RemoveSession(this IContext context)
         => context.RemoveLayer<ChatPersistenceLayer>();
 }
@@ -229,7 +261,7 @@ public interface IChatStore
     Task<IReadOnlyList<Message>?> LoadAsync(CancellationToken ct = default);
     Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
 }
-public class FileChatStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IChatStore
+public sealed class FileChatStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IChatStore
 {
     private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(
@@ -263,12 +295,12 @@ public class FileChatStore(string storageDirectory, string sessionId, JsonSerial
 
 ```
 
-### File: `AgentCore.Layers/Chat/Store/StoreJson.cs` (77 code lines, 89 total)
+### File: `AgentCore.Layers/Chat/Store/StoreJson.cs` (33 code lines, 40 total)
 ```csharp
 using System;
-using System.Collections.Concurrent;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using AgentCore;
 using AgentCore.LLM.Chat;
@@ -277,87 +309,38 @@ namespace AgentCore.Layers.Context.Store;
 
 public static class StoreJson
 {
+    private static readonly Assembly[] Assemblies = [typeof(Agent).Assembly, typeof(StoreJson).Assembly];
+
     public static readonly JsonSerializerOptions Options = new()
     {
         TypeInfoResolver = new DefaultJsonTypeInfoResolver
         {
             Modifiers = { ConfigurePolymorphism }
-        },
-        Converters = { new MetadataConverter() }
+        }
     };
 
     private static void ConfigurePolymorphism(JsonTypeInfo ti)
     {
-        ti.PolymorphismOptions = ti.Type switch
-        {
-            _ when ti.Type == typeof(IMessageEvent) => Polymorphic(
-                (typeof(MessageStart), "msg_start"),
-                (typeof(MessageDelta), "msg_delta"),
-                (typeof(MessageEnd), "msg_end"),
-                (typeof(Message), "message")),
+        if (!ti.Type.IsInterface || (!typeof(IMessageEvent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IContentEvent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IContent).IsAssignableFrom(ti.Type) &&
+                                     !typeof(IMetadata).IsAssignableFrom(ti.Type)))
+            return;
 
-            _ when ti.Type == typeof(IContentEvent) => Polymorphic(
-                (typeof(TextStart), "text_start"),
-                (typeof(TextDelta), "text_delta"),
-                (typeof(TextEnd), "text_end"),
-                (typeof(ReasoningStart), "reasoning_start"),
-                (typeof(ReasoningDelta), "reasoning_delta"),
-                (typeof(ReasoningEnd), "reasoning_end"),
-                (typeof(ToolCallStart), "tool_start"),
-                (typeof(ToolCallDelta), "tool_delta"),
-                (typeof(ToolCallEnd), "tool_end"),
-                (typeof(Text), "text"),
-                (typeof(Reasoning), "reasoning"),
-                (typeof(ToolCall), "tool_call"),
-                (typeof(Image), "image")),
+        var poly = new JsonPolymorphismOptions { TypeDiscriminatorPropertyName = "$type" };
+        var derived = Assemblies.SelectMany(a => a.GetTypes())
+            .Where(t => !t.IsAbstract && !t.IsInterface && ti.Type.IsAssignableFrom(t));
 
-            _ when ti.Type == typeof(IContent) => Polymorphic(
-                (typeof(Text), "text"),
-                (typeof(Reasoning), "reasoning"),
-                (typeof(ToolCall), "tool_call"),
-                (typeof(Image), "image")),
+        foreach (var t in derived)
+            poly.DerivedTypes.Add(new JsonDerivedType(t, t.Name));
 
-            _ => ti.PolymorphismOptions
-        };
-    }
-
-    private static JsonPolymorphismOptions Polymorphic(params (Type Type, string Name)[] types)
-    {
-        var options = new JsonPolymorphismOptions { TypeDiscriminatorPropertyName = "$type" };
-        foreach (var (type, name) in types)
-            options.DerivedTypes.Add(new JsonDerivedType(type, name));
-        return options;
-    }
-
-    private sealed class MetadataConverter : JsonConverter<IMetadata>
-    {
-        private static readonly ConcurrentDictionary<string, Type?> Cache = new(StringComparer.OrdinalIgnoreCase);
-
-        public override IMetadata? Read(ref Utf8JsonReader r, Type _, JsonSerializerOptions o)
-        {
-            using var doc = JsonDocument.ParseValue(ref r);
-            var tag = doc.RootElement.TryGetProperty("$type", out var p) ? p.GetString() : null;
-            var type = tag != null ? Cache.GetOrAdd(tag, t => Type.GetType(t) is { } found && typeof(IMetadata).IsAssignableFrom(found) ? found : null) : null;
-            return type != null ? (IMetadata?)doc.RootElement.Deserialize(type, o) : null;
-        }
-
-        public override void Write(Utf8JsonWriter w, IMetadata v, JsonSerializerOptions o)
-        {
-            using var doc = JsonSerializer.SerializeToDocument(v, v.GetType(), o);
-            w.WriteStartObject();
-            w.WriteString("$type", $"{v.GetType().FullName}, {v.GetType().Assembly.GetName().Name}");
-            foreach (var p in doc.RootElement.EnumerateObject())
-                if (!p.NameEquals("$type")) p.WriteTo(w);
-            w.WriteEndObject();
-        }
+        ti.PolymorphismOptions = poly;
     }
 }
 
-
-
 ```
 
-### File: `AgentCore.Layers/Chat/Store/WalStore.cs` (44 code lines, 49 total)
+### File: `AgentCore.Layers/Chat/Store/WalStore.cs` (48 code lines, 52 total)
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -374,36 +357,39 @@ public interface IWalStore
     Task ClearAsync(CancellationToken ct = default);
     IAsyncEnumerable<IMessageEvent> RecoverAsync(CancellationToken ct = default);
 }
-public class FileWalStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IWalStore
+public sealed class FileWalStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IWalStore
 {
     private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(
         !string.IsNullOrWhiteSpace(storageDirectory) ? storageDirectory : throw new ArgumentException("Storage directory cannot be null or whitespace.", nameof(storageDirectory)),
         $"{string.Join("_", (string.IsNullOrWhiteSpace(sessionId) ? throw new ArgumentException("Session ID cannot be null or whitespace.", nameof(sessionId)) : sessionId).Split(Path.GetInvalidFileNameChars()))}.wal");
+    private StreamWriter? _writer;
 
-    public Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
+    public async Task AppendAsync(IMessageEvent evt, CancellationToken ct = default)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        var line = JsonSerializer.Serialize(evt, _options);
-        return File.AppendAllLinesAsync(_path, [line], ct);
+        if (_writer == null)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            _writer = new StreamWriter(_path, append: true) { AutoFlush = true };
+        }
+        await _writer.WriteLineAsync(JsonSerializer.Serialize(evt, _options).AsMemory(), ct).ConfigureAwait(false);
     }
 
     public Task ClearAsync(CancellationToken ct = default)
     {
-        try { if (File.Exists(_path)) File.Delete(_path); } catch { }
+        _writer?.Dispose();
+        _writer = null;
+        try { File.Delete(_path); } catch { }
         return Task.CompletedTask;
     }
 
-    public async IAsyncEnumerable<IMessageEvent> RecoverAsync(
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public async IAsyncEnumerable<IMessageEvent> RecoverAsync([EnumeratorCancellation] CancellationToken ct = default)
     {
         if (!File.Exists(_path)) yield break;
-
-        var lines = await File.ReadAllLinesAsync(_path, ct).ConfigureAwait(false);
-        foreach (var line in lines)
+        using var reader = new StreamReader(_path);
+        while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (JsonSerializer.Deserialize<IMessageEvent>(line, _options) is { } evt)
+            if (!string.IsNullOrWhiteSpace(line) && JsonSerializer.Deserialize<IMessageEvent>(line, _options) is { } evt)
                 yield return evt;
         }
     }
@@ -411,7 +397,49 @@ public class FileWalStore(string storageDirectory, string sessionId, JsonSeriali
 
 ```
 
-### File: `AgentCore.Layers/LLM/LLMLayerExtensions.cs` (43 code lines, 50 total)
+### File: `AgentCore.Layers/LLM/InputGuardrailLayer.cs` (32 code lines, 37 total)
+```csharp
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using AgentCore.Tool;
+using System.Runtime.CompilerServices;
+
+namespace AgentCore.Layers.LLM;
+
+public delegate ValueTask<IReadOnlyList<IContent>?> InputGuardrail(
+    IReadOnlyList<Message> messages,
+    CancellationToken ct);
+
+public sealed class InputGuardrailLayer(InputGuardrail guardrail, ILLM? inner = null) : LLMLayer(inner)
+{
+    private readonly InputGuardrail _guardrail = guardrail ?? throw new ArgumentNullException(nameof(guardrail));
+
+    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
+        IReadOnlyList<Message> messages,
+        IReadOnlyList<ToolDefinition>? tools = null,
+        JsonSchema? responseSchema = null,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var violation = await _guardrail(messages, ct).ConfigureAwait(false);
+        if (violation is { Count: > 0 })
+        {
+            var id = Guid.NewGuid().ToString("N");
+            yield return new MessageStart(Role.Assistant, Id: id);
+            foreach (var content in violation)
+                yield return new MessageDelta(id, Content: content);
+            yield return new MessageEnd(Id: id);
+            yield break;
+        }
+
+        await foreach (var evt in base.GenerateAsync(messages, tools, responseSchema, ct).WithCancellation(ct).ConfigureAwait(false))
+            yield return evt;
+    }
+}
+
+```
+
+### File: `AgentCore.Layers/LLM/LLMLayerExtensions.cs` (44 code lines, 51 total)
 ```csharp
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
@@ -454,14 +482,15 @@ public static class LLMLayerExtensions
     public static ILLM RemoveToolCallDetection(this ILLM llm)
         => llm.RemoveLayer<ToolCallDetectionLayer>();
 
-    public static ILLM UseStreamingEvents<T>(this ILLM llm, Func<IMessageEvent, T>? mapper = null)
+    public static ILLM UseInputGuardrail(this ILLM llm, InputGuardrail guardrail)
     {
         ArgumentNullException.ThrowIfNull(llm);
-        return llm.AddLayer(new StreamingEventLayer<T>(mapper, llm));
+        ArgumentNullException.ThrowIfNull(guardrail);
+        return llm.AddLayer(new InputGuardrailLayer(guardrail, llm));
     }
 
-    public static ILLM RemoveStreamingEvents<T>(this ILLM llm)
-        => llm.RemoveLayer<StreamingEventLayer<T>>();
+    public static ILLM RemoveInputGuardrail(this ILLM llm)
+        => llm.RemoveLayer<InputGuardrailLayer>();
 }
 
 ```
@@ -608,59 +637,6 @@ public sealed class RetryLayer : LLMLayer
 
 ```
 
-### File: `AgentCore.Layers/LLM/StreamingEventLayer.cs` (43 code lines, 48 total)
-```csharp
-using System;
-using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Channels;
-using AgentCore.LLM;
-using AgentCore.LLM.Chat;
-using AgentCore.LLM.Schema;
-using AgentCore.Tool;
-
-namespace AgentCore.LLM;
-
-public sealed class StreamingEventLayer<T>(Func<IMessageEvent, T>? mapper = null, ILLM? inner = null) : LLMLayer(inner)
-{
-    public ChannelWriter<T>? Writer { get; set; }
-
-    public override IAsyncEnumerable<IMessageEvent> GenerateAsync(
-        IReadOnlyList<Message> messages,
-        IReadOnlyList<ToolDefinition>? tools = null,
-        JsonSchema? responseSchema = null,
-        CancellationToken ct = default)
-    {
-        return InterceptEventsAsync(Inner.GenerateAsync(messages, tools, responseSchema, ct), ct);
-    }
-
-    private async IAsyncEnumerable<IMessageEvent> InterceptEventsAsync(
-        IAsyncEnumerable<IMessageEvent> innerEvents,
-        [EnumeratorCancellation] CancellationToken ct = default)
-    {
-        var writer = Writer;
-        await foreach (var evt in innerEvents.WithCancellation(ct).ConfigureAwait(false))
-        {
-            if (writer != null)
-            {
-                if (mapper != null)
-                {
-                    writer.TryWrite(mapper(evt));
-                }
-                else if (evt is T typedEvt)
-                {
-                    writer.TryWrite(typedEvt);
-                }
-            }
-
-            yield return evt;
-        }
-    }
-}
-
-```
-
 ### File: `AgentCore.Layers/LLM/ToolCallDetectionLayer.cs` (174 code lines, 200 total)
 ```csharp
 using AgentCore.LLM;
@@ -675,7 +651,7 @@ using System.Text.RegularExpressions;
 
 namespace AgentCore.Layers.LLM;
  
-public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false, ILLM? inner = null) : LLMLayer(inner)
+public sealed class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false, ILLM? inner = null) : LLMLayer(inner)
 { 
     private static readonly Regex TagPattern = new(
         @"[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<content>[\s\S]*?)\s*[\[\(<]/\k<tag>[\]\)>]",
@@ -866,7 +842,7 @@ public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false, ILLM? i
 
 ```
 
-### File: `AgentCore.Layers/Tool/ToolApprovalLayer.cs` (48 code lines, 58 total)
+### File: `AgentCore.Layers/Tool/ToolApprovalLayer.cs` (41 code lines, 49 total)
 ```csharp
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
@@ -876,22 +852,18 @@ namespace AgentCore.Tool;
 
 public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, CancellationToken ct);
 
-public sealed class ToolApprovalLayer : ToolingLayer
+public sealed class ToolApprovalLayer(ToolApprover approver, IToolbox? inner = null) : ToolboxLayer(inner)
 {
-    private readonly ToolApprover _approver;
+    private readonly ToolApprover _approver = approver ?? throw new ArgumentNullException(nameof(approver));
 
-    public ToolApprovalLayer(ITooling inner, ToolApprover approver) : base(inner) => _approver = approver ?? throw new ArgumentNullException(nameof(approver));
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator, IToolbox? inner = null)
+        : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null, inner) { }
 
-    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<IContent?>> evaluator)
-        : this(inner, async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null) { }
-
-    public ToolApprovalLayer(ITooling inner, Func<ToolCall, CancellationToken, Task<bool>> prompt)
-        : this(inner, async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")]) { }
-
+    public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<bool>> prompt, IToolbox? inner = null)
+        : this(async (call, ct) => await prompt(call, ct).ConfigureAwait(false) ? null : [new Text($"Execution of tool '{call.Name}' was rejected by the user.")], inner) { }
 
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var allowedCalls = new List<ToolCall>();
@@ -902,13 +874,8 @@ public sealed class ToolApprovalLayer : ToolingLayer
             if (denial is { Count: > 0 })
             {
                 yield return new MessageStart(Role.Tool, Id: call.Id);
-                yield return new MessageDelta(call.Id, Metadata: new ToolCallId(call.Id));
-                for (int i = 0; i < denial.Count; i++)
-                {
-                    var item = denial[i];
-                    var content = item is IContent c ? c : new Text(item.ToString() ?? string.Empty);
-                    yield return new MessageDelta(call.Id, Content: content);
-                }
+                var contents = denial.Select(item => item is IToolResultContent trc ? trc : new Text(item.ToString() ?? string.Empty)).ToList();
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, contents, isError: true));
                 yield return new MessageEnd(Id: call.Id);
             }
             else
@@ -919,7 +886,7 @@ public sealed class ToolApprovalLayer : ToolingLayer
 
         if (allowedCalls.Count > 0)
         {
-            await foreach (var evt in base.ExecuteAsync(allowedCalls, tools, ct).ConfigureAwait(false))
+            await foreach (var evt in base.ExecuteAsync(allowedCalls, ct).ConfigureAwait(false))
             {
                 yield return evt;
             }
@@ -929,8 +896,9 @@ public sealed class ToolApprovalLayer : ToolingLayer
 
 ```
 
-### File: `AgentCore.Layers/Tool/ToolDiscoveryLayer.cs` (68 code lines, 81 total)
+### File: `AgentCore.Layers/Tool/ToolDiscoveryLayer.cs` (97 code lines, 112 total)
 ```csharp
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
@@ -947,11 +915,11 @@ public sealed class Discoverable(string? domain = null) : Attribute, IMetadata
 
 public sealed class ToolDiscoveryTool : ITool
 {
-    private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _active = new(StringComparer.OrdinalIgnoreCase);
 
     public Func<IReadOnlyList<ToolDefinition>>? CatalogProvider { get; set; }
 
-    public ToolDefinition Info { get; } = new(
+    public ToolDefinition Definition { get; } = new(
         "search_tools",
         "Searches available tools in catalog by keyword or domain to activate them into context.",
         new JsonSchemaBuilder()
@@ -960,7 +928,7 @@ public sealed class ToolDiscoveryTool : ITool
             .Build());
 
     public bool IsActive(ToolDefinition tool) =>
-        tool.Metadata.Get<Discoverable>() == null || _active.Contains(tool.Name);
+        tool.Metadata.Get<Discoverable>() == null || _active.ContainsKey(tool.Name);
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
@@ -989,33 +957,63 @@ public sealed class ToolDiscoveryTool : ITool
             yield break;
         }
 
-        foreach (var m in matches) _active.Add(m.Name);
+        foreach (var m in matches) _active.TryAdd(m.Name, 0);
 
         yield return new Text($"Activated {matches.Count} tool(s):\n" +
             string.Join("\n", matches.Select(m => $"- {m.Name}: {m.Description}")));
     }
 }
 
-public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, ITooling? inner = null) : ToolingLayer(inner)
+public sealed class ToolDiscoveryLayer(ToolDiscoveryTool tool, IToolbox? inner = null) : ToolboxLayer(inner)
 {
     public ToolDiscoveryTool Tool { get; } = tool ?? throw new ArgumentNullException(nameof(tool));
 
+    public override async ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
+    {
+        var innerTools = Inner != null ? await Inner.GetToolsAsync(ct).ConfigureAwait(false) : [];
+        Tool.CatalogProvider = () => innerTools.Select(t => t.Definition).ToArray();
+        return [.. innerTools.Where(t => Tool.IsActive(t.Definition)), Tool];
+    }
+
     public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        Tool.CatalogProvider ??= () => tools.Select(t => t.Info).ToList();
-        await foreach (var evt in base.ExecuteAsync(calls, tools, ct).ConfigureAwait(false))
+        var innerCalls = new List<ToolCall>();
+        foreach (var call in calls)
         {
-            yield return evt;
+            if (string.Equals(call.Name, Tool.Definition.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                var (args, _) = call.ParseArguments();
+                yield return new MessageStart(Role.Tool, Id: call.Id);
+                var contents = new List<IToolResultContent>();
+                await foreach (var evt in Tool.InvokeStreamingAsync(args ?? [], ct).ConfigureAwait(false))
+                {
+                    if (evt is IToolResultContent trc) contents.Add(trc);
+                    else if (evt is Text t) contents.Add(t);
+                }
+                yield return new MessageDelta(call.Id, Content: new ToolResult(call.Id, contents));
+                yield return new MessageEnd(Id: call.Id);
+            }
+            else
+            {
+                innerCalls.Add(call);
+            }
+        }
+
+        if (innerCalls.Count > 0)
+        {
+            await foreach (var evt in base.ExecuteAsync(innerCalls, ct).ConfigureAwait(false))
+            {
+                yield return evt;
+            }
         }
     }
 }
 
 ```
 
-### File: `AgentCore.Layers/Tool/ToolingLayerExtensions.cs` (28 code lines, 34 total)
+### File: `AgentCore.Layers/Tool/ToolingLayerExtensions.cs` (27 code lines, 33 total)
 ```csharp
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
@@ -1024,38 +1022,40 @@ namespace AgentCore.Layers.Tools;
 
 public static class ToolingLayerExtensions
 {
-    public static ITooling UseApproval(this ITooling tooling, ToolApprover approver)
+    public static IToolbox UseApproval(this IToolbox tooling, ToolApprover approver)
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(approver);
-        return tooling.AddLayer(new ToolApprovalLayer(tooling, approver));
+        return tooling.AddLayer(new ToolApprovalLayer(approver, tooling));
     }
 
-    public static ITooling UseApproval(this ITooling tooling, Func<ToolCall, CancellationToken, Task<bool>> prompt)
+    public static IToolbox UseApproval(this IToolbox tooling, Func<ToolCall, CancellationToken, Task<bool>> prompt)
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(prompt);
-        return tooling.AddLayer(new ToolApprovalLayer(tooling, prompt));
+        return tooling.AddLayer(new ToolApprovalLayer(prompt, tooling));
     }
 
-    public static ITooling RemoveApproval(this ITooling tooling)
+    public static IToolbox RemoveApproval(this IToolbox tooling)
         => tooling.RemoveLayer<ToolApprovalLayer>();
 
-    public static ITooling UseToolDiscovery(this ITooling tooling, ToolDiscoveryTool tool)
+    public static IToolbox UseToolDiscovery(this IToolbox tooling, ToolDiscoveryTool? tool = null)
     {
         ArgumentNullException.ThrowIfNull(tooling);
-        ArgumentNullException.ThrowIfNull(tool);
-        return tooling.AddLayer(new ToolDiscoveryLayer(tool, tooling));
+        return tooling.AddLayer(new ToolDiscoveryLayer(tool ?? new ToolDiscoveryTool(), tooling));
     }
 
-    public static ITooling RemoveToolDiscovery(this ITooling tooling)
+    public static IToolbox RemoveToolDiscovery(this IToolbox tooling)
         => tooling.RemoveLayer<ToolDiscoveryLayer>();
 }
 
 ```
 
-### File: `AgentCore.LLM.Tornado/TornadoAdapterExtensions.cs` (68 code lines, 80 total)
+### File: `AgentCore.LLM.Tornado/TornadoAdapterExtensions.cs` (100 code lines, 115 total)
 ```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
@@ -1063,6 +1063,7 @@ using LlmTornado.Chat;
 using LlmTornado.ChatFunctions;
 using LlmTornado.Code;
 using LlmTornado.Common;
+using LlmTornado.Images;
 using ToolCall = AgentCore.LLM.Chat.ToolCall;
 
 namespace AgentCore.LLM.Tornado;
@@ -1084,9 +1085,10 @@ public static class TornadoAdapterExtensions
         var tornadoMsg = new ChatMessage(role);
 
         if (message.Role == Role.Tool)
-            tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Get<ToolCallId>()?.Value ?? message.Id;
+            tornadoMsg.ToolCallId = message.Contents.OfType<ToolResult>().FirstOrDefault()?.ToolCallId ?? message.Id;
 
         var textParts = new List<string>();
+        List<ChatMessagePart>? parts = null;
         List<LlmTornado.ChatFunctions.ToolCall>? toolCalls = null;
 
         foreach (var content in message.Contents)
@@ -1098,6 +1100,29 @@ public static class TornadoAdapterExtensions
 
                 case Reasoning reasoning:
                     tornadoMsg.Reasoning = reasoning.Thought;
+                    break;
+
+                case Image img:
+                    parts ??= [];
+                    if (img.Uri != null)
+                        parts.Add(new ChatMessagePart(img.Uri));
+                    else if (img.Data != null)
+                        parts.Add(new ChatMessagePart(Convert.ToBase64String(img.Data.Value.ToArray()), ImageDetail.Auto, img.MediaType));
+                    break;
+
+                case Audio audio:
+                    parts ??= [];
+                    var audioFormat = audio.MediaType.Contains("mp3", StringComparison.OrdinalIgnoreCase) ? ChatAudioFormats.Mp3 : ChatAudioFormats.Wav;
+                    if (audio.Data != null)
+                        parts.Add(new ChatMessagePart(audio.Data.Value.ToArray(), audioFormat));
+                    else if (audio.Uri != null)
+                        parts.Add(new ChatMessagePart(new ChatMessagePartFileLinkData(audio.Uri.AbsoluteUri, audio.MediaType)));
+                    break;
+
+                case Video video:
+                    parts ??= [];
+                    if (video.Uri != null)
+                        parts.Add(new ChatMessagePart(new ChatMessagePartFileLinkData(video.Uri.AbsoluteUri, video.MediaType)));
                     break;
 
                 case ToolCall tc:
@@ -1116,7 +1141,13 @@ public static class TornadoAdapterExtensions
             }
         }
 
-        if (textParts.Count > 0)
+        if (parts is { Count: > 0 })
+        {
+            if (textParts.Count > 0)
+                parts.Insert(0, new ChatMessagePart(string.Join("\n", textParts)));
+            tornadoMsg.Parts = parts;
+        }
+        else if (textParts.Count > 0)
         {
             tornadoMsg.Content = string.Join("\n", textParts);
         }
@@ -1136,66 +1167,11 @@ public static class TornadoAdapterExtensions
         return new LlmTornado.Common.Tool(fn);
     }
 }
+public sealed record TornadoUsage(ChatUsage Raw) : IMetadata;
 
 ```
 
-### File: `AgentCore.LLM.Tornado/TornadoBuilderExtensions.cs` (46 code lines, 51 total)
-```csharp
-using AgentCore;
-using AgentCore.LLM;
-using AgentCore.LLM.Tornado;
-using LlmTornado;
-using LlmTornado.Chat.Models;
-using LlmTornado.Code;
-
-namespace AgentCore.LLM.Tornado;
-
-public static class TornadoExtensions
-{
-    public static Agent UseTornado(
-        this Agent agent,
-        TornadoApi api,
-        ChatModel model)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(api);
-        ArgumentNullException.ThrowIfNull(model);
-        return agent.UseLLM(new TornadoLLM(api, model));
-    }
-
-    public static Agent UseTornado(
-        this Agent agent,
-        string apiKey,
-        string model,
-        string? baseUrl = null,
-        LLmProviders provider = LLmProviders.Custom)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(apiKey);
-        ArgumentNullException.ThrowIfNull(model);
-
-        TornadoApi api;
-        if (!string.IsNullOrWhiteSpace(baseUrl))
-        {
-            var cleanUrl = baseUrl.TrimEnd('/');
-            if (cleanUrl.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-                cleanUrl = cleanUrl[..^3];
-            cleanUrl += "/";
-            api = new TornadoApi(new Uri(cleanUrl), apiKey, provider);
-        }
-        else
-        {
-            api = new TornadoApi(provider, apiKey);
-        }
-
-        var chatModel = new ChatModel(model, provider);
-        return agent.UseLLM(new TornadoLLM(api, chatModel));
-    }
-}
-
-```
-
-### File: `AgentCore.LLM.Tornado/TornadoLLM.cs` (171 code lines, 194 total)
+### File: `AgentCore.LLM.Tornado/TornadoLLM.cs` (169 code lines, 192 total)
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -1362,11 +1338,9 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                         toolBlocks.Clear();
 
                         if (data.Usage != null)
-                        {
-                            int inTokens = data.Usage.PromptTokens;
-                            int outTokens = data.Usage.CompletionTokens;
-                            int totalTokens = data.Usage.TotalTokens > 0 ? data.Usage.TotalTokens : inTokens + outTokens;
-                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TokenUsage(inTokens, outTokens, totalTokens)), ct);
+                        { 
+                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TokenUsage(data.Usage.PromptTokens, data.Usage.CompletionTokens, data.Usage.TotalTokens)), ct);
+                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TornadoUsage(data.Usage)), ct);
                         }
 
                         await channel.Writer.WriteAsync(new MessageEnd(), ct);
@@ -1394,7 +1368,84 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 
 ```
 
-### File: `AgentCore/Agent.cs` (78 code lines, 90 total)
+### File: `AgentCore.MCP/McpTool.cs` (44 code lines, 50 total)
+```csharp
+using AgentCore.LLM;
+using AgentCore.LLM.Chat;
+using AgentCore.LLM.Schema;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using AgentCore.Tool;
+using ProtocolTool = ModelContextProtocol.Protocol.Tool;
+
+namespace AgentCore.MCP;
+
+public sealed class McpTool(McpClient client, ProtocolTool tool) : ITool
+{
+    private readonly McpClient _client = client ?? throw new ArgumentNullException(nameof(client));  
+    private static JsonSchema ParseSchema(JsonElement element) =>
+        element.ValueKind == JsonValueKind.Object
+            ? new JsonSchema((JsonNode.Parse(element.GetRawText()) as JsonObject) ?? new JsonObject())
+            : new JsonSchema(new JsonObject());
+    public ToolDefinition Definition { get; } = new(tool.Name, tool.Description ?? tool.Name, ParseSchema(tool.InputSchema));
+
+    public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
+        JsonObject arguments,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var dict = arguments?.Count > 0
+            ? JsonSerializer.Deserialize<Dictionary<string, object?>>(arguments.ToJsonString())
+            : null;
+
+        var result = await _client.CallToolAsync(Definition.Name, dict, cancellationToken: ct).ConfigureAwait(false);
+
+        if (result.IsError == true)
+        {
+            var msg = string.Join("\n", result.Content.OfType<TextContentBlock>().Select(t => t.Text));
+            throw new InvalidOperationException($"MCP tool '{Definition.Name}' failed: {msg}");
+        }
+
+        foreach (var b in result.Content)
+        {
+            IContent content = b switch
+            {
+                TextContentBlock tb => new Text(tb.Text),
+                ImageContentBlock ib => new Image(Data: ib.Data, MediaType: ib.MimeType),
+                _ => new Text(b.ToString() ?? string.Empty)
+            };
+            yield return content;
+        }
+    }
+}
+
+```
+
+### File: `AgentCore.MCP/McpToolBuilderExtensions.cs` (15 code lines, 18 total)
+```csharp
+using AgentCore;
+using AgentCore.Tool;
+using ModelContextProtocol.Client;
+
+namespace AgentCore.MCP;
+
+public static class McpToolExtensions
+{ 
+    public static async Task<IToolbox> AddMcpToolsAsync(this IToolbox toolbox, McpClient client, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(client);
+
+        var tools = await client.ListToolsAsync(cancellationToken: ct).ConfigureAwait(false);
+        var mcpTools = tools.Select(t => (ITool)new McpTool(client, t.ProtocolTool));
+        return toolbox.AddTool(mcpTools);
+    }
+} 
+```
+
+### File: `AgentCore/Agent.cs` (74 code lines, 86 total)
 ```csharp
 using System.Runtime.CompilerServices;
 using AgentCore.Context;
@@ -1407,11 +1458,9 @@ namespace AgentCore;
 public interface IAgent
 {
     IReadOnlyList<IContent> Instructions { get; }
-    IReadOnlyList<ToolDefinition> ToolDefinitions { get; }
     IContext Context { get; }
     ILLM LLM { get; }
-    ITooling Tooling { get; }
-    IReadOnlyList<ITool> Tools { get; }
+    IToolbox Toolbox { get; }
 
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -1420,34 +1469,31 @@ public interface IAgent
 
 public sealed class Agent(
     ILLM llm,
-    IReadOnlyList<ITool>? tools = null,
+    IToolbox? toolbox = null,
     IContext? context = null,
-    ITooling? tooling = null,
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
-    public ILLM LLM { get; } = llm ?? throw new ArgumentNullException(nameof(llm));
-    public IReadOnlyList<ITool> Tools { get; } = tools ?? [];
-    public IContext Context { get; } = context ?? new ChatContext();
-    public ITooling Tooling { get; } = tooling ?? new Tooling();
+    public ILLM LLM { get; } = llm?.GetType() == typeof(LLMLayer) ? (LLMLayer)llm : new LLMLayer(llm ?? throw new ArgumentNullException(nameof(llm)));
+    public IToolbox Toolbox { get; } = toolbox?.GetType() == typeof(ToolboxLayer) ? (ToolboxLayer)toolbox : new ToolboxLayer(toolbox ?? new Toolbox());
+    public IContext Context { get; } = context?.GetType() == typeof(ContextLayer) ? (ContextLayer)context : new ContextLayer(context ?? new ChatContext());
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
-    public IReadOnlyList<ToolDefinition> ToolDefinitions => Tools.Select(t => t.Info).ToArray();
 
-    public Agent With(
-        ILLM? llm = null,
-        IReadOnlyList<ITool>? tools = null,
-        IContext? context = null,
-        ITooling? tooling = null,
+    public Agent(
+        ILLM llm,
+        Func<IToolbox, IToolbox>? toolbox = null,
+        Func<IContext, IContext>? context = null,
         IReadOnlyList<IContent>? instructions = null,
-        int? maxIterations = null)
-        => new(
-            llm ?? LLM,
-            tools ?? Tools,
-            context ?? Context,
-            tooling ?? Tooling,
-            instructions ?? Instructions,
-            maxIterations ?? MaxIterations);
+        int maxIterations = 20)
+        : this(
+            llm,
+            toolbox != null ? toolbox(new Toolbox()) : null,
+            context != null ? context(new ChatContext()) : null,
+            instructions,
+            maxIterations)
+    {
+    }
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,
@@ -1455,7 +1501,6 @@ public sealed class Agent(
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var toolDefs = ToolDefinitions;
         await Context.WriteAsync(new Message(Role.User, input), ct).ConfigureAwait(false);
         var messages = await Context.ReadAsync(ct).ConfigureAwait(false);
 
@@ -1467,19 +1512,21 @@ public sealed class Agent(
             if (++iterations > MaxIterations)
                 throw new InvalidOperationException($"Execution exceeded maximum limit of {MaxIterations} iterations.");
 
+            var toolDefs = await Toolbox.GetDefinitionsAsync(ct).ConfigureAwait(false);
             List<Message> prompt = [new Message(Role.System, Instructions), .. messages];
 
             toolCalls = null;
             await foreach (var evt in Context.WriteAsync(LLM.GenerateAsync(prompt, toolDefs, ct: ct), ct))
+            if (evt is MessageDelta { Content: { } c })
             {
-                if (evt is ToolCall tc) (toolCalls ??= []).Add(tc);
-                yield return evt;
+                if (c is ToolCall tc) (toolCalls ??= []).Add(tc);
+                yield return c;
             }
 
             if (toolCalls is not null)
             {
-                await foreach (var evt in Context.WriteAsync(Tooling.ExecuteAsync(toolCalls, Tools, ct), ct))
-                    yield return evt;
+                await foreach (var evt in Context.WriteAsync(Toolbox.ExecuteAsync(toolCalls, ct), ct))
+                    if (evt is MessageDelta { Content: { } c }) yield return c;
 
                 messages = await Context.ReadAsync(ct).ConfigureAwait(false);
             }
@@ -1489,10 +1536,9 @@ public sealed class Agent(
 
 ```
 
-### File: `AgentCore/AgentExtensions.cs` (56 code lines, 66 total)
+### File: `AgentCore/AgentExtensions.cs` (39 code lines, 45 total)
 ```csharp
 using AgentCore.Context;
-using AgentCore.Context.Primitives;
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
@@ -1501,19 +1547,21 @@ namespace AgentCore;
 
 public static class AgentExtensions
 {
-    public static T? FindLayer<T>(this object? root) where T : class
+    public static Agent With(
+        this IAgent agent,
+        ILLM? llm = null,
+        IToolbox? toolbox = null,
+        IContext? context = null,
+        IReadOnlyList<IContent>? instructions = null,
+        int? maxIterations = null)
     {
-        for (var c = root; c != null; c = GetInner(c))
-            if (c is T match) return match;
-        return null;
-
-        static object? GetInner(object obj) => obj switch
-        {
-            ContextLayer contextLayer => contextLayer.Inner,
-            LLMLayer llmLayer => llmLayer.Inner,
-            ToolingLayer toolingLayer => toolingLayer.Inner,
-            _ => null
-        };
+        ArgumentNullException.ThrowIfNull(agent);
+        return new(
+            llm ?? agent.LLM,
+            toolbox ?? agent.Toolbox,
+            context ?? agent.Context,
+            instructions ?? agent.Instructions,
+            maxIterations ?? (agent as Agent)?.MaxIterations ?? 20);
     }
 
     public static async Task<string?> GetFinalResponseAsync(
@@ -1528,39 +1576,17 @@ public static class AgentExtensions
 
         return text;
     }
+}
 
-    public static Agent UseLLM(this Agent agent, ILLM newLlm)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newLlm);
-        return agent.With(llm: newLlm);
-    }
-
-    public static Agent UseContext(this Agent agent, IContext newCtx)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newCtx);
-        return agent.With(context: newCtx);
-    }
-
-    public static Agent UseTooling(this Agent agent, ITooling newTooling)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(newTooling);
-        return agent.With(tooling: newTooling);
-    }
-
-    public static Agent UseInstructions(this Agent agent, params IContent[] instructions)
-    {
-        ArgumentNullException.ThrowIfNull(agent);
-        ArgumentNullException.ThrowIfNull(instructions);
-        return agent.With(instructions: instructions);
-    }
+public interface ILayer<T>
+{
+    T Inner { get; }
+    void Attach(T inner);
 }
 
 ```
 
-### File: `AgentCore/Context/ChatContext.cs` (115 code lines, 131 total)
+### File: `AgentCore/Context/ChatContext.cs` (116 code lines, 132 total)
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -1577,15 +1603,16 @@ namespace AgentCore.Context;
 public interface IContext
 {
     Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default);
-    IAsyncEnumerable<IContentEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
-public class ChatContext(
+public sealed class ChatContext(
     int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
-    IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null) : IContext
+    IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null,
+    IEnumerable<Message>? messages = null) : IContext
 {
-    private Message[] _chat = [];
+    private Message[] _chat = messages?.ToArray() ?? [];
     private readonly Dictionary<string, IAssembler> _open = new(StringComparer.Ordinal);
     private readonly IAssembler _assembler = assembler ?? new Assembler();
     private readonly ITokenizer _counter = counter ?? new Tokenizer();
@@ -1595,9 +1622,9 @@ public class ChatContext(
     private readonly int _maxTokens = maxSingleMessageTokens ?? Math.Max(125, Math.Min(10_000, contextWindow / 5));
     private readonly object _lock = new();
     private string? _activeId;
-    private int _tokens;
+    private int _tokens = messages != null ? messages.Sum(m => (int)((1 + m.Contents.Sum((counter ?? new Tokenizer()).Estimate)) * 1.15)) : 0;
 
-    public async IAsyncEnumerable<IContentEvent> WriteAsync(
+    public async IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -1606,11 +1633,11 @@ public class ChatContext(
         {
             await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
             {
-                IContent? completedContent;
-                lock (_lock) completedContent = AppendLocked(evt);
+                IMessageEvent? completed;
+                lock (_lock) completed = AppendLocked(evt);
 
-                if (evt is MessageDelta { Content: { } ce }) yield return ce;
-                if (completedContent is not null) yield return completedContent;
+                yield return evt;
+                if (completed is not null) yield return completed;
             }
         }
         finally
@@ -1626,7 +1653,7 @@ public class ChatContext(
         }
     }
 
-    private IContent? AppendLocked(IMessageEvent evt)
+    private IMessageEvent? AppendLocked(IMessageEvent evt)
     {
         if (evt is Message m)
         {
@@ -1654,10 +1681,10 @@ public class ChatContext(
             if (id == _activeId) _activeId = null;
             var msg = asm.ToMessage(me);
             Commit(msg, msg.Metadata.Get<TokenUsage>()?.TotalTokens);
-            return null;
+            return msg;
         }
 
-        return evt is MessageDelta md ? asm.Push(md) : null;
+        return evt is MessageDelta md && asm.Push(md) is { } c ? new MessageDelta(id, Content: c) : null;
     }
 
     public async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
@@ -1696,7 +1723,7 @@ public class ChatContext(
 
 ```
 
-### File: `AgentCore/Context/ContextExtensions.cs` (31 code lines, 36 total)
+### File: `AgentCore/Context/ContextExtensions.cs` (57 code lines, 64 total)
 ```csharp
 using AgentCore.LLM.Chat;
 
@@ -1712,51 +1739,76 @@ public static class ContextExtensions
         static async IAsyncEnumerable<IMessageEvent> Stream(IMessageEvent e) { yield return e; }
     }
 
-    public static IContext AddLayer(this IContext context, ContextLayer layer)
+    public static IContext Attach(this IContext context, IContext inner)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(inner);
+        if (context is ILayer<IContext> layer) layer.Attach(inner);
+        return context;
+    }
+
+    public static IContext AddLayer(this IContext context, IContext layer)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(layer);
-        layer.Attach(context);
+        if (context is ILayer<IContext> head && layer is ILayer<IContext> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return context;
+        }
+        if (layer is ILayer<IContext> l) l.Attach(context);
         return layer;
     }
 
     public static IContext RemoveLayer<T>(this IContext context) where T : class
     {
-        if (context is T layer && layer is ContextLayer cl)
-            return cl.Inner.RemoveLayer<T>();
-
-        if (context is ContextLayer parent)
+        if (context is T && context is ILayer<IContext> self) return self.Inner.RemoveLayer<T>();
+        if (context is ILayer<IContext> head)
         {
-            var newInner = parent.Inner.RemoveLayer<T>();
-            if (!ReferenceEquals(newInner, parent.Inner))
-                parent.Attach(newInner);
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
         }
         return context;
+    }
+
+    public static TL? FindLayer<TL>(this IContext root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<IContext>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
+
+    public static IReadOnlyList<Message> Snapshot(this IReadOnlyList<Message> messages, string? upToMessageId = null)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        if (upToMessageId == null) return messages;
+        for (int i = 0; i < messages.Count; i++)
+            if (string.Equals(messages[i].Id, upToMessageId, StringComparison.Ordinal))
+                return messages.Take(i + 1).ToList();
+        return messages;
     }
 }
 
 ```
 
-### File: `AgentCore/Context/ContextLayer.cs` (17 code lines, 22 total)
+### File: `AgentCore/Context/ContextLayer.cs` (14 code lines, 19 total)
 ```csharp
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
 
 namespace AgentCore.Context;
 
-public abstract class ContextLayer(IContext? inner = null) : IContext
+public class ContextLayer(IContext? inner = null) : IContext, ILayer<IContext>
 {
     public IContext Inner { get; private set; } = inner!;
 
-    public void Attach(IContext inner)
-    {
-        Inner = inner ?? throw new ArgumentNullException(nameof(inner));
-    }
+    public void Attach(IContext inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
     public virtual Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
         => Inner.ReadAsync(ct);
 
-    public virtual IAsyncEnumerable<IContentEvent> WriteAsync(
+    public virtual IAsyncEnumerable<IMessageEvent> WriteAsync(
         IAsyncEnumerable<IMessageEvent> events,
         CancellationToken ct = default)
         => Inner.WriteAsync(events, ct);
@@ -1867,7 +1919,7 @@ public sealed class Assembler : IAssembler
         {
             var contents = new List<IToolResultContent>(tr.Contents);
             if (tr.TextBuffer.Length > 0) contents.Add(new Text(tr.TextBuffer.ToString()));
-            if (contents.Count > 0) snapshotContents.Add(new ToolResult(tr.Start.ToolCallId, contents));
+            if (contents.Count > 0) snapshotContents.Add(new ToolResult(tr.Start.ToolCallId, contents, isError: true));
         }
         return new Message(_role, snapshotContents, _id, _metadata);
     }
@@ -1880,7 +1932,7 @@ public sealed class Assembler : IAssembler
         }
         foreach (var index in _toolResultBlocks.Keys.ToList())
         {
-            CompleteToolResultBlock(index);
+            CompleteToolResultBlock(index, isError: true);
         }
     }
 
@@ -1940,7 +1992,7 @@ public static class AssemblerExtensions
 
 ```
 
-### File: `AgentCore/Context/Primitives/Normalizer.cs` (83 code lines, 94 total)
+### File: `AgentCore/Context/Primitives/Normalizer.cs` (89 code lines, 101 total)
 ```csharp
 using System;
 using System.Collections.Generic;
@@ -1954,7 +2006,7 @@ public interface INormalizer
     IReadOnlyList<Message> Normalize(IReadOnlyList<Message> messages);
 }
 
-public class ChatNormalizer(
+public sealed class ChatNormalizer(
     bool ensureToolPairing = true,
     bool coalesceAdjacentRoles = true,
     bool stripPastReasoning = true) : INormalizer
@@ -1976,15 +2028,16 @@ public class ChatNormalizer(
         var toolIds = list.Where(m => m.Role == Role.Assistant)
             .SelectMany(m => m.Contents.OfType<ToolCall>().Select(c => c.Id)).ToHashSet(StringComparer.Ordinal);
         var doneIds = list.Where(m => m.Role == Role.Tool)
-            .Select(m => m.Get<ToolCallId>()?.Value ?? m.Id).Where(id => !string.IsNullOrEmpty(id)).ToHashSet(StringComparer.Ordinal);
+            .SelectMany(GetToolCallIds).Where(id => !string.IsNullOrEmpty(id)).ToHashSet(StringComparer.Ordinal);
 
         var result = new List<Message>(list.Count);
         foreach (var msg in list)
         {
             if (msg.Role == Role.Tool)
             {
-                var id = msg.Get<ToolCallId>()?.Value ?? msg.Id;
-                if (string.IsNullOrEmpty(id) || !toolIds.Contains(id)) continue;
+                var ids = GetToolCallIds(msg).ToList();
+                if (ids.Count > 0 && !ids.Any(toolIds.Contains)) continue;
+                if (ids.Count == 0 && (string.IsNullOrEmpty(msg.Id) || !toolIds.Contains(msg.Id))) continue;
             }
 
             result.Add(msg);
@@ -1993,12 +2046,18 @@ public class ChatNormalizer(
             {
                 foreach (var call in msg.Contents.OfType<ToolCall>().Where(c => !doneIds.Contains(c.Id)))
                 {
-                    result.Add(new Message(Role.Tool, [new Text($"Tool call '{call.Name}' was aborted.")], call.Id, [new ToolCallId(call.Id)]));
+                    result.Add(new Message(Role.Tool, [new ToolResult(call.Id, [new Text($"Tool call '{call.Name}' was aborted.")], isError: true)], call.Id));
                     doneIds.Add(call.Id);
                 }
             }
         }
         return result;
+
+        static IEnumerable<string> GetToolCallIds(Message m)
+        {
+            var fromResults = m.Contents.OfType<ToolResult>().Select(tr => tr.ToolCallId);
+            return fromResults.Any() ? fromResults : (m.Id != null ? [m.Id] : []);
+        }
     }
 
     private static List<Message> Coalesce(List<Message> list)
@@ -2059,7 +2118,7 @@ public interface ICompactor
         CancellationToken ct = default);
 }
 
-public class Summarizer(
+public sealed class Summarizer(
     ILLM llm,
     string prompt = "Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.",
     INormalizer? normalizer = null) : ICompactor
@@ -2092,7 +2151,7 @@ public class Summarizer(
         result.Add(new Message(
             Role.User, 
             [new Text($"Context compacted due to overflow. Summary of previous interactions:\n{summary}")],
-            [new Summary(original.Count)]));
+            metadata: [new Summary(original.Count, original.LastOrDefault()?.Id)]));
 
         foreach (var msg in GetTrailingTurn(original))
             if (msg.Role != Role.System)
@@ -2116,7 +2175,7 @@ public class Summarizer(
 
 ```
 
-### File: `AgentCore/Context/Primitives/Tokenizer.cs` (34 code lines, 39 total)
+### File: `AgentCore/Context/Primitives/Tokenizer.cs` (38 code lines, 43 total)
 ```csharp
 using System;
 using System.Linq;
@@ -2130,11 +2189,13 @@ public interface ITokenizer
     int Estimate(IContent content);
 }
 
-public class Tokenizer(
+public sealed class Tokenizer(
     int charsPerToken = 4,
     double pixelsPerToken = 750.0,
     int defaultImageTokens = 1000,
-    int minImageTokens = 85) : ITokenizer
+    int minImageTokens = 85,
+    int defaultAudioTokens = 1000,
+    int defaultVideoTokens = 2000) : ITokenizer
 {
     public int CharsPerToken { get; } = charsPerToken > 0 ? charsPerToken : 4;
 
@@ -2144,6 +2205,8 @@ public class Tokenizer(
         Reasoning r => (int)Math.Ceiling(r.Thought.Length / (double)CharsPerToken),
         ToolCall tc => (int)Math.Ceiling((tc.Name.Length + (tc.Arguments?.Length ?? 0)) / (double)CharsPerToken),
         Image img => EstimateImage(img),
+        Audio a => a.Duration is { TotalSeconds: > 0 } d ? (int)Math.Ceiling(d * 25) : defaultAudioTokens,
+        Video v => v.Duration is { TotalSeconds: > 0 } d ? (int)Math.Ceiling(d * 300) : defaultVideoTokens,
         _ => 0
     };
 
@@ -2173,7 +2236,7 @@ public interface ITruncator
     IContent Truncate(IContent content, int maxTokens);
 }
 
-public class Truncator(
+public sealed class Truncator(
     ITokenizer tokenizer, 
     double headRatio = 0.5, 
     string notice = "\n... [truncated]") : ITruncator
@@ -2184,7 +2247,7 @@ public class Truncator(
         : throw new ArgumentOutOfRangeException(nameof(headRatio), "headRatio must be between 0.0 and 1.0.");
     private readonly string _notice = notice ?? string.Empty;
 
-    public virtual IContent Truncate(IContent content, int maxTokens)
+    public IContent Truncate(IContent content, int maxTokens)
     {
         if (_tokenizer.Estimate(content) <= maxTokens)
             return content;
@@ -2197,7 +2260,7 @@ public class Truncator(
         };
     }
 
-    protected string SliceString(string text, int maxTokens)
+    private string SliceString(string text, int maxTokens)
     {
         if (maxTokens <= 0) return string.Empty;
 
@@ -2219,80 +2282,81 @@ public class Truncator(
 
 ```
 
-### File: `AgentCore/Events.cs` (23 code lines, 26 total)
-```csharp
-using AgentCore.LLM.Chat;
-
-namespace AgentCore;
-
-public interface IMessageEvent { string? Id => null; } 
-public sealed record MessageStart(Role Role = Role.Assistant, string? Id = null) : IMessageEvent;
-public sealed record MessageDelta(string? Id = null, IContentEvent? Content = null, IMetadata? Metadata = null) : IMessageEvent;
-public sealed record MessageEnd(string? Id = null) : IMessageEvent;
-
-public interface IContentEvent { int Index => 0; }
-public interface IToolResultContentEvent : IContentEvent;
-public interface IContentStart : IContentEvent;
-public interface IContentDelta : IContentEvent;
-public interface IContentEnd : IContentEvent; 
-public sealed record TextStart(int Index = 0) : IContentStart, IToolResultContentEvent;
-public sealed record TextDelta(int Index, string Text) : IContentDelta, IToolResultContentEvent;
-public sealed record TextEnd(int Index = 0) : IContentEnd, IToolResultContentEvent;  
-public sealed record ReasoningStart(int Index = 0) : IContentStart;
-public sealed record ReasoningDelta(int Index, string Thought) : IContentDelta;
-public sealed record ReasoningEnd(int Index = 0) : IContentEnd; 
-public sealed record ToolCallStart(int Index, string Id, string Name) : IContentStart;
-public sealed record ToolCallDelta(int Index, string Arguments) : IContentDelta;
-public sealed record ToolCallEnd(int Index = 0) : IContentEnd;
-public sealed record ToolResultStart(int Index, string ToolCallId) : IContentStart;
-public sealed record ToolResultDelta(int Index, IToolResultContentEvent Content) : IContentDelta;
-public sealed record ToolResultEnd(int Index = 0, bool IsError = false) : IContentEnd;
-
-```
-
-### File: `AgentCore/LLM/Chat/Content.cs` (30 code lines, 36 total)
+### File: `AgentCore/LLM/Chat/Content.cs` (61 code lines, 69 total)
 ```csharp
 using AgentCore.LLM;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 namespace AgentCore.LLM.Chat;
 
 public interface IToolResultContent : IContent, IToolResultContentEvent;
 
-public class Text(string value) : IContent, IToolResultContent
+public sealed class Text(string value) : IContent, IToolResultContent
 {
     public string Value { get; } = value ?? "";
     public static implicit operator Text(string text) => new(text);
 }
 
-public class Reasoning(string thought) : IContent
+public sealed class Reasoning(string thought) : IContent
 {
     public string Thought { get; } = thought ?? "";
 }
 
-public class ToolCall(string id, string name, string? arguments = null) : IContent
+public sealed class ToolCall(string id, string name, string? arguments = null) : IContent
 {
     public string Id { get; } = id;
     public string Name { get; } = name;
     public string Arguments { get; } = arguments ?? string.Empty;
 }
+public static class ToolCallExtensions
+{
+    public static (JsonObject? Args, string? Error) ParseArguments(this ToolCall call)
+    {
+        if (string.IsNullOrWhiteSpace(call.Arguments)) return ([], null);
+        try
+        {
+            return JsonNode.Parse(call.Arguments) is JsonObject obj
+                ? (obj, null)
+                : (null, $"Tool arguments must be a JSON object, got non-object payload: '{call.Arguments}'.");
+        }
+        catch (JsonException ex)
+        {
+            return (null, $"Invalid JSON ({ex.Message}). Raw payload: '{call.Arguments}'.");
+        }
+    }
+}
 
-public class ToolResult(string toolCallId, IReadOnlyList<IToolResultContent> contents, bool isError = false) : IContent
+public sealed class ToolResult(string toolCallId, IReadOnlyList<IToolResultContent> contents, bool isError = false) : IContent
 {
     public string ToolCallId { get; } = toolCallId;
     public IReadOnlyList<IToolResultContent> Contents { get; } = contents ?? [];
     public bool IsError { get; } = isError;
 }
 
-public record Image(
+public sealed record Image(
     ReadOnlyMemory<byte>? Data = null,
     Uri? Uri = null,
     string MediaType = "image/png",
     int? Width = null,
     int? Height = null) : IContent, IToolResultContent;
+
+public sealed record Audio(
+    ReadOnlyMemory<byte>? Data = null,
+    Uri? Uri = null,
+    string MediaType = "audio/wav",
+    TimeSpan? Duration = null) : IContent, IToolResultContent;
+
+public sealed record Video(
+    ReadOnlyMemory<byte>? Data = null,
+    Uri? Uri = null,
+    string MediaType = "video/mp4",
+    int? Width = null,
+    int? Height = null,
+    TimeSpan? Duration = null) : IContent, IToolResultContent;
 ```
 
-### File: `AgentCore/LLM/Chat/Message.cs` (29 code lines, 37 total)
+### File: `AgentCore/LLM/Chat/Message.cs` (23 code lines, 30 total)
 ```csharp
-using System.Text.Json.Serialization;
 using AgentCore.LLM;
 
 namespace AgentCore.LLM.Chat; 
@@ -2303,13 +2367,10 @@ public interface IContent : IContentEvent;
 
 public interface IMetadata;
 
-public sealed record ToolCallId(string Value) : IMetadata;
 public sealed record TokenUsage(int InputTokens = 0, int OutputTokens = 0, int TotalTokens = 0) : IMetadata;
-public sealed record Summary(int Count = 0) : IMetadata;
-public sealed record Interrupted(string Reason = "Interrupted") : IMetadata;
+public sealed record Summary(int CompactedMessages = 0, string? ThroughMessageId = null) : IMetadata;
 
-[method: JsonConstructor]
-public class Message(
+public sealed class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
     string? id = null,
@@ -2319,9 +2380,6 @@ public class Message(
     public IReadOnlyList<IContent> Contents { get; } = contents ?? [];
     public string? Id { get; } = id;
     public IReadOnlyList<IMetadata> Metadata { get; } = metadata ?? [];
-
-    public Message(Role role, IReadOnlyList<IContent>? contents, IReadOnlyList<IMetadata>? metadata)
-        : this(role, contents, null, metadata) { }
 }
 
 public static class MetadataExtensions
@@ -2352,6 +2410,55 @@ public interface ILLM
 
 ```
 
+### File: `AgentCore/LLM/LLMExtensions.cs` (40 code lines, 44 total)
+```csharp
+namespace AgentCore.LLM;
+
+public static class LLMExtensions
+{
+    public static ILLM Attach(this ILLM llm, ILLM inner)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(inner);
+        if (llm is ILayer<ILLM> layer) layer.Attach(inner);
+        return llm;
+    }
+
+    public static ILLM AddLayer(this ILLM llm, ILLM layer)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(layer);
+        if (llm is ILayer<ILLM> head && layer is ILayer<ILLM> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return llm;
+        }
+        if (layer is ILayer<ILLM> l) l.Attach(llm);
+        return layer;
+    }
+
+    public static ILLM RemoveLayer<T>(this ILLM llm) where T : class
+    {
+        if (llm is T && llm is ILayer<ILLM> self) return self.Inner.RemoveLayer<T>();
+        if (llm is ILayer<ILLM> head)
+        {
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
+        }
+        return llm;
+    }
+
+    public static TL? FindLayer<TL>(this ILLM root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<ILLM>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
+}
+
+```
+
 ### File: `AgentCore/LLM/LLMLayer.cs` (23 code lines, 28 total)
 ```csharp
 using AgentCore.LLM.Chat;
@@ -2367,7 +2474,7 @@ public delegate IAsyncEnumerable<IMessageEvent> LLMDelegate(
     ILLM next,
     CancellationToken ct);
 
-public class LLMLayer(ILLM? inner = null, LLMDelegate? handler = null) : ILLM
+public class LLMLayer(ILLM? inner = null, LLMDelegate? handler = null) : ILLM, ILayer<ILLM>
 {
     public ILLM Inner { get; private set; } = inner!;
 
@@ -2381,37 +2488,6 @@ public class LLMLayer(ILLM? inner = null, LLMDelegate? handler = null) : ILLM
         => handler != null
             ? handler(messages, tools, responseSchema, Inner, ct)
             : Inner.GenerateAsync(messages, tools, responseSchema, ct);
-}
-
-```
-
-### File: `AgentCore/LLM/LLMLayerExtensions.cs` (23 code lines, 26 total)
-```csharp
-namespace AgentCore.LLM;
-
-public static class LLMLayerExtensions
-{
-    public static ILLM AddLayer(this ILLM llm, LLMLayer layer)
-    {
-        ArgumentNullException.ThrowIfNull(llm);
-        ArgumentNullException.ThrowIfNull(layer);
-        layer.Attach(llm);
-        return layer;
-    }
-
-    public static ILLM RemoveLayer<T>(this ILLM llm) where T : class
-    {
-        if (llm is T layer && layer is LLMLayer ll)
-            return ll.Inner.RemoveLayer<T>();
-
-        if (llm is LLMLayer parent)
-        {
-            var newInner = parent.Inner.RemoveLayer<T>();
-            if (!ReferenceEquals(newInner, parent.Inner))
-                parent.Attach(newInner);
-        }
-        return llm;
-    }
 }
 
 ```
@@ -2513,9 +2589,9 @@ public class JsonSchemaBuilder
         }
         return this;
     }
-    internal JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
-    internal JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
-    internal JsonObject BuildObject() => _schema;
+    public JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
+    public JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
+    public JsonObject BuildObject() => _schema;
     public JsonSchema Build() => new JsonSchema(_schema);
 }
 
@@ -2726,66 +2802,38 @@ public static class JsonSchemaExtensions
 
 ```
 
-### File: `AgentCore/Tool/ToolCallExtensions.cs` (21 code lines, 23 total)
+### File: `AgentCore/MessageEvents.cs` (23 code lines, 26 total)
 ```csharp
 using AgentCore.LLM.Chat;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
-namespace AgentCore.Tool;
+namespace AgentCore;
 
-public static class ToolCallExtensions
-{
-    public static (JsonObject? Args, string? Error) ParseArguments(this ToolCall call)
-    {
-        if (string.IsNullOrWhiteSpace(call.Arguments)) return ([], null);
-        try
-        {
-            return JsonNode.Parse(call.Arguments) is JsonObject obj
-                ? (obj, null)
-                : (null, $"Tool arguments must be a JSON object, got non-object payload: '{call.Arguments}'.");
-        }
-        catch (JsonException ex)
-        {
-            return (null, $"Invalid JSON ({ex.Message}). Raw payload: '{call.Arguments}'.");
-        }
-    }
-}
+public interface IMessageEvent { string? Id => null; } 
+public sealed record MessageStart(Role Role = Role.Assistant, string? Id = null) : IMessageEvent;
+public sealed record MessageDelta(string? Id = null, IContentEvent? Content = null, IMetadata? Metadata = null) : IMessageEvent;
+public sealed record MessageEnd(string? Id = null) : IMessageEvent;
 
-```
-
-### File: `AgentCore/Tool/ToolExtensions.cs` (23 code lines, 26 total)
-```csharp
-namespace AgentCore.Tool;
-
-public static class ToolExtensions
-{
-    public static ITooling AddLayer(this ITooling tooling, ToolingLayer layer)
-    {
-        ArgumentNullException.ThrowIfNull(tooling);
-        ArgumentNullException.ThrowIfNull(layer);
-        layer.Attach(tooling);
-        return layer;
-    }
-
-    public static ITooling RemoveLayer<T>(this ITooling tooling) where T : class
-    {
-        if (tooling is T layer && layer is ToolingLayer tl)
-            return tl.Inner.RemoveLayer<T>();
-
-        if (tooling is ToolingLayer parent)
-        {
-            var newInner = parent.Inner.RemoveLayer<T>();
-            if (!ReferenceEquals(newInner, parent.Inner))
-                parent.Attach(newInner);
-        }
-        return tooling;
-    }
-}
+public interface IContentEvent { int Index => 0; }
+public interface IToolResultContentEvent : IContentEvent;
+public interface IContentStart : IContentEvent;
+public interface IContentDelta : IContentEvent;
+public interface IContentEnd : IContentEvent; 
+public sealed record TextStart(int Index = 0) : IContentStart, IToolResultContentEvent;
+public sealed record TextDelta(int Index, string Text) : IContentDelta, IToolResultContentEvent;
+public sealed record TextEnd(int Index = 0) : IContentEnd, IToolResultContentEvent;  
+public sealed record ReasoningStart(int Index = 0) : IContentStart;
+public sealed record ReasoningDelta(int Index, string Thought) : IContentDelta;
+public sealed record ReasoningEnd(int Index = 0) : IContentEnd; 
+public sealed record ToolCallStart(int Index, string Id, string Name) : IContentStart;
+public sealed record ToolCallDelta(int Index, string Arguments) : IContentDelta;
+public sealed record ToolCallEnd(int Index = 0) : IContentEnd;
+public sealed record ToolResultStart(int Index, string ToolCallId) : IContentStart;
+public sealed record ToolResultDelta(int Index, IToolResultContentEvent Content) : IContentDelta;
+public sealed record ToolResultEnd(int Index = 0, bool IsError = false) : IContentEnd;
 
 ```
 
-### File: `AgentCore/Tool/Tooling.cs` (97 code lines, 111 total)
+### File: `AgentCore/Tool/Toolbox.cs` (127 code lines, 145 total)
 ```csharp
 using AgentCore.LLM;
 using AgentCore.LLM.Chat;
@@ -2806,25 +2854,60 @@ public sealed record ToolDefinition(
 
 public interface ITool
 {
-    ToolDefinition Info { get; }
+    ToolDefinition Definition { get; }
     IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(JsonObject arguments, CancellationToken ct = default);
 }
-public interface ITooling
+public interface IToolbox
 {
-    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, IReadOnlyList<ITool> tools, CancellationToken ct = default);
+    ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default);
+    IAsyncEnumerable<IMessageEvent> ExecuteAsync(IReadOnlyList<ToolCall> calls, CancellationToken ct = default);
 }
 
-internal sealed class Tooling(
-    ILogger<Tooling>? logger = null,
-    bool parallel = true,
-    int? maxConcurrency = null,
-    TimeSpan? timeout = null) : ITooling
+public sealed class Toolbox : IToolbox
 {
-    private readonly ILogger _logger = logger ?? NullLogger<Tooling>.Instance;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ITool> _tools;
+
+    public IReadOnlyList<ITool> Tools => _tools.Values.ToArray();
+    public ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default) => new(_tools.Values.ToArray());
+    public ILogger Logger { get; }
+    public bool ParallelExecution { get; }
+    public int? MaxConcurrency { get; }
+    public TimeSpan? Timeout { get; }
+
+    public Toolbox(
+        IEnumerable<ITool>? tools = null,
+        ILogger<Toolbox>? logger = null,
+        bool parallel = true,
+        int? maxConcurrency = null,
+        TimeSpan? timeout = null)
+    {
+        Logger = logger ?? NullLogger<Toolbox>.Instance;
+        ParallelExecution = parallel;
+        MaxConcurrency = maxConcurrency;
+        Timeout = timeout;
+        _tools = new System.Collections.Concurrent.ConcurrentDictionary<string, ITool>(StringComparer.OrdinalIgnoreCase);
+        if (tools != null)
+        {
+            foreach (var t in tools)
+                _tools[t.Definition.Name] = t;
+        }
+    }
+
+    public void Add(IEnumerable<ITool> tools)
+    {
+        ArgumentNullException.ThrowIfNull(tools);
+        foreach (var t in tools)
+            _tools[t.Definition.Name] = t;
+    }
+
+    public bool Remove(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return _tools.TryRemove(name, out _);
+    }
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (calls is not { Count: > 0 }) yield break;
@@ -2832,15 +2915,14 @@ internal sealed class Tooling(
         var messageId = Guid.NewGuid().ToString("N");
         yield return new MessageStart(Role.Tool, Id: messageId);
 
-        var toolMap = tools?.ToDictionary(t => t.Info.Name, StringComparer.OrdinalIgnoreCase) ?? [];
         var channel = Channel.CreateUnbounded<IMessageEvent>();
         var options = new ParallelOptions
         {
-            MaxDegreeOfParallelism = parallel ? (maxConcurrency is > 0 and int max ? max : -1) : 1,
+            MaxDegreeOfParallelism = ParallelExecution ? (MaxConcurrency is > 0 and int max ? max : -1) : 1,
             CancellationToken = ct
         };
 
-        _ = Parallel.ForEachAsync(calls.Select((call, index) => (call, index)), options, (item, token) => new ValueTask(ExecuteCallAsync(item.call, item.index, messageId, toolMap, channel.Writer, token)))
+        _ = Parallel.ForEachAsync(calls.Select((call, index) => (call, index)), options, (item, token) => new ValueTask(ExecuteCallAsync(item.call, item.index, messageId, channel.Writer, token)))
             .ContinueWith(t => channel.Writer.TryComplete(t.Exception?.InnerException));
 
         await foreach (var evt in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
@@ -2849,24 +2931,24 @@ internal sealed class Tooling(
         yield return new MessageEnd(Id: messageId);
     }
 
-    private async Task ExecuteCallAsync(ToolCall call, int index, string messageId, Dictionary<string, ITool> toolMap, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
+    private async Task ExecuteCallAsync(ToolCall call, int index, string messageId, ChannelWriter<IMessageEvent> writer, CancellationToken ct)
     {
         var (args, parseError) = call.ParseArguments();
-        if (parseError != null || string.IsNullOrWhiteSpace(call.Name) || !toolMap.TryGetValue(call.Name, out var tool))
+        if (parseError != null || string.IsNullOrWhiteSpace(call.Name) || !_tools.TryGetValue(call.Name, out var tool))
         {
             var err = parseError ?? (string.IsNullOrWhiteSpace(call.Name) ? "Tool name cannot be empty." : $"Tool '{call.Name}' not registered.");
             await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResult(call.Id, [Fail(call.Name, err)], isError: true)), ct).ConfigureAwait(false);
             return;
         }
 
-        if (tool.Info.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
+        if (tool.Definition.ParametersSchema.Validate(args!) is { Count: > 0 } errors)
         {
             await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResult(call.Id, [Fail(call.Name, string.Join("; ", errors))], isError: true)), ct).ConfigureAwait(false);
             return;
         }
 
-        using var cts = timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
-        cts?.CancelAfter(timeout!.Value);
+        using var cts = Timeout > TimeSpan.Zero ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+        cts?.CancelAfter(Timeout!.Value);
 
         bool isError = false;
         await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultStart(index, call.Id)), ct).ConfigureAwait(false);
@@ -2881,12 +2963,12 @@ internal sealed class Tooling(
         catch (OperationCanceledException) when (cts?.IsCancellationRequested == true && !ct.IsCancellationRequested)
         {
             isError = true;
-            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, $"Tool execution timed out after {timeout!.Value.TotalSeconds}s."))), ct).ConfigureAwait(false);
+            await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, $"Tool execution timed out after {Timeout!.Value.TotalSeconds}s."))), ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             isError = true;
-            _logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, ex.GetBaseException().Message);
+            Logger.LogError(ex, "Tool '{Tool}' failed: {Error}", call.Name, ex.GetBaseException().Message);
             await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultDelta(index, Fail(call.Name, ex.GetBaseException().Message))), ct).ConfigureAwait(false);
         }
         await writer.WriteAsync(new MessageDelta(messageId, Content: new ToolResultEnd(index, IsError: isError)), ct).ConfigureAwait(false);
@@ -2894,38 +2976,124 @@ internal sealed class Tooling(
 
     private Text Fail(string name, string message)
     {
-        _logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
+        Logger.LogWarning("Tool '{Tool}' error: {Error}", name, message);
         return new Text($"Error calling tool '{name}': {message}");
     }
 }
 
 ```
 
-### File: `AgentCore/Tool/ToolingLayer.cs` (19 code lines, 24 total)
+### File: `AgentCore/Tool/ToolboxExtensions.cs` (71 code lines, 80 total)
+```csharp
+using Microsoft.Extensions.Logging;
+
+namespace AgentCore.Tool;
+
+public static class ToolboxExtensions
+{
+    public static async ValueTask<IReadOnlyList<ToolDefinition>> GetDefinitionsAsync(this IToolbox toolbox, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        var tools = await toolbox.GetToolsAsync(ct).ConfigureAwait(false);
+        return tools.Select(t => t.Definition).ToArray();
+    }
+
+    public static IToolbox AddTool(this IToolbox toolbox, ITool tool)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(tool);
+        var target = toolbox.FindLayer<Toolbox>() ?? (toolbox as Toolbox);
+        target?.Add([tool]);
+        return toolbox;
+    }
+
+    public static IToolbox AddTool(this IToolbox toolbox, IEnumerable<ITool> tools)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(tools);
+        var target = toolbox.FindLayer<Toolbox>() ?? (toolbox as Toolbox);
+        target?.Add(tools);
+        return toolbox;
+    }
+
+    public static IToolbox RemoveTool(this IToolbox toolbox, string name)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(name);
+        var target = toolbox.FindLayer<Toolbox>() ?? (toolbox as Toolbox);
+        target?.Remove(name);
+        return toolbox;
+    }
+
+    public static IToolbox Attach(this IToolbox toolbox, IToolbox inner)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(inner);
+        if (toolbox is ILayer<IToolbox> layer) layer.Attach(inner);
+        return toolbox;
+    }
+
+    public static IToolbox AddLayer(this IToolbox toolbox, IToolbox layer)
+    {
+        ArgumentNullException.ThrowIfNull(toolbox);
+        ArgumentNullException.ThrowIfNull(layer);
+        if (toolbox is ILayer<IToolbox> head && layer is ILayer<IToolbox> next)
+        {
+            next.Attach(head.Inner);
+            head.Attach(layer);
+            return toolbox;
+        }
+        if (layer is ILayer<IToolbox> l) l.Attach(toolbox);
+        return layer;
+    }
+
+    public static IToolbox RemoveLayer<T>(this IToolbox toolbox) where T : class
+    {
+        if (toolbox is T && toolbox is ILayer<IToolbox> self) return self.Inner.RemoveLayer<T>();
+        if (toolbox is ILayer<IToolbox> head)
+        {
+            var newInner = head.Inner.RemoveLayer<T>();
+            if (!ReferenceEquals(newInner, head.Inner)) head.Attach(newInner);
+        }
+        return toolbox;
+    }
+
+    public static TL? FindLayer<TL>(this IToolbox root) where TL : class
+    {
+        for (var c = root; c != null; c = (c as ILayer<IToolbox>)?.Inner)
+            if (c is TL match) return match;
+        return null;
+    }
+}
+
+```
+
+### File: `AgentCore/Tool/ToolboxLayer.cs` (19 code lines, 25 total)
 ```csharp
 using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tool;
 
-public delegate IAsyncEnumerable<IMessageEvent> ToolingDelegate(
+public delegate IAsyncEnumerable<IMessageEvent> ToolboxDelegate(
     IReadOnlyList<ToolCall> calls,
-    IReadOnlyList<ITool> tools,
-    ITooling next,
+    IToolbox next,
     CancellationToken ct);
 
-public class ToolingLayer(ITooling? inner = null, ToolingDelegate? handler = null) : ITooling
+public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = null) : IToolbox, ILayer<IToolbox>
 {
-    public ITooling Inner { get; private set; } = inner!;
+    public IToolbox Inner { get; private set; } = inner!;
 
-    public void Attach(ITooling inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+    public void Attach(IToolbox inner) => Inner = inner ?? throw new ArgumentNullException(nameof(inner));
+
+    public virtual ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
+        => Inner != null ? Inner.GetToolsAsync(ct) : new(Array.Empty<ITool>());
 
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
-        IReadOnlyList<ITool> tools,
         CancellationToken ct = default)
         => handler != null
-            ? handler(calls, tools, Inner, ct)
-            : Inner.ExecuteAsync(calls, tools, ct);
+            ? handler(calls, Inner, ct)
+            : Inner.ExecuteAsync(calls, ct);
 }
 
 ```
@@ -2969,7 +3137,7 @@ public sealed class MethodTool : ITool
     private readonly ParameterInfo[] _parameters;
     private readonly Func<Task, object?>? _taskResultGetter;
 
-    public ToolDefinition Info { get; }
+    public ToolDefinition Definition { get; }
 
     public MethodTool(MethodInfo method, object? target = null, string? name = null, string? description = null, IEnumerable<IMetadata>? extraMetadata = null)
     {
@@ -2982,7 +3150,7 @@ public sealed class MethodTool : ITool
         _parameters = method.GetParameters();
 
         var metadata = method.GetCustomAttributes().OfType<IMetadata>().Concat(extraMetadata ?? []).ToList();
-        Info = new(GetName(method, name), GetDescription(method, description), BuildSchema(method), metadata.Count > 0 ? metadata : null);
+        Definition = new(GetName(method, name), GetDescription(method, description), BuildSchema(method), metadata.Count > 0 ? metadata : null);
 
         if (typeof(Task).IsAssignableFrom(method.ReturnType) && method.ReturnType.IsGenericType)
         {
@@ -3066,7 +3234,7 @@ public sealed class MethodTool : ITool
 
 ```
 
-### File: `AgentCore/Tool/Tools/MethodToolExtensions.cs` (24 code lines, 30 total)
+### File: `AgentCore/Tool/Tools/MethodToolExtensions.cs` (25 code lines, 31 total)
 ```csharp
 using AgentCore.LLM.Chat;
 using System.Reflection;
@@ -3075,27 +3243,28 @@ namespace AgentCore.Tool.Tools;
 
 public static class MethodToolExtensions
 {
-    public static Agent AddTool<T>(this Agent agent, params IMetadata[] metadata)
-        => agent.AddTool(typeof(T), null, metadata);
+    public static IToolbox AddTool<T>(this IToolbox toolbox, params IMetadata[] metadata)
+        => toolbox.AddTool(typeof(T), null, metadata);
 
-    public static Agent AddTool(this Agent agent, object instance, params IMetadata[] metadata)
+    public static IToolbox AddTool(this IToolbox toolbox, object instance, params IMetadata[] metadata)
     {
+        ArgumentNullException.ThrowIfNull(toolbox);
         ArgumentNullException.ThrowIfNull(instance);
         return instance is ITool tool
-            ? agent.With(tools: [.. agent.Tools, tool])
-            : agent.AddTool(instance.GetType(), instance, metadata);
+            ? toolbox.AddTool([tool])
+            : toolbox.AddTool(instance.GetType(), instance, metadata);
     }
 
-    private static Agent AddTool(this Agent agent, Type type, object? target, IMetadata[] metadata)
+    private static IToolbox AddTool(this IToolbox toolbox, Type type, object? target, IMetadata[] metadata)
     {
-        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(toolbox);
         var flags = BindingFlags.Public | BindingFlags.Static | (target != null ? BindingFlags.Instance : 0);
 
         var tools = type.GetMethods(flags)
             .Where(m => m.GetCustomAttribute<ToolAttribute>() != null)
             .Select(m => (ITool)new MethodTool(m, m.IsStatic ? null : target, extraMetadata: metadata));
 
-        return agent.With(tools: [.. agent.Tools, .. tools]);
+        return toolbox.AddTool(tools);
     }
 }
 

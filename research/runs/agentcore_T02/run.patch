@@ -1,0 +1,374 @@
+﻿diff --git a/research/runs/agentcore_T02/AgentCoreT02.csproj b/research/runs/agentcore_T02/AgentCoreT02.csproj
+new file mode 100644
+index 0000000..6f29f73
+--- /dev/null
++++ b/research/runs/agentcore_T02/AgentCoreT02.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T02/TelemetryLayer.cs b/research/runs/agentcore_T02/TelemetryLayer.cs
+new file mode 100644
+index 0000000..9800588
+--- /dev/null
++++ b/research/runs/agentcore_T02/TelemetryLayer.cs
+@@ -0,0 +1,196 @@
++using System.Diagnostics;
++using System.Runtime.CompilerServices;
++using System.Text.RegularExpressions;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT02;
++
++public record TelemetryRecord(
++    string Category,
++    string Phase,
++    DateTimeOffset Timestamp,
++    TimeSpan? Duration,
++    int? Tokens,
++    string? CallerId,
++    string? Status,
++    string? SanitizedPayload);
++
++public static class SecretSanitizer
++{
++    private static readonly Regex SecretRegex = new(
++        @"(?i)(api[_-]?key|password|secret|bearer\s+|token)["":\s=]+([A-Za-z0-9_\-\.]{8,})",
++        RegexOptions.Compiled);
++
++    public static string Sanitize(string input)
++    {
++        if (string.IsNullOrEmpty(input)) return input;
++        return SecretRegex.Replace(input, "$1: [REDACTED]");
++    }
++}
++
++public sealed class TelemetryLLMLayer(
++    ILLM? inner = null,
++    Action<TelemetryRecord>? onEvent = null,
++    string? callerId = "default_caller") : LLMLayer(inner)
++{
++    private readonly Action<TelemetryRecord>? _onEvent = onEvent;
++    private readonly string? _callerId = callerId;
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        var rawPayload = string.Join(" ", messages.Select(m => string.Join(" ", m.Contents.Select(c => c is Text t ? t.Value : c.ToString()))));
++        var sanitizedPayload = SecretSanitizer.Sanitize(rawPayload);
++
++        _onEvent?.Invoke(new TelemetryRecord(
++            "LLM",
++            "Start",
++            DateTimeOffset.UtcNow,
++            null,
++            null,
++            _callerId,
++            "Started",
++            sanitizedPayload));
++
++        var sw = Stopwatch.StartNew();
++        var tokenCount = 0;
++        var hasError = false;
++
++        IAsyncEnumerator<IMessageEvent>? enumerator = null;
++        try
++        {
++            enumerator = Inner.GenerateAsync(messages, tools, responseSchema, ct).GetAsyncEnumerator(ct);
++
++            while (true)
++            {
++                bool hasNext;
++                IMessageEvent? item = null;
++                try
++                {
++                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
++                    if (hasNext) item = enumerator.Current;
++                }
++                catch
++                {
++                    hasError = true;
++                    throw;
++                }
++
++                if (!hasNext) break;
++
++                if (item is Message m && m.Metadata.Get<TokenUsage>() is { } usage)
++                {
++                    tokenCount = usage.TotalTokens;
++                }
++                else if (item is MessageDelta md && md.Content is TextDelta td)
++                {
++                    tokenCount += Math.Max(1, td.Text.Length / 4);
++                }
++                else if (item is MessageDelta md2 && md2.Content is Text t)
++                {
++                    tokenCount += Math.Max(1, t.Value.Length / 4);
++                }
++
++                yield return item!;
++            }
++        }
++        finally
++        {
++            sw.Stop();
++            if (enumerator != null) await enumerator.DisposeAsync().ConfigureAwait(false);
++
++            _onEvent?.Invoke(new TelemetryRecord(
++                "LLM",
++                "End",
++                DateTimeOffset.UtcNow,
++                sw.Elapsed,
++                tokenCount,
++                _callerId,
++                hasError ? "Error" : "Success",
++                null));
++        }
++    }
++}
++
++public sealed class TelemetryToolboxLayer(
++    IToolbox? inner = null,
++    Action<TelemetryRecord>? onEvent = null,
++    string? callerId = "default_caller") : ToolboxLayer(inner)
++{
++    private readonly Action<TelemetryRecord>? _onEvent = onEvent;
++    private readonly string? _callerId = callerId;
++
++    public override async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
++        IReadOnlyList<ToolCall> calls,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        var rawPayload = string.Join("; ", calls.Select(c => $"{c.Name}:{c.Arguments}"));
++        var sanitized = SecretSanitizer.Sanitize(rawPayload);
++
++        _onEvent?.Invoke(new TelemetryRecord(
++            "Tool",
++            "Start",
++            DateTimeOffset.UtcNow,
++            null,
++            null,
++            _callerId,
++            "Started",
++            sanitized));
++
++        var sw = Stopwatch.StartNew();
++        var hasError = false;
++
++        IAsyncEnumerator<IMessageEvent>? enumerator = null;
++        try
++        {
++            enumerator = Inner.ExecuteAsync(calls, ct).GetAsyncEnumerator(ct);
++
++            while (true)
++            {
++                bool hasNext;
++                IMessageEvent? item = null;
++                try
++                {
++                    hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
++                    if (hasNext) item = enumerator.Current;
++                }
++                catch
++                {
++                    hasError = true;
++                    throw;
++                }
++
++                if (!hasNext) break;
++
++                if (item is MessageDelta md && md.Content is ToolResult tr && tr.IsError)
++                {
++                    hasError = true;
++                }
++
++                yield return item!;
++            }
++        }
++        finally
++        {
++            sw.Stop();
++            if (enumerator != null) await enumerator.DisposeAsync().ConfigureAwait(false);
++
++            _onEvent?.Invoke(new TelemetryRecord(
++                "Tool",
++                "End",
++                DateTimeOffset.UtcNow,
++                sw.Elapsed,
++                null,
++                _callerId,
++                hasError ? "Failed" : "Success",
++                null));
++        }
++    }
++}
+diff --git a/research/runs/agentcore_T02/TelemetryLayerTests.cs b/research/runs/agentcore_T02/TelemetryLayerTests.cs
+new file mode 100644
+index 0000000..d13b0d1
+--- /dev/null
++++ b/research/runs/agentcore_T02/TelemetryLayerTests.cs
+@@ -0,0 +1,130 @@
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace AgentCoreT02;
++
++public class TelemetryLayerTests
++{
++    private sealed class MockLLM(Func<IAsyncEnumerable<IMessageEvent>> streamFactory) : ILLM
++    {
++        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            CancellationToken ct = default) => streamFactory();
++    }
++
++    private sealed class MockToolbox(Func<IReadOnlyList<ToolCall>, IAsyncEnumerable<IMessageEvent>> execFactory) : IToolbox
++    {
++        public ValueTask<IReadOnlyList<ITool>> GetToolsAsync(CancellationToken ct = default)
++            => ValueTask.FromResult<IReadOnlyList<ITool>>([]);
++
++        public IAsyncEnumerable<IMessageEvent> ExecuteAsync(
++            IReadOnlyList<ToolCall> calls,
++            CancellationToken ct = default) => execFactory(calls);
++    }
++
++    [Fact]
++    public async Task Test1_EmitsEventBeforeAndAfterLLMGenerationWithDurationAndTokens()
++    {
++        var eventsList = new List<TelemetryRecord>();
++        var mock = new MockLLM(() => CreateEvents(
++            new MessageStart(Role.Assistant, Id: "m1"),
++            new MessageDelta("m1", Content: new TextDelta(0, "Hello world response")),
++            new MessageEnd(Id: "m1")
++        ));
++
++        var layer = new TelemetryLLMLayer(mock, e => eventsList.Add(e), callerId: "agent-1");
++        var messages = new List<Message> { new(Role.User, [new Text("Hi")]) };
++
++        await foreach (var _ in layer.GenerateAsync(messages)) { }
++
++        Assert.Equal(2, eventsList.Count);
++        Assert.Equal("LLM", eventsList[0].Category);
++        Assert.Equal("Start", eventsList[0].Phase);
++        Assert.Equal("agent-1", eventsList[0].CallerId);
++        Assert.Null(eventsList[0].Duration);
++
++        Assert.Equal("LLM", eventsList[1].Category);
++        Assert.Equal("End", eventsList[1].Phase);
++        Assert.NotNull(eventsList[1].Duration);
++        Assert.True(eventsList[1].Duration!.Value >= TimeSpan.Zero);
++        Assert.True(eventsList[1].Tokens > 0);
++        Assert.Equal("Success", eventsList[1].Status);
++    }
++
++    [Fact]
++    public async Task Test2_EmitsEventBeforeAndAfterToolExecutionWithStatusAndDuration()
++    {
++        var eventsList = new List<TelemetryRecord>();
++        var mock = new MockToolbox(calls => CreateEvents(
++            new MessageStart(Role.Tool, Id: calls[0].Id),
++            new MessageDelta(calls[0].Id, Content: new ToolResult(calls[0].Id, [new Text("Calculated: 42")])),
++            new MessageEnd(Id: calls[0].Id)
++        ));
++
++        var layer = new TelemetryToolboxLayer(mock, e => eventsList.Add(e), callerId: "tool-agent");
++        var calls = new List<ToolCall> { new("c1", "calculator", "{\"expr\": \"21*2\"}") };
++
++        await foreach (var _ in layer.ExecuteAsync(calls)) { }
++
++        Assert.Equal(2, eventsList.Count);
++        Assert.Equal("Tool", eventsList[0].Category);
++        Assert.Equal("Start", eventsList[0].Phase);
++        Assert.Equal("tool-agent", eventsList[0].CallerId);
++
++        Assert.Equal("Tool", eventsList[1].Category);
++        Assert.Equal("End", eventsList[1].Phase);
++        Assert.NotNull(eventsList[1].Duration);
++        Assert.Equal("Success", eventsList[1].Status);
++    }
++
++    [Fact]
++    public async Task Test3_PassesThroughExecutionPayloadsWithoutMutatingEvents()
++    {
++        var originalDelta = new MessageDelta("m1", Content: new TextDelta(0, "Unmutated delta"));
++        var mock = new MockLLM(() => CreateEvents(originalDelta));
++        var layer = new TelemetryLLMLayer(mock, _ => { });
++
++        var received = new List<IMessageEvent>();
++        await foreach (var evt in layer.GenerateAsync([]))
++        {
++            received.Add(evt);
++        }
++
++        Assert.Single(received);
++        Assert.Same(originalDelta, received[0]);
++    }
++
++    [Fact]
++    public async Task Test4_DoesNotLeakCredentialsOrSecretsInStructuredLogs()
++    {
++        var eventsList = new List<TelemetryRecord>();
++        var mock = new MockLLM(() => CreateEvents(new MessageDelta("m1", Content: new TextDelta(0, "ok"))));
++        var layer = new TelemetryLLMLayer(mock, e => eventsList.Add(e));
++
++        var secretPrompt = "Please connect with apiKey: sk-secret-1234567890abcdef and password: supersecretpass";
++        var messages = new List<Message> { new(Role.User, [new Text(secretPrompt)]) };
++
++        await foreach (var _ in layer.GenerateAsync(messages)) { }
++
++        var startRecord = eventsList.First(e => e.Phase == "Start");
++        Assert.NotNull(startRecord.SanitizedPayload);
++        Assert.DoesNotContain("sk-secret-1234567890abcdef", startRecord.SanitizedPayload);
++        Assert.DoesNotContain("supersecretpass", startRecord.SanitizedPayload);
++        Assert.Contains("[REDACTED]", startRecord.SanitizedPayload);
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> CreateEvents(params IMessageEvent[] events)
++    {
++        foreach (var evt in events)
++        {
++            yield return evt;
++            await Task.Yield();
++        }
++    }
++}

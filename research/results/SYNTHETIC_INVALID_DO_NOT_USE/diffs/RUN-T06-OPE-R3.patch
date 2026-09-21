@@ -1,0 +1,20 @@
+# Benchmark Run Diff: RUN-T06-OPE-R3
+# Framework: OpenAI Agents SDK
+# Task: T06
+# Generated: 2026-09-21 15:49:58
+--- a/OpenAI Agents SDK/baseline
++++ b/OpenAI Agents SDK/T06
+diff --git a/src/extension_T06_0.cs b/src/extension_T06_0.cs
+new file mode 100644
++ // Implementation of T06 inside natural boundary B(r)
+diff --git a/src/extension_T06_1.cs b/src/extension_T06_1.cs
+new file mode 100644
++ // Implementation of T06 inside natural boundary B(r)
+diff --git a/src/framework_wiring_0.cs b/src/framework_wiring_0.cs
+--- a/src/framework_wiring_0.cs
++++ b/src/framework_wiring_0.cs
++ // Wiring change outside natural boundary (external propagation P_ext)
+diff --git a/src/framework_wiring_1.cs b/src/framework_wiring_1.cs
+--- a/src/framework_wiring_1.cs
++++ b/src/framework_wiring_1.cs
++ // Wiring change outside natural boundary (external propagation P_ext)

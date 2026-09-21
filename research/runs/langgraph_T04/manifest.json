@@ -1,0 +1,27 @@
+{
+  "run_id": "RUN-T04-LAN-R1",
+  "framework": "LangGraph",
+  "framework_commit": "e00a02757964a95a9426a5d953c9adb0ab9d7f63",
+  "task_id": "T04",
+  "replicate_id": 1,
+  "files_added": [
+    "response_cache.py",
+    "test_T04.py"
+  ],
+  "files_modified": [
+    "agent_graph.py"
+  ],
+  "natural_boundary": [
+    "response_cache.py",
+    "test_T04.py"
+  ],
+  "modified_outside_boundary": [
+    "agent_graph.py"
+  ],
+  "core_touched": false,
+  "external_propagation": 1,
+  "test_exit_code": 0,
+  "test_output": "D:\\CodeBase\\Popular Agent Frameworks\\langgraph\\libs\\checkpoint\\langgraph\\cache\\base\\__init__.py:8: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.\n  from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer\n....\n----------------------------------------------------------------------\nRan 4 tests in 0.177s\n\nOK",
+  "wall_clock_seconds": 1.386,
+  "pass_fail": "pass"
+}

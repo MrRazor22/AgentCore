@@ -1,0 +1,39 @@
+--- a/research/runs/pilot_langgraph_T01_R2/agent_graph.py
++++ b/research/runs/pilot_langgraph_T01_R2/agent_graph.py
+@@ -1,14 +1,19 @@
+ """
+-Baseline turn-based LangGraph agent graph.
++Turn-based LangGraph agent graph implementation with model retry policy.
+ 
+ Constructs a standard cyclical agent graph using StateGraph, MessagesState,
+-a model execution node, and a tool execution node.
++a model execution node configured with RetryPolicy, and a tool execution node.
+ """
+ from typing import Any, Callable, Dict, List, Optional
+ from langchain_core.messages import AIMessage
+ from langgraph.graph import StateGraph, MessagesState, START, END
+ from langgraph.prebuilt import ToolNode, tools_condition
+ 
++try:
++    from retry_policy import create_model_retry_policy
++except ImportError:
++    from research.runs.pilot_langgraph_T01_R2.retry_policy import create_model_retry_policy
++
+ 
+ def default_model_fn(state: MessagesState) -> Dict[str, Any]:
+     """Default fallback model invocation node."""
+@@ -25,12 +30,12 @@ def build_agent_graph(
+     tools: Optional[List[Callable[..., Any]]] = None,
+ ):
+     """
+-    Constructs and compiles the baseline LangGraph agent workflow.
++    Constructs and compiles the LangGraph agent workflow with retry policy on model node.
+     """
+     builder = StateGraph(MessagesState)
+ 
+     node_model = model_fn or default_model_fn
+-    builder.add_node("model", node_model)
++    builder.add_node("model", node_model, retry_policy=create_model_retry_policy())
+ 
+     node_tools = tools if tools is not None else [default_search_tool]
+     builder.add_node("tools", ToolNode(node_tools))

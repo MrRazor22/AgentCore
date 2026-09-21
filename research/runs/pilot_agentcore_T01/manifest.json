@@ -1,0 +1,25 @@
+{
+  "run_id": "RUN-T01-AGC-R1",
+  "framework": "AgentCore",
+  "framework_commit": "b11d0e489f08e1cc73284a1088e56d3720386597",
+  "task_id": "T01",
+  "replicate_id": 1,
+  "files_added": [
+    "PilotAgentCoreT01.csproj",
+    "RetryLayer.cs",
+    "RetryLayerTests.cs"
+  ],
+  "files_modified": [],
+  "natural_boundary": [
+    "PilotAgentCoreT01.csproj",
+    "RetryLayer.cs",
+    "RetryLayerTests.cs"
+  ],
+  "modified_outside_boundary": [],
+  "core_touched": false,
+  "external_propagation": 0,
+  "test_exit_code": 0,
+  "test_output": "Test run for D:\\CodeBase\\AgentCore-Main\\research\\runs\\pilot_agentcore_T01\\bin\\Debug\\net8.0\\PilotAgentCoreT01.dll (.NETCoreApp,Version=v8.0)\nA total of 1 test files matched the specified pattern.\n\nPassed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 108 ms - PilotAgentCoreT01.dll (net8.0)",
+  "wall_clock_seconds": 3.28,
+  "pass_fail": "pass"
+}

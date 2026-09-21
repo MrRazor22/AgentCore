@@ -1,0 +1,9 @@
+# Benchmark Run Diff: RUN-T06-AGE-R4
+# Framework: AgentCore
+# Task: T06
+# Generated: 2026-09-21 15:49:58
+--- a/AgentCore/baseline
++++ b/AgentCore/T06
+diff --git a/src/extension_T06_0.cs b/src/extension_T06_0.cs
+new file mode 100644
++ // Implementation of T06 inside natural boundary B(r)

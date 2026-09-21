@@ -1,0 +1,313 @@
+diff --git a/research/runs/pilot_agentcore_T01_R2/PilotAgentCoreT01R2.csproj b/research/runs/pilot_agentcore_T01_R2/PilotAgentCoreT01R2.csproj
+new file mode 100644
+index 0000000..173316b
+--- /dev/null
++++ b/research/runs/pilot_agentcore_T01_R2/PilotAgentCoreT01R2.csproj
+@@ -0,0 +1,31 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++    <IsPackable>false</IsPackable>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/pilot_agentcore_T01_R2/RetryLayer.cs b/research/runs/pilot_agentcore_T01_R2/RetryLayer.cs
+new file mode 100644
+index 0000000..82a4dfc
+--- /dev/null
++++ b/research/runs/pilot_agentcore_T01_R2/RetryLayer.cs
+@@ -0,0 +1,102 @@
++using System.Net;
++using System.Runtime.CompilerServices;
++using AgentCore;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCore.LLM;
++
++public class RetryLayer(
++    ILLM? inner = null,
++    int maxRetries = 3,
++    TimeSpan? initialDelay = null,
++    double jitterRatio = 0.0,
++    Func<Exception, bool>? isTransient = null,
++    Func<TimeSpan, CancellationToken, Task>? sleep = null) : LLMLayer(inner)
++{
++    public int MaxRetries { get; } = maxRetries;
++    public TimeSpan InitialDelay { get; } = initialDelay ?? TimeSpan.FromMilliseconds(100);
++    public double JitterRatio { get; } = jitterRatio;
++
++    private readonly Func<Exception, bool> _isTransient = isTransient ?? DefaultIsTransient;
++    private readonly Func<TimeSpan, CancellationToken, Task> _sleep = sleep ?? Task.Delay;
++
++    public static bool DefaultIsTransient(Exception ex)
++    {
++        if (ex is AggregateException agg && agg.InnerExceptions.Count == 1)
++            ex = agg.InnerExceptions[0];
++
++        return ex switch
++        {
++            HttpRequestException hre => hre.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable,
++            _ => false
++        };
++    }
++
++    public static TimeSpan CalculateDelay(int attempt, TimeSpan initialDelay, double jitterRatio = 0.0, Random? random = null)
++    {
++        if (attempt < 1)
++            throw new ArgumentOutOfRangeException(nameof(attempt), "Attempt must be at least 1.");
++
++        var factor = Math.Pow(2, attempt - 1);
++        var baseMs = initialDelay.TotalMilliseconds * factor;
++
++        if (jitterRatio <= 0.0)
++            return TimeSpan.FromMilliseconds(baseMs);
++
++        var rng = random ?? Random.Shared;
++        var jitter = rng.NextDouble() * jitterRatio * baseMs;
++        return TimeSpan.FromMilliseconds(baseMs + jitter);
++    }
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        for (var attempt = 1; attempt <= MaxRetries + 1; attempt++)
++        {
++            var yieldedAny = false;
++            var retryRequired = false;
++
++            IAsyncEnumerator<IMessageEvent>? enumerator = null;
++            try
++            {
++                enumerator = base.GenerateAsync(messages, tools, responseSchema, ct).GetAsyncEnumerator(ct);
++
++                while (true)
++                {
++                    bool hasNext;
++                    try
++                    {
++                        hasNext = await enumerator.MoveNextAsync().ConfigureAwait(false);
++                    }
++                    catch (Exception ex) when (!yieldedAny && attempt <= MaxRetries && _isTransient(ex))
++                    {
++                        retryRequired = true;
++                        break;
++                    }
++
++                    if (!hasNext)
++                        yield break;
++
++                    yieldedAny = true;
++                    yield return enumerator.Current;
++                }
++            }
++            finally
++            {
++                if (enumerator != null)
++                    await enumerator.DisposeAsync().ConfigureAwait(false);
++            }
++
++            if (retryRequired)
++            {
++                var delay = CalculateDelay(attempt, InitialDelay, JitterRatio);
++                await _sleep(delay, ct).ConfigureAwait(false);
++            }
++        }
++    }
++}
+diff --git a/research/runs/pilot_agentcore_T01_R2/RetryLayerTests.cs b/research/runs/pilot_agentcore_T01_R2/RetryLayerTests.cs
+new file mode 100644
+index 0000000..342c95d
+--- /dev/null
++++ b/research/runs/pilot_agentcore_T01_R2/RetryLayerTests.cs
+@@ -0,0 +1,162 @@
++using System.Net;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace PilotAgentCoreT01R2;
++
++public class RetryLayerTests
++{
++    private sealed class MockLLM(Func<int, IAsyncEnumerable<IMessageEvent>> generator) : ILLM
++    {
++        public int InvocationCount { get; private set; }
++
++        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            CancellationToken ct = default)
++        {
++            InvocationCount++;
++            return generator(InvocationCount);
++        }
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> SuccessfulStream(string content = "OK")
++    {
++        yield return new MessageStart(Role.Assistant, "test-msg-1");
++        yield return new MessageDelta("test-msg-1", Content: new TextDelta(0, content));
++        yield return new MessageEnd("test-msg-1");
++        await Task.CompletedTask;
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> ThrowingStream(Exception ex)
++    {
++        await Task.Yield();
++        if (ex != null)
++            throw ex;
++        yield break;
++    }
++
++    [Fact]
++    public async Task Test1_CatchesTransient429_AndSucceedsOnRetry()
++    {
++        var recordedDelays = new List<TimeSpan>();
++        var mock = new MockLLM(attempt =>
++        {
++            if (attempt == 1)
++                return ThrowingStream(new HttpRequestException("Too Many Requests", null, HttpStatusCode.TooManyRequests));
++            return SuccessfulStream("Succeeded after 429");
++        });
++
++        var layer = new RetryLayer(
++            inner: mock,
++            maxRetries: 3,
++            initialDelay: TimeSpan.FromMilliseconds(50),
++            jitterRatio: 0.0,
++            sleep: (delay, _) =>
++            {
++                recordedDelays.Add(delay);
++                return Task.CompletedTask;
++            });
++
++        var results = new List<IMessageEvent>();
++        await foreach (var evt in layer.GenerateAsync([]))
++        {
++            results.Add(evt);
++        }
++
++        Assert.Equal(2, mock.InvocationCount);
++        Assert.Single(recordedDelays);
++        Assert.Equal(TimeSpan.FromMilliseconds(50), recordedDelays[0]);
++        Assert.Contains(results, r => r is MessageDelta d && d.Content is TextDelta td && td.Text == "Succeeded after 429");
++    }
++
++    [Fact]
++    public async Task Test2_FatalError400_PropagatesImmediatelyWithoutRetry()
++    {
++        var recordedDelays = new List<TimeSpan>();
++        var mock = new MockLLM(_ => ThrowingStream(new HttpRequestException("Bad Request", null, HttpStatusCode.BadRequest)));
++
++        var layer = new RetryLayer(
++            inner: mock,
++            maxRetries: 3,
++            initialDelay: TimeSpan.FromMilliseconds(50),
++            jitterRatio: 0.0,
++            sleep: (delay, _) =>
++            {
++                recordedDelays.Add(delay);
++                return Task.CompletedTask;
++            });
++
++        var ex = await Assert.ThrowsAsync<HttpRequestException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync([])) { }
++        });
++
++        Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
++        Assert.Equal(1, mock.InvocationCount);
++        Assert.Empty(recordedDelays);
++    }
++
++    [Fact]
++    public async Task Test3_ExceedingMaxRetries_ThrowsException()
++    {
++        var recordedDelays = new List<TimeSpan>();
++        var mock = new MockLLM(_ => ThrowingStream(new HttpRequestException("Service Unavailable", null, HttpStatusCode.ServiceUnavailable)));
++
++        var layer = new RetryLayer(
++            inner: mock,
++            maxRetries: 3,
++            initialDelay: TimeSpan.FromMilliseconds(100),
++            jitterRatio: 0.0,
++            sleep: (delay, _) =>
++            {
++                recordedDelays.Add(delay);
++                return Task.CompletedTask;
++            });
++
++        var ex = await Assert.ThrowsAsync<HttpRequestException>(async () =>
++        {
++            await foreach (var _ in layer.GenerateAsync([])) { }
++        });
++
++        Assert.Equal(HttpStatusCode.ServiceUnavailable, ex.StatusCode);
++        Assert.Equal(4, mock.InvocationCount); // Initial call + 3 retries
++        Assert.Equal(3, recordedDelays.Count);
++        Assert.Equal(TimeSpan.FromMilliseconds(100), recordedDelays[0]);
++        Assert.Equal(TimeSpan.FromMilliseconds(200), recordedDelays[1]);
++        Assert.Equal(TimeSpan.FromMilliseconds(400), recordedDelays[2]);
++    }
++
++    [Fact]
++    public void Test4_BackoffDurationCalculation()
++    {
++        var baseDelay = TimeSpan.FromMilliseconds(100);
++
++        var delay1 = RetryLayer.CalculateDelay(1, baseDelay, jitterRatio: 0.0);
++        var delay2 = RetryLayer.CalculateDelay(2, baseDelay, jitterRatio: 0.0);
++        var delay3 = RetryLayer.CalculateDelay(3, baseDelay, jitterRatio: 0.0);
++        var delay4 = RetryLayer.CalculateDelay(4, baseDelay, jitterRatio: 0.0);
++
++        Assert.Equal(TimeSpan.FromMilliseconds(100), delay1);
++        Assert.Equal(TimeSpan.FromMilliseconds(200), delay2);
++        Assert.Equal(TimeSpan.FromMilliseconds(400), delay3);
++        Assert.Equal(TimeSpan.FromMilliseconds(800), delay4);
++
++        var rng = new Random(12345);
++        for (var attempt = 1; attempt <= 5; attempt++)
++        {
++            var expectedBaseMs = 100.0 * Math.Pow(2, attempt - 1);
++            var jitterRatio = 0.25;
++            var jitteredDelay = RetryLayer.CalculateDelay(attempt, baseDelay, jitterRatio, rng);
++
++            Assert.InRange(jitteredDelay.TotalMilliseconds, expectedBaseMs, expectedBaseMs * (1.0 + jitterRatio));
++        }
++
++        Assert.Throws<ArgumentOutOfRangeException>(() => RetryLayer.CalculateDelay(0, baseDelay));
++    }
++}

@@ -1,0 +1,631 @@
+                           Primitive-First Architecture for LLM Agent Systems:
+               Decomposition, Architectural Locality, and a Controlled Evaluation Protocol
+
+                             Revised research manuscript — September 2026
+
+Status note: This manuscript defines a preregisterable research protocol and reference-implementation
+study. It does not fabricate cross-framework experimental results.
+
+
+
+
+Figure 1. Revised architecture view. Policies, composition, and layers are cross-cutting mechanisms; they
+                                  are not assigned to one primitive axis.
+
+
+
+Abstract
+Large language model agent frameworks increasingly combine model invocation, tool execution, context
+management, guardrails, persistence, orchestration, observability, and multi-agent coordination. This
+paper studies a narrower architectural question: whether a turn-based, tool-using agent can be
+decomposed around a small set of stable semantic primitives while expressing most cross-cutting
+variation through policies, composition, and contract-preserving layers. We call this approach primitive-
+first architecture. The revised manuscript makes four changes. First, it no longer treats the three-axis
+model as a universal theorem. Instead, it defines an independently testable capability universe for the
+studied agent class and asks whether reasoning, acting, and remembering form a minimal generating set
+under explicit criteria. Second, it separates structural minimality from behavioral equivalence: removing
+a primitive must be tested by controlled ablation, not inferred from interface elegance. Third, it makes
+architectural locality—the amount of unrelated structure disturbed by a requirement or fault—the
+primary empirical construct rather than raw LOC. Fourth, it specifies a reproducible cross-framework
+protocol covering matched extensions, sequential requirement evolution, static architecture metrics, AI-
+assisted implementation, and fault locality. AgentCore is used as a reference implementation, not as the
+source of the capability definition. The supplied evidence currently establishes the architecture and
+protocol, but does not establish causal superiority: the cross-framework experiments remain to be
+executed. This distinction is explicit throughout the paper.
+
+
+
+1. Introduction
+Agent frameworks are becoming software platforms rather than thin wrappers around model APIs.
+Current systems expose tools, sessions, context providers, middleware, workflows, handoffs, tracing,
+persistence, and safety controls. Contemporary documentation makes the diversity visible: OpenAI's
+Agents SDK centers agents, tools, handoffs, guardrails, and sessions; Microsoft Agent Framework
+combines agents, middleware, context providers, and graph-based workflows; DeepSeek's Cordis
+develops a more general context paradigm for dynamically composable components. [1–4]
+
+The architectural question in this paper is deliberately narrower than “which framework is better?” We
+ask whether a common class of turn-based, tool-using agents can be represented using a small set of
+semantic contracts, and whether that representation changes the locality of subsequent software
+changes. The key distinction is between a primitive and a mechanism. A primitive is a stable behavioral
+boundary required by the target execution model. A policy is replaceable decision logic inside or around
+a primitive. Composition combines existing primitives or agents. A layer preserves a contract while
+changing behavior around one existing component.
+
+The proposed primitive-first model uses three contracts: reasoning, acting, and remembering,
+represented in the AgentCore implementation by ILLM, IToolbox, and IContext. The claim is not that
+every possible agent system must have exactly three primitives. That stronger claim is neither necessary
+nor justified by the current evidence. The research claim is conditional: for a pre-specified capability
+universe G of turn-based tool-using agents, the three contracts may constitute a minimal generating set
+under an explicitly defined implementation relation.
+
+The empirical object is therefore architectural locality. If a new requirement can be implemented by
+replacing or composing an existing component while leaving unrelated contracts and the execution
+kernel unchanged, the change has low structural propagation. If the same requirement requires
+modifying shared state representations, central runners, unrelated handlers, or several independent
+subsystems, the change has higher propagation. This construct is closely related to established work on
+modularity and design dependency structure, where dependency matrices are used to study how
+architectural structure affects change and redesign. [5,6]
+
+This manuscript is a revised research design and reference-implementation study. It does not present
+unexecuted experiments as results. The supplied AgentCore source audit and research artifacts establish
+the concrete implementation and motivate the protocol; they do not, by themselves, establish that
+AgentCore is superior to other frameworks.
+2. Research Questions and Contributions
+RQ1 — Primitive sufficiency: For a pre-registered capability universe G describing turn-based, tool-using
+agents, can every required capability be implemented using the primitive set {L, T, C}, where L is
+reasoning, T is acting, and C is remembering, plus policies, composition, and contract-preserving layers?
+
+RQ2 — Primitive necessity: Does removing any one primitive from the implementation basis cause at
+least one capability in G to become unimplementable without either changing the remaining primitive
+contracts or introducing a replacement primitive with equivalent semantic responsibility?
+
+RQ3 — Architectural locality: Under matched requirement changes, does a primitive-first architecture
+reduce the number and centrality of unrelated artifacts that must be changed, compared with alternative
+framework architectures?
+
+RQ4 — Fault locality: When a defect is injected into an isolated cross-cutting concern, does the primitive-
+first architecture constrain functional impact and repair scope to the affected concern more often than
+alternative architectures?
+
+RQ5 — AI-assisted implementation cost: Under controlled information conditions, does the architecture
+change implementation effort, iteration count, correctness, or defect rate for equivalent extension tasks?
+
+Confirmatory hypotheses. H1: architecture condition changes external propagation for cross-cutting
+requirements; H2: each primitive ablation either fails a frozen acceptance test or introduces an
+independently rated replacement primitive; H3: locality effects persist after accounting for task and
+replicate variation; H4: fault leakage and repair scope differ by architecture condition; H5: AI
+implementation cost and correctness differ by architecture condition. These are estimands, not
+directional guarantees.
+
+The contributions are therefore: (1) a falsifiable primitive-selection procedure; (2) a minimal-generating-
+set formulation that distinguishes sufficiency from necessity; (3) architectural locality as the primary
+comparative construct; (4) a matched-task empirical protocol; (5) a reference implementation in
+AgentCore; and (6) an explicit boundary analysis for cases where primitive-first decomposition is
+expected to fail.
+
+The substantive claim tested by the study is architectural rather than cosmetic: if the primitive basis is
+causal, then holding required behavior fixed should change where requirements and faults propagate
+through an implementation. The decisive evidence is therefore the joint pattern of primitive-ablation
+outcomes, requirement-locality measurements, fault-locality measurements, and independent
+implementation outcomes across unrelated framework architectures—not LOC, interface count, or the
+presence of decorators.
+
+
+
+3. Related Architectural Perspectives
+Classical modular design argues for information hiding and decomposition around design decisions likely
+to change. [7] The present work specializes that principle to agent runtimes by treating reasoning, acting,
+and remembering as candidate semantic boundaries rather than treating planning, reflection, memory,
+guardrails, or persistence as automatically separate architectural primitives.
+Middleware and decorator architectures already provide contract-preserving extension mechanisms. The
+novelty claimed here is not the mathematical observation that a wrapper F → F can compose with
+another wrapper. That closure is routine. The research question is whether choosing a particular
+semantic primitive basis changes the observed propagation of requirements and defects. The layer
+algebra is consequently treated as an implementation mechanism and measurement aid, not as the main
+theoretical novelty.
+
+Current agent frameworks demonstrate that several architectural representations are viable. OpenAI
+documents agents as combinations of model instructions, tools, handoffs, guardrails, and runtime
+behavior. Microsoft Agent Framework documents an agent pipeline containing middleware, context, and
+chat-client layers and separately provides explicit graph workflows with executors, edges, events, and
+state. [1,2,3] These systems are not treated as “bad” baselines; they are structurally different points in the
+design space against which locality can be measured.
+
+DeepSeek/Cordis provides a particularly important contrast. Cordis addresses dynamic composition by
+formalizing reversible effects and reactive coeffects mediated through context, with explicit runtime
+support for loading and reconciliation. [4] The present paper does not claim that primitive-first
+architecture subsumes Cordis. Instead, it asks whether the more general composition machinery is
+required for the narrower workload class studied here, and whether the two approaches can coexist at
+different architectural levels.
+
+
+
+4. Primitive-First Model
+Let L, T, and C denote behavioral contracts for reasoning, acting, and remembering. An agent state is
+represented abstractly as A = (L, T, C). The contracts are intentionally unopinionated: L determines how
+model reasoning is requested and observed; T determines how available actions are discovered and
+invoked; C determines how execution context is assembled, transformed, and persisted.
+
+A layer over a contract F is written λF : F → F. A stack λ3 ∘ λ2 ∘ λ1 therefore remains an implementation of
+F. This gives a convenient closure property: a concern that can be expressed entirely by wrapping one
+contract does not require a new semantic primitive. Examples in the AgentCore evidence include retry
+around LLM interaction, approval or discovery around tools, and persistence around context. The
+property is architectural, not a claim that all concerns are single-axis.
+
+The execution kernel can then be expressed as repeated interaction among the contracts: obtain model
+output from L; if the output requests actions, dispatch through T; incorporate resulting events through C;
+repeat until the termination condition is reached. The exact implementation may be asynchronous,
+streaming, durable, or provider-specific. The model only requires that these responsibilities remain
+contractually distinguishable.
+
+The important methodological restriction is that the three contracts are not declared minimal merely
+because the model was written using three names. Minimality is an empirical property. A primitive is
+necessary only if removing it from the implementation basis prevents the target capability set from being
+implemented without reintroducing an equivalent semantic boundary elsewhere.
+5. Defining the Capability Universe Independently
+G must not be defined by inspecting AgentCore and then declaring AgentCore sufficient. Before
+evaluating any architecture, the study freezes a capability matrix for the target workload. The initial
+candidate matrix is derived from the common execution semantics of turn-based tool-using agents and
+from documented capabilities across contemporary frameworks, rather than from AgentCore's class
+names.
+
+G0 — Model interaction: invoke a model with messages/instructions and receive a response or event
+stream. G1 — Tool discovery: expose a set of executable actions to the model. G2 — Tool invocation:
+execute selected actions and return results. G3 — Context continuity: carry conversation or working state
+across turns. G4 — Termination: determine when an agent run is complete. G5 — Cross-cutting policy
+injection: add concerns such as retry, validation, approval, logging, or rate limiting without changing the
+semantic task. G6 — Persistence/recovery: preserve enough execution state to resume after interruption.
+G7 — Composition: combine agents or execution components into larger behavior. G8 — Human
+interruption/approval: suspend or gate an action and resume later. G9 — Streaming/event observation:
+expose incremental or completed execution events. G10 — Provider substitution: change the underlying
+model provider without changing the application-level agent semantics.
+
+This matrix is a starting protocol, not a result. Before the experiment, each capability must receive an
+operational definition and at least one acceptance test. Capabilities that cannot be implemented by a
+given framework without changing its intended programming model are recorded as out-of-scope rather
+than silently normalized.
+
+The study also records the implementation relation used for necessity. A capability is considered
+generated by a basis if it can be implemented without adding a new semantic primitive category, while
+allowing arbitrary ordinary code inside implementations and allowing composition/layers that preserve
+the declared contracts. This prevents a superficial interface-count test from masquerading as a proof of
+minimality.
+
+
+
+6. Necessity and Ablation
+Sufficiency is evaluated by implementing every acceptance test in G using the candidate basis. Necessity
+requires ablation. For each primitive P ∈ {L,T,C}, construct a constrained variant in which P is
+unavailable as a first-class contract. The remaining contracts and the implementation language remain
+available. The experiment then attempts to implement the same capability matrix.
+
+The primary outcome is not whether the code becomes awkward. The primary outcome is whether a
+capability is not achievable under the constrained contract system and preregistered implementation
+budget. A secondary outcome records what replacement structure is introduced. If removing C requires
+adding a new ContextStore primitive with equivalent semantic responsibility, the result is evidence of
+replacement rather than evidence that the original C was unnecessary. This distinction separates
+structural minimality from mere renaming.
+
+A second ablation removes the layer mechanism while retaining the primitive contracts. This tests
+whether the proposed locality effect depends on the existence of layers rather than on the primitive basis
+itself. A third ablation retains layers but allows shared mutable state across primitives. This tests whether
+contract preservation, rather than wrapper syntax, is responsible for observed fault locality.
+
+The protocol therefore produces three separate claims: basis sufficiency, basis necessity, and mechanism-
+level locality. They must not be collapsed into one theorem.
+
+6.1 Operational rubric for semantic primitives. A candidate replacement is classified as an equivalent
+primitive only when all four mandatory tests are satisfied: (R1) responsibility — it owns a distinct
+domain-level state/effect responsibility rather than a single policy decision; (R2) lifecycle — it has an
+independently managed lifecycle or state that persists across more than one local operation; (R3)
+boundary — other components interact with that responsibility through a stable contract rather than by
+reaching into implementation details; and (R4) necessity under ablation — removing the candidate
+requires another named boundary with substantially the same responsibility to restore the capability. A
+structure that fails any mandatory test is not counted as a primitive merely because it has a class,
+interface, registry, or manager name.
+
+6.2 Anti-hiding rule. Evaluators classify semantic responsibility, not location or identifier. Hiding context
+inside L, tool orchestration inside T, or persistence inside an arbitrary helper does not avoid a primitive
+count if the hidden structure satisfies R1–R4. Conversely, a helper that merely formats messages, selects a
+retry policy, adapts a provider, or transforms data without owning an independent domain responsibility
+is not a primitive. The test is therefore invariant to renaming and file placement.
+
+6.3 Canonical examples. If C is removed and an implementation introduces ContextStore +
+ContextAssembler whose stable contract owns cross-turn state, the replacement satisfies R1–R4 and is
+counted as an equivalent remembering primitive. If T is removed and L gains a ToolRuntime contract
+that owns tool discovery, invocation state, and tool lifecycle, the semantic responsibility has moved
+rather than disappeared. By contrast, adding a RetryPolicy object with no independent execution lifecycle
+does not create a fourth primitive; it is a policy.
+
+6.4 Independent rating. Two raters who did not author the implementation independently classify every
+newly introduced abstraction against R1–R4. They see the task specification, public API, dependency
+graph, and implementation diff, but not the study hypothesis or framework identity. Agreement is
+measured with Cohen's kappa for each criterion and for the final primitive/non-primitive decision.
+Disagreements are resolved only after the blinded first-pass ratings are frozen. The final paper reports
+both raw agreement and kappa.
+
+6.5 Natural-boundary rubric. The natural boundary B(r) is also pre-registered before implementation.
+Each task specification names (a) the directly responsible semantic capability, (b) the allowed primary
+artifacts, and (c) the artifacts that are explicitly outside the boundary. A change is inside B(r) only if it
+implements, tests, or configures the named responsibility without changing an unrelated semantic
+contract. Changes outside that boundary are counted as propagation. Two independent raters classify
+changed artifacts while blinded to framework identity; disagreements are resolved after first-pass scoring
+and reported. Inter-rater agreement is reported for boundary membership.
+
+6.6 Boundary examples. For a retry requirement, the natural boundary includes the model-call adapter
+and retry policy/tests; modifying the tool schema, context representation, or central agent state machine
+is external propagation. For a persistence requirement, the boundary includes the persistence adapter,
+serialization/recovery logic, and persistence tests; changing the semantic tool contract solely because
+persistence was added is external propagation. For a workflow-topology requirement, graph nodes and
+edges are naturally inside the boundary; such changes are therefore not treated as leakage merely
+because they touch multiple graph artifacts.
+
+
+
+7. Benchmark Scope and Experimental Protocol
+7.1 Primary scope and eligibility. The primary empirical claim is restricted to single-agent, turn-based,
+tool-using execution with cross-cutting extensions. The core capability universe is G0–G6 and G9–G10:
+model interaction, tool discovery, tool invocation, context continuity, termination, policy injection,
+persistence/recovery, streaming/event observation, and provider substitution. Multi-agent composition
+(G7) is retained as a secondary external-validity stress test, not included in the primary locality aggregate.
+Human interruption (G8) is evaluated only when it can be expressed as a run-control or approval
+extension without introducing a workflow-topology requirement.
+
+7.2 Pre-registration and freeze. Before any implementation begins, the study publishes a machine-
+readable benchmark manifest containing the capability matrix, task texts, acceptance tests,
+eligibility/exclusion rules, framework versions, commit hashes, runtime versions, model versions,
+prompts, randomization seeds, stopping rules, and architecture-classification rubric. The benchmark uses
+immutable tags where available and exact commit hashes for every checkout. For developer-preview
+software without a stable release, the exact commit is frozen in the manifest and never replaced mid-
+study.
+
+7.3 Framework set. The planned six-framework comparison is AgentCore, LangGraph, PydanticAI,
+OpenAI Agents SDK, Microsoft Agent Framework, and DeepSeek Harness/Cordis. The external baselines
+are pinned to immutable snapshots at protocol freeze: LangGraph 1.2.11 (full commit
+644815f9e5bc52ad8f7a5227a456227e9c3e639b), PydanticAI v2.46.0 (full commit
+c4898abb54dc25ae6f6aef208a4c0661b30a455e), OpenAI Agents SDK Python v0.22.3 (full commit
+fdf21db62c303a3db54b0dfbee82de2141fa2799), Microsoft Agent Framework Python 1.19.0 (full commit
+703fbce285ee0f026e5effcadfb9e65aab7f5d84), and DeepSeek Harness developer-preview snapshot (full
+commit ddefc45fbc7f8e46dd73185e68295696d1297887). AgentCore is frozen to the exact source snapshot
+used to generate the reference implementation. These values are protocol anchors, not claims that later
+releases are equivalent. [10–14]
+
+7.4 Independent implementation unit. One implementation unit is one fresh worktree, one framework
+checkout, one task specification, one clean dependency environment, and one implementer run. Each
+framework-task condition receives five independent implementation units for the primary change-
+locality benchmark. Runs are isolated from one another and cannot reuse code, intermediate patches, test
+fixes, or conversation history. A failed run is not silently restarted: the failure reason is recorded and the
+stopping rule applied.
+
+7.5 Task corpus. The primary corpus contains 12 atomic requirements selected before implementation:
+six cross-cutting concerns (retry, telemetry, approval, caching, rate limiting, validation) and six
+state/execution requirements (durable context, compaction, provider substitution, streaming observation,
+controlled interruption, and tool discovery evolution). A separate ten-phase lifecycle sequence is used for
+requirement-evolution analysis. Multi-agent composition is phase 10 of that sequence but is reported as
+an external-validity stress test rather than pooled with the primary single-agent results.
+
+7.6 Randomization and blocking. Task order is randomized independently for each implementation unit.
+Framework assignment is blocked by task so every framework sees the same task before results are
+inspected. For sequential evolution, every replicate starts from the same clean baseline and applies the
+same ordered phase sequence. Architecture comparisons are therefore matched by task and replicate
+index; they are not within-run paired observations because each implementation unit is independently
+executed.
+
+7.7 Idiomaticity and non-expressible tasks. A task is eligible only if the framework's documented
+programming model can express the target behavior without changing the framework itself. If a task
+cannot be implemented, the run is recorded as an expressiveness failure with the exact acceptance
+criterion that failed. It is not reclassified after observing the results. Such failures are reported separately
+and are not removed from the primary analysis. A task may be excluded from the primary aggregate only
+if the same exclusion rule was triggered for every framework before implementation.
+
+7.8 Stopping rules. A run stops when the acceptance tests pass, the maximum implementation budget is
+exhausted, or the framework is shown unable to express the requirement under the pre-registered
+eligibility rule. The implementation budget is 90 minutes of wall-clock time for a coding-agent run and 20
+repair iterations, whichever comes first. No evaluator may continue a failed run until it becomes
+favorable to one architecture.
+
+The experimental suite is specified below as a pre-registered benchmark. The primary analysis is blocked
+by task and replicate at the scoring stage; raw runs are retained even when a framework cannot express
+a task.
+
+7.9 Confirmatory statistical plan
+
+The study has one confirmatory family for architectural locality and separate confirmatory families for
+primitive ablation and fault leakage. The primary locality estimand is the architecture-condition contrast
+in external propagation P_ext over the frozen task universe, with task as the blocking/generalization
+factor and replicate as an implementation-level source of variance. AgentCore is compared separately
+with each external framework; pairwise contrasts use Holm multiplicity correction. Continuous outcomes
+use a mixed-effects model by default; non-negative integer counts use a Poisson or negative-binomial
+mixed model selected by a predeclared dispersion diagnostic; sparse binary outcomes use logistic mixed
+models or the preregistered exact/cluster-bootstrap alternative. A task-cluster bootstrap is the robustness
+analysis and resamples tasks, not individual runs. The report must include effect estimates, 95%
+confidence intervals, task-level distributions, and counts of successful, failed, infrastructure-failed, and
+non-expressible cells. A conditional locality analysis restricted to successful implementations is permitted
+only as a secondary analysis and must be labeled conditional. AI-assisted outcomes are analyzed
+separately by coding-agent model, with model identity as a blocking factor; they are not pooled with any
+human study. All confirmatory outcomes, contrasts, stopping rules, and exclusions are frozen before the
+first benchmark run; post-hoc subgroup or metric analyses are exploratory.
+Experiment 1 — Matched extensibility. Implement six concerns: retry, logging/telemetry, approval,
+caching, rate limiting, and input validation. Each concern is implemented independently on every
+framework. Record new files, modified files, core-runner modifications, public API changes, dependency-
+edge changes, and test changes. A concern-removal pass then measures whether the implementation can
+be deleted without unrelated edits.
+
+Experiment 2 — Requirement evolution. Apply a pre-registered ten-phase sequence to the same baseline
+agent: model substitution; additional tool; retry; approval; persistence; context compaction; telemetry;
+human interruption; provider substitution; and multi-agent composition. Each phase is committed
+separately. The primary measure is propagation: the number of artifacts outside the concern's natural
+boundary that must change. Secondary measures include core-runner edits, dependency-edge additions,
+and change amplification.
+
+Experiment 3 — Architectural structure. Extract language-normalized structural metrics: public type
+count, public method count, dependency edges, strongly connected components, coupling measures,
+abstraction surface, and design-structure-matrix propagation cost. Raw LOC is reported descriptively but
+is not used as a quality proxy. Established modularity research motivates dependency-structure analysis,
+while OO metrics are treated cautiously because metric validity depends on the measurement context.
+[5,8,9]
+
+Experiment 4 — AI-assisted implementation. The benchmark uses 8 representative tasks drawn from the
+primary corpus, 6 frameworks, 2 coding-agent models, and 5 independent runs per
+model/framework/task condition, yielding 480 planned runs. Each run starts from a clean checkout with
+identical task text, acceptance tests, runtime limits, and framework-specific reference documentation of
+equal information budget. Record input tokens, output tokens, tool calls, compile/test cycles, wall-clock
+time, first-pass success, final correctness, and defect count. Model identity is a blocking factor, not a
+pooled advantage. If a model cannot access a framework because of toolchain incompatibility, that cell is
+recorded as an infrastructure failure and is not silently replaced.
+
+Experiment 5 — Defect locality. Inject the same five defect specifications into each framework's closest
+corresponding concern implementation. Where a framework has no corresponding extension seam, the
+defect is recorded as an expressiveness/architecture mismatch rather than synthesized into an unrelated
+subsystem. Run the full standardized acceptance suite and record unrelated failures, repair files, central-
+runner edits, dependency changes, and repair iterations.
+
+
+
+8. Architectural Locality Metrics
+The principal dependent construct is propagation rather than code size. For a change request r, let M(r)
+be the set of modified artifacts and B(r) the set of artifacts belonging to the natural implementation
+boundary of r. Define external propagation as P_ext(r) = |M(r) − B(r)|. A normalized form is I_ext(r) = |
+M(r) − B(r)| / max(1, |M(r)|).
+
+A dependency-aware version weights modifications by their graph distance from the target boundary. Let
+d(v,B) be the shortest dependency distance from artifact v to the natural boundary B. The propagation
+radius is R_p(r) = max d(v,B) over modified artifacts. The protocol also records whether a central
+execution artifact is touched, because a single change to a highly connected runner can have greater
+architectural significance than several isolated file edits.
+
+For fault injection, locality is measured separately from change propagation. Let L_leak be a binary
+indicator that a defect in one concern causes an observable failure in an unrelated concern. Let F_fix be
+the number of distinct artifacts changed to repair the defect and C_fix indicate whether the central
+execution kernel was modified.
+
+These measures do not assert that smaller propagation is always better. A workflow engine may
+intentionally propagate a requirement through a graph because the requirement changes execution
+topology. The study therefore reports whether the observed propagation matches the declared
+responsibility of the requirement, rather than treating all cross-component changes as defects.
+
+
+
+9. AgentCore as Reference Implementation
+AgentCore is the treatment implementation used to make the architectural hypothesis concrete. The
+supplied source artifacts identify ILLM, IToolbox, and IContext as the principal contracts, with context
+assembly/normalization/summarization/truncation components and optional layers for retry, guardrails,
+tool-call handling, approval, discovery, and chat persistence. The supplied ChatPersistenceLayer is
+particularly relevant because it wraps IContext, restores state from a store/WAL, forwards context events,
+persists new messages, and clears the WAL after successful persistence.
+
+The supplied evidence reports approximately 2,848 lines across 46 framework files in one audited
+snapshot, with a small core execution loop and separate layer/provider/MCP components. A different
+project-structure snapshot in the supplied materials reports different totals. The revised manuscript
+therefore treats exact line counts as snapshot-specific and requires commit hashes plus an automated
+counting script before publication. No cross-framework LOC ranking is used as an inferential result.
+
+The implementation is evidence for realizability, not proof of the theory. In particular, the fact that
+AgentCore was designed around three contracts cannot establish that three contracts are necessary. That
+question belongs to the ablation experiment.
+
+
+
+10. Reproducibility and Artifact Protocol
+Every evaluated framework must be pinned to an immutable release or commit, and the exact checkout
+metadata must appear in benchmark-manifest.json. The artifact bundle contains: repository URL;
+release/tag and full commit SHA; checkout date; language/runtime/package-manager versions;
+dependency lockfile; build instructions; task specifications; acceptance tests; architecture-classification
+rubric; blinded rater forms; metric extraction scripts; raw measurements; run logs; AI prompts/model
+identifiers; random seeds; fault-injection patches; analysis scripts; and generated tables. The manifest is
+immutable after the first benchmark run except for additive execution logs.
+
+The classification rubric is released before the final comparison. For every changed file, the evaluator
+records its role, the requirement phase that caused the change, whether the file is inside the natural
+boundary, whether the change touches a public contract, and whether the change introduces a new
+semantic abstraction. Disagreements are adjudicated using the pre-registered rubric and reported rather
+than silently resolved.
+
+The study must also distinguish framework code from examples, tests, generated files, vendored
+dependencies, integrations, and applications. Any LOC or type-count table therefore reports the exact
+inclusion rule. The earlier broad table spanning frameworks and production agents is retained only as a
+descriptive survey, not as an apples-to-apples architectural comparison.
+
+The public artifact should be versioned independently of the manuscript and archived with a persistent
+identifier. Private working artifacts are not treated as evidence in the final study. All evidence used for a
+claim must be included in the public artifact bundle or replaced by a reproducible public source.
+
+
+
+11. Counterexamples and Boundary Conditions
+Primitive-first architecture is not asserted to be universally sufficient. The supplied counterexample
+analysis identifies several important boundaries.
+
+First, some operations are inherently multi-primitive transactions. A capability that must atomically
+update model state, tool state, and persistent context may require an explicit transaction coordinator or
+workflow-level abstraction. Forcing such a capability into one primitive would hide rather than remove
+coupling.
+
+Second, layer ordering can be semantically significant. Retry followed by caching is not generally
+equivalent to caching followed by retry. Therefore the endomorphism composition is associative as an
+operation on a chosen stack, but different orderings may have different behavior. The algebra does not
+eliminate policy interaction.
+
+Third, substrate leakage can violate contract isolation. A layer that depends on a shared database,
+ambient process state, global event bus, or provider-specific mutable state may create dependencies
+outside its apparent interface. The type signature F → F is therefore insufficient to guarantee operational
+isolation.
+
+Fourth, AI-facing semantics may require richer contracts. If an agent must reason explicitly over
+workflow topology, temporal commitments, or multi-agent negotiation, a three-axis model may cease to
+be an adequate abstraction. Such cases should be recorded as capability-universe violations rather than
+forced into the model.
+
+These boundaries are part of the falsification strategy. A negative result is scientifically useful: it
+identifies the class of requirements for which the primitive basis ceases to be sufficient.
+
+
+
+12. What the Current Evidence Establishes
+The supplied materials establish a coherent reference implementation, a formal vocabulary, a set of
+architectural hypotheses, a counterexample taxonomy, and a detailed experimental protocol. They also
+establish that several concerns can be implemented as layers around the current AgentCore contracts
+without editing the small execution kernel in the supplied snapshot.
+They do not establish that AgentCore has lower maintenance cost, lower developer cognitive load, lower
+defect rate, or lower AI implementation cost than competing frameworks. They do not establish that
+three primitives are mathematically minimal for all agents. They do not establish causal superiority from
+LOC differences. The primary claim is limited to the pre-registered single-agent capability universe;
+multi-agent composition is an external-validity stress test. Those claims require the controlled
+experiments specified here.
+
+This separation is deliberate. A publishable empirical result should survive an outcome in which the
+primitive-first hypothesis is only partially supported. For example, it may reduce propagation for cross-
+cutting concerns while performing no better for workflow-topology changes. The protocol is designed to
+reveal that boundary rather than conceal it.
+
+
+
+13. Conclusion
+Primitive-first architecture is best understood as a falsifiable hypothesis about architectural
+representation. The proposed representation separates stable semantic contracts from policies,
+composition, and contract-preserving layers. The research contribution is not the observation that
+decorators compose, nor the observation that one implementation is small. It is the proposed method for
+selecting and testing a primitive basis and the hypothesis that this choice affects architectural locality
+under change and fault.
+
+The revised protocol makes the central claims independently testable. A capability universe is frozen
+before evaluation. Sufficiency and necessity are separated. Primitive ablations test necessity. Matched
+requirement evolution measures propagation. Fault injection tests locality. AI-assisted implementation
+measures whether the architectural representation changes the cost of generating and repairing code.
+Structural metrics provide supporting evidence rather than serving as substitutes for behavioral
+experiments.
+
+AgentCore provides a concrete implementation through which the hypotheses can be exercised, but the
+theory must survive outside that implementation. The decisive next step is therefore not another
+architectural argument. It is execution of the preregistered experiments across pinned baselines, release
+of the raw artifacts, and independent replication.
+
+
+
+Appendix A. Minimal Evaluation Matrix
+ Experiment                 Independent variable          Primary outcomes                   Falsifier
+
+                                                          external propagation; core
+ E1 Extensibility           architecture × concern                                           no locality reduction
+                                                          edits; API changes
+
+                                                          propagation; edge churn;           no reduction in change
+ E2 Evolution               architecture × phase
+                                                          runner edits                       propagation
+
+                                                          DSM propagation; coupling; API     no coherent structural
+ E3 Structure               architecture
+                                                          surface                            distinction
+
+                                                          tokens; iterations; correctness;   no implementation-cost
+ E4 AI cost                 architecture × model × task
+                                                          defects                            reduction
+                                                            leakage; affected tests; repair
+    E5 Fault locality          architecture × fault                                           faults cross intended boundary
+                                                            scope
+
+
+
+
+Appendix B. Artifact Checklist
+      Pinned repository commit/release for every baseline.
+      Exact build/runtime/toolchain versions.
+      Pre-registered capability universe and acceptance tests.
+      Pre-registered architecture classification rubric.
+      Automated metric extraction scripts.
+      Raw task-by-task measurements, not only aggregates.
+      Separate framework/application/test/generated-code inclusion rules.
+      Prompt and model configuration for AI-assisted implementation.
+      Fault injection patches and repair transcripts.
+      Analysis scripts and generated tables.
+      Persistent archive/DOI for the complete artifact bundle.
+
+Appendix C. Benchmark Manifest (preregistration schema)
+
+Each benchmark run is keyed by {framework, framework_commit, task_id, replicate_id, model_id,
+model_version, seed}. The manifest records: scope_version; capability_matrix_version; task_text_hash;
+acceptance_test_hash; eligibility_rule_version; framework_repository; framework_release;
+framework_commit; runtime_version; dependency_lock_hash; implementer/model; prompt_hash; seed;
+start/end timestamps; stopping reason; pass/fail outcome; files_added; files_modified; public_api_changes;
+dependency_edges_added; core_touched; external_propagation; repair_iterations; tokens_in; tokens_out;
+tool_calls; wall_clock_seconds; defect_count; and rater IDs.
+
+Primary analysis uses five independent implementation units per framework-task cell. With 12 primary
+tasks and six frameworks, this yields 360 primary implementation units. Experiment 4 uses eight
+representative tasks × six frameworks × two coding-agent models × five independent runs = 480 AI-
+assisted runs. Experiment 5 uses the five fault specifications across all eligible concern/framework cells;
+the exact cell count is reported from the frozen eligibility matrix rather than inferred after exclusions.
+
+Analysis is performed on raw run-level observations with task as the unit of generalization. The primary
+locality model estimates architecture contrasts while blocking on task and accounting for replicate-level
+variation. Replicate indices are matched by task and seed schedule but are not described as within-run
+pairs. Missing cells are reported explicitly; no framework-level mean is computed by silently dropping
+failed or ineligible tasks.
+
+
+
+References
+[1] OpenAI. OpenAI Agents SDK documentation: Agents.
+https://openai.github.io/openai-agents-python/agents/ (retrieved 2026-09-21).
+
+[2] Microsoft. Agent Framework documentation: Agent concepts. https://learn.microsoft.com/en-us/agent-
+framework/concepts/agents/ (retrieved 2026-09-21).
+[3] Microsoft. Agent Framework documentation: Workflow concepts.
+https://learn.microsoft.com/en-us/agent-framework/concepts/workflows/ (retrieved 2026-09-21).
+
+[4] Y. Shi, W. Zhang, and T. Cui. “A Programming Paradigm for Spatiotemporal Composability.”
+arXiv:2608.25512, 2026. https://arxiv.org/abs/2608.25512.
+
+[5] A. MacCormack, J. Rusnak, and C. Y. Baldwin. “Exploring the Structure of Complex Software Designs:
+An Empirical Study of Open Source and Proprietary Code.” Management Science, 52(7), 1015–1030, 2006.
+
+[6] C. Y. Baldwin and K. B. Clark. “The Architecture of Participation: Does Code Architecture Mitigate Free
+Riding in the Open Source Development Model?” Management Science, 52(7), 1116–1127, 2006.
+
+[7] D. L. Parnas. “On the Criteria To Be Used in Decomposing Systems into Modules.” Communications of
+the ACM, 15(12), 1053–1058, 1972.
+
+[8] S. R. Chidamber and C. F. Kemerer. “A Metrics Suite for Object Oriented Design.” IEEE Transactions on
+Software Engineering, 20(6), 476–493, 1994.
+
+[9] L. C. Briand, J. W. Daly, and J. K. Wüst. “A Unified Framework for Coupling Measurement in Object-
+Oriented Systems.” IEEE Transactions on Software Engineering, 25(1), 91–121, 1999.
+
+[10] LangChain. LangGraph release 1.2.11, full commit 644815f9e5bc52ad8f7a5227a456227e9c3e639b,
+2026-08-11. https://github.com/langchain-ai/langgraph/releases.
+
+[11] Pydantic. PydanticAI release v2.46.0, full commit c4898abb54dc25ae6f6aef208a4c0661b30a455e,
+2026-09-18. https://github.com/pydantic/pydantic-ai/releases.
+
+[12] OpenAI. OpenAI Agents SDK Python release v0.22.3, full commit
+fdf21db62c303a3db54b0dfbee82de2141fa2799, 2026-09-17. https://github.com/openai/openai-agents-
+python/releases.
+
+[13] Microsoft. Agent Framework Python release 1.19.0, full commit
+703fbce285ee0f026e5effcadfb9e65aab7f5d84, 2026-09-18.
+https://github.com/microsoft/agent-framework/releases.
+
+[14] DeepSeek AI. DeepSeek Harness: Everything is a Plugin. Developer preview repository. Benchmark
+snapshot pinned at full commit ddefc45fbc7f8e46dd73185e68295696d1297887 (2026-09-21).
+https://github.com/deepseek-ai/deepseek-harness.
+

@@ -1,0 +1,25 @@
+{
+  "run_id": "RUN-T12-AGC-R1",
+  "framework": "AgentCore",
+  "framework_commit": "b11d0e489f08e1cc73284a1088e56d3720386597",
+  "task_id": "T12",
+  "replicate_id": 1,
+  "files_added": [
+    "AgentCoreT12.csproj",
+    "DynamicToolboxLayer.cs",
+    "DynamicToolboxLayerTests.cs"
+  ],
+  "files_modified": [],
+  "natural_boundary": [
+    "AgentCoreT12.csproj",
+    "DynamicToolboxLayer.cs",
+    "DynamicToolboxLayerTests.cs"
+  ],
+  "modified_outside_boundary": [],
+  "core_touched": false,
+  "external_propagation": 0,
+  "test_exit_code": 0,
+  "test_output": "Passed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 124 ms - AgentCoreT12.dll (net8.0)",
+  "wall_clock_seconds": 3.61,
+  "pass_fail": "pass"
+}

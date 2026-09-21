@@ -1,0 +1,25 @@
+{
+  "run_id": "RUN-T07-AGC-R1",
+  "framework": "AgentCore",
+  "framework_commit": "b11d0e489f08e1cc73284a1088e56d3720386597",
+  "task_id": "T07",
+  "replicate_id": 1,
+  "files_added": [
+    "AgentCoreT07.csproj",
+    "DurableContextLayer.cs",
+    "DurableContextLayerTests.cs"
+  ],
+  "files_modified": [],
+  "natural_boundary": [
+    "AgentCoreT07.csproj",
+    "DurableContextLayer.cs",
+    "DurableContextLayerTests.cs"
+  ],
+  "modified_outside_boundary": [],
+  "core_touched": false,
+  "external_propagation": 0,
+  "test_exit_code": 0,
+  "test_output": "Test run for D:\\CodeBase\\AgentCore-Main\\research\\runs\\agentcore_T07\\bin\\Debug\\net8.0\\AgentCoreT07.dll (.NETCoreApp,Version=v8.0)\nA total of 1 test files matched the specified pattern.\n\nPassed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 73 ms - AgentCoreT07.dll (net8.0)",
+  "wall_clock_seconds": 3.49,
+  "pass_fail": "pass"
+}

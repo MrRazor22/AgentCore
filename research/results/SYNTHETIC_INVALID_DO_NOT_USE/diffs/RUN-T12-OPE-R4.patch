@@ -1,0 +1,16 @@
+# Benchmark Run Diff: RUN-T12-OPE-R4
+# Framework: OpenAI Agents SDK
+# Task: T12
+# Generated: 2026-09-21 15:49:58
+--- a/OpenAI Agents SDK/baseline
++++ b/OpenAI Agents SDK/T12
+diff --git a/src/extension_T12_0.cs b/src/extension_T12_0.cs
+new file mode 100644
++ // Implementation of T12 inside natural boundary B(r)
+diff --git a/src/extension_T12_1.cs b/src/extension_T12_1.cs
+new file mode 100644
++ // Implementation of T12 inside natural boundary B(r)
+diff --git a/src/framework_wiring_0.cs b/src/framework_wiring_0.cs
+--- a/src/framework_wiring_0.cs
++++ b/src/framework_wiring_0.cs
++ // Wiring change outside natural boundary (external propagation P_ext)

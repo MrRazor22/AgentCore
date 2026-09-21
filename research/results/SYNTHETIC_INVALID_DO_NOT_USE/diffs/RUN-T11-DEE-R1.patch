@@ -1,0 +1,20 @@
+# Benchmark Run Diff: RUN-T11-DEE-R1
+# Framework: DeepSeek Harness
+# Task: T11
+# Generated: 2026-09-21 15:49:58
+--- a/DeepSeek Harness/baseline
++++ b/DeepSeek Harness/T11
+diff --git a/src/extension_T11_0.cs b/src/extension_T11_0.cs
+new file mode 100644
++ // Implementation of T11 inside natural boundary B(r)
+diff --git a/src/extension_T11_1.cs b/src/extension_T11_1.cs
+new file mode 100644
++ // Implementation of T11 inside natural boundary B(r)
+diff --git a/src/framework_wiring_0.cs b/src/framework_wiring_0.cs
+--- a/src/framework_wiring_0.cs
++++ b/src/framework_wiring_0.cs
++ // Wiring change outside natural boundary (external propagation P_ext)
+diff --git a/src/framework_wiring_1.cs b/src/framework_wiring_1.cs
+--- a/src/framework_wiring_1.cs
++++ b/src/framework_wiring_1.cs
++ // Wiring change outside natural boundary (external propagation P_ext)

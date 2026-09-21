@@ -1,0 +1,25 @@
+{
+  "run_id": "RUN-T11-AGC-R1",
+  "framework": "AgentCore",
+  "framework_commit": "b11d0e489f08e1cc73284a1088e56d3720386597",
+  "task_id": "T11",
+  "replicate_id": 1,
+  "files_added": [
+    "AgentCoreT11.csproj",
+    "InterruptionLayer.cs",
+    "InterruptionLayerTests.cs"
+  ],
+  "files_modified": [],
+  "natural_boundary": [
+    "AgentCoreT11.csproj",
+    "InterruptionLayer.cs",
+    "InterruptionLayerTests.cs"
+  ],
+  "modified_outside_boundary": [],
+  "core_touched": false,
+  "external_propagation": 0,
+  "test_exit_code": 0,
+  "test_output": "Passed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 181 ms - AgentCoreT11.dll (net8.0)",
+  "wall_clock_seconds": 3.52,
+  "pass_fail": "pass"
+}

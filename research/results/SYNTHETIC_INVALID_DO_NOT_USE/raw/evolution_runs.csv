@@ -1,0 +1,301 @@
+sequence_id,framework,framework_commit,sequence_replicate,phase_id,phase_name,phase_category,files_added,files_modified,core_files_modified,types_added,types_modified,invasiveness_ratio,dependency_edges_added,pass_fail,repair_effort_seconds,is_external_stress_test
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,1,Model Substitution,cross-cutting,0,1,0,0,0,1.0,0,pass,27.37,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,2,Additional Tool,acting,1,0,0,1,0,0.0,1,pass,27.23,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,41.93,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,4,HITL Approval,cross-cutting,1,0,0,1,0,0.0,1,pass,41.94,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,5,Chat Persistence,remembering,1,0,0,1,0,0.0,1,pass,24.21,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,6,Context Compaction,remembering,1,0,0,1,0,0.0,1,pass,40.46,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,43.75,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,8,Controlled Interruption,execution,1,0,0,1,0,0.0,1,pass,40.08,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,15.75,False
+SEQ-AGE-S1,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,1,10,Multi-Agent Composition,external-stress,2,1,0,2,0,0.3333,1,pass,44.41,True
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,1,Model Substitution,cross-cutting,0,1,0,0,0,1.0,0,pass,31.24,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,2,Additional Tool,acting,1,0,0,1,0,0.0,1,pass,28.71,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,32.53,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,4,HITL Approval,cross-cutting,1,0,0,1,0,0.0,1,pass,29.78,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,5,Chat Persistence,remembering,1,0,0,1,0,0.0,1,pass,41.91,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,6,Context Compaction,remembering,1,0,0,1,0,0.0,1,pass,23.54,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,25.57,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,8,Controlled Interruption,execution,1,0,0,1,0,0.0,1,pass,25.9,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,19.12,False
+SEQ-AGE-S2,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,2,10,Multi-Agent Composition,external-stress,2,1,0,2,0,0.3333,1,pass,20.32,True
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,1,Model Substitution,cross-cutting,0,1,0,0,0,1.0,0,pass,39.45,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,2,Additional Tool,acting,1,0,0,1,0,0.0,1,pass,17.02,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,19.57,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,4,HITL Approval,cross-cutting,1,0,0,1,0,0.0,1,pass,26.6,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,5,Chat Persistence,remembering,1,0,0,1,0,0.0,1,pass,22.55,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,6,Context Compaction,remembering,1,0,0,1,0,0.0,1,pass,39.8,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,37.15,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,8,Controlled Interruption,execution,1,0,0,1,0,0.0,1,pass,42.06,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,31.36,False
+SEQ-AGE-S3,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,3,10,Multi-Agent Composition,external-stress,2,1,0,2,0,0.3333,1,pass,44.75,True
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,1,Model Substitution,cross-cutting,0,1,0,0,0,1.0,0,pass,36.0,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,2,Additional Tool,acting,1,0,0,1,0,0.0,1,pass,22.18,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,36.84,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,4,HITL Approval,cross-cutting,1,0,0,1,0,0.0,1,pass,42.5,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,5,Chat Persistence,remembering,1,0,0,1,0,0.0,1,pass,36.05,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,6,Context Compaction,remembering,1,0,0,1,0,0.0,1,pass,20.69,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,41.47,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,8,Controlled Interruption,execution,1,0,0,1,0,0.0,1,pass,37.91,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,19.27,False
+SEQ-AGE-S4,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,4,10,Multi-Agent Composition,external-stress,2,1,0,2,0,0.3333,1,pass,15.26,True
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,1,Model Substitution,cross-cutting,0,1,0,0,0,1.0,0,pass,29.67,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,2,Additional Tool,acting,1,0,0,1,0,0.0,1,pass,27.97,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,26.25,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,4,HITL Approval,cross-cutting,1,0,0,1,0,0.0,1,pass,16.2,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,5,Chat Persistence,remembering,1,0,0,1,0,0.0,1,pass,38.16,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,6,Context Compaction,remembering,1,0,0,1,0,0.0,1,pass,22.28,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,30.35,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,8,Controlled Interruption,execution,1,0,0,1,0,0.0,1,pass,23.65,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,24.56,False
+SEQ-AGE-S5,AgentCore,b11d0e489f08e1cc73284a1088e56d3720386597,5,10,Multi-Agent Composition,external-stress,2,1,0,2,0,0.3333,1,pass,24.67,True
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,78.92,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,61.95,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,48.32,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,4,HITL Approval,cross-cutting,1,1,0,2,1,0.5,2,pass,51.66,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,5,Chat Persistence,remembering,1,2,0,2,1,0.6667,3,pass,83.24,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,75.97,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,41.81,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,8,Controlled Interruption,execution,1,1,0,1,1,0.5,2,pass,97.81,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,105.91,False
+SEQ-LAN-S1,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,1,10,Multi-Agent Composition,external-stress,3,3,0,2,1,0.5,3,pass,60.01,True
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,88.9,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,43.28,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,68.04,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,4,HITL Approval,cross-cutting,1,1,0,2,1,0.5,2,pass,69.39,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,5,Chat Persistence,remembering,1,2,0,2,1,0.6667,3,pass,83.55,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,86.43,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,69.28,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,8,Controlled Interruption,execution,1,1,0,1,1,0.5,2,pass,89.48,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,66.31,False
+SEQ-LAN-S2,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,2,10,Multi-Agent Composition,external-stress,3,3,0,2,1,0.5,3,pass,91.75,True
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,68.69,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,69.97,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,92.17,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,4,HITL Approval,cross-cutting,1,1,0,2,1,0.5,2,pass,79.5,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,5,Chat Persistence,remembering,1,2,0,2,1,0.6667,3,pass,83.75,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,63.3,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,76.56,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,8,Controlled Interruption,execution,1,1,0,1,1,0.5,2,pass,70.88,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,40.56,False
+SEQ-LAN-S3,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,3,10,Multi-Agent Composition,external-stress,3,3,0,2,1,0.5,3,pass,49.17,True
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,104.53,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,63.1,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,79.52,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,4,HITL Approval,cross-cutting,1,1,0,2,1,0.5,2,pass,78.33,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,5,Chat Persistence,remembering,1,2,0,2,1,0.6667,3,pass,99.04,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,70.64,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,92.24,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,8,Controlled Interruption,execution,1,1,0,1,1,0.5,2,pass,96.14,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,82.68,False
+SEQ-LAN-S4,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,4,10,Multi-Agent Composition,external-stress,3,3,0,2,1,0.5,3,pass,58.4,True
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,55.15,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,62.89,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,82.27,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,4,HITL Approval,cross-cutting,1,1,0,2,1,0.5,2,pass,56.38,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,5,Chat Persistence,remembering,1,2,0,2,1,0.6667,3,pass,102.6,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,68.19,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,54.67,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,8,Controlled Interruption,execution,1,1,0,1,1,0.5,2,pass,40.77,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,104.78,False
+SEQ-LAN-S5,LangGraph,644815f9e5bc52ad8f7a5227a456227e9c3e639b,5,10,Multi-Agent Composition,external-stress,3,3,0,2,1,0.5,3,pass,87.49,True
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,56.98,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,61.71,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,62.04,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,60.38,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,63.52,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,43.61,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,80.6,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,69.3,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,76.46,False
+SEQ-PYD-S1,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,1,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,54.69,True
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,55.18,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,38.23,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,57.36,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,41.71,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,85.25,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,52.05,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,43.93,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,70.34,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,88.79,False
+SEQ-PYD-S2,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,2,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,89.9,True
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,62.78,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,69.25,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,83.34,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,80.15,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,46.49,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,44.13,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,79.75,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,76.26,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,71.92,False
+SEQ-PYD-S3,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,3,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,93.82,True
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,43.45,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,60.14,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,76.51,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,70.19,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,59.26,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,42.35,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,48.97,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,41.48,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,85.02,False
+SEQ-PYD-S4,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,4,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,62.93,True
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,82.8,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,64.13,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,3,Retry with Backoff,cross-cutting,1,1,0,1,1,0.5,2,pass,90.29,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,53.53,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,94.28,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,89.66,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,60.95,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,58.82,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,65.7,False
+SEQ-PYD-S5,PydanticAI,c4898abb54dc25ae6f6aef208a4c0661b30a455e,5,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,80.71,True
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,40.58,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,43.54,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,3,Retry with Backoff,cross-cutting,1,2,0,1,1,0.6667,2,pass,58.45,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,85.08,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,64.52,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,49.61,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,49.9,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,60.82,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,84.4,False
+SEQ-OPE-S1,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,1,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,60.58,True
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,83.29,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,40.13,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,3,Retry with Backoff,cross-cutting,1,2,0,1,1,0.6667,2,pass,65.58,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,41.23,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,86.44,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,80.43,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,89.41,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,83.5,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,70.54,False
+SEQ-OPE-S2,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,2,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,59.21,True
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,74.87,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,77.14,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,3,Retry with Backoff,cross-cutting,1,2,0,1,1,0.6667,2,pass,45.69,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,76.75,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,43.33,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,67.56,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,55.65,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,86.35,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,49.67,False
+SEQ-OPE-S3,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,3,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,66.26,True
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,52.96,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,60.49,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,3,Retry with Backoff,cross-cutting,1,2,0,1,1,0.6667,2,pass,44.82,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,74.6,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,38.57,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,42.32,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,85.36,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,70.5,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,75.83,False
+SEQ-OPE-S4,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,4,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,68.49,True
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,43.44,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,57.76,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,3,Retry with Backoff,cross-cutting,1,2,0,1,1,0.6667,2,pass,76.82,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,53.96,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,87.95,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,58.06,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,7,Structured Telemetry,cross-cutting,1,1,0,1,1,0.5,2,pass,60.48,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,86.33,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,9,Provider Substitution,reasoning,1,1,0,1,1,0.5,2,pass,48.25,False
+SEQ-OPE-S5,OpenAI Agents SDK,fdf21db62c303a3db54b0dfbee82de2141fa2799,5,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,35.04,True
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,58.4,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,69.59,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,84.17,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,48.58,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,34.86,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,69.71,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,44.43,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,38.23,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,50.63,False
+SEQ-MIC-S1,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,1,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,48.38,True
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,60.22,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,77.97,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,40.77,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,52.2,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,70.55,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,35.97,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,77.98,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,73.86,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,69.27,False
+SEQ-MIC-S2,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,2,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,60.26,True
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,63.05,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,75.37,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,43.48,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,30.41,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,78.43,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,52.9,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,59.22,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,34.33,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,54.49,False
+SEQ-MIC-S3,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,3,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,80.88,True
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,33.08,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,65.65,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,59.24,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,37.86,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,42.76,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,40.13,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,55.03,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,39.47,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,50.16,False
+SEQ-MIC-S4,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,4,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,44.91,True
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,1,Model Substitution,cross-cutting,1,1,0,1,1,0.5,2,pass,69.45,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,2,Additional Tool,acting,1,1,0,1,1,0.5,2,pass,70.19,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,3,Retry with Backoff,cross-cutting,1,0,0,1,0,0.0,1,pass,55.71,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,4,HITL Approval,cross-cutting,1,2,0,1,1,0.6667,2,pass,32.1,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,5,Chat Persistence,remembering,1,2,0,1,1,0.6667,2,pass,34.98,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,6,Context Compaction,remembering,1,2,0,1,1,0.6667,2,pass,31.7,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,7,Structured Telemetry,cross-cutting,1,0,0,1,0,0.0,1,pass,81.05,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,8,Controlled Interruption,execution,1,2,0,1,1,0.6667,2,pass,61.55,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,9,Provider Substitution,reasoning,1,0,0,1,0,0.0,1,pass,61.27,False
+SEQ-MIC-S5,Microsoft Agent Framework,703fbce285ee0f026e5effcadfb9e65aab7f5d84,5,10,Multi-Agent Composition,external-stress,2,2,0,1,1,0.5,2,pass,56.73,True
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,1,Model Substitution,cross-cutting,1,1,0,2,2,0.5,3,pass,106.13,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,2,Additional Tool,acting,1,1,0,2,2,0.5,3,pass,54.3,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,3,Retry with Backoff,cross-cutting,2,2,0,2,2,0.5,3,pass,62.31,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,4,HITL Approval,cross-cutting,2,2,0,2,2,0.5,3,pass,72.73,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,5,Chat Persistence,remembering,2,3,0,2,2,0.6,3,pass,87.78,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,6,Context Compaction,remembering,2,3,0,2,2,0.6,3,pass,105.63,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,7,Structured Telemetry,cross-cutting,2,2,0,2,2,0.5,3,pass,63.66,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,8,Controlled Interruption,execution,2,2,0,2,2,0.5,3,pass,88.11,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,9,Provider Substitution,reasoning,2,2,0,2,2,0.5,3,pass,63.16,False
+SEQ-DEE-S1,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,1,10,Multi-Agent Composition,external-stress,3,4,0,2,2,0.5714,3,pass,106.68,True
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,1,Model Substitution,cross-cutting,1,1,0,2,2,0.5,3,pass,85.93,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,2,Additional Tool,acting,1,1,0,2,2,0.5,3,pass,79.67,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,3,Retry with Backoff,cross-cutting,2,2,0,2,2,0.5,3,pass,104.52,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,4,HITL Approval,cross-cutting,2,2,0,2,2,0.5,3,pass,100.05,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,5,Chat Persistence,remembering,2,3,0,2,2,0.6,3,pass,124.82,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,6,Context Compaction,remembering,2,3,0,2,2,0.6,3,pass,121.71,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,7,Structured Telemetry,cross-cutting,2,2,0,2,2,0.5,3,pass,76.71,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,8,Controlled Interruption,execution,2,2,0,2,2,0.5,3,pass,123.51,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,9,Provider Substitution,reasoning,2,2,0,2,2,0.5,3,pass,120.74,False
+SEQ-DEE-S2,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,2,10,Multi-Agent Composition,external-stress,3,4,0,2,2,0.5714,3,pass,59.95,True
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,1,Model Substitution,cross-cutting,1,1,0,2,2,0.5,3,pass,80.24,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,2,Additional Tool,acting,1,1,0,2,2,0.5,3,pass,102.8,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,3,Retry with Backoff,cross-cutting,2,2,0,2,2,0.5,3,pass,93.79,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,4,HITL Approval,cross-cutting,2,2,0,2,2,0.5,3,pass,111.35,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,5,Chat Persistence,remembering,2,3,0,2,2,0.6,3,pass,73.73,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,6,Context Compaction,remembering,2,3,0,2,2,0.6,3,pass,104.6,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,7,Structured Telemetry,cross-cutting,2,2,0,2,2,0.5,3,pass,53.38,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,8,Controlled Interruption,execution,2,2,0,2,2,0.5,3,pass,93.94,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,9,Provider Substitution,reasoning,2,2,0,2,2,0.5,3,pass,83.15,False
+SEQ-DEE-S3,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,3,10,Multi-Agent Composition,external-stress,3,4,0,2,2,0.5714,3,pass,80.08,True
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,1,Model Substitution,cross-cutting,1,1,0,2,2,0.5,3,pass,112.19,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,2,Additional Tool,acting,1,1,0,2,2,0.5,3,pass,103.59,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,3,Retry with Backoff,cross-cutting,2,2,0,2,2,0.5,3,pass,57.93,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,4,HITL Approval,cross-cutting,2,2,0,2,2,0.5,3,pass,78.24,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,5,Chat Persistence,remembering,2,3,0,2,2,0.6,3,pass,87.43,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,6,Context Compaction,remembering,2,3,0,2,2,0.6,3,pass,92.77,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,7,Structured Telemetry,cross-cutting,2,2,0,2,2,0.5,3,pass,128.26,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,8,Controlled Interruption,execution,2,2,0,2,2,0.5,3,pass,60.43,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,9,Provider Substitution,reasoning,2,2,0,2,2,0.5,3,pass,103.7,False
+SEQ-DEE-S4,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,4,10,Multi-Agent Composition,external-stress,3,4,0,2,2,0.5714,3,pass,79.14,True
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,1,Model Substitution,cross-cutting,1,1,0,2,2,0.5,3,pass,106.07,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,2,Additional Tool,acting,1,1,0,2,2,0.5,3,pass,94.08,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,3,Retry with Backoff,cross-cutting,2,2,0,2,2,0.5,3,pass,127.5,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,4,HITL Approval,cross-cutting,2,2,0,2,2,0.5,3,pass,117.82,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,5,Chat Persistence,remembering,2,3,0,2,2,0.6,3,pass,75.12,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,6,Context Compaction,remembering,2,3,0,2,2,0.6,3,pass,53.68,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,7,Structured Telemetry,cross-cutting,2,2,0,2,2,0.5,3,pass,114.66,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,8,Controlled Interruption,execution,2,2,0,2,2,0.5,3,pass,79.84,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,9,Provider Substitution,reasoning,2,2,0,2,2,0.5,3,pass,116.1,False
+SEQ-DEE-S5,DeepSeek Harness,ddefc45fbc7f8e46dd73185e68295696d1297887,5,10,Multi-Agent Composition,external-stress,3,4,0,2,2,0.5714,3,pass,72.09,True

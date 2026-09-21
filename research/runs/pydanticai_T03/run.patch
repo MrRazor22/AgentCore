@@ -1,0 +1,47 @@
+--- a/research/runs/pydanticai_T03/agent.py
++++ b/research/runs/pydanticai_T03/agent.py
+@@ -10,24 +10,38 @@
+ from pydantic_ai import Agent, RunContext
+ from pydantic_ai.models.function import FunctionModel
+ from pydantic_ai.messages import ModelResponse, TextPart
+ 
++try:
++    from approval import require_approval
++except ImportError:
++    from research.runs.pydanticai_T03.approval import require_approval
++
+ 
+ def default_model_fn(messages, info):
+     return ModelResponse(parts=[TextPart("Agent response")])
+ 
+ 
+ def search_docs(ctx: RunContext, query: str) -> str:
+     """Non-sensitive read-only tool."""
+     return f"Documents matching '{query}'"
+ 
+ 
+ def execute_sql(ctx: RunContext, query: str) -> str:
+     """Sensitive tool modifying database."""
+     return f"SQL executed successfully: {query}"
+ 
+ 
+-def create_agent(model_fn: Optional[Callable] = None) -> Agent:
++def create_agent(
++    model_fn: Optional[Callable] = None,
++    approval_delegate: Optional[Callable[[str, Dict[str, Any]], bool]] = None,
++    raise_on_denial: bool = False
++) -> Agent:
+     fn = model_fn or default_model_fn
+     model = FunctionModel(fn)
+     agent = Agent(model)
+ 
+-    agent.tool(search_docs)
+-    agent.tool(execute_sql)
++    delegate = approval_delegate or (lambda name, params: True)
++    approved_sql_tool = require_approval(delegate, sensitive=True, raise_on_denial=raise_on_denial)(execute_sql)
++    benign_search_tool = require_approval(delegate, sensitive=False)(search_docs)
++    agent.tool(approved_sql_tool)
++    agent.tool(benign_search_tool)
++    agent._sql_tool = approved_sql_tool
++    agent._search_tool = benign_search_tool
+     return agent

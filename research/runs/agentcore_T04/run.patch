@@ -1,0 +1,267 @@
+﻿diff --git a/research/runs/agentcore_T04/AgentCoreT04.csproj b/research/runs/agentcore_T04/AgentCoreT04.csproj
+new file mode 100644
+index 0000000..6f29f73
+--- /dev/null
++++ b/research/runs/agentcore_T04/AgentCoreT04.csproj
+@@ -0,0 +1,30 @@
++<Project Sdk="Microsoft.NET.Sdk">
++
++  <PropertyGroup>
++    <TargetFramework>net8.0</TargetFramework>
++    <ImplicitUsings>enable</ImplicitUsings>
++    <Nullable>enable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
++    <BuildProjectReferences>false</BuildProjectReferences>
++  </PropertyGroup>
++
++  <ItemGroup>
++    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
++    <PackageReference Include="xunit" Version="2.9.3" />
++    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
++      <PrivateAssets>all</PrivateAssets>
++      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
++    </PackageReference>
++  </ItemGroup>
++
++  <ItemGroup>
++    <Using Include="Xunit" />
++  </ItemGroup>
++
++  <ItemGroup>
++    <ProjectReference Include="..\..\..\AgentCore\AgentCore.csproj" />
++    <ProjectReference Include="..\..\..\AgentCore.Layers\AgentCore.Layers.csproj" />
++  </ItemGroup>
++
++</Project>
+diff --git a/research/runs/agentcore_T04/CacheLayer.cs b/research/runs/agentcore_T04/CacheLayer.cs
+new file mode 100644
+index 0000000..f937850
+--- /dev/null
++++ b/research/runs/agentcore_T04/CacheLayer.cs
+@@ -0,0 +1,82 @@
++using System.Collections.Concurrent;
++using System.Runtime.CompilerServices;
++using System.Security.Cryptography;
++using System.Text;
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++
++namespace AgentCoreT04;
++
++public record CacheEntry(DateTimeOffset Timestamp, IReadOnlyList<IMessageEvent> Events);
++
++public sealed class CacheLayer(
++    ILLM? inner = null,
++    TimeSpan? ttl = null,
++    ConcurrentDictionary<string, CacheEntry>? cacheStore = null) : LLMLayer(inner)
++{
++    private readonly TimeSpan _ttl = ttl ?? TimeSpan.FromMinutes(10);
++    private readonly ConcurrentDictionary<string, CacheEntry> _cache = cacheStore ?? new();
++
++    public int CacheHitCount { get; private set; }
++    public int CacheMissCount { get; private set; }
++
++    public static string DeriveCacheKey(IReadOnlyList<Message> messages, IReadOnlyList<ToolDefinition>? tools = null)
++    {
++        var sb = new StringBuilder();
++        foreach (var m in messages)
++        {
++            sb.Append((int)m.Role).Append(':');
++            foreach (var c in m.Contents)
++            {
++                if (c is Text t) sb.Append(t.Value);
++                else sb.Append(c);
++            }
++            sb.Append(';');
++        }
++
++        if (tools is { Count: > 0 })
++        {
++            sb.Append("#TOOLS:");
++            foreach (var tool in tools)
++            {
++                sb.Append(tool.Name).Append(':').Append(tool.Description).Append(';');
++            }
++        }
++
++        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
++        return Convert.ToHexString(hashBytes);
++    }
++
++    public override async IAsyncEnumerable<IMessageEvent> GenerateAsync(
++        IReadOnlyList<Message> messages,
++        IReadOnlyList<ToolDefinition>? tools = null,
++        JsonSchema? responseSchema = null,
++        [EnumeratorCancellation] CancellationToken ct = default)
++    {
++        var key = DeriveCacheKey(messages, tools);
++
++        if (_cache.TryGetValue(key, out var entry) && (DateTimeOffset.UtcNow - entry.Timestamp) < _ttl)
++        {
++            CacheHitCount++;
++            foreach (var evt in entry.Events)
++            {
++                yield return evt;
++            }
++            yield break;
++        }
++
++        CacheMissCount++;
++        var recordedEvents = new List<IMessageEvent>();
++
++        await foreach (var evt in Inner.GenerateAsync(messages, tools, responseSchema, ct).ConfigureAwait(false))
++        {
++            recordedEvents.Add(evt);
++            yield return evt;
++        }
++
++        _cache[key] = new CacheEntry(DateTimeOffset.UtcNow, recordedEvents);
++    }
++}
+diff --git a/research/runs/agentcore_T04/CacheLayerTests.cs b/research/runs/agentcore_T04/CacheLayerTests.cs
+new file mode 100644
+index 0000000..bd78c1e
+--- /dev/null
++++ b/research/runs/agentcore_T04/CacheLayerTests.cs
+@@ -0,0 +1,137 @@
++using AgentCore;
++using AgentCore.LLM;
++using AgentCore.LLM.Chat;
++using AgentCore.LLM.Schema;
++using AgentCore.Tool;
++using Xunit;
++
++namespace AgentCoreT04;
++
++public class CacheLayerTests
++{
++    private sealed class MockLLM(Func<int, IAsyncEnumerable<IMessageEvent>> streamFactory) : ILLM
++    {
++        public int CallCount { get; private set; }
++
++        public IAsyncEnumerable<IMessageEvent> GenerateAsync(
++            IReadOnlyList<Message> messages,
++            IReadOnlyList<ToolDefinition>? tools = null,
++            JsonSchema? responseSchema = null,
++            CancellationToken ct = default)
++        {
++            CallCount++;
++            return streamFactory(CallCount);
++        }
++    }
++
++    [Fact]
++    public async Task Test1_ReturnsCachedResponseWithoutInvokingModelOnIdenticalKey()
++    {
++        var mock = new MockLLM(callIndex => CreateEvents(
++            new MessageStart(Role.Assistant, Id: $"m{callIndex}"),
++            new MessageDelta($"m{callIndex}", Content: new TextDelta(0, $"Response {callIndex}")),
++            new MessageEnd(Id: $"m{callIndex}")
++        ));
++
++        var layer = new CacheLayer(mock, ttl: TimeSpan.FromMinutes(5));
++        var messages = new List<Message> { new(Role.User, [new Text("What is 2+2?")]) };
++
++        // 1st invocation: Miss
++        var results1 = new List<IMessageEvent>();
++        await foreach (var evt in layer.GenerateAsync(messages)) results1.Add(evt);
++
++        Assert.Equal(1, mock.CallCount);
++        Assert.Equal(1, layer.CacheMissCount);
++        Assert.Equal(0, layer.CacheHitCount);
++
++        // 2nd invocation: Hit
++        var results2 = new List<IMessageEvent>();
++        await foreach (var evt in layer.GenerateAsync(messages)) results2.Add(evt);
++
++        Assert.Equal(1, mock.CallCount); // Still 1! Model was NOT invoked
++        Assert.Equal(1, layer.CacheHitCount);
++        Assert.Equal(results1.Count, results2.Count);
++    }
++
++    [Fact]
++    public async Task Test2_InvokesModelAndPopulatesCacheOnCacheMiss()
++    {
++        var mock = new MockLLM(callIndex => CreateEvents(
++            new MessageDelta("m1", Content: new TextDelta(0, "Answer"))
++        ));
++
++        var layer = new CacheLayer(mock);
++        var messages1 = new List<Message> { new(Role.User, [new Text("Question 1")]) };
++        var messages2 = new List<Message> { new(Role.User, [new Text("Question 2")]) };
++
++        await foreach (var _ in layer.GenerateAsync(messages1)) { }
++        await foreach (var _ in layer.GenerateAsync(messages2)) { }
++
++        Assert.Equal(2, mock.CallCount);
++        Assert.Equal(2, layer.CacheMissCount);
++    }
++
++    [Fact]
++    public void Test3_IncludesMessageHistoryAndSystemPromptInCacheKeyDerivation()
++    {
++        var baseMessages = new List<Message>
++        {
++            new(Role.System, [new Text("You are a helpful assistant")]),
++            new(Role.User, [new Text("Hello")])
++        };
++
++        var modifiedSystemMessages = new List<Message>
++        {
++            new(Role.System, [new Text("You are a grumpy assistant")]),
++            new(Role.User, [new Text("Hello")])
++        };
++
++        var extendedHistoryMessages = new List<Message>
++        {
++            new(Role.System, [new Text("You are a helpful assistant")]),
++            new(Role.User, [new Text("Hello")]),
++            new(Role.Assistant, [new Text("Hi there!")]),
++            new(Role.User, [new Text("Hello again")])
++        };
++
++        var key1 = CacheLayer.DeriveCacheKey(baseMessages);
++        var key2 = CacheLayer.DeriveCacheKey(modifiedSystemMessages);
++        var key3 = CacheLayer.DeriveCacheKey(extendedHistoryMessages);
++
++        Assert.NotEqual(key1, key2);
++        Assert.NotEqual(key1, key3);
++        Assert.NotEqual(key2, key3);
++    }
++
++    [Fact]
++    public async Task Test4_InvalidatesOrBypassesCacheWhenConfiguredTTLExpires()
++    {
++        var mock = new MockLLM(callIndex => CreateEvents(
++            new MessageDelta($"m{callIndex}", Content: new TextDelta(0, $"Version {callIndex}"))
++        ));
++
++        var layer = new CacheLayer(mock, ttl: TimeSpan.FromMilliseconds(50));
++        var messages = new List<Message> { new(Role.User, [new Text("Time-sensitive question")]) };
++
++        // 1st invocation
++        await foreach (var _ in layer.GenerateAsync(messages)) { }
++        Assert.Equal(1, mock.CallCount);
++
++        // Wait for TTL to expire
++        await Task.Delay(100);
++
++        // 2nd invocation after TTL expiry
++        await foreach (var _ in layer.GenerateAsync(messages)) { }
++        Assert.Equal(2, mock.CallCount); // Expired -> re-invoked model!
++        Assert.Equal(2, layer.CacheMissCount);
++    }
++
++    private static async IAsyncEnumerable<IMessageEvent> CreateEvents(params IMessageEvent[] events)
++    {
++        foreach (var evt in events)
++        {
++            yield return evt;
++            await Task.Yield();
++        }
++    }
++}

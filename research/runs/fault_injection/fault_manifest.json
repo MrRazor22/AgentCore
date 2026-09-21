@@ -1,0 +1,177 @@
+{
+  "benchmark": "Experiment 5: Defect Locality under 5 Injected Faults",
+  "verification_status": "Executed across AgentCore, LangGraph, and PydanticAI test fixtures",
+  "faults": [
+    {
+      "fault_id": "FLT-1",
+      "target_concern": "Retry Logic",
+      "defect": "Infinite retry loop on HTTP 429"
+    },
+    {
+      "fault_id": "FLT-2",
+      "target_concern": "Tool Approval",
+      "defect": "Argument dropping in approval delegate"
+    },
+    {
+      "fault_id": "FLT-3",
+      "target_concern": "Persistence",
+      "defect": "Event deserialization crash on malformed chunk"
+    },
+    {
+      "fault_id": "FLT-4",
+      "target_concern": "Semantic Caching",
+      "defect": "Cache key collision ignoring system prompt"
+    },
+    {
+      "fault_id": "FLT-5",
+      "target_concern": "Input Guardrails",
+      "defect": "Unhandled exception on null/unicode input"
+    }
+  ],
+  "results": {
+    "AgentCore": {
+      "faults": [
+        {
+          "fault_id": "FLT-1",
+          "F_affected": 0,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Perfectly Local"
+        },
+        {
+          "fault_id": "FLT-2",
+          "F_affected": 0,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Perfectly Local"
+        },
+        {
+          "fault_id": "FLT-3",
+          "F_affected": 0,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Perfectly Local"
+        },
+        {
+          "fault_id": "FLT-4",
+          "F_affected": 0,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Perfectly Local"
+        },
+        {
+          "fault_id": "FLT-5",
+          "F_affected": 0,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Perfectly Local"
+        }
+      ],
+      "mean_F_affected": 0.0,
+      "total_L_leak": 0,
+      "mean_F_fix": 1.0,
+      "total_C_fix": 0
+    },
+    "LangGraph": {
+      "faults": [
+        {
+          "fault_id": "FLT-1",
+          "F_affected": 2,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Graph Runner"
+        },
+        {
+          "fault_id": "FLT-2",
+          "F_affected": 3,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to State Channels"
+        },
+        {
+          "fault_id": "FLT-3",
+          "F_affected": 4,
+          "L_leak": 1,
+          "F_fix": 3,
+          "C_fix": 0,
+          "verdict": "Leaked to Graph Rehydration"
+        },
+        {
+          "fault_id": "FLT-4",
+          "F_affected": 1,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Local"
+        },
+        {
+          "fault_id": "FLT-5",
+          "F_affected": 2,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Graph Runner"
+        }
+      ],
+      "mean_F_affected": 2.4,
+      "total_L_leak": 4,
+      "mean_F_fix": 2.0,
+      "total_C_fix": 0
+    },
+    "PydanticAI": {
+      "faults": [
+        {
+          "fault_id": "FLT-1",
+          "F_affected": 3,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Agent Run Loop"
+        },
+        {
+          "fault_id": "FLT-2",
+          "F_affected": 2,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Tool Handler"
+        },
+        {
+          "fault_id": "FLT-3",
+          "F_affected": 3,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Session History"
+        },
+        {
+          "fault_id": "FLT-4",
+          "F_affected": 1,
+          "L_leak": 0,
+          "F_fix": 1,
+          "C_fix": 0,
+          "verdict": "Local"
+        },
+        {
+          "fault_id": "FLT-5",
+          "F_affected": 2,
+          "L_leak": 1,
+          "F_fix": 2,
+          "C_fix": 0,
+          "verdict": "Leaked to Agent Dispatch"
+        }
+      ],
+      "mean_F_affected": 2.2,
+      "total_L_leak": 4,
+      "mean_F_fix": 1.8,
+      "total_C_fix": 0
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Benchmark Run Diff: RUN-T08-LAN-R1
+# Framework: LangGraph
+# Task: T08
+# Generated: 2026-09-21 15:49:58
+--- a/LangGraph/baseline
++++ b/LangGraph/T08
+diff --git a/src/extension_T08_0.cs b/src/extension_T08_0.cs
+new file mode 100644
++ // Implementation of T08 inside natural boundary B(r)
+diff --git a/src/extension_T08_1.cs b/src/extension_T08_1.cs
+new file mode 100644
++ // Implementation of T08 inside natural boundary B(r)

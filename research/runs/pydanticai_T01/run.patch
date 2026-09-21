@@ -1,0 +1,30 @@
+--- a/research/runs/pydanticai_T01/agent.py
++++ b/research/runs/pydanticai_T01/agent.py
+@@ -10,10 +10,18 @@
+ from pydantic_ai import Agent
+ from pydantic_ai.models.function import FunctionModel
+ from pydantic_ai.messages import ModelResponse, TextPart
+ 
++try:
++    from retry_policy import RetryModelWrapper
++except ImportError:
++    from research.runs.pydanticai_T01.retry_policy import RetryModelWrapper
++
+ 
+ def default_model_fn(messages, info):
+     return ModelResponse(parts=[TextPart("Default response")])
+ 
+ 
+-def create_agent(model_fn: Optional[Callable] = None) -> Agent:
++def create_agent(model_fn: Optional[Callable] = None, max_retries: int = 3, sleep_fn: Optional[Callable] = None) -> Agent:
+     fn = model_fn or default_model_fn
+-    model = FunctionModel(fn)
+-    return Agent(model)
++    kwargs = {"max_retries": max_retries}
++    if sleep_fn is not None:
++        kwargs["sleep_fn"] = sleep_fn
++    retry_wrapped_fn = RetryModelWrapper(fn, **kwargs)
+     model = FunctionModel(retry_wrapped_fn)
+     agent = Agent(model)
+     agent._retry_wrapper = retry_wrapped_fn
+     return agent

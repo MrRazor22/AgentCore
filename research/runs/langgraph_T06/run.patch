@@ -1,0 +1,75 @@
+--- a/research/runs/langgraph_T06/agent_graph.py
++++ b/research/runs/langgraph_T06/agent_graph.py
+@@ -1,13 +1,18 @@
+ """
+-Baseline turn-based LangGraph agent graph.
++Turn-based LangGraph agent graph implementation with input guardrail node.
+ 
+ Constructs a standard cyclical agent graph using StateGraph, MessagesState,
+-a model execution node, and a tool execution node.
++a dedicated guardrail validation node, model node, and guarded tool node.
+ """
+ from typing import Any, Callable, Dict, List, Optional
+ from langchain_core.messages import AIMessage
+ from langgraph.graph import StateGraph, MessagesState, START, END
+ from langgraph.prebuilt import ToolNode, tools_condition
++
++try:
++    from guardrails import InputGuardrail, ValidationException
++except ImportError:
++    from research.runs.langgraph_T06.guardrails import InputGuardrail, ValidationException
+ 
+ 
+ def default_model_fn(state: MessagesState) -> Dict[str, Any]:
+@@ -23,20 +28,43 @@
+ def build_agent_graph(
+     model_fn: Optional[Callable[[MessagesState], Dict[str, Any]]] = None,
+     tools: Optional[List[Callable[..., Any]]] = None,
++    guardrail: Optional[InputGuardrail] = None,
+ ):
+     """
+-    Constructs and compiles the baseline LangGraph agent workflow.
++    Constructs and compiles the LangGraph agent workflow with input guardrail node.
+     """
+     builder = StateGraph(MessagesState)
+ 
+-    node_model = model_fn or default_model_fn
+-    builder.add_node("model", node_model)
++    base_model = model_fn or default_model_fn
++    node_tools = tools if tools is not None else [default_search_tool]
++    base_tool_node = ToolNode(node_tools)
+ 
+-    node_tools = tools if tools is not None else [default_search_tool]
+-    builder.add_node("tools", ToolNode(node_tools))
++    if guardrail is not None:
++        def guardrail_node(state: MessagesState) -> Dict[str, Any]:
++            # Validate input messages before passing to model
++            guardrail.validate_messages(state.get("messages", []))
++            return {}
+ 
+-    builder.add_edge(START, "model")
+-    builder.add_conditional_edges("model", tools_condition)
+-    builder.add_edge("tools", "model")
++        def guarded_tool_node(state: MessagesState) -> Dict[str, Any]:
++            last_msg = state.get("messages", [])[-1]
++            tool_calls = getattr(last_msg, "tool_calls", [])
++            for call in tool_calls:
++                guardrail.validate_tool_call(call.get("name", ""), call.get("args", {}))
++            return base_tool_node.invoke(state)
++
++        builder.add_node("guardrail", guardrail_node)
++        builder.add_node("model", base_model)
++        builder.add_node("tools", guarded_tool_node)
++
++        builder.add_edge(START, "guardrail")
++        builder.add_edge("guardrail", "model")
++        builder.add_conditional_edges("model", tools_condition)
++        builder.add_edge("tools", "guardrail")
++    else:
++        builder.add_node("model", base_model)
++        builder.add_node("tools", base_tool_node)
++        builder.add_edge(START, "model")
++        builder.add_conditional_edges("model", tools_condition)
++        builder.add_edge("tools", "model")
+ 
+     return builder.compile()

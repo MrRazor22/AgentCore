@@ -1,0 +1,28 @@
+--- a/research/runs/openai_agents_T07/agent_app.py
++++ b/research/runs/openai_agents_T07/agent_app.py
+@@ -10,12 +10,18 @@
+ from typing import Optional
+ from agents import Agent, Runner, set_tracing_disabled
+ from agents.models.interface import Model, ModelResponse
+ from openai.types.responses.response_output_message import ResponseOutputMessage, ResponseOutputText
+ from agents.usage import Usage
+ 
++try:
++    from wal_session import DurableWALSession
++except ImportError:
++    from research.runs.openai_agents_T07.wal_session import DurableWALSession
++
+ set_tracing_disabled(True)
+ 
+ 
+-def run_agent(agent: Agent, prompt: str):
+-    return Runner.run_sync(agent, prompt)
++def run_agent_in_session(
++    agent: Agent,
++    prompt: str,
++    session: DurableWALSession
++):
++    result = Runner.run_sync(agent, prompt, session=session)
++    # Checkpoint on successful completion
++    session.checkpoint()
++    return result
