@@ -74,7 +74,7 @@ The set of all layer stacks over $F$ forms the **endomorphism monoid** $(\text{E
 
 | Concern | Layer Type | Interface | Implementation Evidence |
 |---|---|---|---|
-| Logging / telemetry | $\lambda_\mathcal{L}$ | `LLMLayer` | `StreamingEventLayer.cs` (43 lines) |
+| Input guardrails / validation | $\lambda_\mathcal{L}$ | `LLMLayer` | `InputGuardrailLayer.cs` (38 lines) |
 | Retry / resilience | $\lambda_\mathcal{L}$ | `LLMLayer` | `RetryLayer.cs` (117 lines) |
 | Model routing / switching | $\lambda_\mathcal{L}$ | `LLMLayer` | inline `LLMDelegate` |
 | Tool call detection for non-native models | $\lambda_\mathcal{L}$ | `LLMLayer` | `ToolCallDetectionLayer.cs` (175 lines) |

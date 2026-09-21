@@ -39,12 +39,13 @@ public static class LLMLayerExtensions
     public static ILLM RemoveToolCallDetection(this ILLM llm)
         => llm.RemoveLayer<ToolCallDetectionLayer>();
 
-    public static ILLM UseStreamingEvents<T>(this ILLM llm, Func<IMessageEvent, T>? mapper = null)
+    public static ILLM UseInputGuardrail(this ILLM llm, InputGuardrail guardrail)
     {
         ArgumentNullException.ThrowIfNull(llm);
-        return llm.AddLayer(new StreamingEventLayer<T>(mapper, llm));
+        ArgumentNullException.ThrowIfNull(guardrail);
+        return llm.AddLayer(new InputGuardrailLayer(guardrail, llm));
     }
 
-    public static ILLM RemoveStreamingEvents<T>(this ILLM llm)
-        => llm.RemoveLayer<StreamingEventLayer<T>>();
+    public static ILLM RemoveInputGuardrail(this ILLM llm)
+        => llm.RemoveLayer<InputGuardrailLayer>();
 }
