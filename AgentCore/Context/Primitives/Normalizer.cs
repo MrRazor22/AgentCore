@@ -10,7 +10,7 @@ public interface INormalizer
     IReadOnlyList<Message> Normalize(IReadOnlyList<Message> messages);
 }
 
-public class ChatNormalizer(
+public sealed class ChatNormalizer(
     bool ensureToolPairing = true,
     bool coalesceAdjacentRoles = true,
     bool stripPastReasoning = true) : INormalizer

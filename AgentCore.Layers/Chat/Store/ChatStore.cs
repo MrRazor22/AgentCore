@@ -13,7 +13,7 @@ public interface IChatStore
     Task<IReadOnlyList<Message>?> LoadAsync(CancellationToken ct = default);
     Task AppendAsync(IReadOnlyList<Message> messages, CancellationToken ct = default);
 }
-public class FileChatStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IChatStore
+public sealed class FileChatStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IChatStore
 {
     private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(

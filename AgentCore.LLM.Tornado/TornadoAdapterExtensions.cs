@@ -112,5 +112,4 @@ public static class TornadoAdapterExtensions
         return new LlmTornado.Common.Tool(fn);
     }
 }
-public sealed record TornadoUsage(int InputTokens, int OutputTokens, int TotalTokens, ChatUsage Raw)
-    : TokenUsage(InputTokens, OutputTokens, TotalTokens);
+public sealed record TornadoUsage(ChatUsage Raw) : IMetadata;

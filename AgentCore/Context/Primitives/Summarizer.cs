@@ -16,7 +16,7 @@ public interface ICompactor
         CancellationToken ct = default);
 }
 
-public class Summarizer(
+public sealed class Summarizer(
     ILLM llm,
     string prompt = "Please summarize our conversation so far, focusing on key details, facts, preferences, and decisions. Keep it concise.",
     INormalizer? normalizer = null) : ICompactor

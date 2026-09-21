@@ -10,7 +10,7 @@ public interface ITokenizer
     int Estimate(IContent content);
 }
 
-public class Tokenizer(
+public sealed class Tokenizer(
     int charsPerToken = 4,
     double pixelsPerToken = 750.0,
     int defaultImageTokens = 1000,

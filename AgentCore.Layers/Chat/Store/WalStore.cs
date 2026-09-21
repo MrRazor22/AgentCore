@@ -13,7 +13,7 @@ public interface IWalStore
     Task ClearAsync(CancellationToken ct = default);
     IAsyncEnumerable<IMessageEvent> RecoverAsync(CancellationToken ct = default);
 }
-public class FileWalStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IWalStore
+public sealed class FileWalStore(string storageDirectory, string sessionId, JsonSerializerOptions? options = null) : IWalStore
 {
     private readonly JsonSerializerOptions _options = options ?? StoreJson.Options;
     private readonly string _path = Path.Combine(

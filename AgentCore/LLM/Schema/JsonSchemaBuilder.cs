@@ -49,8 +49,8 @@ public class JsonSchemaBuilder
         }
         return this;
     }
-    internal JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
-    internal JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
-    internal JsonObject BuildObject() => _schema;
+    public JsonSchemaBuilder Properties(JsonObject properties) { _schema[JsonSchemaConstants.PropertiesKey] = properties; return this; }
+    public JsonSchemaBuilder Required(JsonArray required) { if (required?.Count > 0) _schema[JsonSchemaConstants.RequiredKey] = required; return this; }
+    public JsonObject BuildObject() => _schema;
     public JsonSchema Build() => new JsonSchema(_schema);
 }

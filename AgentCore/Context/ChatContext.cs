@@ -16,7 +16,7 @@ public interface IContext
     IAsyncEnumerable<IMessageEvent> WriteAsync(IAsyncEnumerable<IMessageEvent> events, CancellationToken ct = default);
 }
 
-public class ChatContext(
+public sealed class ChatContext(
     int contextWindow = 50000, int? reserveTokens = null, int? maxSingleMessageTokens = null,
     ICompactor? compactor = null, ITokenizer? counter = null, ITruncator? truncator = null,
     IAssembler? assembler = null, INormalizer? normalizer = null, ILogger<ChatContext>? logger = null,

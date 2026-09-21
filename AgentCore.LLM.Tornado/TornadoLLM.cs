@@ -163,11 +163,9 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
                         toolBlocks.Clear();
 
                         if (data.Usage != null)
-                        {
-                            int inTokens = data.Usage.PromptTokens;
-                            int outTokens = data.Usage.CompletionTokens;
-                            int totalTokens = data.Usage.TotalTokens > 0 ? data.Usage.TotalTokens : inTokens + outTokens;
-                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TornadoUsage(inTokens, outTokens, totalTokens, data.Usage)), ct);
+                        { 
+                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TokenUsage(data.Usage.PromptTokens, data.Usage.CompletionTokens, data.Usage.TotalTokens)), ct);
+                            await channel.Writer.WriteAsync(new MessageDelta(Metadata: new TornadoUsage(data.Usage)), ct);
                         }
 
                         await channel.Writer.WriteAsync(new MessageEnd(), ct);

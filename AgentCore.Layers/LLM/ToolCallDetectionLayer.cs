@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 
 namespace AgentCore.Layers.LLM;
  
-public class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false, ILLM? inner = null) : LLMLayer(inner)
+public sealed class ToolCallDetectionLayer(bool stopAfterFirstToolCall = false, ILLM? inner = null) : LLMLayer(inner)
 { 
     private static readonly Regex TagPattern = new(
         @"[\[\(<](?<tag>[^\]\)>]*?tool[^\]\)>]*?)[\]\)>]\s*(?<content>[\s\S]*?)\s*[\[\(<]/\k<tag>[\]\)>]",

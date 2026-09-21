@@ -8,10 +8,10 @@ public interface IContent : IContentEvent;
 
 public interface IMetadata;
 
-public record TokenUsage(int InputTokens = 0, int OutputTokens = 0, int TotalTokens = 0) : IMetadata;
+public sealed record TokenUsage(int InputTokens = 0, int OutputTokens = 0, int TotalTokens = 0) : IMetadata;
 public sealed record Summary(int CompactedMessages = 0, string? ThroughMessageId = null) : IMetadata;
 
-public class Message(
+public sealed class Message(
     Role role,
     IReadOnlyList<IContent>? contents = null,
     string? id = null,

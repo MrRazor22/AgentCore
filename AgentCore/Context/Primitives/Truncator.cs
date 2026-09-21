@@ -9,7 +9,7 @@ public interface ITruncator
     IContent Truncate(IContent content, int maxTokens);
 }
 
-public class Truncator(
+public sealed class Truncator(
     ITokenizer tokenizer, 
     double headRatio = 0.5, 
     string notice = "\n... [truncated]") : ITruncator
@@ -20,7 +20,7 @@ public class Truncator(
         : throw new ArgumentOutOfRangeException(nameof(headRatio), "headRatio must be between 0.0 and 1.0.");
     private readonly string _notice = notice ?? string.Empty;
 
-    public virtual IContent Truncate(IContent content, int maxTokens)
+    public IContent Truncate(IContent content, int maxTokens)
     {
         if (_tokenizer.Estimate(content) <= maxTokens)
             return content;
@@ -33,7 +33,7 @@ public class Truncator(
         };
     }
 
-    protected string SliceString(string text, int maxTokens)
+    private string SliceString(string text, int maxTokens)
     {
         if (maxTokens <= 0) return string.Empty;
 
