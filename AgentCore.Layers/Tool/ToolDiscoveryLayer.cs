@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using AgentCore.LLM.Chat;
@@ -14,7 +15,7 @@ public sealed class Discoverable(string? domain = null) : Attribute, IMetadata
 
 public sealed class ToolDiscoveryTool : ITool
 {
-    private readonly HashSet<string> _active = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _active = new(StringComparer.OrdinalIgnoreCase);
 
     public Func<IReadOnlyList<ToolDefinition>>? CatalogProvider { get; set; }
 
@@ -27,7 +28,7 @@ public sealed class ToolDiscoveryTool : ITool
             .Build());
 
     public bool IsActive(ToolDefinition tool) =>
-        tool.Metadata.Get<Discoverable>() == null || _active.Contains(tool.Name);
+        tool.Metadata.Get<Discoverable>() == null || _active.ContainsKey(tool.Name);
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         JsonObject arguments,
@@ -56,7 +57,7 @@ public sealed class ToolDiscoveryTool : ITool
             yield break;
         }
 
-        foreach (var m in matches) _active.Add(m.Name);
+        foreach (var m in matches) _active.TryAdd(m.Name, 0);
 
         yield return new Text($"Activated {matches.Count} tool(s):\n" +
             string.Join("\n", matches.Select(m => $"- {m.Name}: {m.Description}")));

@@ -17,6 +17,7 @@ public sealed class ChatPersistenceLayer(
     IContext? inner = null) : ContextLayer(inner)
 {
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _restored;
 
     public override async Task<IReadOnlyList<Message>> ReadAsync(CancellationToken ct = default)
@@ -65,19 +66,28 @@ public sealed class ChatPersistenceLayer(
     private async Task RestoreAsync(CancellationToken ct)
     {
         if (_restored) return;
-        _restored = true;
-
-        if (walStore != null)
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
-            if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
-            await walStore.ClearAsync(ct).ConfigureAwait(false);
+            if (_restored) return;
+
+            if (walStore != null)
+            {
+                var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
+                if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
+                await walStore.ClearAsync(ct).ConfigureAwait(false);
+            }
+
+            if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
+            {
+                foreach (var m in ExtractWorkingContext(history))
+                    await Inner.WriteAsync(m, ct).ConfigureAwait(false);
+            }
+            _restored = true;
         }
-
-        if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)
+        finally
         {
-            foreach (var m in ExtractWorkingContext(history))
-                await Inner.WriteAsync(m, ct).ConfigureAwait(false);
+            _gate.Release();
         }
     }
 
