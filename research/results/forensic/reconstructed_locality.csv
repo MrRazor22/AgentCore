@@ -1,0 +1,38 @@
+framework,task,replicate,boundary_roles,modified_files,external_modified_files,P_ext_reported,P_ext_reconstructed,I_ext_reported,I_ext_reconstructed,C_core_reported,C_core_reconstructed,MATCH
+AgentCore,T02,1,telemetry_handler;telemetry_config;telemetry_test;telemetry_layer,AgentCoreT02.csproj;TelemetryLayer.cs;TelemetryLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T03,1,approval_config;approval_test;toolbox_layer;approval_delegate,AgentCoreT03.csproj;ApprovalLayer.cs;ApprovalLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T04,1,caching_layer;caching_test;cache_store;cache_config,AgentCoreT04.csproj;CacheLayer.cs;CacheLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T05,1,rate_limit_test;rate_limit_config;token_bucket;rate_limit_layer,AgentCoreT05.csproj;RateLimitLayer.cs;RateLimitLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T06,1,guardrail_config;guardrail_test;guardrail_layer;validation_policy,AgentCoreT06.csproj;GuardrailLayer.cs;GuardrailLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T07,1,persistence_config;context_layer;wal_store;persistence_test,AgentCoreT07.csproj;DurableContextLayer.cs;DurableContextLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T08,1,compactor_config;summarizer;context_compactor;compactor_test,AgentCoreT08.csproj;ContextCompactionLayer.cs;ContextCompactionLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T09,1,provider_config;llm_provider_adapter;provider_test,AgentCoreT09.csproj;AnthropicProviderLayer.cs;AnthropicProviderLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T10,1,stream_observer;stream_test;stream_config;stream_tap,AgentCoreT10.csproj;StreamObservationLayer.cs;StreamObservationLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T11,1,interruption_test;run_control;interruption_state;interruption_config,InterruptionLayer.cs,,0,0,0,0,0,0,True
+AgentCore,T12,1,discovery_test;discovery_config;toolbox_layer;tool_filter,DynamicToolboxLayer.cs,,0,0,0,0,0,0,True
+LangGraph,T02,1,telemetry_handler;telemetry_config;telemetry_test;telemetry_layer,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T03,1,approval_config;approval_test;toolbox_layer;approval_delegate,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T04,1,caching_layer;caching_test;cache_store;cache_config,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T05,1,rate_limit_test;rate_limit_config;token_bucket;rate_limit_layer,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T06,1,guardrail_config;guardrail_test;guardrail_layer;validation_policy,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T07,1,persistence_config;context_layer;wal_store;persistence_test,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T08,1,compactor_config;summarizer;context_compactor;compactor_test,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T09,1,provider_config;llm_provider_adapter;provider_test,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T10,1,stream_observer;stream_test;stream_config;stream_tap,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T11,1,interruption_test;run_control;interruption_state;interruption_config,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T12,1,discovery_test;discovery_config;toolbox_layer;tool_filter,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+OpenAI Agents SDK,T01,1,retry_config;retry_test;retry_policy;llm_layer,agent_app.py;agent_app.py,agent_app.py;agent_app.py,1,1,1,1,1,1,True
+OpenAI Agents SDK,T02,1,telemetry_handler;telemetry_config;telemetry_test;telemetry_layer,agent_app.py;agent_app.py,agent_app.py;agent_app.py,1,1,1,1,1,1,True
+OpenAI Agents SDK,T03,1,approval_config;approval_test;toolbox_layer;approval_delegate,agent_app.py;agent_app.py,agent_app.py;agent_app.py,1,1,1,1,1,1,True
+OpenAI Agents SDK,T06,1,guardrail_config;guardrail_test;guardrail_layer;validation_policy,agent_app.py;agent_app.py,agent_app.py;agent_app.py,1,1,1,1,1,1,True
+OpenAI Agents SDK,T07,1,persistence_config;context_layer;wal_store;persistence_test,agent_app.py;agent_app.py,agent_app.py;agent_app.py,1,1,1,1,1,1,True
+AgentCore,T01,1,retry_config;retry_test;retry_policy;llm_layer,PilotAgentCoreT01.csproj;RetryLayer.cs;RetryLayerTests.cs,,0,0,0,0,0,0,True
+AgentCore,T01,2,retry_config;retry_test;retry_policy;llm_layer,PilotAgentCoreT01R2.csproj;RetryLayer.cs;RetryLayerTests.cs,,0,0,0,0,0,0,True
+LangGraph,T01,1,retry_config;retry_test;retry_policy;llm_layer,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+LangGraph,T01,2,retry_config;retry_test;retry_policy;llm_layer,agent_graph.py;agent_graph.py,agent_graph.py;agent_graph.py,1,1,1,1,1,1,True
+PydanticAI,T01,1,retry_config;retry_test;retry_policy;llm_layer,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True
+PydanticAI,T02,1,telemetry_handler;telemetry_config;telemetry_test;telemetry_layer,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True
+PydanticAI,T03,1,approval_config;approval_test;toolbox_layer;approval_delegate,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True
+PydanticAI,T05,1,rate_limit_test;rate_limit_config;token_bucket;rate_limit_layer,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True
+PydanticAI,T06,1,guardrail_config;guardrail_test;guardrail_layer;validation_policy,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True
+PydanticAI,T07,1,persistence_config;context_layer;wal_store;persistence_test,agent.py;agent.py,agent.py;agent.py,1,1,1,1,1,1,True

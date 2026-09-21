@@ -1,0 +1,49 @@
+framework,task,fairness_classification,explanation
+AgentCore,T01,FAIR,Standard clean architecture boundary separation.
+AgentCore,T02,FAIR,Standard clean architecture boundary separation.
+AgentCore,T03,FAIR,Standard clean architecture boundary separation.
+AgentCore,T04,FAIR,Standard clean architecture boundary separation.
+AgentCore,T05,FAIR,Standard clean architecture boundary separation.
+AgentCore,T06,FAIR,Standard clean architecture boundary separation.
+AgentCore,T07,FAIR,Standard clean architecture boundary separation.
+AgentCore,T08,FAIR,Standard clean architecture boundary separation.
+AgentCore,T09,FAIR,Standard clean architecture boundary separation.
+AgentCore,T10,FAIR,Standard clean architecture boundary separation.
+AgentCore,T11,FAIR,Standard clean architecture boundary separation.
+AgentCore,T12,FAIR,Standard clean architecture boundary separation.
+LangGraph,T01,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T02,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T03,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T04,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T05,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T06,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T07,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T08,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T09,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T10,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T11,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+LangGraph,T12,POTENTIAL_BIAS,"In LangGraph tutorials, agent_graph.py is considered the user's application composition file, but the protocol treats it as the core agent runner."
+PydanticAI,T01,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T02,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T03,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T04,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T05,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T06,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T07,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T08,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T09,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T10,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T11,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+PydanticAI,T12,POTENTIAL_BIAS,PydanticAI idioms attach tools and decorators directly to Agent instance in agent.py.
+OpenAI Agents,T01,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T02,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T03,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T04,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T05,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T06,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T07,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T08,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T09,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T10,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T11,FAIR,Standard clean architecture boundary separation.
+OpenAI Agents,T12,FAIR,Standard clean architecture boundary separation.
