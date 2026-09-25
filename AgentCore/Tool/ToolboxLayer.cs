@@ -2,12 +2,7 @@ using AgentCore.LLM.Chat;
 
 namespace AgentCore.Tool;
 
-public delegate IAsyncEnumerable<IMessageEvent> ToolboxDelegate(
-    IReadOnlyList<ToolCall> calls,
-    IToolbox next,
-    CancellationToken ct);
-
-public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = null) : IToolbox, ILayer<IToolbox>
+public class ToolboxLayer(IToolbox? inner = null) : IToolbox, ILayer<IToolbox>
 {
     public IToolbox Inner { get; private set; } = inner!;
 
@@ -19,7 +14,5 @@ public class ToolboxLayer(IToolbox? inner = null, ToolboxDelegate? handler = nul
     public virtual IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,
         CancellationToken ct = default)
-        => handler != null
-            ? handler(calls, Inner, ct)
-            : Inner.ExecuteAsync(calls, ct);
+        => Inner.ExecuteAsync(calls, ct);
 }

@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.Json;
+using AgentCore;
+using LlmTornado.Chat.Models;
 using AgentCore.LLM.Chat;
 using AgentCore.Tool;
 using LlmTornado.Chat;
@@ -118,7 +116,22 @@ public static class TornadoAdapterExtensions
         LLmProviders provider = LLmProviders.Custom)
     {
         ArgumentNullException.ThrowIfNull(llm);
-        return llm.Attach(new TornadoLLM(apiKey, model, baseUrl, provider));
+        return llm.Add(new TornadoLLM(apiKey, model, baseUrl, provider));
     }
+
+    public static ILLM SetModel(this ILLM llm, ChatModel model)
+    {
+        llm.Find<TornadoLLM>(t => t.Model = model);
+        return llm;
+    }
+
+    public static ILLM SetModel(this ILLM llm, string model)
+    {
+        llm.Find<TornadoLLM>(t => t.Model = new ChatModel(model, t.Model.Provider));
+        return llm;
+    }
+
+    public static ILLM SetModel(this ILLM llm, string model, LLmProviders provider)
+        => llm.SetModel(new ChatModel(model, provider));
 }
 public sealed record TornadoUsage(ChatUsage Raw) : IMetadata;

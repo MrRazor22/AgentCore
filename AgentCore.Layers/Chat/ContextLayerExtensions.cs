@@ -22,7 +22,7 @@ public static class ContextLayerExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(store);
-        return context.AddLayer(new ChatPersistenceLayer(store, walStore, context));
+        return context.Remove<ChatPersistenceLayer>().Add(new ChatPersistenceLayer(store, walStore));
     }
 
     public static async Task<IContext> ForkSessionAsync(
@@ -45,5 +45,8 @@ public static class ContextLayerExtensions
     }
 
     public static IContext RemoveSession(this IContext context)
-        => context.RemoveLayer<ChatPersistenceLayer>();
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return context.Remove<ChatPersistenceLayer>();
+    }
 }

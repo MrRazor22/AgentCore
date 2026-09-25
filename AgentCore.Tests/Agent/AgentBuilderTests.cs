@@ -140,8 +140,8 @@ public class AgentRuntimeTests
         Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
 
         var layer = new ToolboxLayer();
-        agent.Toolbox.AddLayer(layer);
-        agent.Toolbox.RemoveLayer<ToolboxLayer>();
+        agent.Toolbox.Add(layer);
+        agent.Toolbox.Remove<ToolboxLayer>();
         Assert.Equal(2, (await agent.Toolbox.GetToolsAsync()).Count);
     }
 }

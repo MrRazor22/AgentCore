@@ -59,53 +59,73 @@ public class SystemTools
 }
 ```
 
-### 2. Create and Run an Agent
+### 2. Assemble and Run the Agent
+
+Build the entire agent in a single, declarative flow:
 
 ```csharp
 using AgentCore;
 using AgentCore.Context;
 using AgentCore.LLM.Chat;
 using AgentCore.LLM.Tornado;
+using AgentCore.Layers.Tools;
+using AgentCore.Layers.LLM;
 using AgentCore.Tool;
-using LlmTornado;
 
-// 1. Initialize LLM & Tool primitives
-var tornadoApi = new TornadoApi("YOUR_API_KEY");
-var llm = new TornadoLLM(tornadoApi, "gpt-4o");
-var tools = MethodTool.FromInstance(new SystemTools());
-
-// 2. Assemble the Agent
 var agent = new Agent(
-    llm: llm,
-    toolbox: new Toolbox(tools),
-    context: new ChatContext(contextWindow: 128000),
+    llm: llm => llm
+        .UseTornado("YOUR_API_KEY", "gpt-4o")
+        .UseRetry(maxRetries: 3)
+        .UseToolCallDetection(),
+
+    toolbox: tools => tools
+        .Configure(parallel: true, maxConcurrency: 8)
+        .AddTool(new SystemTools()),
+
+    context: ctx => ctx
+        .Configure(contextWindow: 128_000, reserveTokens: 10_000)
+        .UseSession(storageDirectory: "./sessions", sessionId: "main-session"),
+
     instructions: [new Text("You are an autonomous engineering assistant.")]
 );
 
-// 3. Stream execution events
+// Stream execution events in real time
 await foreach (var evt in agent.InvokeStreamingAsync([new Text("Check the status of core-cluster-1")]))
 {
-    if (evt is Text t)
+    switch (evt)
     {
-        Console.Write(t.Value);
+        case TextDelta td:       Console.Write(td.Text); break;
+        case ReasoningDelta rd: Console.Write($"\n[Thinking: {rd.Thought}]\n"); break;
+        case ToolCall tc:       Console.WriteLine($"\n[Tool: {tc.Name}({tc.Arguments})]"); break;
     }
 }
 ```
 
-### 3. Adding Middleware Layers
+---
 
-Stack cross-cutting behaviors cleanly without altering core logic:
+## ⚡ Living Facade & Hot-Reload
+
+### 1. Direct Capability Control
+Control underlying providers and layers directly via clean interface extensions:
 
 ```csharp
-using AgentCore.Layers.Tools;
-using AgentCore.Layers.LLM;
+// Change active model on the LLM provider
+agent.LLM.SetModel("claude-3-5-sonnet");
 
-// Add human-in-the-loop approval and tool-call detection layers
-var toolbox = new ToolboxLayer(new Toolbox(tools))
-    .Use(next => new ApprovalLayer(next, autoApprove: false));
+// Dynamically attach or detach human-in-the-loop approval gate
+agent.Toolbox.UseApproval(async (call, ct) => await AskUserAsync(call));
+agent.Toolbox.RemoveApproval();
 
-var layeredLlm = new LLMLayer(llm)
-    .Use(next => new ToolCallDetectionLayer(next));
+// Switch active persistence session in place
+agent.Context.UseSession("./sessions", "debug-session");
+```
+
+### 2. Functional Pipeline Hot-Reload (`With`)
+Evolve the pipeline dynamically at runtime without in-flight concurrency hazards:
+
+```csharp
+// Evolve toolbox with human approval in one atomic step
+agent = agent.With(toolbox: t => t.UseApproval(async (call, ct) => await AskUserAsync(call)));
 ```
 
 ---

@@ -63,11 +63,6 @@ public sealed class Toolbox : IToolbox
             _tools[t.Definition.Name] = t;
     }
 
-    public bool Remove(string name)
-    {
-        ArgumentNullException.ThrowIfNull(name);
-        return _tools.TryRemove(name, out _);
-    }
 
     public async IAsyncEnumerable<IMessageEvent> ExecuteAsync(
         IReadOnlyList<ToolCall> calls,

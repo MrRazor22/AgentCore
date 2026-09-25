@@ -9,25 +9,31 @@ public static class ToolingLayerExtensions
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(approver);
-        return tooling.AddLayer(new ToolApprovalLayer(approver, tooling));
+        return tooling.Remove<ToolApprovalLayer>().Add(new ToolApprovalLayer(approver));
     }
 
     public static IToolbox UseApproval(this IToolbox tooling, Func<ToolCall, CancellationToken, Task<bool>> prompt)
     {
         ArgumentNullException.ThrowIfNull(tooling);
         ArgumentNullException.ThrowIfNull(prompt);
-        return tooling.AddLayer(new ToolApprovalLayer(prompt, tooling));
+        return tooling.Remove<ToolApprovalLayer>().Add(new ToolApprovalLayer(prompt));
     }
 
     public static IToolbox RemoveApproval(this IToolbox tooling)
-        => tooling.RemoveLayer<ToolApprovalLayer>();
+    {
+        ArgumentNullException.ThrowIfNull(tooling);
+        return tooling.Remove<ToolApprovalLayer>();
+    }
 
     public static IToolbox UseToolDiscovery(this IToolbox tooling, ToolDiscoveryTool? tool = null)
     {
         ArgumentNullException.ThrowIfNull(tooling);
-        return tooling.AddLayer(new ToolDiscoveryLayer(tool ?? new ToolDiscoveryTool(), tooling));
+        return tooling.Remove<ToolDiscoveryLayer>().Add(new ToolDiscoveryLayer(tool ?? new ToolDiscoveryTool()));
     }
 
     public static IToolbox RemoveToolDiscovery(this IToolbox tooling)
-        => tooling.RemoveLayer<ToolDiscoveryLayer>();
+    {
+        ArgumentNullException.ThrowIfNull(tooling);
+        return tooling.Remove<ToolDiscoveryLayer>();
+    }
 }

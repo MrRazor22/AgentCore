@@ -17,6 +17,7 @@ public sealed class ChatPersistenceLayer(
     IContext? inner = null) : ContextLayer(inner)
 {
     private readonly IChatStore _store = store ?? throw new ArgumentNullException(nameof(store));
+    private readonly IWalStore? _walStore = walStore;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private bool _restored;
 
@@ -34,12 +35,12 @@ public sealed class ChatPersistenceLayer(
         int initial = (await Inner.ReadAsync(ct: CancellationToken.None).ConfigureAwait(false)).Count;
         try
         {
-            var source = walStore == null ? events : LogAsync();
+            var source = _walStore == null ? events : LogAsync();
             async IAsyncEnumerable<IMessageEvent> LogAsync()
             {
                 await foreach (var evt in events.WithCancellation(ct).ConfigureAwait(false))
                 {
-                    await walStore.AppendAsync(evt, ct).ConfigureAwait(false);
+                    await _walStore.AppendAsync(evt, ct).ConfigureAwait(false);
                     yield return evt;
                 }
             }
@@ -58,7 +59,7 @@ public sealed class ChatPersistenceLayer(
             }
             finally
             {
-                if (walStore != null) await walStore.ClearAsync(CancellationToken.None).ConfigureAwait(false);
+                if (_walStore != null) await _walStore.ClearAsync(CancellationToken.None).ConfigureAwait(false);
             }
         }
     }
@@ -71,11 +72,11 @@ public sealed class ChatPersistenceLayer(
         {
             if (_restored) return;
 
-            if (walStore != null)
+            if (_walStore != null)
             {
-                var recovered = await walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
+                var recovered = await _walStore.RecoverAsync(ct).ToMessagesAsync(ct: ct).ConfigureAwait(false);
                 if (recovered.Count > 0) await _store.AppendAsync(recovered, ct).ConfigureAwait(false);
-                await walStore.ClearAsync(ct).ConfigureAwait(false);
+                await _walStore.ClearAsync(ct).ConfigureAwait(false);
             }
 
             if (await _store.LoadAsync(ct).ConfigureAwait(false) is { Count: > 0 } history)

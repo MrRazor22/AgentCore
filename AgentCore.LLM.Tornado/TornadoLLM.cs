@@ -23,6 +23,8 @@ namespace AgentCore.LLM.Tornado;
 /// </summary>
 public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
 {
+    public ChatModel Model { get; set; } = model ?? throw new ArgumentNullException(nameof(model));
+
     public TornadoLLM(string apiKey, string model, string? baseUrl = null, LLmProviders provider = LLmProviders.Custom)
         : this(CreateApi(apiKey, baseUrl, provider), new ChatModel(model, provider))
     {
@@ -42,7 +44,7 @@ public sealed class TornadoLLM(TornadoApi api, ChatModel model) : ILLM
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var conv = api.Chat.CreateConversation();
-        conv.Model = model;
+        conv.Model = Model;
         
         // Populate messages cleanly
         conv.AddMessage(messages.Select(m => m.ToTornadoMessage()));

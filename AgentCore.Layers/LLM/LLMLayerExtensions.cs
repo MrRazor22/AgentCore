@@ -16,7 +16,7 @@ public static class LLMLayerExtensions
         Action<Exception, int, TimeSpan>? onRetry = null)
     {
         ArgumentNullException.ThrowIfNull(llm);
-        return llm.AddLayer(new RetryLayer(
+        return llm.Add(new RetryLayer(
             llm,
             maxRetries,
             initialDelay,
@@ -27,25 +27,16 @@ public static class LLMLayerExtensions
             onRetry));
     }
 
-    public static ILLM RemoveRetry(this ILLM llm)
-        => llm.RemoveLayer<RetryLayer>();
-
     public static ILLM UseToolCallDetection(this ILLM llm, bool stopAfterFirstToolCall = false)
     {
         ArgumentNullException.ThrowIfNull(llm);
-        return llm.AddLayer(new ToolCallDetectionLayer(stopAfterFirstToolCall, llm));
+        return llm.Add(new ToolCallDetectionLayer(stopAfterFirstToolCall, llm));
     }
-
-    public static ILLM RemoveToolCallDetection(this ILLM llm)
-        => llm.RemoveLayer<ToolCallDetectionLayer>();
 
     public static ILLM UseInputGuardrail(this ILLM llm, InputGuardrail guardrail)
     {
         ArgumentNullException.ThrowIfNull(llm);
         ArgumentNullException.ThrowIfNull(guardrail);
-        return llm.AddLayer(new InputGuardrailLayer(guardrail, llm));
+        return llm.Add(new InputGuardrailLayer(guardrail, llm));
     }
-
-    public static ILLM RemoveInputGuardrail(this ILLM llm)
-        => llm.RemoveLayer<InputGuardrailLayer>();
 }

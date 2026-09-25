@@ -25,11 +25,19 @@ public sealed class Agent(
     IReadOnlyList<IContent>? instructions = null,
     int maxIterations = 20) : IAgent
 {
-    public ILLM LLM { get; } = (llm ?? throw new ArgumentNullException(nameof(llm)))(new LLMLayer()) is LLMLayer l ? l : new LLMLayer(llm(new LLMLayer()));
-    public IToolbox Toolbox { get; } = (toolbox != null ? toolbox(new Toolbox()) : new Toolbox()) is ToolboxLayer t ? t : new ToolboxLayer(toolbox != null ? toolbox(new Toolbox()) : new Toolbox());
-    public IContext Context { get; } = (context != null ? context(new ChatContext()) : new ChatContext()) is ContextLayer c ? c : new ContextLayer(context != null ? context(new ChatContext()) : new ChatContext());
+    public ILLM LLM { get; } = (llm ?? throw new ArgumentNullException(nameof(llm)))(new LLMLayer());
+    public IToolbox Toolbox { get; } = toolbox?.Invoke(new ToolboxLayer(new Toolbox())) ?? new ToolboxLayer(new Toolbox());
+    public IContext Context { get; } = context?.Invoke(new ContextLayer(new ChatContext())) ?? new ContextLayer(new ChatContext());
     public IReadOnlyList<IContent> Instructions { get; } = instructions ?? [new Text("You are a helpful AI assistant.")];
     public int MaxIterations { get; } = maxIterations;
+
+    public Agent(
+        ILLM llm,
+        IToolbox? toolbox = null,
+        IContext? context = null,
+        IReadOnlyList<IContent>? instructions = null,
+        int maxIterations = 20)
+        : this(_ => llm ?? throw new ArgumentNullException(nameof(llm)), toolbox != null ? _ => toolbox : null, context != null ? _ => context : null, instructions, maxIterations) { }
 
     public async IAsyncEnumerable<IContentEvent> InvokeStreamingAsync(
         IReadOnlyList<IContent> input,

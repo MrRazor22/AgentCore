@@ -9,7 +9,6 @@ public delegate Task<IReadOnlyList<IContent>?> ToolApprover(ToolCall call, Cance
 public sealed class ToolApprovalLayer(ToolApprover approver, IToolbox? inner = null) : ToolboxLayer(inner)
 {
     private readonly ToolApprover _approver = approver ?? throw new ArgumentNullException(nameof(approver));
-
     public ToolApprovalLayer(Func<ToolCall, CancellationToken, Task<IContent?>> evaluator, IToolbox? inner = null)
         : this(async (call, ct) => (await evaluator(call, ct).ConfigureAwait(false)) is { } c ? [c] : null, inner) { }
 
